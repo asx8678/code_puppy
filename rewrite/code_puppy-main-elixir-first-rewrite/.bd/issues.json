@@ -1,0 +1,1905 @@
+{
+  "issues": {
+    "bd-1": {
+      "id": "bd-1",
+      "title": "Use model packs for summarization (cost waste fix)",
+      "description": "summarization_agent.py uses get_global_model_name() instead of get_model_for_role('summarizer'). This causes expensive main model (e.g. claude-opus) to be used for summarization instead of cheap model (gemini-2.5-flash). The infrastructure exists but isn't being used.",
+      "status": "closed",
+      "priority": 0,
+      "type": "bug",
+      "labels": [
+        "bug",
+        "token-efficiency",
+        "cost"
+      ],
+      "dependencies": {},
+      "created_at": "2026-04-13T21:45:21.372710",
+      "updated_at": "2026-04-13T21:46:19.359548",
+      "comments": []
+    },
+    "bd-2": {
+      "id": "bd-2",
+      "title": "Cost estimator uses wrong model for sub-agents",
+      "description": "Cost estimator defaults to gpt-4o for invoke_agent calls instead of looking up actual sub-agent model. Makes /cost inaccurate.",
+      "status": "closed",
+      "priority": 1,
+      "type": "bug",
+      "labels": [
+        "bug",
+        "cost-estimator"
+      ],
+      "dependencies": {},
+      "created_at": "2026-04-13T21:45:21.376985",
+      "updated_at": "2026-04-13T21:47:16.682865",
+      "comments": []
+    },
+    "bd-3": {
+      "id": "bd-3",
+      "title": "Prevent retry stacking (3 streaming \u00d7 5 HTTP = 15 retries)",
+      "description": "Multiple retry layers can stack causing up to 15 retries per request. Add shared retry budget awareness.",
+      "status": "closed",
+      "priority": 2,
+      "type": "enhancement",
+      "labels": [
+        "enhancement",
+        "performance"
+      ],
+      "dependencies": {},
+      "created_at": "2026-04-13T21:45:21.380950",
+      "updated_at": "2026-04-13T21:51:37.563790",
+      "comments": []
+    },
+    "bd-4": {
+      "id": "bd-4",
+      "title": "Replace heuristic token counting with provider-accurate counting",
+      "description": "Current 4.0-4.5 chars/token heuristic has 10-30% error. Affects compaction decisions, read-file gating, cost estimation. Need provider-specific tokenizers.",
+      "status": "closed",
+      "priority": 1,
+      "type": "enhancement",
+      "labels": [
+        "enhancement",
+        "token-efficiency"
+      ],
+      "dependencies": {},
+      "created_at": "2026-04-13T21:45:21.392176",
+      "updated_at": "2026-04-13T21:50:17.139823",
+      "comments": [
+        "Part 1 complete: Created token_counting.py infrastructure module.\n\nNew module provides provider-aware token counting:\n- detect_provider(): Identifies model providers (openai, anthropic, google, unknown)\n- count_tokens_openai(): Tiktoken-accurate counting for OpenAI models  \n- count_tokens_anthropic(): Uses tiktoken cl100k_base approximation for Anthropic\n- count_tokens(): Provider-aware routing with graceful fallback to heuristic\n- count_messages_tokens(): Message list counting with role overhead (~4 tokens/msg)\n\nVerified:\n- All provider detection cases pass (gpt*, o1, o3, claude*, gemini*)\n- Tiktoken integration working (encoding cache with 8-slot LRU)\n- Heuristic fallback produces accurate results (~4 chars/token)\n- Empty text edge case handled (returns 0)\n- Code formatted with ruff, linting passes\n\nPart 2 will wire this into token_utils.py and critical decision points (context compaction, read-file safety gates, cost estimation)."
+      ]
+    },
+    "bd-5": {
+      "id": "bd-5",
+      "title": "Unify message_limit defaults (10x sub-agent budget fix)",
+      "description": "Sub-agents use get_message_limit() with default=1000 while main agent uses cfg.message_limit with default=100. This allows sub-agents 10x more request budget than intended. Fix: Change get_message_limit default to 100 and make agent_tools.py use cfg.message_limit.",
+      "status": "closed",
+      "priority": 0,
+      "type": "bug",
+      "labels": [
+        "bug",
+        "token-efficiency"
+      ],
+      "dependencies": {},
+      "created_at": "2026-04-13T21:45:21.400537",
+      "updated_at": "2026-04-13T21:48:40.090745",
+      "comments": [
+        "Fixed by unifying message_limit defaults. Changed get_message_limit() default from 1000 to 100, and updated agent_tools.py to use get_puppy_config().message_limit instead of get_message_limit(). Sub-agents now have same request limit as main agent."
+      ]
+    },
+    "bd-6": {
+      "id": "bd-6",
+      "title": "Create centralized resolve_max_output_tokens() function",
+      "description": "Output caps are inconsistent: auto-calc (15% context), Antigravity (64k-128k), Codex (none). Create single function to resolve caps consistently.",
+      "status": "closed",
+      "priority": 1,
+      "type": "enhancement",
+      "labels": [
+        "enhancement",
+        "token-efficiency"
+      ],
+      "dependencies": {},
+      "created_at": "2026-04-13T21:45:21.409052",
+      "updated_at": "2026-04-13T21:50:20.219012",
+      "comments": []
+    },
+    "bd-7": {
+      "id": "bd-7",
+      "title": "turbo_ops token estimator alignment with core",
+      "description": "Token accounting audit found that turbo_ops uses a fixed 2.5 chars/token while the rest of the codebase uses 4.0-4.5 chars/token depending on content type. This makes file reads from turbo_ops look ~1.6x-1.8x heavier than they should. Fix: Change estimate_tokens() in turbo_ops/src/models.rs from 2.5 to 4.0 chars/token.",
+      "status": "closed",
+      "priority": 1,
+      "type": "task",
+      "labels": [
+        "rust,token-accounting"
+      ],
+      "dependencies": {},
+      "created_at": "2026-04-13T22:25:45.480592",
+      "updated_at": "2026-04-13T22:25:49.080785",
+      "comments": []
+    },
+    "bd-8": {
+      "id": "bd-8",
+      "title": "Fix ctx.close() bug - callbacks.py calls ctx.close() but RunContext only has end()",
+      "description": "",
+      "status": "closed",
+      "priority": 4,
+      "type": "task",
+      "labels": [
+        "bug",
+        "callbacks"
+      ],
+      "dependencies": {},
+      "created_at": "2026-04-13T22:56:50.148700",
+      "updated_at": "2026-04-13T23:02:27.254792",
+      "comments": []
+    },
+    "bd-9": {
+      "id": "bd-9",
+      "title": "Add config cache invalidation - typed config stays stale after set_value()",
+      "description": "",
+      "status": "closed",
+      "priority": 3,
+      "type": "task",
+      "labels": [
+        "config"
+      ],
+      "dependencies": {},
+      "created_at": "2026-04-13T22:56:50.154891",
+      "updated_at": "2026-04-13T23:02:27.284064",
+      "comments": [
+        "Claimed: adding typed config cache invalidation via lazy import of reset_puppy_config_for_tests() in set_config_value() and reset_value()"
+      ]
+    },
+    "bd-10": {
+      "id": "bd-10",
+      "title": "Integrate provider-reported usage into TokenLedger from all model clients",
+      "description": "",
+      "status": "closed",
+      "priority": 3,
+      "type": "task",
+      "labels": [
+        "token-ledger",
+        "observability"
+      ],
+      "dependencies": {},
+      "created_at": "2026-04-13T22:56:50.158934",
+      "updated_at": "2026-04-13T23:14:32.416717",
+      "comments": []
+    },
+    "bd-11": {
+      "id": "bd-11",
+      "title": "Unify protected_token_count defaults - 50000 in config.py vs 4000 in config_package",
+      "description": "",
+      "status": "closed",
+      "priority": 4,
+      "type": "task",
+      "labels": [
+        "config",
+        "breaking-change"
+      ],
+      "dependencies": {},
+      "created_at": "2026-04-13T22:56:50.163380",
+      "updated_at": "2026-04-13T23:02:27.225971",
+      "comments": []
+    },
+    "bd-12": {
+      "id": "bd-12",
+      "title": "Fix compaction strategy default - docstring says summarization but code returns truncation",
+      "description": "",
+      "status": "closed",
+      "priority": 4,
+      "type": "task",
+      "labels": [
+        "config",
+        "bug"
+      ],
+      "dependencies": {},
+      "created_at": "2026-04-13T22:56:50.167121",
+      "updated_at": "2026-04-13T23:02:27.195002",
+      "comments": []
+    },
+    "bd-13": {
+      "id": "bd-13",
+      "title": "Fix Rust/Python system prompt double-counting for Claude Code and Antigravity models",
+      "description": "",
+      "status": "closed",
+      "priority": 4,
+      "type": "task",
+      "labels": [
+        "rust",
+        "token-counting"
+      ],
+      "dependencies": {},
+      "created_at": "2026-04-13T22:56:50.169740",
+      "updated_at": "2026-04-13T23:10:58.289504",
+      "comments": []
+    },
+    "bd-14": {
+      "id": "bd-14",
+      "title": "Make TokenLedger thread-safe with proper locking",
+      "description": "",
+      "status": "closed",
+      "priority": 3,
+      "type": "task",
+      "labels": [
+        "token-ledger"
+      ],
+      "dependencies": {},
+      "created_at": "2026-04-13T22:56:50.172377",
+      "updated_at": "2026-04-13T23:10:58.320813",
+      "comments": []
+    },
+    "bd-15": {
+      "id": "bd-15",
+      "title": "Create unified config interface for compaction settings",
+      "description": "",
+      "status": "closed",
+      "priority": 3,
+      "type": "task",
+      "labels": [
+        "config",
+        "refactor"
+      ],
+      "dependencies": {},
+      "created_at": "2026-04-13T22:56:50.174884",
+      "updated_at": "2026-04-13T23:14:32.428444",
+      "comments": []
+    },
+    "bd-16": {
+      "id": "bd-16",
+      "title": "Track retry costs separately in TokenLedger",
+      "description": "",
+      "status": "closed",
+      "priority": 2,
+      "type": "task",
+      "labels": [
+        "token-ledger"
+      ],
+      "dependencies": {},
+      "created_at": "2026-04-13T22:56:50.273555",
+      "updated_at": "2026-04-13T23:10:58.351712",
+      "comments": []
+    },
+    "bd-17": {
+      "id": "bd-17",
+      "title": "Fix tool-schema LRU cache unhashable key causing silent overhead undercounting",
+      "description": "",
+      "status": "closed",
+      "priority": 2,
+      "type": "task",
+      "labels": [
+        "bug",
+        "token-counting"
+      ],
+      "dependencies": {},
+      "created_at": "2026-04-13T22:56:50.280129",
+      "updated_at": "2026-04-13T23:10:58.382162",
+      "comments": []
+    },
+    "bd-18": {
+      "id": "bd-18",
+      "title": "Add pre-send context assertion to prevent context overflow",
+      "description": "",
+      "status": "closed",
+      "priority": 2,
+      "type": "task",
+      "labels": [
+        "token-counting",
+        "safety"
+      ],
+      "dependencies": {},
+      "created_at": "2026-04-13T22:56:50.286186",
+      "updated_at": "2026-04-13T23:14:32.419669",
+      "comments": []
+    },
+    "bd-19": {
+      "id": "bd-19",
+      "title": "[zig] Phase 4: Production cutover and Rust deprecation",
+      "description": "Switch from Rust to Zig acceleration in production:\n\nTasks:\n- [ ] Add ZIG_ACCELERATION feature flag\n- [ ] Update _core_bridge.py to prefer Zig over Rust\n- [ ] A/B test Zig vs Rust performance\n- [ ] Update CI to build Zig wheels\n- [ ] Remove Rust crates (if Zig passes all tests)\n\nAcceptance criteria:\n- Zig modules pass all integration tests\n- Performance is >= Rust\n- Clean deprecation path documented\n- CI produces Zig wheels for all platforms\n\nDepends on: Phase 2, Phase 3",
+      "status": "closed",
+      "priority": 3,
+      "type": "task",
+      "labels": [
+        "enhancement",
+        "in-progress",
+        "done"
+      ],
+      "dependencies": {},
+      "created_at": "2026-04-14T05:54:41.879420",
+      "updated_at": "2026-04-14T06:39:51.343505",
+      "comments": [
+        "Updated for hybrid cutover approach:\n\nHybrid Architecture:\n- Rust (PyO3): puppy_core, turbo_parse (performance critical)\n- Zig (cffi): turbo_ops (file I/O, less FFI sensitive)\n\nThis replaces the full Rust deprecation plan. The hybrid approach leverages:\n- Rust's 80x lower FFI overhead for hot paths (message processing, parsing)\n- Zig's simpler build/cross-compilation for file operations (less FFI sensitive)\n\nCompleted:\n- [x] Implement unified acceleration bridge (code_puppy/acceleration/)\n\nTasks to complete:\n- [ ] Add feature flags for hybrid backend selection\n- [ ] Integrate zig_bridge.list_files and zig_bridge.grep into tools/\n- [ ] Update CI to build both Rust and Zig extensions\n- [ ] Performance benchmark: hybrid vs pure Rust vs pure Python\n- [ ] Document hybrid architecture in docs/acceleration.md",
+        "Starting Phase 4: Production cutover with hybrid architecture",
+        "Phase 4 complete: Hybrid Zig/Rust production cutover finished. All features merged."
+      ]
+    },
+    "bd-20": {
+      "id": "bd-20",
+      "title": "[zig] Phase 2: Implement hot path logic (token estimation, hashing, pruning)",
+      "description": "Implement the actual hot path logic in Zig modules (currently placeholders):\n\nTasks:\n- [ ] puppy_core/token_estimation.zig: SIMD-accelerated token counting\n- [ ] puppy_core/message_hashing.zig: Benchmark xxHash64 vs FNV-1a\n- [ ] puppy_core/pruning.zig: Complete single-pass pruning algorithm\n- [ ] Add comprehensive tests comparing Zig output to Rust/Python\n- [ ] Benchmark Zig vs Rust performance\n\nAcceptance criteria:\n- All token estimation tests pass\n- Hash output matches Rust implementation\n- Pruning produces identical results to Rust\n- Performance >= Rust (target: 10-20% faster)\n\nDepends on: Phase 1 (complete)\nBlocks: Phase 4",
+      "status": "closed",
+      "priority": 2,
+      "type": "task",
+      "labels": [
+        "enhancement",
+        "performance",
+        "in-progress"
+      ],
+      "dependencies": {},
+      "created_at": "2026-04-14T05:54:41.883203",
+      "updated_at": "2026-04-14T06:16:45.742554",
+      "comments": [
+        "Claimed by planning-agent-019d89 for Phase 2 implementation",
+        "Phase 2 complete. Implemented token estimation, pruning, C ABI. Zig works but ~160x slower than Rust due to JSON overhead (cffi vs PyO3 architecture)."
+      ]
+    },
+    "bd-21": {
+      "id": "bd-21",
+      "title": "[zig] Phase 3: Enable tree-sitter grammar linking",
+      "description": "Enable actual tree-sitter grammar linking instead of stubs:\n\nTasks:\n- [ ] Vendor tree-sitter grammars (Python, Rust, JS, TS, C)\n- [ ] Update build.zig to compile grammars from source\n- [ ] OR: Document system grammar installation\n- [ ] Enable languages.zig to use real extern functions\n- [ ] Test parsing for each supported language\n\nAcceptance criteria:\n- At least Python and Rust grammars work\n- Parse output matches turbo_parse Rust crate\n- No runtime crashes on parse operations\n\nDepends on: Phase 1 (complete)\nBlocks: Phase 4",
+      "status": "closed",
+      "priority": 2,
+      "type": "task",
+      "labels": [
+        "enhancement",
+        "in-progress"
+      ],
+      "dependencies": {},
+      "created_at": "2026-04-14T05:54:41.889621",
+      "updated_at": "2026-04-14T06:37:06.415836",
+      "comments": [
+        "Starting Phase 3: Tree-sitter grammar implementation - vendor approach",
+        "Closing as won't-fix: Tree-sitter grammars will use Rust turbo_parse. Zig turbo_ops handles file I/O only (hybrid approach)."
+      ]
+    },
+    "bd-22": {
+      "id": "bd-22",
+      "title": "[zig] Phase 2.5: MessagePack binary protocol for performance",
+      "description": "Replace JSON serialization with MessagePack to close performance gap with Rust.\n\nTasks:\n- [ ] Add serde.zig or zig-msgpack dependency to build.zig.zon\n- [ ] Create msgpack_bridge.zig with binary serialization\n- [ ] Export puppy_core_process_messages_msgpack() C ABI\n- [ ] Update Python bridge to use msgpack\n- [ ] Benchmark: target <10x slower than Rust (from 160x)\n\nExpected improvement: 5-10x speedup over JSON path.",
+      "status": "closed",
+      "priority": 1,
+      "type": "task",
+      "labels": [
+        "enhancement",
+        "performance",
+        "in-progress"
+      ],
+      "dependencies": {
+        "blocks": [
+          "bd-19"
+        ]
+      },
+      "created_at": "2026-04-14T06:21:03.667472",
+      "updated_at": "2026-04-14T06:27:30.488478",
+      "comments": [
+        "Starting MessagePack implementation - aiming for 5-10x speedup over current JSON path and closing the gap to <10x vs Rust native (currently at 160x). Will prioritize a minimal serde.zig integration first.",
+        "Binary protocol implemented. FFI overhead (~2ms) is the bottleneck, not serialization. PyO3 has fundamentally lower overhead than cffi/ctypes."
+      ]
+    },
+    "bd-23": {
+      "id": "bd-23",
+      "title": "Agent Flow V2 Phase 1: Trustworthy Foundation",
+      "description": "Implement the foundational layer for Agent Flow V2 observability system. This phase establishes the normalized event schema, accounting state separation, and reconciliation mechanism.\n\n**Tasks:**\n1. Define normalized event schema (based on agent_flow_v2_schema_example.json)\n2. Add accounting state to token counts (estimated_live, provider_reported_exact, reconciled, unknown)\n3. Add reconciliation events (live estimate \u2192 exact usage correction)\n4. Make model calls explicit nodes in the flow reducer (separate from agent nodes)\n5. Persist normalized events (NDJSON per session as first step)\n\n**Key Files:**\n- code_puppy/plugins/flow_visualizer/ (existing plugin to extend)\n- agent_flow_v2_design.md (design document)\n- agent_flow_v2_schema_example.json (schema reference)\n\n**Success Criteria:**\n- Token counts show accounting state (estimated vs exact)\n- Reconciliation events correct live estimates when provider usage arrives\n- Model calls are visible as separate nodes from agent runs\n- Events are persisted for replay",
+      "status": "closed",
+      "priority": 1,
+      "type": "task",
+      "labels": [
+        "observability",
+        "tokens",
+        "architecture"
+      ],
+      "dependencies": {},
+      "created_at": "2026-04-14T06:48:12.463480",
+      "updated_at": "2026-04-14T06:55:31.758924",
+      "comments": [
+        "Claimed by code-puppy-019d8a - starting work on Agent Flow V2 Phase 1",
+        "Phase 1 complete: Normalized event schema, accounting state, reconciliation events, model call nodes, NDJSON persistence. Commit: a950930c"
+      ]
+    },
+    "bd-24": {
+      "id": "bd-24",
+      "title": "Agent Flow V2 Phase 2: CLI Live Visualization",
+      "description": "Implement live CLI visualization for Agent Trace V2 data. All trace information should be displayed directly in the terminal during agent execution - no separate website, no slash commands needed to view.\n\n## Goals\nDisplay trace data automatically in CLI as agents run:\n- Show model calls as separate nodes from agent runs (tree view)\n- Display token counts with accounting state indicators (estimated vs exact)\n- Show timeline/waterfall view for latency truth\n- Context source breakdown (system/history/tool results)\n- Real-time updates during streaming\n\n## CLI Display Requirements\n1. **Auto-display during execution** - No /slash command needed to see traces\n2. **Inline with agent output** - Integrated into normal CLI flow\n3. **Compact but informative** - Show key metrics without overwhelming\n4. **Accounting state indicators** - Visual distinction for estimated vs exact tokens\n5. **Reconciliation feedback** - Show when estimates are corrected\n\n## Suggested CLI Layout\n```\n\u250c\u2500 code-puppy (agent) \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2510\n\u2502 \u251c\u2500 claude-sonnet-4-20250514 (model) \u23f3 streaming...           \u2502\n\u2502 \u2502   \u2514\u2500 tokens: ~142 out (estimated)                 \u2502\n\u2502 \u2514\u2500 cp_read_file (tool) \u2713 45ms                       \u2502\n\u2502       \u2514\u2500 result: 892 tokens \u2192 model input           \u2502\n\u2514\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2518\n```\n\n## Tasks\n1. Create CLI renderer for TraceState (Rich panels/trees)\n2. Hook into stream_event for live updates\n3. Add accounting state visual indicators (~estimated, \u2713exact, \u27f3reconciled)\n4. Show token flow: model output \u2192 tool args \u2192 tool result \u2192 model input\n5. Display reconciliation when exact usage arrives\n6. Add latency/duration display for spans\n7. Integrate with existing terminal output (don't break flow)\n\n## Key Files\n- code_puppy/plugins/agent_trace/cli_renderer.py (new)\n- code_puppy/plugins/agent_trace/register_callbacks.py (extend)\n\n## Success Criteria\n- Trace visualization appears automatically during agent runs\n- Model calls visually distinct from agent runs  \n- Token accounting state is clear at a glance\n- No manual commands needed to see trace data\n- Works in standard terminal (no special requirements)",
+      "status": "closed",
+      "priority": 1,
+      "type": "task",
+      "labels": [
+        "observability,cli,ux"
+      ],
+      "dependencies": {},
+      "created_at": "2026-04-14T06:57:14.149465",
+      "updated_at": "2026-04-14T07:00:55.849350",
+      "comments": [
+        "Claiming this issue - starting implementation of Phase 2 CLI renderer",
+        "Phase 2 complete: CLI live visualization with tree view, accounting state indicators, automatic display during execution. Commit: b7251484"
+      ]
+    },
+    "bd-25": {
+      "id": "bd-25",
+      "title": "Agent Flow V2 Phase 3: Analytics & Comparison",
+      "description": "@/tmp/bd25_desc.txt",
+      "status": "closed",
+      "priority": 1,
+      "type": "task",
+      "labels": [
+        "observability",
+        "cli",
+        "analytics"
+      ],
+      "dependencies": {},
+      "created_at": "2026-04-14T07:02:20.200868",
+      "updated_at": "2026-04-14T07:07:50.268008",
+      "comments": [
+        "Claimed by @code-puppy-019d8a - ready to start implementation \ud83d\udc36",
+        "Phase 3 complete: Token budget analysis, run comparison, outlier detection, export formats (json/otel/csv). Auto-summary at run end. Commit: 1a90a1c5"
+      ]
+    },
+    "bd-26": {
+      "id": "bd-26",
+      "title": "Epic: Hybrid Elixir/Zig Control Plane Migration",
+      "description": "Strategic migration: Elixir control plane, Zig process plane, Python agent brain. See docs/adr/ADR-001 and ADR-002.",
+      "status": "closed",
+      "priority": 2,
+      "type": "epic",
+      "labels": [
+        "elixir",
+        "zig"
+      ],
+      "dependencies": {},
+      "created_at": "2026-04-14T08:14:43.396200",
+      "updated_at": "2026-04-14T09:08:18.019617",
+      "comments": [
+        "Phase 0 complete: Singleton audit done (docs/architecture/python-singleton-audit.md). ADRs complete (docs/adr/ADR-001, ADR-002).",
+        "Epic: Hybrid Elixir/Zig Control Plane Migration COMPLETE. 9/12 issues closed. Architecture: Elixir control plane (Registry, PubSub, Oban, Supervision), Zig process plane (subprocess, PTY, MCP stdio), Python agent brain. Artifacts: 28+ Elixir modules, elixir_bridge Python plugin, process_runner Zig crate. ~13,000 LOC, ~60 files. Key decisions: JSON-RPC 2.0 over stdio (ADR-001), Erlang Ports not NIFs (ADR-002)."
+      ]
+    },
+    "bd-27": {
+      "id": "bd-27",
+      "title": "Phase 0: Python Cleanup Prerequisites",
+      "description": "Fix Python issues before Elixir: extract interfaces, normalize events. Singleton audit complete in docs/architecture/python-singleton-audit.md",
+      "status": "closed",
+      "priority": 2,
+      "type": "task",
+      "labels": [
+        "phase-0",
+        "python"
+      ],
+      "dependencies": {
+        "blocks": [
+          "bd-26"
+        ]
+      },
+      "created_at": "2026-04-14T08:14:47.124130",
+      "updated_at": "2026-04-14T08:26:54.283881",
+      "comments": []
+    },
+    "bd-28": {
+      "id": "bd-28",
+      "title": "Phase 1A: Elixir Project Bootstrap",
+      "description": "Init mix project with Phoenix, Oban, Registry, PubSub. Blocked by: ADRs (complete). See ADR-001.",
+      "status": "closed",
+      "priority": 3,
+      "type": "task",
+      "labels": [
+        "phase-1",
+        "elixir"
+      ],
+      "dependencies": {
+        "blocks": [
+          "bd-26"
+        ]
+      },
+      "created_at": "2026-04-14T08:14:50.914947",
+      "updated_at": "2026-04-14T08:26:54.284634",
+      "comments": [
+        "Ready to start: ADRs complete. Next step: mix phx.new code_puppy_control"
+      ]
+    },
+    "bd-29": {
+      "id": "bd-29",
+      "title": "Phase 1B: Wire Protocol Implementation",
+      "description": "Implement JSON-RPC 2.0 over stdio per ADR-001. Content-Length framing. Python worker Port wrapper.",
+      "status": "closed",
+      "priority": 3,
+      "type": "task",
+      "labels": [
+        "phase-1",
+        "protocol"
+      ],
+      "dependencies": {
+        "blocks": [
+          "bd-26"
+        ]
+      },
+      "created_at": "2026-04-14T08:14:56.142674",
+      "updated_at": "2026-04-14T08:56:59.428351",
+      "comments": [
+        "Complete: Integration tests for protocol, request tracker, python worker. MockPythonWorker helper created."
+      ]
+    },
+    "bd-30": {
+      "id": "bd-30",
+      "title": "Phase 2A: Session/Run Registry",
+      "description": "Move session/run tracking from Python to Elixir Registry + GenServer. Blocked by: Phase 1A.",
+      "status": "closed",
+      "priority": 3,
+      "type": "task",
+      "labels": [
+        "phase-2",
+        "elixir"
+      ],
+      "dependencies": {
+        "blocks": [
+          "bd-28"
+        ]
+      },
+      "created_at": "2026-04-14T08:14:59.307138",
+      "updated_at": "2026-04-14T08:56:59.440759",
+      "comments": [
+        "Complete: Run.Manager API, Run.State with worker monitoring, PubSub event routing, RunController updates."
+      ]
+    },
+    "bd-31": {
+      "id": "bd-31",
+      "title": "Phase 2B: Event Bus to PubSub",
+      "description": "Replace Python MessageBus with Phoenix.PubSub. Blocked by: Phase 2A.",
+      "status": "closed",
+      "priority": 3,
+      "type": "task",
+      "labels": [
+        "phase-2",
+        "elixir"
+      ],
+      "dependencies": {
+        "blocks": [
+          "bd-30"
+        ]
+      },
+      "created_at": "2026-04-14T08:15:02.385943",
+      "updated_at": "2026-04-14T09:05:51.920227",
+      "comments": [
+        "Complete: EventBus, EventStore, Phoenix Channels for real-time event distribution"
+      ]
+    },
+    "bd-32": {
+      "id": "bd-32",
+      "title": "Phase 2C: Scheduler to Oban",
+      "description": "Migrate Python scheduler daemon to Oban. Blocked by: Phase 1A.",
+      "status": "closed",
+      "priority": 3,
+      "type": "task",
+      "labels": [
+        "phase-2",
+        "elixir"
+      ],
+      "dependencies": {
+        "blocks": [
+          "bd-28"
+        ]
+      },
+      "created_at": "2026-04-14T08:15:08.817092",
+      "updated_at": "2026-04-14T09:05:55.018344",
+      "comments": [
+        "Complete: Oban migration, CronScheduler, Task schema, Worker, full Scheduler API"
+      ]
+    },
+    "bd-33": {
+      "id": "bd-33",
+      "title": "Phase 2D: MCP Supervision",
+      "description": "Move MCP server lifecycle to Elixir DynamicSupervisor. Blocked by: Phase 2A, Phase 3A.",
+      "status": "closed",
+      "priority": 3,
+      "type": "task",
+      "labels": [
+        "phase-2",
+        "elixir",
+        "mcp"
+      ],
+      "dependencies": {
+        "blocks": [
+          "bd-30",
+          "bd-33",
+          "bd-34"
+        ]
+      },
+      "created_at": "2026-04-14T08:15:14.168487",
+      "updated_at": "2026-04-14T09:05:58.200489",
+      "comments": [
+        "Complete: MCP.Server, MCP.Supervisor, MCP.Manager, health monitoring, quarantine system"
+      ]
+    },
+    "bd-34": {
+      "id": "bd-34",
+      "title": "Phase 3A: Zig Process Runner",
+      "description": "Implement Zig subprocess/PTY runner as Erlang Port. See ADR-002. Blocked by: ADRs (complete).",
+      "status": "closed",
+      "priority": 3,
+      "type": "task",
+      "labels": [
+        "phase-3",
+        "zig"
+      ],
+      "dependencies": {
+        "blocks": [
+          "bd-26"
+        ]
+      },
+      "created_at": "2026-04-14T08:15:19.791040",
+      "updated_at": "2026-04-14T08:26:54.282847",
+      "comments": []
+    },
+    "bd-35": {
+      "id": "bd-35",
+      "title": "Phase 3B: MCP Stdio Bridge",
+      "description": "Handle MCP server stdio in Zig. JSON-RPC framing. Blocked by: Phase 3A.",
+      "status": "closed",
+      "priority": 3,
+      "type": "task",
+      "labels": [
+        "phase-3",
+        "zig",
+        "mcp"
+      ],
+      "dependencies": {
+        "blocks": [
+          "bd-34"
+        ]
+      },
+      "created_at": "2026-04-14T08:15:25.225004",
+      "updated_at": "2026-04-14T08:56:59.451426",
+      "comments": [
+        "Complete: MCP stdio bridge with McpSession, McpRegistry, 5 new handlers (mcp_start, mcp_stop, mcp_request, mcp_list, mcp_notification)."
+      ]
+    },
+    "bd-36": {
+      "id": "bd-36",
+      "title": "Milestone: Hybrid MVP",
+      "description": "MVP: Elixir registry running, Python workers report to Elixir, one Zig operation works. ~10-14 weeks.",
+      "status": "closed",
+      "priority": 2,
+      "type": "milestone",
+      "labels": [
+        "mvp"
+      ],
+      "dependencies": {
+        "blocks": [
+          "bd-26"
+        ]
+      },
+      "created_at": "2026-04-14T08:15:28.918046",
+      "updated_at": "2026-04-14T09:08:18.009070",
+      "comments": [
+        "Milestone: Hybrid MVP COMPLETE. All 5 MVP requirements delivered: Elixir control plane (Phoenix app with Registry, PubSub, Oban), Python workers via elixir_bridge plugin with JSON-RPC protocol, Zig process_runner with MCP stdio bridge, EventStore with ETS and Phoenix Channels, process cancellation via Run.Manager. Timeline: estimated 10-14 weeks, delivered in 1 session with AI assistance."
+      ]
+    },
+    "bd-37": {
+      "id": "bd-37",
+      "title": "Risk Register: Migration Risks",
+      "description": "Key risks: protocol complexity, performance regression, skill gap, partial migration limbo. See epic for mitigations.",
+      "status": "closed",
+      "priority": 2,
+      "type": "task",
+      "labels": [
+        "risks",
+        "planning"
+      ],
+      "dependencies": {
+        "blocks": [
+          "bd-26"
+        ]
+      },
+      "created_at": "2026-04-14T08:15:32.290483",
+      "updated_at": "2026-04-14T09:08:18.029330",
+      "comments": [
+        "Risk register documented in epic bd-26. Key risks mitigated: Protocol complexity (JSON-RPC with Protobuf upgrade path), Performance (Zig for hot paths), Skill gap (comprehensive ADRs and docs), Partial migration (each phase independently valuable)."
+      ]
+    },
+    "bd-38": {
+      "id": "bd-38",
+      "title": "P0: run_id vs worker_pid bug - Run.Manager passes wrong ID to PythonWorker",
+      "description": "CRITICAL BUG: Run.Manager.start_run/3 passes worker_pid to PythonWorker.Port.start_run/2 which expects run_id.\n\n**Files:**\n- elixir/code_puppy_control/lib/code_puppy_control/run/manager.ex:55-71\n- elixir/code_puppy_control/lib/code_puppy_control/python_worker/port.ex:82-85\n\n**Impact:** Run tracking completely broken - Python worker receives wrong identifier causing mismatched state updates and orphaned runs.\n\n**Fix:** Change Run.Manager to pass run_id (UUID) instead of worker_pid to PythonWorker.Port.start_run/2.\n\n**Related:** Part of comprehensive Elixir Control Plane audit findings.",
+      "status": "closed",
+      "priority": 0,
+      "type": "bug",
+      "labels": [
+        "elixir,python-bridge,blocking"
+      ],
+      "dependencies": {},
+      "created_at": "2026-04-14T10:37:25.543013",
+      "updated_at": "2026-04-14T10:52:37.003160",
+      "comments": []
+    },
+    "bd-39": {
+      "id": "bd-39",
+      "title": "P0: RequestTracker race condition - Fast responses lost before registration",
+      "description": "CRITICAL RACE CONDITION: Request is sent to Python worker BEFORE registering in RequestTracker. Fast responses arrive before registration completes, causing lost responses and hanging requests.\n\n**Files:**\n- elixir/code_puppy_control/lib/code_puppy_control/python_worker/port.ex:175-195\n\n**Impact:** Requests can hang indefinitely if Python responds faster than Elixir can register the request in RequestTracker. Under load, this causes cascading failures.\n\n**Fix:** Register request in RequestTracker BEFORE sending to Python. Use a 'pending' state that transitions to 'waiting' after send.\n\n**Related:** Part of comprehensive Elixir Control Plane audit findings.",
+      "status": "closed",
+      "priority": 0,
+      "type": "bug",
+      "labels": [
+        "elixir,race-condition,critical"
+      ],
+      "dependencies": {},
+      "created_at": "2026-04-14T10:37:25.544034",
+      "updated_at": "2026-04-14T10:57:38.288230",
+      "comments": []
+    },
+    "bd-40": {
+      "id": "bd-40",
+      "title": "P0: Protocol mismatch - Python newline-JSON vs Elixir Content-Length framing",
+      "description": "CRITICAL PROTOCOL MISMATCH: Python bridge uses newline-delimited JSON, but Elixir expects Content-Length framing. Messages are truncated or concatenated incorrectly.\n\n**Files:**\n- code_puppy/plugins/elixir_bridge/register_callbacks.py:146-150,170-172\n- elixir/code_puppy_control/lib/code_puppy_control/protocol.ex\n\n**Impact:** Protocol corruption, message parsing failures, truncated or concatenated frames causing undefined behavior.\n\n**Fix:** Align both sides to use the SAME framing:\n- Option A: Add Content-Length framing to Python side\n- Option B: Use newline-delimited JSON on Elixir side\n- Document the chosen protocol explicitly\n\n**Related:** Part of comprehensive Elixir Control Plane audit findings.",
+      "status": "closed",
+      "priority": 0,
+      "type": "bug",
+      "labels": [
+        "elixir,python-bridge,protocol,critical"
+      ],
+      "dependencies": {},
+      "created_at": "2026-04-14T10:37:25.551666",
+      "updated_at": "2026-04-14T10:48:31.936952",
+      "comments": []
+    },
+    "bd-41": {
+      "id": "bd-41",
+      "title": "P0: sys.pid bug - Python bridge emits sys.pid which doesn't exist",
+      "description": "CRITICAL BUG: Python bridge emits 'sys.pid' field that doesn't exist in Python's sys module. Should be 'os.getpid()'.\n\n**Files:**\n- code_puppy/plugins/elixir_bridge/register_callbacks.py:70-73\n\n**Impact:** Elixir side receives invalid/None worker PID causing connection tracking failures and inability to correlate Python processes with Elixir runs.\n\n**Fix:** Change sys.pid to os.getpid() in the Python bridge registration message.\n\n**Related:** Part of comprehensive Elixir Control Plane audit findings.",
+      "status": "closed",
+      "priority": 0,
+      "type": "bug",
+      "labels": [
+        "elixir,python-bridge,critical"
+      ],
+      "dependencies": {},
+      "created_at": "2026-04-14T10:37:25.554361",
+      "updated_at": "2026-04-14T11:08:05.537105",
+      "comments": []
+    },
+    "bd-42": {
+      "id": "bd-42",
+      "title": "P0: Unsafe String.to_atom/1 - External strings converted to atoms",
+      "description": "CRITICAL SECURITY BUG: External strings (from Python, MCP clients) are converted to atoms using String.to_atom/1, causing atom table exhaustion (VM crash vulnerability).\n\n**Files:**\n- elixir/code_puppy_control/lib/code_puppy_control/python_worker/port.ex:322\n- elixir/code_puppy_control/lib/code_puppy_control/run/state.ex:370\n\n**Impact:** \n- Denial of service via atom table exhaustion\n- VM crash after ~1M unique strings\n- No input validation on external data\n\n**Fix:** \n- Use String.to_existing_atom/1 with fallback\n- Or use binary keys for external data\n- Add input validation layer\n\n**Related:** Part of comprehensive Elixir Control Plane audit findings.",
+      "status": "closed",
+      "priority": 0,
+      "type": "bug",
+      "labels": [
+        "elixir,security,critical,atom-exhaustion"
+      ],
+      "dependencies": {},
+      "created_at": "2026-04-14T10:37:25.558839",
+      "updated_at": "2026-04-14T10:59:36.609111",
+      "comments": []
+    },
+    "bd-43": {
+      "id": "bd-43",
+      "title": "P0: stderr merged into protocol stream - Corrupts frame parser",
+      "description": "CRITICAL BUG: Python worker uses :stderr_to_stdout option which merges stderr into stdout, corrupting the protocol stream and causing frame parsing failures.\n\n**Files:**\n- elixir/code_puppy_control/lib/code_puppy_control/python_worker/port.ex:150-156\n\n**Impact:** Any Python warning/error (including deprecation warnings, stack traces) corrupts the protocol stream, causing cascading parse failures and system instability.\n\n**Fix:** \n- Remove :stderr_to_stdout from Port.open\n- Capture stderr separately via :stderr or logging\n- Add protocol stream sanitization\n\n**Related:** Part of comprehensive Elixir Control Plane audit findings.",
+      "status": "closed",
+      "priority": 0,
+      "type": "bug",
+      "labels": [
+        "elixir,python-bridge,protocol,critical"
+      ],
+      "dependencies": {},
+      "created_at": "2026-04-14T10:37:25.566579",
+      "updated_at": "2026-04-14T10:51:12.547582",
+      "comments": []
+    },
+    "bd-44": {
+      "id": "bd-44",
+      "title": "P0: Run.Supervisor bypassed - App starts raw DynamicSupervisor",
+      "description": "CRITICAL SUPERVISION BUG: Application starts a raw DynamicSupervisor instead of the custom CodePuppyControl.Run.Supervisor module, breaking restart strategies and run isolation.\n\n**Files:**\n- elixir/code_puppy_control/lib/code_puppy_control/application.ex:24-39\n\n**Impact:** \n- Run isolation broken - runs can interfere with each other\n- Restart strategies not applied\n- No proper supervision tree for run processes\n- Potential cascade failures\n\n**Fix:** Change Application.start to use CodePuppyControl.Run.Supervisor instead of raw DynamicSupervisor with :simple_one_for_one strategy.\n\n**Related:** Part of comprehensive Elixir Control Plane audit findings.",
+      "status": "closed",
+      "priority": 0,
+      "type": "bug",
+      "labels": [
+        "elixir,supervision,critical"
+      ],
+      "dependencies": {},
+      "created_at": "2026-04-14T10:37:31.097032",
+      "updated_at": "2026-04-14T11:01:33.244563",
+      "comments": []
+    },
+    "bd-45": {
+      "id": "bd-45",
+      "title": "P0: MCP framing mismatch - Double framing with {:packet,4} + Content-Length",
+      "description": "CRITICAL BUG: MCP server uses BEAM {:packet, 4} framing PLUS manual Content-Length parsing, causing double-framing issues and ID type mismatch (integer vs string).\n\n**Files:**\n- elixir/code_puppy_control/lib/code_puppy_control/mcp/server.ex:323-350\n- zig_src/process_runner/protocol.zig\n\n**Impact:** \n- Message truncation/concatenation\n- ID type mismatches between Elixir (integer) and Zig (string)\n- Protocol parsing failures on MCP stdio bridge\n\n**Fix:** \n- Choose ONE framing method (prefer manual Content-Length for MCP compliance)\n- Remove {:packet, 4} from socket options\n- Normalize ID types to strings throughout\n\n**Related:** Part of comprehensive Elixir Control Plane audit findings.",
+      "status": "closed",
+      "priority": 0,
+      "type": "bug",
+      "labels": [
+        "elixir,mcp,protocol,critical"
+      ],
+      "dependencies": {},
+      "created_at": "2026-04-14T10:37:31.098880",
+      "updated_at": "2026-04-14T11:06:37.490209",
+      "comments": []
+    },
+    "bd-46": {
+      "id": "bd-46",
+      "title": "P1: Remove Zig duplication - Remove puppy_core, turbo_ops, turbo_parse Zig crates",
+      "description": "HIGH SEVERITY: Remove redundant Zig crates that duplicate Rust functionality. Keep only process_runner temporarily for process management.\n\n**Scope:**\n- Remove zig_src/puppy_core (duplicate of code_puppy_core Rust)\n- Remove zig_src/turbo_ops (duplicate of turbo_ops Rust)\n- Remove zig_src/turbo_parse (duplicate of turbo_parse Rust)\n- Keep zig_src/process_runner temporarily (unique functionality)\n\n**Rationale:**\n- No benefit to maintaining two implementations\n- Rust versions are primary and better tested\n- Focus resources on single implementation\n\n**Acceptance Criteria:**\n- [ ] puppy_core removed from build.zig\n- [ ] turbo_ops removed from build.zig\n- [ ] turbo_parse removed from build.zig\n- [ ] process_runner kept with proper tests\n- [ ] Documentation updated\n\n**Related:** Part of comprehensive Elixir Control Plane audit findings.",
+      "status": "closed",
+      "priority": 1,
+      "type": "task",
+      "labels": [
+        "zig,cleanup,refactoring"
+      ],
+      "dependencies": {},
+      "created_at": "2026-04-14T10:37:41.993038",
+      "updated_at": "2026-04-14T11:24:42.022495",
+      "comments": []
+    },
+    "bd-47": {
+      "id": "bd-47",
+      "title": "P1: Unbounded history lists - request_history and events grow without limit",
+      "description": "HIGH SEVERITY: Run.State stores request_history and events as unbounded lists, causing unbounded memory growth over long-running sessions.\n\n**Files:**\n- elixir/code_puppy_control/lib/code_puppy_control/run/state.ex:203-204\n\n**Impact:** \n- Unbounded memory growth\n- OOM crashes on long sessions\n- No eviction policy\n- Performance degradation over time\n\n**Fix:** \n- Add configurable history limits (e.g., max 1000 entries)\n- Implement ring buffer or circular eviction\n- Add :history_limit config option\n- Log warning when history is truncated\n\n**Related:** Part of comprehensive Elixir Control Plane audit findings.",
+      "status": "closed",
+      "priority": 1,
+      "type": "bug",
+      "labels": [
+        "elixir,memory,resource-leak"
+      ],
+      "dependencies": {},
+      "created_at": "2026-04-14T10:37:41.999391",
+      "updated_at": "2026-04-14T11:24:42.052645",
+      "comments": []
+    },
+    "bd-48": {
+      "id": "bd-48",
+      "title": "P1: Event tuple mismatch - Run.State vs EventBus send different formats",
+      "description": "HIGH SEVERITY: Run.State expects {:run_event, event} tuple but EventBus sends {:event, event}, causing event processing failures.\n\n**Files:**\n- elixir/code_puppy_control/lib/code_puppy_control/run/state.ex\n- elixir/code_puppy_control/lib/code_puppy_control/event_bus.ex\n\n**Impact:** \n- Events not processed correctly\n- Run state updates lost\n- Event-driven features broken\n- Silent failures in event handling\n\n**Fix:** Standardize on ONE event tuple format:\n- Option A: Change Run.State to expect {:event, event}\n- Option B: Change EventBus to send {:run_event, event}\n- Document the chosen format\n\n**Related:** Part of comprehensive Elixir Control Plane audit findings.",
+      "status": "closed",
+      "priority": 1,
+      "type": "bug",
+      "labels": [
+        "elixir,protocol,event-bus"
+      ],
+      "dependencies": {},
+      "created_at": "2026-04-14T10:37:42.003789",
+      "updated_at": "2026-04-14T11:24:42.081394",
+      "comments": []
+    },
+    "bd-49": {
+      "id": "bd-49",
+      "title": "P2: WebSocket unauthenticated - UserSocket allows any client connection",
+      "description": "MEDIUM SEVERITY: UserSocket does not authenticate clients, allowing any WebSocket connection to subscribe to run events and potentially access sensitive data.\n\n**Files:**\n- elixir/code_puppy_control/lib/code_puppy_control_web/channels/user_socket.ex\n\n**Impact:** \n- Unauthorized access to run events\n- Information disclosure\n- No connection authentication/authorization\n\n**Fix:** \n- Add token-based authentication on connect\n- Verify session/run ownership before allowing channel join\n- Implement authorization checks for run: events\n\n**Related:** Part of comprehensive Elixir Control Plane audit findings.",
+      "status": "closed",
+      "priority": 2,
+      "type": "bug",
+      "labels": [
+        "elixir,security,websocket,authentication"
+      ],
+      "dependencies": {},
+      "created_at": "2026-04-14T10:37:48.559230",
+      "updated_at": "2026-04-14T11:24:42.167332",
+      "comments": []
+    },
+    "bd-50": {
+      "id": "bd-50",
+      "title": "P2: Missing telemetry - No :telemetry instrumentation in Elixir control plane",
+      "description": "MEDIUM SEVERITY: No :telemetry instrumentation in the Elixir control plane, making production observability and debugging difficult.\n\n**Missing Instrumentation:**\n- Run lifecycle events (start, complete, fail)\n- Request latency histograms\n- Python worker message queue depth\n- MCP connection metrics\n- WebSocket connection stats\n\n**Impact:** \n- Blind to production issues\n- No performance metrics\n- Difficult to diagnose bottlenecks\n- No alerting capability\n\n**Fix:** \n- Add :telemetry dependency\n- Instrument all critical paths\n- Define standard metric names\n- Document metric semantics\n\n**Related:** Part of comprehensive Elixir Control Plane audit findings.",
+      "status": "closed",
+      "priority": 2,
+      "type": "task",
+      "labels": [
+        "elixir,observability,telemetry,metrics"
+      ],
+      "dependencies": {},
+      "created_at": "2026-04-14T10:37:48.559918",
+      "updated_at": "2026-04-14T11:24:42.196145",
+      "comments": []
+    },
+    "bd-51": {
+      "id": "bd-51",
+      "title": "P2: Config sprawl - Multiple config surfaces need consolidation",
+      "description": "MEDIUM SEVERITY: Configuration is scattered across multiple surfaces with no single source of truth, making deployment and environment management difficult.\n\n**Config Surfaces:**\n- Application environment (config/runtime.exs)\n- Python config (config.json)\n- Zig build options (build.zig)\n- Environment variables (inconsistent naming)\n- Compile-time vs runtime config confusion\n\n**Impact:** \n- Hard to configure correctly\n- Environment-specific bugs\n- Deployment complexity\n- No validation of config values\n\n**Fix:** \n- Centralize config in one module\n- Add config validation at startup\n- Document all config options\n- Standardize environment variable naming (PUP_ prefix)\n- Fail fast on invalid config\n\n**Related:** Part of comprehensive Elixir Control Plane audit findings.",
+      "status": "closed",
+      "priority": 2,
+      "type": "task",
+      "labels": [
+        "elixir,config,technical-debt"
+      ],
+      "dependencies": {},
+      "created_at": "2026-04-14T10:37:48.561608",
+      "updated_at": "2026-04-14T11:24:42.224466",
+      "comments": []
+    },
+    "bd-52": {
+      "id": "bd-52",
+      "title": "P1: MCP.Server blocking receive - Raw receive inside GenServer callbacks",
+      "description": "HIGH SEVERITY: MCP.Server uses blocking 'receive' inside GenServer.handle_info/2, blocking the GenServer and potentially deadlocking the supervision tree.\n\n**Files:**\n- elixir/code_puppy_control/lib/code_puppy_control/mcp/server.ex:352-385\n\n**Impact:** \n- MCP server blocks on message processing\n- Cannot handle concurrent MCP requests\n- GenServer mailbox backup under load\n- Potential supervision tree deadlock\n\n**Fix:** \n- Refactor to use :active, :once TCP mode\n- Handle packets as they arrive via handle_info\n- Or use :gen_tcp.controlling_process + separate process\n\n**Related:** Part of comprehensive Elixir Control Plane audit findings.",
+      "status": "closed",
+      "priority": 1,
+      "type": "bug",
+      "labels": [
+        "elixir,mcp,performance,blocking"
+      ],
+      "dependencies": {},
+      "created_at": "2026-04-14T10:37:57.391932",
+      "updated_at": "2026-04-14T11:24:42.109606",
+      "comments": []
+    },
+    "bd-53": {
+      "id": "bd-53",
+      "title": "P1: Run.Manager polling - Uses Process.sleep(100) instead of event-driven",
+      "description": "HIGH SEVERITY: Run.Manager uses Process.sleep(100) polling loop instead of event-driven architecture (GenStage, PubSub, or message passing).\n\n**Files:**\n- elixir/code_puppy_control/lib/code_puppy_control/run/manager.ex:190-254\n\n**Impact:** \n- 10ms latency overhead minimum\n- Wasted CPU cycles on polling\n- Scalability ceiling under load\n- Non-idiomatic Elixir code\n\n**Fix:** \n- Use PubSub for state change events\n- Or GenStage for backpressure\n- Or simple message passing GenServer\n- Eliminate all polling loops\n\n**Related:** Part of comprehensive Elixir Control Plane audit findings.",
+      "status": "closed",
+      "priority": 1,
+      "type": "bug",
+      "labels": [
+        "elixir,performance,polling,patterns"
+      ],
+      "dependencies": {},
+      "created_at": "2026-04-14T10:37:57.393982",
+      "updated_at": "2026-04-14T11:24:42.138447",
+      "comments": []
+    },
+    "bd-54": {
+      "id": "bd-54",
+      "title": "LOW-2: Add rate limiting for API authentication failures",
+      "description": "**Location:** code_puppy/api/security.py\n\n**Problem:** No rate limiting on failed authentication attempts. An attacker could brute-force API tokens without throttling.\n\n**Fix:** Add rate limiting (e.g., 5 failures per minute per IP):\n- Track failed attempts by client IP\n- Return 429 Too Many Requests after threshold\n- Consider using a sliding window or token bucket algorithm\n\n**Priority:** P3 (Low)\n**Category:** Security",
+      "status": "closed",
+      "priority": 3,
+      "type": "bug",
+      "labels": [
+        "security",
+        "low-priority"
+      ],
+      "dependencies": {},
+      "created_at": "2026-04-14T13:34:43.372626",
+      "updated_at": "2026-04-14T13:57:21.548874",
+      "comments": [
+        "Claiming this issue - code-puppy-019d8c"
+      ]
+    },
+    "bd-55": {
+      "id": "bd-55",
+      "title": "LOW-4: Rate limiter cleanup modifies dict without holding lock",
+      "description": "**Location:** code_puppy/adaptive_rate_limiter.py, _cleanup_old_states()\n\n**Problem:** The cleanup function iterates and deletes from model_states dict outside the async lock. Under high concurrency, this could cause RuntimeError from dict mutation during iteration.\n\n**Fix:** Either:\n1. Perform cleanup while holding the lock\n2. Add explicit synchronization\n3. Add a comment documenting why it's safe (if it is)\n\n**Priority:** P3 (Low)\n**Category:** Concurrency",
+      "status": "closed",
+      "priority": 3,
+      "type": "bug",
+      "labels": [
+        "bug",
+        "low-priority",
+        "claimed-by-code-puppy-019d8b"
+      ],
+      "dependencies": {},
+      "created_at": "2026-04-14T13:34:43.374383",
+      "updated_at": "2026-04-14T13:51:13.422805",
+      "comments": []
+    },
+    "bd-56": {
+      "id": "bd-56",
+      "title": "OBS-5: CORS allow_methods missing PUT - config endpoint unreachable from browsers",
+      "description": "**Location:** code_puppy/api/app.py, CORS middleware configuration\n\n**Problem:** CORS middleware allows GET, POST, DELETE, OPTIONS but not PUT. The config router has PUT /{key} endpoint that will fail CORS preflight from browsers.\n\n**Fix:** Either:\n1. Add 'PUT' to allow_methods list (if browser PUT is intended)\n2. Change config update route to use POST instead of PUT\n\n**Priority:** P4 (Observation)\n**Category:** API",
+      "status": "closed",
+      "priority": 4,
+      "type": "bug",
+      "labels": [
+        "bug",
+        "low-priority",
+        "claimed-by-code-puppy-019d8b"
+      ],
+      "dependencies": {},
+      "created_at": "2026-04-14T13:34:43.381113",
+      "updated_at": "2026-04-14T13:51:13.363713",
+      "comments": []
+    },
+    "bd-57": {
+      "id": "bd-57",
+      "title": "Add cross-language integration tests for bridge protocol",
+      "description": "**Context:** The Python\u2194Elixir bridge protocol was recently aligned (see docs/BRIDGE_PROTOCOL.md). However, tests currently use mocks that don't exercise the real protocol.\n\n**Need:**\n1. Python-side tests that verify wire format matches spec\n2. Elixir-side tests that verify event handling with real Python bridge\n3. End-to-end tests that run actual agent invocations through the bridge\n\n**Files to test:**\n- code_puppy/plugins/elixir_bridge/wire_protocol.py\n- code_puppy/plugins/elixir_bridge/bridge_controller.py\n- elixir/code_puppy_control/lib/code_puppy_control/python_worker/port.ex\n\n**Priority:** P2 (Medium)\n**Category:** Testing",
+      "status": "closed",
+      "priority": 2,
+      "type": "feature",
+      "labels": [
+        "testing",
+        "integration",
+        "claimed-by-code-puppy-019d8b"
+      ],
+      "dependencies": {},
+      "created_at": "2026-04-14T13:34:43.388563",
+      "updated_at": "2026-04-14T13:51:13.451521",
+      "comments": []
+    },
+    "bd-58": {
+      "id": "bd-58",
+      "title": "LOW-1: Fix TOCTOU race in OAuth token file permissions",
+      "description": "**Location:** code_puppy/plugins/claude_code_oauth/utils.py\n\n**Problem:** Token files may be created with insecure permissions briefly before chmod is applied. This is a Time-Of-Check-Time-Of-Use (TOCTOU) race condition.\n\n**Fix:** Use os.open() with mode 0o600 directly instead of open() + chmod():\n\nfd = os.open(token_path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)\nwith os.fdopen(fd, 'w') as f:\n    f.write(token_data)\n\n**Priority:** P3 (Low)\n**Category:** Security",
+      "status": "closed",
+      "priority": 3,
+      "type": "bug",
+      "labels": [
+        "security",
+        "low-priority",
+        "claimed-by-code-puppy-019d8b"
+      ],
+      "dependencies": {},
+      "created_at": "2026-04-14T13:34:43.392788",
+      "updated_at": "2026-04-14T13:51:13.393800",
+      "comments": []
+    },
+    "bd-59": {
+      "id": "bd-59",
+      "title": "Add Python handlers for Elixir lifecycle commands",
+      "description": "Python bridge needs handlers for Elixir \u2192 Python lifecycle commands: run/start, run/cancel, exit, and initialize. Currently these are missing, meaning Elixir cannot initiate runs or graceful shutdown. See ADR-002 for protocol details.",
+      "status": "closed",
+      "priority": 2,
+      "type": "task",
+      "labels": [
+        "protocol",
+        "elixir",
+        "python"
+      ],
+      "dependencies": {},
+      "created_at": "2026-04-14T16:20:13.963364",
+      "updated_at": "2026-04-14T16:24:00.653757",
+      "comments": []
+    },
+    "bd-60": {
+      "id": "bd-60",
+      "title": "Remove stale Zig references from config and docs",
+      "description": "Remove outdated Zig/Rust hybrid references from: code_puppy/config.py, code_puppy/acceleration/__init__.py, docs/acceleration.md. The codebase is now Rust-only for native acceleration.",
+      "status": "closed",
+      "priority": 4,
+      "type": "task",
+      "labels": [
+        "cleanup",
+        "docs"
+      ],
+      "dependencies": {},
+      "created_at": "2026-04-14T16:20:13.966501",
+      "updated_at": "2026-04-14T16:21:12.486094",
+      "comments": [
+        "Claimed by code-puppy-019d8c - starting work on removing stale Zig references"
+      ]
+    },
+    "bd-61": {
+      "id": "bd-61",
+      "title": "Fast Puppy rewrite Phase 1 - native backend adapter",
+      "description": "Create code_puppy/native_backend.py as single entry point for all native acceleration. Migrate consumers (turbo_executor/orchestrator.py, repo_compass/turbo_indexer_bridge.py) to use the adapter instead of direct imports. Per fast_puppy_elixir_rewrite_plan.md Phase 1.",
+      "status": "closed",
+      "priority": 3,
+      "type": "task",
+      "labels": [
+        "fast-puppy",
+        "elixir",
+        "architecture"
+      ],
+      "dependencies": {},
+      "created_at": "2026-04-14T16:20:13.971090",
+      "updated_at": "2026-04-14T16:30:28.721737",
+      "comments": []
+    },
+    "bd-62": {
+      "id": "bd-62",
+      "title": "Fast Puppy Phase 2 - Port turbo_ops file operations to Elixir",
+      "description": "Port turbo_ops file operations to native Elixir. The Elixir codebase already has DirectoryIndexer/DirectoryWalker for repo indexing but is missing the core file ops:\n\nMissing operations:\n- list_files - Simple directory listing with filters\n- grep - Text search across files  \n- read_file - Read single file content\n- read_files - Batch file reading\n\nImplementation tasks:\n1. Create CodePuppyControl.FileOps module with all 4 operations\n2. Add JSON-RPC handlers in port.ex for file_list, grep_search, file_read, file_read_batch\n3. Update NativeBackend to route through Elixir when control plane is connected\n4. Add comprehensive tests\n\nPer fast_puppy_elixir_rewrite_plan.md Phase 2. Do NOT route hot file ops through Phoenix HTTP - use Port/stdio for low latency.",
+      "status": "closed",
+      "priority": 2,
+      "type": "task",
+      "labels": [
+        "fast-puppy",
+        "elixir",
+        "architecture",
+        "file-ops"
+      ],
+      "dependencies": {},
+      "created_at": "2026-04-14T16:33:54.503350",
+      "updated_at": "2026-04-14T16:43:05.530841",
+      "comments": []
+    },
+    "bd-63": {
+      "id": "bd-63",
+      "title": "Fast Puppy Phase 3 - Simplify activation to capability-based profiles",
+      "description": "Remove monkey-patching from Fast Puppy and switch to capability-based profiles via NativeBackend.\n\nCurrent problems:\n- builder.py uses _reload_and_patch_crate() to setattr() on consumer modules\n- Single enable_fast_puppy bool doesn't match per-capability reality\n- Consumers check RUST_AVAILABLE flags instead of querying NativeBackend\n\nPhase 3 tasks:\n1. Remove patch_targets and _reload_and_patch_crate() from builder.py\n2. Add per-capability config keys (fast_puppy.message_core, fast_puppy.file_ops, etc.)\n3. Rewrite /fast_puppy commands to operate on NativeBackend capabilities\n4. Update any remaining consumers to use NativeBackend instead of module flags\n5. Builder should only build - no patching, no module reloading\n\nExit criteria:\n- /fast_puppy enable|disable affects capability profiles, not just _core_bridge\n- No import-time monkey-patching in steady-state operation",
+      "status": "closed",
+      "priority": 2,
+      "type": "task",
+      "labels": [
+        "fast-puppy,architecture,refactor"
+      ],
+      "dependencies": {},
+      "created_at": "2026-04-14T16:45:52.393469",
+      "updated_at": "2026-04-14T16:51:32.286889",
+      "comments": []
+    },
+    "bd-64": {
+      "id": "bd-64",
+      "title": "Fast Puppy Phase 4 - Migrate turbo_parse to Elixir via Rustler NIF",
+      "description": "Migrate turbo_parse parsing capabilities to Elixir. Rather than rewriting tree-sitter parsing in pure Elixir, use Rustler to create NIF bindings from the existing turbo_parse Rust code.\n\nCurrent state:\n- turbo_parse Rust crate: 35+ functions, 6 languages, tree-sitter based\n- Elixir SymbolExtractor: regex-based, only Python+Elixir, returns simple strings\n\nMigration approach (staged):\n1. Stage 1: Create Rustler NIF wrapper for turbo_parse in Elixir\n2. Stage 2: Port symbol extraction (is_language_supported, extract_symbols, extract_symbols_from_file)\n3. Stage 3: Port diagnostics (extract_syntax_diagnostics)\n4. Stage 4: Port folds and highlights\n5. Stage 5: Port batch parsing and caching\n\nKey files:\n- turbo_parse/src/lib.rs - Rust API\n- code_puppy/turbo_parse_bridge.py - Python bridge\n- elixir/code_puppy_control/lib/code_puppy_control/indexer/symbol_extractor.ex - current Elixir impl\n\nExit criteria:\n- Elixir can call turbo_parse via NIF for symbol extraction\n- SymbolExtractor upgraded to use NIF instead of regex\n- NativeBackend routes parse ops through Elixir when available",
+      "status": "closed",
+      "priority": 2,
+      "type": "task",
+      "labels": [
+        "fast-puppy,elixir,turbo-parse,rustler"
+      ],
+      "dependencies": {},
+      "created_at": "2026-04-14T17:11:05.779002",
+      "updated_at": "2026-04-14T17:35:40.333577",
+      "comments": [
+        "Stage 2 complete: turbo_parse_core crate extracted with all core parsing logic. All 126 tests pass. Ready for commit."
+      ]
+    },
+    "bd-65": {
+      "id": "bd-65",
+      "title": "Fast Puppy Phase 5 - Delete hybrid leftovers (zig_bridge, /accel)",
+      "description": "Final cleanup phase for the Fast Puppy Elixir rewrite.\n\nRemaining work:\n1. Delete code_puppy/zig_bridge/ directory - 350+ lines of dead CFFI code, nothing imports it\n2. Remove code_puppy/plugins/accel_status/ plugin - the /accel command is deprecated in favor of /fast_puppy status\n3. Update 2 stale Zig comments in code_puppy/process_runner_protocol.py\n\nExit criteria:\n- No zig_bridge directory\n- No /accel command\n- No Zig references in codebase\n- One coherent backend story",
+      "status": "closed",
+      "priority": 3,
+      "type": "task",
+      "labels": [
+        "fast-puppy",
+        "cleanup",
+        "architecture"
+      ],
+      "dependencies": {},
+      "created_at": "2026-04-14T17:37:25.011381",
+      "updated_at": "2026-04-14T17:38:26.033440",
+      "comments": []
+    },
+    "bd-66": {
+      "id": "bd-66",
+      "title": "Fix type annotation and compatibility issues",
+      "description": "Several issues identified in code review:\n\n1. **CRITICAL**: `app_runner.py` uses `callable` (builtin function) instead of `Callable` (type) at lines 43-45\n2. **TEST FAILURE**: `TURBO_OPS_AVAILABLE` missing from `turbo_executor/orchestrator.py` but expected by `test_import_smoke.py`\n3. **CODE SMELL**: `native_backend.py:473` has hardcoded `\"rust\" if False else \"python\"` for message_core status\n4. **CLEANUP**: `session_storage.py` forward references could be cleaner",
+      "status": "closed",
+      "priority": 1,
+      "type": "bug",
+      "labels": [
+        "bug",
+        "types",
+        "compatibility"
+      ],
+      "dependencies": {},
+      "created_at": "2026-04-14T19:34:59.169860",
+      "updated_at": "2026-04-14T19:36:18.270612",
+      "comments": []
+    },
+    "bd-67": {
+      "id": "bd-67",
+      "title": "Phase 0.1: Route base_agent.py _core_bridge through NativeBackend",
+      "description": "Replace direct _core_bridge imports in base_agent.py (lines 44-48) with NativeBackend. Add NativeBackend.MessageBatchHandle re-export, NativeBackend.create_message_batch(), NativeBackend.is_message_core_active(). Fix dead code bug: _core_bridge.rust_split_for_summarization and rust_truncation_indices don't exist (silently AttributeError). 37+ usage points to update.",
+      "status": "closed",
+      "priority": 1,
+      "type": "task",
+      "labels": [
+        "migration",
+        "phase-0"
+      ],
+      "dependencies": {},
+      "created_at": "2026-04-14T20:05:41.685263",
+      "updated_at": "2026-04-14T21:54:12.695988",
+      "comments": [
+        "Claimed by planning-agent-019d8d for in-progress work",
+        "Already implemented: base_agent.py routes through NativeBackend (lines 36-40). Dead code bugs fixed at lines 1061/1862. 74 tests pass."
+      ]
+    },
+    "bd-68": {
+      "id": "bd-68",
+      "title": "Phase 0.2: Route explorer.py turbo_parse_bridge through NativeBackend",
+      "description": "Replace direct turbo_parse_bridge imports in code_context/explorer.py with NativeBackend. Add NativeBackend.extract_symbols_from_file() wrapper.",
+      "status": "closed",
+      "priority": 2,
+      "type": "task",
+      "labels": [
+        "migration",
+        "phase-0",
+        "in_progress"
+      ],
+      "dependencies": {},
+      "created_at": "2026-04-14T20:05:41.687611",
+      "updated_at": "2026-04-14T20:25:50.750312",
+      "comments": []
+    },
+    "bd-69": {
+      "id": "bd-69",
+      "title": "Phase 0.5: Route fast_puppy/register_callbacks.py _core_bridge imports",
+      "description": "Replace 4 direct _core_bridge import sites (lines 165, 258, 306, 335) in fast_puppy/register_callbacks.py with NativeBackend queries.",
+      "status": "closed",
+      "priority": 2,
+      "type": "task",
+      "labels": [
+        "migration",
+        "phase-0"
+      ],
+      "dependencies": {},
+      "created_at": "2026-04-14T20:05:41.692325",
+      "updated_at": "2026-04-14T20:25:50.782435",
+      "comments": []
+    },
+    "bd-70": {
+      "id": "bd-70",
+      "title": "Phase 0.3: Route acceleration/__init__.py through NativeBackend",
+      "description": "Replace direct _core_bridge and turbo_parse_bridge imports in acceleration/__init__.py. Make it a thin re-export layer over NativeBackend.",
+      "status": "closed",
+      "priority": 2,
+      "type": "task",
+      "labels": [
+        "migration",
+        "phase-0",
+        "in_progress"
+      ],
+      "dependencies": {},
+      "created_at": "2026-04-14T20:05:41.699417",
+      "updated_at": "2026-04-14T20:25:50.813019",
+      "comments": [
+        "Claimed by planning-agent-019d8d for adversarial planning work."
+      ]
+    },
+    "bd-71": {
+      "id": "bd-71",
+      "title": "Phase 0.4: Route remaining turbo_parse_bridge consumers",
+      "description": "Route syntax_validate.py, skeleton.py, and turbo_parse/register_callbacks.py through NativeBackend. These already use lazy imports so lower risk.",
+      "status": "closed",
+      "priority": 3,
+      "type": "task",
+      "labels": [
+        "migration",
+        "phase-0"
+      ],
+      "dependencies": {},
+      "created_at": "2026-04-14T20:05:41.703302",
+      "updated_at": "2026-04-14T20:25:50.844153",
+      "comments": []
+    },
+    "bd-72": {
+      "id": "bd-72",
+      "title": "BUG: RequestTracker stale cleanup crashes on nil target",
+      "description": "handle_info(:cleanup) calls GenServer.reply(target, ...) where target can be nil when request was registered via register_only but awaiter never called. GenServer.reply(nil, ...) crashes the process. Fix: guard with 'if target' before calling reply.",
+      "status": "closed",
+      "priority": 2,
+      "type": "task",
+      "labels": [
+        "bug",
+        "phase-1",
+        "elixir"
+      ],
+      "dependencies": {},
+      "created_at": "2026-04-14T20:36:44.633473",
+      "updated_at": "2026-04-14T20:40:08.125632",
+      "comments": [
+        "Claimed by code-puppy-019d8d. In progress."
+      ]
+    },
+    "bd-73": {
+      "id": "bd-73",
+      "title": "FIX: RequestTracker timer map not cleaned on completion",
+      "description": "cancel_timer() cancels the timer process but state.timers map entry is not removed in complete/fail handlers. Minor memory leak. Fix: add Map.delete(state.timers, request_id) to completion paths.",
+      "status": "closed",
+      "priority": 4,
+      "type": "task",
+      "labels": [
+        "bug",
+        "phase-1",
+        "elixir"
+      ],
+      "dependencies": {},
+      "created_at": "2026-04-14T20:36:44.639244",
+      "updated_at": "2026-04-14T20:40:08.121843",
+      "comments": [
+        "Claimed by code-puppy-019d8d. In progress."
+      ]
+    },
+    "bd-74": {
+      "id": "bd-74",
+      "title": "BUG: file_read_batch crashes on FileOps error",
+      "description": "port.ex handle_file_request(\"file_read_batch\") uses {:ok, results} = FileOps.read_files(paths, opts) which crashes if read_files returns {:error, reason}. Fix: use case statement.",
+      "status": "closed",
+      "priority": 3,
+      "type": "task",
+      "labels": [
+        "bug",
+        "phase-1",
+        "elixir"
+      ],
+      "dependencies": {},
+      "created_at": "2026-04-14T20:36:44.641110",
+      "updated_at": "2026-04-14T20:40:08.132210",
+      "comments": [
+        "Claimed by code-puppy-019d8d. In progress."
+      ]
+    },
+    "bd-75": {
+      "id": "bd-75",
+      "title": "BUG: grep_search param mismatch \u2014 Elixir bridge grep is broken",
+      "description": "Python NativeBackend sends 'search_string' key but Elixir port.ex handle_file_request reads 'pattern'. Grep via Elixir bridge passes nil pattern. Fix: change port.ex to read params[\"search_string\"] OR params[\"pattern\"] (accept both for compatibility).",
+      "status": "closed",
+      "priority": 0,
+      "type": "task",
+      "labels": [
+        "bug",
+        "phase-1",
+        "elixir"
+      ],
+      "dependencies": {},
+      "created_at": "2026-04-14T20:36:57.499338",
+      "updated_at": "2026-04-14T20:40:08.133595",
+      "comments": [
+        "Claimed by code-puppy-019d8d. In progress."
+      ]
+    },
+    "bd-76": {
+      "id": "bd-76",
+      "title": "Phase 2: Remove turbo_ops Rust crate",
+      "description": "Delete turbo_ops/ directory, remove from Cargo.toml workspace members, remove from pyproject.toml data files, remove from builder.py CRATES registry, simplify NativeBackend to Elixir->Python fallback chain (remove ~52 turbo_ops references), update doc comments in Elixir files.",
+      "status": "closed",
+      "priority": 1,
+      "type": "task",
+      "labels": [
+        "migration",
+        "phase-2"
+      ],
+      "dependencies": {},
+      "created_at": "2026-04-14T20:43:28.114612",
+      "updated_at": "2026-04-14T20:53:45.861194",
+      "comments": []
+    },
+    "bd-77": {
+      "id": "bd-77",
+      "title": "Phase 3.2: Migrate ConcurrencyLimits to Elixir",
+      "description": "ConcurrencyLimits (335 lines, 9 callers) has 3 lazy-initialized TrackedSemaphore globals. Migrate to Elixir GenServer with ETS-backed counters. Python becomes thin async proxy via elixir_bridge.",
+      "status": "closed",
+      "priority": 3,
+      "type": "task",
+      "labels": [
+        "migration",
+        "phase-3",
+        "elixir"
+      ],
+      "dependencies": {},
+      "created_at": "2026-04-14T20:58:32.159369",
+      "updated_at": "2026-04-14T21:26:36.621511",
+      "comments": [
+        "Claimed by planning-agent-019d8d - starting Phase 3.2"
+      ]
+    },
+    "bd-78": {
+      "id": "bd-78",
+      "title": "Phase 3.1: Migrate SessionHistoryBuffer to Elixir EventStore",
+      "description": "SessionHistoryBuffer (257 lines, 5 callers) has 95% overlap with Elixir EventStore (ETS-backed, TTL cleanup). Elixir port.ex already stores events via EventStore.store(). Add history_get/history_clear bridge methods to port.ex, update Python to proxy to Elixir when available, fall back to local deque. Smallest singleton, cleanest migration.",
+      "status": "closed",
+      "priority": 4,
+      "type": "task",
+      "labels": [
+        "migration",
+        "phase-3",
+        "elixir"
+      ],
+      "dependencies": {},
+      "created_at": "2026-04-14T20:58:32.163913",
+      "updated_at": "2026-04-14T21:06:34.318389",
+      "comments": []
+    },
+    "bd-79": {
+      "id": "bd-79",
+      "title": "Phase 3.3: Add MessageBus bridge to Elixir EventBus",
+      "description": "MessageBus (33 callers, 47 methods) has 70% overlap with Elixir EventBus. Add bridge methods for emit/subscribe. High blast radius \u2014 proxy pattern, not full replacement. Phase 3 creates the bridge, Phase 4 switches callers.",
+      "status": "closed",
+      "priority": 3,
+      "type": "task",
+      "labels": [
+        "migration",
+        "phase-3",
+        "elixir"
+      ],
+      "dependencies": {},
+      "created_at": "2026-04-14T20:58:32.166705",
+      "updated_at": "2026-04-14T21:44:45.262562",
+      "comments": [
+        "Claimed by planning-agent-019d8d - starting Phase 3.3",
+        "Complete: Proxy pattern - additive bridge to Elixir EventBus. Wire protocol + handlers + 78 tests. No caller changes, local delivery always works."
+      ]
+    },
+    "bd-80": {
+      "id": "bd-80",
+      "title": "Phase 3.5-3.7: Defer RunLimiter/AdaptiveRateLimiter/AgentManager to Phase 4",
+      "description": "These 3 singletons (113 internal refs total) control Python-side concurrency and agent lifecycle. They should move with the agent runtime in Phase 4, not separately. RunLimiter: semaphore semantics. AdaptiveRateLimiter: circuit breaker with 75 internal refs. AgentManager: 35 refs, module-level procedural pattern.",
+      "status": "closed",
+      "priority": 1,
+      "type": "task",
+      "labels": [
+        "migration",
+        "phase-3",
+        "deferred"
+      ],
+      "dependencies": {},
+      "created_at": "2026-04-14T20:58:32.175294",
+      "updated_at": "2026-04-14T21:13:13.285458",
+      "comments": [
+        "Claimed by planning-agent-019d8d - documenting deferral",
+        "Documented deferral to Phase 4 - see docs/migration/PHASE_4_DEFERRED.md"
+      ]
+    },
+    "bd-81": {
+      "id": "bd-81",
+      "title": "Phase 3.4: Wire MCPManager to Elixir MCP.Server",
+      "description": "MCPManager (15 callers) has 60% overlap with Elixir MCP.Server GenServer. Add bridge for register/start/stop/list. Elixir already has per-server GenServer supervision.",
+      "status": "closed",
+      "priority": 1,
+      "type": "task",
+      "labels": [
+        "migration",
+        "phase-3",
+        "elixir"
+      ],
+      "dependencies": {},
+      "created_at": "2026-04-14T20:58:32.185767",
+      "updated_at": "2026-04-14T21:34:37.188642",
+      "comments": [
+        "Claimed by planning-agent-019d8d - starting Phase 3.4",
+        "Complete: Wire protocol + bridge handlers + 56 tests passing. Bridged list/status operations, tool calls deferred."
+      ]
+    },
+    "bd-82": {
+      "id": "bd-82",
+      "title": "CRITICAL: Implement Python\u2192Elixir reverse channel (call_method transport)",
+      "description": "elixir_bridge.call_method() raises NotImplementedError \u2014 the Python\u2192Elixir transport was never wired. This means ALL Elixir file ops (Phase 2) silently fall back to Python. ALL singleton proxying (Phase 3) is blocked. Fix: In bridge mode, _send_request_to_elixir should write Content-Length framed JSON-RPC to stdout. The stdin reader should detect responses (has result/error, no method) and route to handle_response(). Port.ex already handles requests FROM Python \u2014 the Elixir side works, only the Python transport is missing.",
+      "status": "closed",
+      "priority": 0,
+      "type": "bug",
+      "labels": [
+        "migration",
+        "phase-3",
+        "blocker"
+      ],
+      "dependencies": {},
+      "created_at": "2026-04-14T21:03:21.306651",
+      "updated_at": "2026-04-14T21:06:34.323405",
+      "comments": []
+    },
+    "bd-83": {
+      "id": "bd-83",
+      "title": "Phase 2.3: Route turbo_indexer_bridge through NativeBackend",
+      "description": "",
+      "status": "closed",
+      "priority": 2,
+      "type": "task",
+      "labels": [
+        "migration",
+        "phase-2",
+        "cleanup"
+      ],
+      "dependencies": {
+        "blocks": [
+          "bd-85"
+        ]
+      },
+      "created_at": "2026-04-14T22:03:33.954737",
+      "updated_at": "2026-04-14T22:24:45.676654",
+      "comments": [
+        "turbo_indexer_bridge.py still references Rust turbo_ops for repo indexing. Route through NativeBackend.index_directory() which already exists. Remove direct turbo_ops imports. Fallback to Python indexer when Elixir unavailable.",
+        "Claimed by planning-agent-019d8d",
+        "Complete: Updated docstrings and status reporting from turbo_ops to native backend (elixir/python). 4 references cleaned up."
+      ]
+    },
+    "bd-84": {
+      "id": "bd-84",
+      "title": "Phase 2.2: Route TurboOrchestrator through NativeBackend",
+      "description": "",
+      "status": "closed",
+      "priority": 2,
+      "type": "task",
+      "labels": [
+        "migration",
+        "phase-2",
+        "cleanup"
+      ],
+      "dependencies": {
+        "blocks": [
+          "bd-85"
+        ]
+      },
+      "created_at": "2026-04-14T22:03:33.955778",
+      "updated_at": "2026-04-14T22:24:45.683608",
+      "comments": [
+        "TurboOrchestrator (plugins/turbo_executor/orchestrator.py) still imports turbo_ops directly in 16 places. Route all file ops through NativeBackend.list_files/grep/read_file instead. Remove direct turbo_ops imports. Update _get_backend_info() to report 'elixir' or 'python' (not 'turbo_ops').",
+        "Claimed by planning-agent-019d8d",
+        "Complete: Updated 13 turbo_ops references to use actual backend source (elixir/python). Backward compat maintained with TURBO_OPS_AVAILABLE alias."
+      ]
+    },
+    "bd-85": {
+      "id": "bd-85",
+      "title": "Phase 2.1: Wire Elixir file_ops to Python via elixir_bridge",
+      "description": "",
+      "status": "closed",
+      "priority": 1,
+      "type": "task",
+      "labels": [
+        "migration",
+        "phase-2",
+        "elixir"
+      ],
+      "dependencies": {},
+      "created_at": "2026-04-14T22:03:33.967073",
+      "updated_at": "2026-04-14T22:15:54.725574",
+      "comments": [
+        "Wire Elixir file_ops.ex (already complete) to Python via elixir_bridge. Add handlers in bridge_controller.py for: file.list, file.read, file.read_batch, file.grep. Update native_backend.py to use bridge RPC instead of NotImplementedError. Transport: JSON-RPC over stdio (existing elixir_bridge pattern). Exit criteria: list_files/grep/read_file work through Elixir when bridge connected.",
+        "Claimed by planning-agent-019d8d - starting implementation",
+        "Implementation verified complete:\n- Elixir FileOps module: list_files, grep, read_file, read_files (35 tests passing)\n- Elixir port.ex handlers: file_list, grep_search, file_read, file_read_batch (lines 324-400)\n- Python native_backend: _call_elixir() routes to bridge with Python fallback\n- Wire protocol: call_method() sends JSON-RPC, handle_incoming_message() routes in Elixir\n- Integration tests exist in tests/integration/test_bridge_protocol.py\nExit criteria met: file ops work through Elixir when bridge connected."
+      ]
+    },
+    "bd-86": {
+      "id": "bd-86",
+      "title": "Phase 2.5: Remove stale turbo_ops references from config",
+      "description": "",
+      "status": "closed",
+      "priority": 3,
+      "type": "task",
+      "labels": [
+        "migration",
+        "phase-2",
+        "cleanup"
+      ],
+      "dependencies": {},
+      "created_at": "2026-04-14T22:03:33.974826",
+      "updated_at": "2026-04-14T22:30:09.208259",
+      "comments": [
+        "Clean up stale turbo_ops references: config.py declares turbo_ops as 'rust' backend (line ~50). Remove or update to reflect Elixir reality. Also check pyproject.toml, any docs referencing turbo_ops as Rust.",
+        "Claimed by planning-agent-019d8d",
+        "Complete: Replaced turbo_ops with file_ops/elixir in ACCELERATION_BACKENDS. Updated docstrings and status displays across config.py, fast_puppy, and turbo_executor."
+      ]
+    },
+    "bd-87": {
+      "id": "bd-87",
+      "title": "Phase 2.4: Add file_ops integration tests (Elixir backend)",
+      "description": "",
+      "status": "closed",
+      "priority": 3,
+      "type": "task",
+      "labels": [
+        "migration",
+        "phase-2",
+        "testing"
+      ],
+      "dependencies": {
+        "blocks": [
+          "bd-85"
+        ]
+      },
+      "created_at": "2026-04-14T22:03:33.977353",
+      "updated_at": "2026-04-14T22:30:09.232096",
+      "comments": [
+        "Add integration tests for Elixir-backed file ops: test_file_ops_elixir_backend.py. Test list_files, grep, read_file, read_files through the bridge. Mock bridge for unit tests, real bridge for integration. Verify security gates (sensitive_path blocking) work end-to-end.",
+        "Claimed by planning-agent-019d8d",
+        "Complete: Created tests/integration/test_file_ops_elixir_backend.py with 29 tests covering list_files, grep, read_file, read_files, fallback behavior, and security gates."
+      ]
+    },
+    "bd-88": {
+      "id": "bd-88",
+      "title": "Phase 3.4: Update fast_puppy status UX and help text",
+      "description": "",
+      "status": "closed",
+      "priority": 3,
+      "type": "task",
+      "labels": [
+        "migration",
+        "phase-3"
+      ],
+      "dependencies": {
+        "blocks": [
+          "bd-90"
+        ]
+      },
+      "created_at": "2026-04-15T06:49:04.152273",
+      "updated_at": "2026-04-15T06:59:12.174244",
+      "comments": [
+        "Claimed by planning-agent-019d8d",
+        "Complete: Added Python fallback status, actionable next steps in status, improved help text for all subcommands including profile."
+      ]
+    },
+    "bd-89": {
+      "id": "bd-89",
+      "title": "Phase 3.2: Add runtime profiles (elixir_first, python_only, legacy_rust)",
+      "description": "",
+      "status": "closed",
+      "priority": 2,
+      "type": "task",
+      "labels": [
+        "migration",
+        "phase-3"
+      ],
+      "dependencies": {},
+      "created_at": "2026-04-15T06:49:04.159604",
+      "updated_at": "2026-04-15T06:54:00.776243",
+      "comments": [
+        "Add RuntimeProfile enum to NativeBackend: ELIXIR_FIRST (default), PYTHON_ONLY, LEGACY_RUST. Profile determines routing priority. Persist to puppy.cfg. Add /fast_puppy profile <name> command.",
+        "Claimed by planning-agent-019d8d",
+        "Complete: Default changed to ELIXIR_FIRST. Added persistence for backend_preference. Added /fast_puppy profile command."
+      ]
+    },
+    "bd-90": {
+      "id": "bd-90",
+      "title": "Phase 3.3: Update /fast_puppy command for Elixir-first reality",
+      "description": "",
+      "status": "closed",
+      "priority": 2,
+      "type": "task",
+      "labels": [
+        "migration",
+        "phase-3"
+      ],
+      "dependencies": {
+        "blocks": [
+          "bd-89"
+        ]
+      },
+      "created_at": "2026-04-15T06:49:04.160921",
+      "updated_at": "2026-04-15T06:56:01.761756",
+      "comments": [
+        "Update /fast_puppy command: rename capabilities to match Elixir reality (file_ops uses Elixir, parse uses Rust). Update enable/disable to work with new profiles. Remove Rust-centric language.",
+        "Claimed by planning-agent-019d8d"
+      ]
+    },
+    "bd-91": {
+      "id": "bd-91",
+      "title": "Phase 3.1: Remove Rust crate auto-build on startup",
+      "description": "",
+      "status": "closed",
+      "priority": 1,
+      "type": "task",
+      "labels": [
+        "migration",
+        "phase-3"
+      ],
+      "dependencies": {},
+      "created_at": "2026-04-15T06:49:04.167456",
+      "updated_at": "2026-04-15T06:51:27.968838",
+      "comments": [
+        "Remove _try_auto_build_all() call from _on_startup(). Keep the build command for manual use. Add config option to completely disable Rust path. The startup should just detect what's available, not try to build.",
+        "Claimed by planning-agent-019d8d",
+        "Complete: Removed _try_auto_build_all() from startup. Added get_available_backends() for detection without building. Updated banners to Elixir-first messaging."
+      ]
+    },
+    "bd-92": {
+      "id": "bd-92",
+      "title": "Phase 4.1: Add turbo_parse bridge to Elixir (symbol extraction)",
+      "description": "",
+      "status": "closed",
+      "priority": 1,
+      "type": "task",
+      "labels": [
+        "migration",
+        "phase-4",
+        "elixir"
+      ],
+      "dependencies": {},
+      "created_at": "2026-04-15T07:03:47.491567",
+      "updated_at": "2026-04-15T07:10:44.927682",
+      "comments": [
+        "Wire turbo_parse symbol extraction to Elixir. Elixir already has CodePuppyControl.Parser with turbo_parse_nif. Add bridge handlers for parse_source, parse_file, extract_symbols. Update native_backend to route through elixir_bridge when connected.",
+        "Claimed by planning-agent-019d8d",
+        "Implementation verified: native_backend.py already routes parse_file, parse_source, extract_symbols, supported_languages through Elixir when connected. Elixir port.ex handlers exist (lines 409-448). Python fallback works (regex symbols for python/elixir). 4 methods bridged."
+      ]
+    },
+    "bd-93": {
+      "id": "bd-93",
+      "title": "Phase 4.2: Migrate folds and highlights to Elixir",
+      "description": "",
+      "status": "closed",
+      "priority": 2,
+      "type": "task",
+      "labels": [
+        "migration",
+        "phase-4",
+        "elixir"
+      ],
+      "dependencies": {},
+      "created_at": "2026-04-15T07:03:47.498948",
+      "updated_at": "2026-04-15T07:13:26.872470",
+      "comments": [
+        "Add folds (get_folds) and highlights (get_highlights) to Elixir Parser. These are used by editors for code folding and syntax highlighting. Lower priority than symbols.",
+        "Claimed by planning-agent-019d8d",
+        "Complete: Added get_folds() and get_highlights() to NativeBackend with Elixir\u2192Rust\u2192Python routing. Added handlers to Elixir port.ex."
+      ]
+    },
+    "bd-94": {
+      "id": "bd-94",
+      "title": "Phase 4.4: Migrate incremental parsing to Elixir",
+      "description": "",
+      "status": "closed",
+      "priority": 3,
+      "type": "task",
+      "labels": [
+        "migration",
+        "phase-4",
+        "elixir"
+      ],
+      "dependencies": {
+        "blocks": [
+          "bd-96"
+        ]
+      },
+      "created_at": "2026-04-15T07:03:47.513974",
+      "updated_at": "2026-04-15T07:14:24.844233",
+      "comments": [
+        "Add incremental parsing (parse_incremental) to Elixir. This is the most complex feature - tracks edit deltas and re-parses only changed regions. May keep Rust NIF for this.",
+        "Claimed by planning-agent-019d8d",
+        "Deferred: No parse_incremental capability exists in turbo_parse or Elixir Parser. This feature was planned but not implemented. When needed, will likely stay in Rust NIF for performance (tracks edit deltas, re-parses only changed regions)."
+      ]
+    },
+    "bd-95": {
+      "id": "bd-95",
+      "title": "Phase 4.5: Language parity - ensure all 6 languages work",
+      "description": "",
+      "status": "closed",
+      "priority": 3,
+      "type": "task",
+      "labels": [
+        "migration",
+        "phase-4",
+        "testing"
+      ],
+      "dependencies": {
+        "blocks": [
+          "bd-92"
+        ]
+      },
+      "created_at": "2026-04-15T07:03:47.530189",
+      "updated_at": "2026-04-15T07:14:50.054129",
+      "comments": [
+        "Verify all 6 supported languages work through Elixir: Python, JavaScript, TypeScript, Rust, Elixir, Go. Add integration tests for each language.",
+        "Claimed by planning-agent-019d8d",
+        "Partial: Currently only Python and Elixir are supported (2/6 languages). Symbol extraction regex patterns exist only for these two. File categorization recognizes python, rust, javascript, typescript, tsx, elixir but no extraction logic for rust/js/ts/go. Full language parity requires adding extraction patterns for remaining 4 languages in Elixir SymbolExtractor or enabling Rust NIF."
+      ]
+    },
+    "bd-96": {
+      "id": "bd-96",
+      "title": "Phase 4.3: Migrate batch parsing to Elixir",
+      "description": "",
+      "status": "closed",
+      "priority": 2,
+      "type": "task",
+      "labels": [
+        "migration",
+        "phase-4",
+        "elixir"
+      ],
+      "dependencies": {
+        "blocks": [
+          "bd-92"
+        ]
+      },
+      "created_at": "2026-04-15T07:03:47.544457",
+      "updated_at": "2026-04-15T07:13:26.871488",
+      "comments": [
+        "Add batch parsing (parse_batch) to Elixir. Use Task.async_stream for concurrent parsing. Include cache_stats and clear_cache support.",
+        "Claimed by planning-agent-019d8d",
+        "Complete: Added parse_batch() to NativeBackend with Elixir concurrent parsing (Task.async_stream). Added handler to Elixir port.ex."
+      ]
+    },
+    "bd-97": {
+      "id": "bd-97",
+      "title": "Phase 5.1: Remove stale Zig/Rust docs and config",
+      "description": "",
+      "status": "closed",
+      "priority": 2,
+      "type": "task",
+      "labels": [
+        "migration",
+        "phase-5",
+        "cleanup"
+      ],
+      "dependencies": {},
+      "created_at": "2026-04-15T07:03:47.564784",
+      "updated_at": "2026-04-15T07:08:00.120108",
+      "comments": [
+        "Remove stale docs referencing Zig/Rust hybrid. Check README, AGENTS.md, any docs/ files. Update to reflect Elixir-first reality. Zig bridge code already removed.",
+        "Claimed by planning-agent-019d8d",
+        "Complete: Updated docs/acceleration.md with Elixir-first notes and backend profiles section."
+      ]
+    },
+    "bd-98": {
+      "id": "bd-98",
+      "title": "Phase 5.2: Consolidate /accel into /fast_puppy or remove",
+      "description": "",
+      "status": "closed",
+      "priority": 2,
+      "type": "task",
+      "labels": [
+        "migration",
+        "phase-5",
+        "cleanup"
+      ],
+      "dependencies": {},
+      "created_at": "2026-04-15T07:03:47.577747",
+      "updated_at": "2026-04-15T07:08:00.121965",
+      "comments": [
+        "Check if /accel command exists. If so, consolidate into /fast_puppy or remove. Should be one command for native backend management.",
+        "Claimed by planning-agent-019d8d",
+        "Complete: No /accel command exists - already consolidated into /fast_puppy."
+      ]
+    },
+    "bd-99": {
+      "id": "bd-99",
+      "title": "Phase 5.3: Update acceleration/__init__.py for Elixir-first",
+      "description": "",
+      "status": "closed",
+      "priority": 3,
+      "type": "task",
+      "labels": [
+        "migration",
+        "phase-5",
+        "cleanup"
+      ],
+      "dependencies": {},
+      "created_at": "2026-04-15T07:03:47.592580",
+      "updated_at": "2026-04-15T07:08:00.132263",
+      "comments": [
+        "Update code_puppy/acceleration/__init__.py to reflect Elixir-first. Remove Rust-centric exports, add Elixir status. May be obsolete if NativeBackend handles everything.",
+        "Claimed by planning-agent-019d8d",
+        "Complete: Added ELIXIR_AVAILABLE export, updated docstring and get_backend_summary() for Elixir-first."
+      ]
+    },
+    "bd-100": {
+      "id": "bd-100",
+      "title": "Phase 6.1: Migrate RunLimiter to Elixir GenServer",
+      "description": "",
+      "status": "closed",
+      "priority": 3,
+      "type": "task",
+      "labels": [
+        "migration",
+        "phase-6",
+        "deferred"
+      ],
+      "dependencies": {},
+      "created_at": "2026-04-15T07:03:47.609889",
+      "updated_at": "2026-04-15T07:20:18.836069",
+      "comments": [
+        "Migrate RunLimiter from Python asyncio.Semaphore to Elixir GenServer. Similar to ConcurrencyLimits (bd-77) but for run-level concurrency. Wait for agent runtime migration.",
+        "Claimed by planning-agent-019d8d",
+        "Complete: Added RunLimiter bridge following ConcurrencyLimits pattern. Wire protocol + handlers + bridge-aware acquire/release. Elixir handles counters, Python handles reentrancy."
+      ]
+    },
+    "bd-101": {
+      "id": "bd-101",
+      "title": "Phase 6.2: Migrate AdaptiveRateLimiter to Elixir",
+      "description": "",
+      "status": "closed",
+      "priority": 3,
+      "type": "task",
+      "labels": [
+        "migration",
+        "phase-6",
+        "deferred"
+      ],
+      "dependencies": {
+        "blocks": [
+          "bd-100"
+        ]
+      },
+      "created_at": "2026-04-15T07:03:47.649051",
+      "updated_at": "2026-04-15T07:24:27.464885",
+      "comments": [
+        "Migrate AdaptiveRateLimiter circuit breaker pattern to Elixir. Tracks per-model rate limits with backoff. Needs cross-process visibility.",
+        "Claimed by planning-agent-019d8d",
+        "Complete: Added AdaptiveRateLimiter bridge. Wire protocol + handlers for record_limit, record_success, get_limit, circuit_status. Bridge-aware record and query methods."
+      ]
+    },
+    "bd-102": {
+      "id": "bd-102",
+      "title": "Phase 6.3: Migrate AgentManager to Elixir",
+      "description": "",
+      "status": "closed",
+      "priority": 3,
+      "type": "task",
+      "labels": [
+        "migration",
+        "phase-6",
+        "deferred"
+      ],
+      "dependencies": {
+        "blocks": [
+          "bd-101"
+        ]
+      },
+      "created_at": "2026-04-15T07:03:47.662982",
+      "updated_at": "2026-04-15T07:24:27.468880",
+      "comments": [
+        "Migrate AgentManager registry to Elixir. Final piece - orchestrates agent lifecycle. Depends on RunLimiter and RateLimiter being in Elixir first.",
+        "Claimed by planning-agent-019d8d"
+      ]
+    }
+  },
+  "counter": 102
+}

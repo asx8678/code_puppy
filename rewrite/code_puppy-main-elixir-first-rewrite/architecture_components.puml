@@ -1,0 +1,109 @@
+@startuml CodePuppy Component Diagram
+!define component class
+
+skinparam componentStyle uml2
+skinparam linetype ortho
+
+title Code Puppy Component Architecture & Data Flow
+
+package "Entry Points" {
+    [CLI Entry] as CLI
+    [API Server] as API
+    [Web Terminal] as WebTerm
+}
+
+package "Core Engine" {
+    [AppRunner] as App
+    [Callback System] as Callbacks
+    [Config Manager] as Config
+    [Plugin Loader] as Plugins
+}
+
+package "Agent Engine" {
+    [BaseAgent] as Base
+    [Agent Manager] as AgMgr
+    [Pack Leader] as Pack
+    [Agent Runtime State] as State
+}
+
+package "AI Integration" {
+    [PydanticAI] as PAI
+    [Model Factory] as ModelFact
+    [Rate Limiter] as RateLimit
+    [Token Ledger] as Tokens
+}
+
+package "Tools" {
+    [File Operations] as FileOps
+    [Shell Command] as Shell
+    [Subagent Invoke] as Invoke
+    [User Prompt] as AskUser
+}
+
+package "Acceleration" {
+    [Native Backend] as Native
+    [Rust Core] as Rust
+    [Elixir Bridge] as Elixir
+    [Turbo Parse] as Parse
+}
+
+package "MCP" {
+    [MCP Manager] as MCPMgr
+    [Circuit Breaker] as Circuit
+    [Security Layer] as MCPSec
+}
+
+package "Storage" {
+    [Session Storage] as SessStore
+    [History Manager] as HistMgr
+    [State Persistence] as Persist
+}
+
+' Data Flow
+CLI --> App : command args
+API --> App : HTTP request
+WebTerm --> API : websocket
+
+App --> Config : load settings
+App --> Plugins : discover
+App --> Callbacks : lifecycle
+App --> AgMgr : get agent
+
+Plugins --> Callbacks : register hooks
+
+AgMgr --> Base : instantiate
+AgMgr --> State : track
+
+Base --> PAI : execute
+Base --> State : read/write
+Base --> Tokens : track usage
+Base --> FileOps : use
+Base --> Shell : use
+Base --> Invoke : use
+Base --> AskUser : use
+
+PAI --> ModelFact : get model
+ModelFact --> RateLimit : check
+
+Invoke --> Pack : request slot
+Pack --> Base : delegate
+
+FileOps --> Native : accelerate
+Shell --> Native : accelerate
+Invoke --> Native : accelerate
+
+Native --> Rust : (optional)
+Native --> Elixir : (optional)
+Native --> Parse : (optional)
+
+FileOps --> MCPMgr : fallback
+Invoke --> MCPMgr : external tools
+
+MCPMgr --> Circuit : protected
+MCPMgr --> MCPSec : validated
+
+State --> SessStore : persist
+State --> HistMgr : manage history
+State --> Persist : checkpoint
+
+@enduml

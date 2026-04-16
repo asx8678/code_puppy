@@ -1,0 +1,346 @@
+# Contributing to Code Puppy
+
+> **Golden rule:** nearly all new functionality should be a **plugin** under `code_puppy/plugins/`
+> that hooks into core via `code_puppy/callbacks.py`. Don't edit `code_puppy/command_line/`.
+
+## How Plugins Work
+
+Create `code_puppy/plugins/my_feature/register_callbacks.py` (builtin) or `~/.code_puppy/plugins/my_feature/register_callbacks.py` (user):
+
+```python
+from code_puppy.callbacks import register_callback
+
+def _on_startup():
+    print("my_feature loaded!")
+
+register_callback("startup", _on_startup)
+```
+
+That's it. The plugin loader auto-discovers `register_callbacks.py` in subdirs.
+
+> **Security note:** user plugins in `~/.code_puppy/plugins/` are treated as trusted local Python code.
+> They are imported and executed during plugin discovery with the same local privileges as Code Puppy itself.
+> There is currently no isolated safe mode for user plugins, so do not install untrusted plugins.
+
+## Native Acceleration Stack (Fast Puppy)
+
+Code Puppy has a **runtime backend selector** called `fast_puppy` that routes performance-critical operations to the optimal native backend:
+
+| Capability | Rust Crate | Elixir Service | Purpose |
+|------------|-----------|----------------|---------|
+| `message_core` | `code_puppy_core` | — | Message serialization, pruning, hashing |
+| `file_ops` | — | `file_service` | Batch file ops (`list_files`, `grep`, `read_file`) |
+| `repo_index` | — | `repo_index` | Repository indexing |
+| `parse` | `turbo_parse` | `turbo_parse_nif` | Tree-sitter parsing, symbols, diagnostics |
+
+**Phase 4 Update:** All parse operations now route through `NativeBackend` with **Elixir-first routing** (bd-93):
+- Elixir NIF (`turbo_parse_nif`) → Rust crate (`turbo_parse`) → Python fallback
+- Direct `turbo_parse_bridge` imports are **deprecated** — use `NativeBackend` instead
+- New `NativeBackend` methods for parsing:
+  - `extract_syntax_diagnostics(file_path, code, language)` — Extract syntax errors/warnings
+  - `parse_health_check()` — Check parse backend health
+  - `parse_stats()` — Get parse operation statistics
+
+**Phase 3 Reality:** Fast Puppy is now a **runtime selector**, not a crate builder:
+- `/fast_puppy profile elixir_first` → Prefer Elixir backends (default)
+- `/fast_puppy profile rust_only` → Use only Rust crates
+- `/fast_puppy profile python_only` → Pure Python fallback
+
+**Agent Guidelines:**
+- Check capability availability via bridge flags (not just Rust availability)
+- All backends provide Python stubs — fall back gracefully
+- Don't manually edit `fast_puppy/` — add new capabilities via `NATIVE_BACKENDS` registry
+- **Migration rule:** Import from `fast_puppy.native_backend` instead of direct bridge imports
+- To test without native acceleration: set `disable_rust_autobuild=true` and `enable_elixir_control=false` in `puppy.cfg`
+
+## Available Hooks
+
+`register_callback("<hook>", func)` — deduplicated, async hooks accept sync or async functions.
+
+| Hook | When | Signature |
+|------|------|-----------|
+| `startup` | App boot | `() -> None` |
+| `shutdown` | Graceful exit | `() -> None` |
+| `invoke_agent` | Sub-agent invoked | `(*args, **kwargs) -> None` |
+| `agent_exception` | Unhandled agent error | `(exception, *args, **kwargs) -> None` |
+| `agent_run_start` | Before agent task | `(agent_name, model_name, session_id=None) -> None` |
+| `agent_run_end` | After agent run | `(agent_name, model_name, session_id=None, success=True, error=None, response_text=None, metadata=None) -> None` |
+| `load_prompt` | System prompt assembly | `() -> str \| None` |
+| `run_shell_command` | Before shell exec | `(context, command, cwd=None, timeout=60) -> dict \| None` (return `{"blocked": True}` to block) |
+| `file_permission` | Before file op | `(context, file_path, operation, ...) -> bool` |
+| `pre_tool_call` | Before tool executes | `(tool_name, tool_args, context=None) -> Any` |
+| `post_tool_call` | After tool finishes | `(tool_name, tool_args, result, duration_ms, context=None) -> Any` |
+| `custom_command` | Unknown `/slash` cmd | `(command, name) -> True \| str \| None` |
+| `custom_command_help` | `/help` menu | `() -> list[tuple[str, str]]` |
+| `register_tools` | Tool registration | `() -> list[dict]` with `{"name": str, "register_func": callable}` |
+| `register_agents` | Agent catalogue | `() -> list[dict]` with `{"name": str, "class": type}` |
+| `register_model_type` | Custom model type | `() -> list[dict]` with `{"type": str, "handler": callable}` |
+| `load_model_config` | Patch model config | `(*args, **kwargs) -> Any` |
+| `load_models_config` | Inject models | `() -> dict` |
+| `get_model_system_prompt` | Per-model prompt | `(model_name, default_prompt, user_prompt) -> dict \| None` |
+| `stream_event` | Response streaming | `(event_type, event_data, agent_session_id=None) -> None` |
+| `get_motd` | Banner | `() -> tuple[str, str] \| None` |
+
+Full list + rarely-used hooks: see `code_puppy/callbacks.py` source.
+
+## Prompt Assembly Architecture
+
+The system prompt is built in layers by different components. Understanding this helps explain where customizations apply:
+
+| Layer | Component | What It Does | Current Status |
+|-------|-----------|--------------|----------------|
+| 1 | `get_system_prompt()` | Agent-specific base prompt (e.g., code-puppy instructions) | **Stable** - Every agent implements this |
+| 2 | `AgentPromptMixin.get_full_system_prompt()` | Adds platform info (OS, shell, cwd) + agent identity | **Stable** - Called by agents that need full context |
+| 3 | `callbacks.on_load_prompt()` | Plugin additions (e.g., file mentions, pack-parallelism limits) | **Opt-in per agent** - Not all agents call this! |
+| 4 | `prepare_prompt_for_model()` | Model-specific adaptation (claude-code) | **Stable** - Automatic based on model name |
+| 5 | `callbacks.on_get_model_system_prompt()` | Model-type plugins can override final output | **Extension point** - For custom model types |
+
+### Known Inconsistencies (Unresolved)
+
+- **UNK3**: Whether `load_prompt` should apply globally to ALL agents is **unresolved**. Currently some agents call it, others don't.
+- **Merge semantics**: String returns from `load_prompt` are concatenated; dict returns from `get_model_system_prompt` are chained. This asymmetry is intentional but confusing.
+
+## Rules
+
+1. **Plugins over core** — if a hook exists for it, use it
+2. **One `register_callbacks.py` per plugin** — register at module scope
+3. **600-line hard cap** — split into submodules
+4. **Fail gracefully** — never crash the app
+5. **Return `None` from commands you don't own**
+
+## Audit-Driven Development Rules
+
+The following rules are enforced based on project audit findings:
+
+### Async I/O in Async Callbacks
+
+All async callback implementations **must use non-blocking I/O only**:
+
+```python
+# CORRECT: async context manager with proper I/O
+async def _on_shutdown_async():
+    await asyncio.gather(*pending_tasks)  # Non-blocking
+
+# INCORRECT: blocking I/O in async callback
+async def _on_shutdown_bad():
+    time.sleep(5)  # Blocking! Use asyncio.sleep instead
+```
+
+**Rule**: If your callback is registered as async, **all I/O must be async-native**. Use `asyncio` primitives, not blocking stdlib calls.
+
+### Environment Variable Naming Convention
+
+Environment variables follow strict prefixes for namespacing:
+
+| Prefix | Purpose | Example |
+|--------|---------|---------|
+| `PUP_` | Core runtime settings | `PUP_DEBUG=1` |
+| `PUPPY_` | Legacy compatibility | `PUPPY_HOME` |
+| `CODEPUP_` | CI/build environment | `CODEPUP_CI=1` |
+
+**Rule**: New variables **must use `PUP_` prefix**. Legacy `PUPPY_` is supported but deprecated.
+
+### Hook Merge Semantics
+
+When multiple callbacks register for the same hook, results are **merged by type**:
+
+| Hook Return Type | Merge Strategy |
+|-----------------|---------------|
+| `str` | Concatenation (newlines) |
+| `list` | Extend (concatenate) |
+| `dict` | Update (later wins on conflict) |
+| `bool` | OR (any True wins) |
+| `None` | Ignored |
+
+```python
+# Example: load_prompt returns are concatenated
+def my_prompt():
+    return "\n\n## Custom Instructions"  # Appended to base prompt
+
+register_callback("load_prompt", my_prompt)
+```
+
+**Rule**: Design callbacks expecting **additive semantics**, not replacement.
+
+### TODO Marker Format
+
+TODO comments follow a strict format for tooling and tracking:
+
+```python
+# TODO(<issue-id>): Brief description
+# FIXME(code-puppy-xxx): Description with issue reference
+# HACK(<category>): Temporary workaround with justification
+# REVIEW(<username>): Flag for code review discussion
+```
+
+Examples:
+```python
+# TODO(code_puppy-123): Add retry logic for rate limits
+# FIXME(code_puppy-456): Race condition on concurrent config updates
+# HACK(pack-parallelism): Workaround for semaphore state sync
+```
+
+**Rule**: All TODOs **must include identifier**. Bare `TODO:` markers are discouraged.
+
+### Test-Drift Prevention
+
+Tests must prevent "drift" from implementation changes:
+
+| Anti-Pattern | Prevention Strategy |
+|--------------|---------------------|
+| Mocking implementation details | Mock at boundary, not internals |
+| Hardcoded expected values | Use property-based testing (hypothesis) |
+| Ignoring error paths | Explicit error case coverage |
+| Stale comment assertions | `pytest --doctest-modules` |
+
+**CI Gate**: Plugin tests run on every plugin-related commit (see `lefthook.yml`).
+
+```python
+# CORRECT: Test the invariant, not the implementation
+@given(config=valid_config())
+def test_effective_limit_always_positive(config):
+    limiter = RunLimiter(config)
+    assert limiter.effective_limit >= 1
+
+# INCORRECT: Testing internal counter directly
+def test_counter_increment():
+    limiter._async_active = 1  # Brittle: relies on internal field
+```
+
+### Coverage Gates
+
+Per-module coverage requirements (CI-enforced):
+
+| Module Pattern | Minimum Coverage |
+|---------------|------------------|
+| `code_puppy/plugins/pack_parallelism/*` | ≥85% |
+| `code_puppy/utils/file_display.py` | Tested via integration |
+| `code_puppy/tools/command_runner.py` | Security-scanned + tested |
+
+**Rule**: Coverage gates are **minimums**, not targets. Prefer quality over percentage.
+
+## Adversarial Planning Agents
+
+The adversarial planning system provides specialized agents for evidence-first, isolated, execution-ready planning. Use these when the cost of being wrong exceeds the cost of process.
+
+### When to Use
+
+- Migrations and data moves
+- Architecture changes
+- Security work
+- Production-risky launches
+- Incident response
+- High-blast-radius refactors
+
+### Available Agents
+
+| Agent | Role | Phase | Description |
+|-------|------|-------|-------------|
+| `ap-researcher` | Researcher | 0A, 0B | Discovers environment evidence before planning |
+| `ap-planner-a` | Planner A | 1 | Creates conservative plan (minimize blast radius) |
+| `ap-planner-b` | Planner B | 1 | Creates contrarian plan (challenge defaults) |
+| `ap-reviewer` | Reviewer | 2 | Adversarially reviews plans to falsify weak claims |
+| `ap-arbiter` | Arbiter | 4, 6, 7 | Synthesizes surviving elements, makes decisions |
+| `ap-red-team` | Red Team | 5 | Stress tests merged plan (deep mode only) |
+
+### Slash Commands
+
+| Command | Description |
+|---------|-------------|
+| `/ap <task>` | Start adversarial planning (auto mode) |
+| `/ap-standard <task>` | Force standard mode (faster) |
+| `/ap-deep <task>` | Force deep mode (thorough) |
+| `/ap-status` | Show active planning sessions |
+| `/ap-abort` | Abort all active sessions |
+
+### Modes
+
+**Standard Mode** (default for most work):
+- Phase 0A: Discovery
+- Phase 0B: Scope Lock
+- Phase 1: Independent Planning (parallel)
+- Phase 2: Adversarial Review (parallel)
+- Phase 4: Synthesis
+- Phase 6: Execution Decision
+
+**Deep Mode** (automatically triggered or forced):
+Adds:
+- Phase 3: Rebuttal
+- Phase 5: Red Team Stress Test
+- Phase 7: Change-Set Synthesis
+
+Deep mode is auto-triggered when:
+- Production change is likely
+- Data migration involved
+- Security/privacy/compliance risk
+- >2 critical unknowns
+- Same-model fallback used
+
+### Evidence Classes
+
+| Class | Confidence | Can Support |
+|-------|------------|-------------|
+| Verified | 90-100 | Irreversible work |
+| Inference | 70-89 | Reversible probes only |
+| Assumption | 50-69 | Must become verification task |
+| Unknown | <50 | Must become blocker/gate |
+
+### Example Usage
+
+```bash
+# Start adversarial planning for a migration
+/ap Migrate user authentication from sessions to JWT
+
+# Force deep mode for security work
+/ap-deep Implement rate limiting for API endpoints
+
+# Quick feature work (standard mode)
+/ap-standard Add dark mode toggle to settings
+```
+
+<!-- BEGIN BEADS INTEGRATION v:1 profile:minimal hash:ca08a54f -->
+## Beads Issue Tracker
+
+This project uses **bd (beads)** for issue tracking. Run `bd prime` to see full workflow context and commands.
+
+### Quick Reference
+
+```bash
+bd ready              # Find available work
+bd show <id>          # View issue details
+bd update <id> --claim  # Claim work
+bd close <id>         # Complete work
+```
+
+### Rules
+
+- Use `bd` for ALL task tracking — do NOT use TodoWrite, TaskCreate, or markdown TODO lists
+- Run `bd prime` for detailed command reference and session close protocol
+- Use `bd remember` for persistent knowledge — do NOT use MEMORY.md files
+
+## Session Completion
+
+**When ending a work session**, you MUST complete ALL steps below. Work is NOT complete until `git push` succeeds.
+
+**MANDATORY WORKFLOW:**
+
+1. **File issues for remaining work** - Create issues for anything that needs follow-up
+2. **Run quality gates** (if code changed) - Tests, linters, builds
+3. **Update issue status** - Close finished work, update in-progress items
+4. **PUSH TO REMOTE** - This is MANDATORY:
+   > **Note:** bd is configured for local-only operation (no dolt remote). Do NOT run `bd dolt push`.
+   ```bash
+   git pull --rebase
+   git push
+   git status  # MUST show "up to date with origin"
+   ```
+5. **Clean up** - Clear stashes, prune remote branches
+6. **Verify** - All changes committed AND pushed
+7. **Hand off** - Provide context for next session
+
+**CRITICAL RULES:**
+- Work is NOT complete until `git push` succeeds
+- NEVER stop before pushing - that leaves work stranded locally
+- NEVER say "ready to push when you are" - YOU must push
+- If push fails, resolve and retry until it succeeds
+<!-- END BEADS INTEGRATION -->

@@ -555,7 +555,7 @@ async def interactive_mode(message_renderer, initial_command: str = None) -> Non
 
                 # Increment and show debug message
                 loop_num = increment_wiggum_count()
-                from code_puppy.messaging import emit_system_message, emit_warning
+                from code_puppy.messaging import emit_system_message, emit_warning, emit_info
 
                 emit_warning(f"\n🍩 WIGGUM RELOOPING! (Loop #{loop_num})")
                 emit_system_message(f"Re-running prompt: {wiggum_prompt}")
@@ -563,6 +563,12 @@ async def interactive_mode(message_renderer, initial_command: str = None) -> Non
                 # Reset context/history for fresh start
                 new_session_id = finalize_autosave_session()
                 current_agent.clear_message_history()
+
+                # Clear token ledger for fresh cost tracking per wiggum loop
+                # (design fix: each wiggum iteration should have independent accounting)
+                current_agent._state.get_token_ledger().clear()
+                emit_info(f"💰 Token ledger reset for wiggum loop #{loop_num}")
+
                 emit_system_message(
                     f"Context cleared. Session rotated to: {new_session_id}"
                 )

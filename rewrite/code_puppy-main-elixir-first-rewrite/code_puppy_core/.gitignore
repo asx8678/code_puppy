@@ -1,0 +1,9 @@
+/target/
+/.venv/
+Cargo.lock
+uv.lock
+*.so
+*.dylib
+*.pyd
+__pycache__/
+*.egg-info/

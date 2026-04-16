@@ -16,7 +16,10 @@ from unittest import mock
 
 import pytest
 
-from code_puppy.turbo_parse_bridge import TURBO_PARSE_AVAILABLE
+from code_puppy.native_backend import NativeBackend  # bd-13: route through NativeBackend
+
+# bd-13: Derive availability from NativeBackend instead of direct bridge import
+TURBO_PARSE_AVAILABLE = NativeBackend.is_available(NativeBackend.Capabilities.PARSE)
 
 
 # ============================================================================

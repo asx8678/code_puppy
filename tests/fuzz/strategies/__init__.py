@@ -22,15 +22,15 @@ from hypothesis import (
 )
 from hypothesis import Phase
 
-# Import the symbol extraction function
-try:
-    from code_puppy.turbo_parse_bridge import extract_symbols, TURBO_PARSE_AVAILABLE
-except ImportError:
-    TURBO_PARSE_AVAILABLE = False
+# bd-13: Import through NativeBackend instead of direct bridge import
+from code_puppy.native_backend import NativeBackend
 
-    def extract_symbols(*args: Any, **kwargs: Any) -> dict[str, Any]:
-        """Fallback when turbo_parse is not available."""
-        return {"success": False, "symbols": [], "error": "turbo_parse not available"}
+TURBO_PARSE_AVAILABLE = NativeBackend.is_available(NativeBackend.Capabilities.PARSE)
+
+
+def extract_symbols(source: str, language: str, **kwargs: Any) -> dict[str, Any]:
+    """Extract symbols via NativeBackend (routes to best available backend)."""
+    return NativeBackend.extract_symbols(source, language)
 
 
 # Import all strategies for easy access

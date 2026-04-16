@@ -1,0 +1,15 @@
+[package]
+name = "hashline_nif"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+name = "hashline_nif"
+crate-type = ["cdylib"]
+
+# Exclude from workspace to avoid conflicts with parent project
+[workspace]
+
+[dependencies]
+rustler = "0.34"
+xxhash-rust = { version = "0.8", features = ["xxh32"] }

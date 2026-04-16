@@ -20,7 +20,8 @@ from code_puppy.code_context import (
     get_code_context,
     get_file_outline,
 )
-from code_puppy.turbo_parse_bridge import TURBO_PARSE_AVAILABLE
+# bd-13: Import through NativeBackend instead of direct bridge import
+from code_puppy.native_backend import NativeBackend
 
 
 # -----------------------------------------------------------------------------
@@ -468,7 +469,7 @@ class TestCodeExplorer:
 
         # When turbo_parse is not available, symbols won't be extracted
         # When available, should find 'main' function
-        if TURBO_PARSE_AVAILABLE:
+        if NativeBackend.is_available(NativeBackend.Capabilities.PARSE):
             assert len(results) >= 1
             for file_path, symbol in results:
                 assert symbol.name == "main"
@@ -563,7 +564,10 @@ class TestModuleFunctions:
 # -----------------------------------------------------------------------------
 
 
-@pytest.mark.skipif(not TURBO_PARSE_AVAILABLE, reason="turbo_parse not available")
+@pytest.mark.skipif(
+    not NativeBackend.is_available(NativeBackend.Capabilities.PARSE),
+    reason="turbo_parse not available",
+)
 class TestTurboParseIntegration:
     """Integration tests requiring turbo_parse."""
 

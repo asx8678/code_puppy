@@ -9,9 +9,15 @@ This module provides a single entry point for all native acceleration:
 All methods gracefully fall back to Python implementations when native modules
 are unavailable, ensuring the system works regardless of Rust build status.
 
+Backend Preference (bd-13):
+- ELIXIR_FIRST (default): Try Elixir, fall back to Rust/Python
+- RUST_FIRST: Try Rust first (for PARSE, skips Elixir if turbo_parse available)
+- PYTHON_ONLY: Use only Python fallbacks
+
 bd-61: Phase 1 of Fast Puppy rewrite — native backend adapter.
 bd-62: Phase 2 — Add Elixir control plane routing for file operations.
 bd-64: Phase 4 — Add Elixir NIF routing for parse operations.
+bd-13: Fix RUST_FIRST semantics, explicit capability routing, cache all turbo_parse imports.
 """
 
 import asyncio
@@ -42,13 +48,21 @@ class CapabilityInfo:
 
 
 class BackendPreference(str, Enum):
-    """Backend preference for file operations.
+    """Backend preference for routing native operations.
 
-    bd-62: Controls the priority order for file operation backends.
+    bd-62: Controls the priority order for backend selection.
+    bd-13: RUST_FIRST semantics fixed — for PARSE, skips Elixir when turbo_parse available.
+
+    Routing behavior per capability:
+    - MESSAGE_CORE: RUST_ONLY (no Elixir support)
+    - FILE_OPS/REPO_INDEX: ELIXIR_FIRST → Elixir → Python; RUST_FIRST → Elixir → Python
+      (no Rust fallback since turbo_ops removed in bd-76)
+    - PARSE: ELIXIR_FIRST → Elixir → Rust → Python; RUST_FIRST → Rust → Elixir → Python
+      (RUST_FIRST skips Elixir when turbo_parse available)
     """
 
-    ELIXIR_FIRST = "elixir_first"  # Try Elixir, fall back to Rust/Python
-    RUST_FIRST = "rust_first"  # Try Rust, fall back to Elixir/Python (default)
+    ELIXIR_FIRST = "elixir_first"  # Try Elixir first, then native fallbacks
+    RUST_FIRST = "rust_first"  # Try Rust first (for PARSE, skips Elixir if turbo_parse available)
     PYTHON_ONLY = "python_only"  # Only use Python fallbacks
 
 
@@ -89,7 +103,8 @@ class NativeBackend:
     _turbo_parse_imports: dict[str, Any] | None = None
 
     # bd-62: Backend preference for routing decisions
-    # bd-89: Default changed to ELIXIR_FIRST for runtime profile persistence
+    # bd-89: Default is ELIXIR_FIRST for runtime profile persistence
+    # bd-13: Fixed RUST_FIRST semantics for PARSE capability (skips Elixir when turbo_parse available)
     _backend_preference: BackendPreference = BackendPreference.ELIXIR_FIRST
 
     # bd-63: Per-capability enabled state (user can disable even if available)
@@ -331,23 +346,192 @@ class NativeBackend:
         return cls._backend_preference
 
     @classmethod
-    def _should_use_elixir(cls, capability: str) -> bool:
+    def _is_turbo_parse_entrypoint_available(cls, entrypoint: str) -> bool:
+        """Check if a specific turbo_parse entrypoint is available.
+
+        bd-13-partial-fix: Per-entrypoint checks for partial turbo_parse builds.
+
+        Args:
+            entrypoint: Entrypoint name (e.g., "parse_file", "extract_symbols")
+
+        Returns:
+            True if the specific entrypoint exists and is callable.
+        """
+        turbo = cls._get_turbo_parse()
+        if not turbo.get("available", False):
+            return False
+        func = turbo.get(entrypoint)
+        return func is not None and callable(func)
+
+    @classmethod
+    def _should_use_elixir(cls, capability: str, entrypoint: str | None = None) -> bool:
         """Determine if Elixir should be used for a capability.
 
         bd-76: Routing logic based on backend preference and Elixir availability.
-        turbo_ops removed — file operations now route through Elixir or Python.
+        bd-13: RUST_FIRST semantics fixed — for PARSE, skips Elixir when turbo_parse available.
+        bd-13-fix: PYTHON_ONLY must block ALL native backend calls including Elixir.
+        bd-13-partial-fix: For PARSE, checks specific entrypoint availability, not just generic.
 
         Args:
             capability: Capability name (e.g., "file_ops")
+            entrypoint: Optional entrypoint name for PARSE capability. When provided,
+                       checks if that specific turbo_parse entrypoint is available.
 
         Returns:
             True if Elixir should be tried for this capability.
         """
+        # bd-13-fix: PYTHON_ONLY blocks ALL native backends
         if cls._backend_preference == BackendPreference.PYTHON_ONLY:
             return False
 
-        # ELIXIR_FIRST or RUST_FIRST: use Elixir if available
+        # Also check if the capability is enabled
+        if not cls.is_enabled(capability):
+            return False
+
+        # For PARSE with RUST_FIRST: skip Elixir if turbo_parse is available
+        # bd-13-partial-fix: Check specific entrypoint, not just generic availability
+        if capability == cls.Capabilities.PARSE:
+            if cls._backend_preference == BackendPreference.RUST_FIRST:
+                # If entrypoint specified, check that specific entrypoint
+                if entrypoint:
+                    if cls._is_turbo_parse_entrypoint_available(entrypoint):
+                        return False  # RUST_FIRST + specific entrypoint available → skip Elixir
+                else:
+                    # Fallback to generic check for backward compatibility
+                    turbo = cls._get_turbo_parse()
+                    if turbo.get("available", False):
+                        return False  # RUST_FIRST + turbo_parse available → skip Elixir
+
+        # ELIXIR_FIRST or RUST_FIRST (with fallback): use Elixir if available
         return cls._is_elixir_available()
+
+    @classmethod
+    def _should_use_turbo_parse(cls) -> bool:
+        """Determine if turbo_parse should be used.
+
+        bd-13-fix: Check if turbo_parse should be tried based on preference and capability state.
+
+        Returns:
+            True if turbo_parse should be tried.
+        """
+        # PYTHON_ONLY blocks ALL native backends
+        if cls._backend_preference == BackendPreference.PYTHON_ONLY:
+            return False
+
+        # Check if PARSE capability is enabled
+        if not cls.is_enabled(cls.Capabilities.PARSE):
+            return False
+
+        turbo = cls._get_turbo_parse()
+        return turbo.get("available", False)
+
+    @classmethod
+    def get_capability_routing(
+        cls, capability: str, entrypoint: str | None = None
+    ) -> dict[str, Any]:
+        """Get explicit routing plan for a capability.
+
+        bd-13: Makes capability routing explicit and introspectable.
+        bd-13-fix-semantics: Fixed PYTHON_ONLY reporting to reflect actual runtime behavior:
+            - Disabled capability => will_use="disabled" (or None)
+            - FILE_OPS/REPO_INDEX with PYTHON_ONLY => route to Python, not disabled
+            - PARSE with PYTHON_ONLY => route to python_fallback, not disabled
+        bd-13-partial-fix: Added entrypoint parameter for entrypoint-aware routing in
+            partial turbo_parse builds (e.g., parse_source available but parse_file missing).
+
+        Args:
+            capability: One of the Capability constants.
+            entrypoint: Optional entrypoint name for PARSE capability. When provided,
+                       checks specific entrypoint availability instead of generic turbo_parse.
+                       Use "parse_file" for status/reporting (the primary parse entrypoint).
+
+        Returns:
+            Dict with routing info:
+            - backends: Ordered list of (backend_name, available) tuples
+            - preference: Current backend preference setting
+            - will_use: The backend that will actually be used (first available),
+                        or "disabled" if capability is disabled
+        """
+        preference = cls._backend_preference
+        elixir_avail = cls._is_elixir_available()
+        turbo = cls._get_turbo_parse()
+        # bd-13-partial-fix: For PARSE with entrypoint, check specific entrypoint availability
+        if capability == cls.Capabilities.PARSE and entrypoint:
+            turbo_avail = cls._is_turbo_parse_entrypoint_available(entrypoint)
+        else:
+            turbo_avail = turbo.get("available", False)
+        capability_enabled = cls.is_enabled(capability)
+
+        # bd-13-fix-semantics: Only report disabled if capability is actually disabled
+        # PYTHON_ONLY should report the Python fallback, not "disabled"
+        if not capability_enabled:
+            return {
+                "backends": [],
+                "preference": preference.value,
+                "will_use": "disabled",
+                "capability": capability,
+                "reason": "capability_disabled",
+            }
+
+        # Determine backend order and availability per capability
+        if capability == cls.Capabilities.MESSAGE_CORE:
+            # MESSAGE_CORE: Rust only (no Elixir support)
+            from code_puppy._core_bridge import RUST_AVAILABLE
+
+            backends = [
+                ("rust", RUST_AVAILABLE),
+                ("python", True),  # Always available fallback
+            ]
+
+        elif capability in (cls.Capabilities.FILE_OPS, cls.Capabilities.REPO_INDEX):
+            # FILE_OPS/REPO_INDEX: Elixir → Python (no Rust since turbo_ops removed)
+            # bd-13-fix-semantics: In PYTHON_ONLY, only Python is available
+            if preference == BackendPreference.PYTHON_ONLY:
+                backends = [
+                    ("python", True),  # Python fallback always available
+                ]
+            else:
+                backends = [
+                    ("elixir", elixir_avail),
+                    ("python", True),  # Always available fallback
+                ]
+
+        elif capability == cls.Capabilities.PARSE:
+            # PARSE: Depends on preference
+            # bd-13-fix-semantics: In PYTHON_ONLY, only python_fallback is available
+            if preference == BackendPreference.PYTHON_ONLY:
+                backends = [
+                    ("python_fallback", True),  # Python fallback always available
+                ]
+            elif preference == BackendPreference.RUST_FIRST and turbo_avail:
+                backends = [
+                    ("turbo_parse", turbo_avail),
+                    ("elixir", elixir_avail),
+                    ("python_fallback", True),
+                ]
+            else:
+                # ELIXIR_FIRST or RUST_FIRST with turbo unavailable
+                backends = [
+                    ("elixir", elixir_avail),
+                    ("turbo_parse", turbo_avail),
+                    ("python_fallback", True),
+                ]
+        else:
+            backends = [("python", True)]
+
+        # Determine which backend will actually be used
+        will_use = None
+        for name, available in backends:
+            if available:
+                will_use = name
+                break
+
+        return {
+            "backends": backends,
+            "preference": preference.value,
+            "will_use": will_use,
+            "capability": capability,
+        }
 
     # -------------------------------------------------------------------------
     # Native Module Loading
@@ -355,23 +539,50 @@ class NativeBackend:
 
     @classmethod
     def _get_turbo_parse(cls) -> dict[str, Any]:
-        """Lazy-load turbo_parse imports with fallback handling."""
+        """Lazy-load turbo_parse imports with fallback handling.
+
+        bd-13: Expanded to cache all parse-related functions for explicit routing.
+        bd-13-fix: Use getattr to allow partial imports - older/partial turbo_parse
+        builds still expose core parse functions even if newer methods are missing.
+        """
         if cls._turbo_parse_imports is None:
             imports: dict[str, Any] = {
                 "available": False,
                 "parse_file": None,
                 "parse_source": None,
                 "extract_symbols": None,
+                "supported_languages": None,
+                "is_language_supported": None,
+                "extract_syntax_diagnostics": None,
+                "get_folds": None,
+                "get_highlights": None,
+                "health_check": None,
+                "stats": None,
             }
             try:
-                from turbo_parse import parse_file, parse_source, extract_symbols
+                import turbo_parse
 
-                imports["parse_file"] = parse_file
-                imports["parse_source"] = parse_source
-                imports["extract_symbols"] = extract_symbols
-                imports["available"] = True
-            except ImportError, SystemError:
-                logger.debug("turbo_parse not available, will use Python fallbacks")
+                # bd-13-fix: Use getattr to allow partial imports
+                # This lets older/partial turbo_parse builds still work
+                imports["parse_file"] = getattr(turbo_parse, "parse_file", None)
+                imports["parse_source"] = getattr(turbo_parse, "parse_source", None)
+                imports["extract_symbols"] = getattr(turbo_parse, "extract_symbols", None)
+                imports["supported_languages"] = getattr(turbo_parse, "supported_languages", None)
+                imports["is_language_supported"] = getattr(turbo_parse, "is_language_supported", None)
+                imports["extract_syntax_diagnostics"] = getattr(turbo_parse, "extract_syntax_diagnostics", None)
+                imports["get_folds"] = getattr(turbo_parse, "get_folds", None)
+                imports["get_highlights"] = getattr(turbo_parse, "get_highlights", None)
+                imports["health_check"] = getattr(turbo_parse, "health_check", None)
+                imports["stats"] = getattr(turbo_parse, "stats", None)
+                # Consider available if at least core parse functions exist
+                imports["available"] = (
+                    imports["parse_file"] is not None or
+                    imports["parse_source"] is not None
+                )
+                if imports["available"]:
+                    logger.debug("turbo_parse loaded with partial availability")
+            except (ImportError, SystemError) as e:
+                logger.debug(f"turbo_parse not available: {e}")
 
             cls._turbo_parse_imports = imports
 
@@ -382,6 +593,7 @@ class NativeBackend:
         """Return status of all capabilities.
 
         bd-63: Now includes user enable/disable preferences.
+        bd-13: Uses NativeBackend's own turbo_parse cache, not turbo_parse_bridge.
 
         Returns:
             Dict mapping capability names to CapabilityInfo objects.
@@ -390,9 +602,10 @@ class NativeBackend:
 
         # Import bridge modules to check their status
         from code_puppy._core_bridge import RUST_AVAILABLE, is_rust_enabled
-        from code_puppy.turbo_parse_bridge import TURBO_PARSE_AVAILABLE
 
-        _ = cls._get_turbo_parse()  # Ensure lazy-load happens for status
+        # bd-13: Use NativeBackend's own turbo_parse cache instead of turbo_parse_bridge
+        turbo_parse = cls._get_turbo_parse()
+        TURBO_PARSE_AVAILABLE = turbo_parse.get("available", False)
 
         # bd-62: Check Elixir availability
         elixir_available = cls._is_elixir_available()
@@ -466,37 +679,45 @@ class NativeBackend:
         """Return detailed status including all backend sources.
 
         bd-62: Extended status with Elixir and backend preference info.
+        bd-13: Fixed message_core.rust_available to reflect real availability.
 
         Returns:
-            Dict with detailed capability status and backend info.
+            Dict with detailed capability status, backend info, and routing plan.
         """
         turbo_parse = cls._get_turbo_parse()
+        elixir_available = cls._is_elixir_available()
+
+        # bd-13: Get real Rust availability from _core_bridge
+        from code_puppy._core_bridge import RUST_AVAILABLE
 
         return {
             "message_core": {
                 "available": True,
-                "rust_available": False,
+                "rust_available": RUST_AVAILABLE,  # bd-13: Real availability, not hardcoded
                 "source": cls._get_message_core_source(),
+                "routing": cls.get_capability_routing(cls.Capabilities.MESSAGE_CORE),
             },
             "file_ops": {
                 "available": True,  # Python fallback always available
-                "elixir_available": cls._is_elixir_available(),
+                "elixir_available": elixir_available,
                 "source": cls._get_file_ops_source(),
                 "backend_preference": cls._backend_preference.value,
+                "routing": cls.get_capability_routing(cls.Capabilities.FILE_OPS),
             },
             "repo_index": {
                 "available": True,  # Python fallback always available
-                "elixir_available": cls._is_elixir_available(),
+                "elixir_available": elixir_available,
                 "source": cls._last_source.get(
                     cls.Capabilities.REPO_INDEX,
-                    "elixir" if cls._is_elixir_available() else "python",
+                    "elixir" if elixir_available else "python",
                 ),
+                "routing": cls.get_capability_routing(cls.Capabilities.REPO_INDEX),
             },
             "parse": {
-                "available": turbo_parse.get("available", False)
-                or cls._is_elixir_available(),
+                "available": turbo_parse.get("available", False) or elixir_available,
                 "rust_available": turbo_parse.get("available", False),
-                "elixir_available": cls._is_elixir_available(),
+                "elixir_available": elixir_available,
+                "routing": cls.get_capability_routing(cls.Capabilities.PARSE),
                 "source": cls._last_source.get(cls.Capabilities.PARSE, "unknown"),
             },
         }
@@ -1146,12 +1367,15 @@ class NativeBackend:
         Returns:
             Dict with parse results or error.
         """
-        # bd-63: Check if capability is enabled first
-        if not cls.is_active(cls.Capabilities.PARSE):
+        # bd-13-fix: Check if capability is enabled first (not is_active).
+        # is_enabled allows Python fallback in PYTHON_ONLY mode; is_active would block it.
+        if not cls.is_enabled(cls.Capabilities.PARSE):
             return {"error": "Parse capability disabled", "path": path}
 
         # bd-64: Try Elixir first if preferred and available
-        if _prefer_native and cls._should_use_elixir(cls.Capabilities.PARSE):
+        # bd-13-fix: _should_use_elixir now handles PYTHON_ONLY internally
+        # bd-13-partial-fix: Pass specific entrypoint for accurate RUST_FIRST fallback
+        if _prefer_native and cls._should_use_elixir(cls.Capabilities.PARSE, entrypoint="parse_file"):
             try:
                 result = cls._call_elixir(
                     "parse_file",
@@ -1167,8 +1391,9 @@ class NativeBackend:
                 logger.debug(f"Elixir parse_file failed: {e}")
 
         # Try Rust turbo_parse
+        # bd-13-fix: Use _should_use_turbo_parse to respect PYTHON_ONLY mode
         turbo_parse = cls._get_turbo_parse()
-        if turbo_parse["available"]:
+        if _prefer_native and cls._should_use_turbo_parse():
             try:
                 native_func = turbo_parse["parse_file"]
                 result = native_func(path, language)
@@ -1205,11 +1430,15 @@ class NativeBackend:
         Returns:
             Dict with parse results or error.
         """
-        if not cls.is_active(cls.Capabilities.PARSE):
+        # bd-13-fix: Check if capability is enabled first (not is_active).
+        # is_enabled allows Python fallback in PYTHON_ONLY mode; is_active would block it.
+        if not cls.is_enabled(cls.Capabilities.PARSE):
             return {"error": "Parse capability disabled"}
 
         # bd-64: Try Elixir first if preferred and available
-        if _prefer_native and cls._should_use_elixir(cls.Capabilities.PARSE):
+        # bd-13-fix: _should_use_elixir now handles PYTHON_ONLY internally
+        # bd-13-partial-fix: Pass specific entrypoint for accurate RUST_FIRST fallback
+        if _prefer_native and cls._should_use_elixir(cls.Capabilities.PARSE, entrypoint="parse_source"):
             try:
                 result = cls._call_elixir(
                     "parse_source",
@@ -1225,8 +1454,9 @@ class NativeBackend:
                 logger.debug(f"Elixir parse_source failed: {e}")
 
         # Try Rust turbo_parse
+        # bd-13-fix: Use _should_use_turbo_parse to respect PYTHON_ONLY mode
         turbo_parse = cls._get_turbo_parse()
-        if turbo_parse["available"]:
+        if _prefer_native and cls._should_use_turbo_parse():
             try:
                 native_func = turbo_parse["parse_source"]
                 result = native_func(source, language)
@@ -1258,11 +1488,15 @@ class NativeBackend:
         Returns:
             List of symbol dicts with name, kind, range info.
         """
-        if not cls.is_active(cls.Capabilities.PARSE):
+        # bd-13-fix: Check if capability is enabled first (not is_active).
+        # is_enabled allows Python fallback in PYTHON_ONLY mode; is_active would block it.
+        if not cls.is_enabled(cls.Capabilities.PARSE):
             return []
 
         # bd-64: Try Elixir first if preferred and available
-        if _prefer_native and cls._should_use_elixir(cls.Capabilities.PARSE):
+        # bd-13-fix: _should_use_elixir now handles PYTHON_ONLY internally
+        # bd-13-partial-fix: Pass specific entrypoint for accurate RUST_FIRST fallback
+        if _prefer_native and cls._should_use_elixir(cls.Capabilities.PARSE, entrypoint="extract_symbols"):
             try:
                 result = cls._call_elixir(
                     "extract_symbols",
@@ -1279,8 +1513,9 @@ class NativeBackend:
                 logger.debug(f"Elixir extract_symbols failed: {e}")
 
         # Try Rust turbo_parse
+        # bd-13-fix: Use _should_use_turbo_parse to respect PYTHON_ONLY mode
         turbo_parse = cls._get_turbo_parse()
-        if turbo_parse["available"]:
+        if _prefer_native and cls._should_use_turbo_parse():
             try:
                 native_func = turbo_parse["extract_symbols"]
                 result = native_func(source, language)
@@ -1308,11 +1543,14 @@ class NativeBackend:
         Returns:
             Dict with fold ranges or error info.
         """
-        if not cls.is_active(cls.Capabilities.PARSE):
-            return {"error": "Parse capability not active", "folds": []}
+        # bd-13-fix: Check if capability is enabled first (not is_active).
+        # is_enabled allows Python fallback in PYTHON_ONLY mode; is_active would block it.
+        if not cls.is_enabled(cls.Capabilities.PARSE):
+            return {"error": "Parse capability disabled", "folds": []}
 
         # Try Elixir
-        if cls._should_use_elixir(cls.Capabilities.PARSE):
+        # bd-13-partial-fix: Pass specific entrypoint for accurate RUST_FIRST fallback
+        if cls._should_use_elixir(cls.Capabilities.PARSE, entrypoint="get_folds"):
             try:
                 result = cls._call_elixir(
                     "get_folds",
@@ -1325,11 +1563,11 @@ class NativeBackend:
                 logger.debug(f"Elixir get_folds failed: {e}")
 
         # Try Rust turbo_parse
+        # bd-13-fix: Use _should_use_turbo_parse to respect PYTHON_ONLY and capability state
         turbo_parse = cls._get_turbo_parse()
-        if turbo_parse["available"]:
+        if cls._should_use_turbo_parse() and turbo_parse.get("get_folds"):
             try:
-                native_func = turbo_parse["get_folds"]
-                result = native_func(source, language)
+                result = turbo_parse["get_folds"](source, language)
                 cls._last_source[cls.Capabilities.PARSE] = "turbo_parse"
                 if isinstance(result, dict):
                     return result
@@ -1353,11 +1591,14 @@ class NativeBackend:
         Returns:
             Dict with highlight ranges or error info.
         """
-        if not cls.is_active(cls.Capabilities.PARSE):
-            return {"error": "Parse capability not active", "highlights": []}
+        # bd-13-fix: Check if capability is enabled first (not is_active).
+        # is_enabled allows Python fallback in PYTHON_ONLY mode; is_active would block it.
+        if not cls.is_enabled(cls.Capabilities.PARSE):
+            return {"error": "Parse capability disabled", "highlights": []}
 
         # Try Elixir
-        if cls._should_use_elixir(cls.Capabilities.PARSE):
+        # bd-13-partial-fix: Pass specific entrypoint for accurate RUST_FIRST fallback
+        if cls._should_use_elixir(cls.Capabilities.PARSE, entrypoint="get_highlights"):
             try:
                 result = cls._call_elixir(
                     "get_highlights",
@@ -1370,11 +1611,11 @@ class NativeBackend:
                 logger.debug(f"Elixir get_highlights failed: {e}")
 
         # Try Rust turbo_parse
+        # bd-13-fix: Use _should_use_turbo_parse to respect PYTHON_ONLY and capability state
         turbo_parse = cls._get_turbo_parse()
-        if turbo_parse["available"]:
+        if cls._should_use_turbo_parse() and turbo_parse.get("get_highlights"):
             try:
-                native_func = turbo_parse["get_highlights"]
-                result = native_func(source, language)
+                result = turbo_parse["get_highlights"](source, language)
                 cls._last_source[cls.Capabilities.PARSE] = "turbo_parse"
                 if isinstance(result, dict):
                     return result
@@ -1402,11 +1643,14 @@ class NativeBackend:
         Returns:
             Dict with results list and count.
         """
-        if not cls.is_active(cls.Capabilities.PARSE):
-            return {"error": "Parse capability not active", "results": [], "count": 0}
+        # bd-13-fix: Check if capability is enabled first (not is_active).
+        # is_enabled allows Python fallback in PYTHON_ONLY mode; is_active would block it.
+        if not cls.is_enabled(cls.Capabilities.PARSE):
+            return {"error": "Parse capability disabled", "results": [], "count": 0}
 
         # Try Elixir (uses Task.async_stream for concurrency)
-        if cls._should_use_elixir(cls.Capabilities.PARSE):
+        # bd-13-partial-fix: Uses parse_file under the hood, so check that entrypoint
+        if cls._should_use_elixir(cls.Capabilities.PARSE, entrypoint="parse_file"):
             try:
                 result = cls._call_elixir(
                     "parse_batch",
@@ -1419,8 +1663,11 @@ class NativeBackend:
                 logger.debug(f"Elixir parse_batch failed: {e}")
 
         # Try Rust turbo_parse (sequential)
+        # bd-13-fix: Gate with BOTH _should_use_turbo_parse() AND _is_turbo_parse_entrypoint_available
+        # to respect PYTHON_ONLY semantics. Partial turbo_parse builds may have available=True
+        # (parse_source exists) but parse_file missing, so we must verify the specific entrypoint.
         turbo_parse = cls._get_turbo_parse()
-        if turbo_parse["available"]:
+        if cls._should_use_turbo_parse() and cls._is_turbo_parse_entrypoint_available("parse_file"):
             try:
                 native_func = turbo_parse["parse_file"]
                 results = []
@@ -1455,12 +1702,15 @@ class NativeBackend:
         """Get list of supported languages for parsing.
 
         bd-64: Routes through Elixir when available, then tries Rust.
+        bd-13-fix: Respects PYTHON_ONLY mode and capability state.
 
         Returns:
             List of supported language identifiers.
         """
         # Try Elixir
-        if cls._is_elixir_available():
+        # bd-13-fix: Use _should_use_elixir to respect PYTHON_ONLY and capability state
+        # bd-13-partial-fix: Pass specific entrypoint for accurate RUST_FIRST fallback
+        if cls._should_use_elixir(cls.Capabilities.PARSE, entrypoint="supported_languages"):
             try:
                 result = cls._call_elixir("supported_languages", {})
                 languages = result.get("languages", [])
@@ -1470,12 +1720,11 @@ class NativeBackend:
                 pass
 
         # Try Rust
+        # bd-13-fix: Use _should_use_turbo_parse to respect PYTHON_ONLY and capability state
         turbo_parse = cls._get_turbo_parse()
-        if turbo_parse["available"]:
+        if cls._should_use_turbo_parse() and turbo_parse.get("supported_languages"):
             try:
-                from turbo_parse import supported_languages as turbo_supported
-
-                result = turbo_supported()
+                result = turbo_parse["supported_languages"]()
                 # Handle both list return and dict with "languages" key
                 if isinstance(result, list):
                     return result
@@ -1491,19 +1740,29 @@ class NativeBackend:
     def is_language_supported(cls, language: str) -> bool:
         """Check if a language is supported for parsing.
 
+        bd-13-fix: Respects PYTHON_ONLY mode and capability state.
+
         Args:
             language: Language identifier to check.
 
         Returns:
             True if the language is supported.
         """
-        turbo_parse = cls._get_turbo_parse()
-
-        if turbo_parse["available"]:
+        # bd-13-fix: Use _should_use_elixir first, then turbo_parse
+        # bd-13-partial-fix: Pass specific entrypoint for accurate RUST_FIRST fallback
+        if cls._should_use_elixir(cls.Capabilities.PARSE, entrypoint="is_language_supported"):
             try:
-                from turbo_parse import is_language_supported as turbo_is_supported
+                result = cls._call_elixir("is_language_supported", {"language": language})
+                if result.get("supported") is not None:
+                    return result["supported"]
+            except Exception:
+                pass
 
-                return turbo_is_supported(language)
+        # Try Rust turbo_parse
+        turbo_parse = cls._get_turbo_parse()
+        if cls._should_use_turbo_parse() and turbo_parse.get("is_language_supported"):
+            try:
+                return turbo_parse["is_language_supported"](language)
             except Exception:
                 pass
 
@@ -1534,8 +1793,9 @@ class NativeBackend:
         Returns:
             Dict with diagnostics list, error_count, warning_count, success
         """
-        # bd-63: Check capability first
-        if not cls.is_active(cls.Capabilities.PARSE):
+        # bd-13-fix: Check if capability is enabled first (not is_active).
+        # is_enabled allows Python fallback in PYTHON_ONLY mode; is_active would block it.
+        if not cls.is_enabled(cls.Capabilities.PARSE):
             return {
                 "diagnostics": [],
                 "error_count": 0,
@@ -1545,7 +1805,8 @@ class NativeBackend:
             }
 
         # Try Elixir first
-        if cls._should_use_elixir(cls.Capabilities.PARSE):
+        # bd-13-partial-fix: Pass specific entrypoint for accurate RUST_FIRST fallback
+        if cls._should_use_elixir(cls.Capabilities.PARSE, entrypoint="extract_syntax_diagnostics"):
             try:
                 result = cls._call_elixir(
                     "extract_syntax_diagnostics",
@@ -1558,12 +1819,11 @@ class NativeBackend:
                 logger.debug(f"Elixir diagnostics failed: {e}")
 
         # Try Rust turbo_parse
+        # bd-13-fix: Use _should_use_turbo_parse to respect PYTHON_ONLY and capability state
         turbo_parse = cls._get_turbo_parse()
-        if turbo_parse["available"]:
+        if cls._should_use_turbo_parse() and turbo_parse.get("extract_syntax_diagnostics"):
             try:
-                from turbo_parse import extract_syntax_diagnostics as rust_diagnostics
-
-                result = rust_diagnostics(source, language)
+                result = turbo_parse["extract_syntax_diagnostics"](source, language)
                 cls._last_source[cls.Capabilities.PARSE] = "rust"
                 return result
             except Exception as e:
@@ -1584,34 +1844,57 @@ class NativeBackend:
         """Get health check info for parse capability.
 
         bd-93: Phase 4 - NativeBackend method for turbo_parse health.
+        bd-13-fix: Now turbo_parse-specific; respects PYTHON_ONLY and capability state.
 
         Returns:
             Dict with available, version, languages, cache_available
         """
-        # Try Rust first since health_check is Rust-specific
+        # bd-13-fix: Check if we should even try turbo_parse (PYTHON_ONLY or disabled)
+        is_enabled = cls.is_enabled(cls.Capabilities.PARSE)
+        is_python_only = cls._backend_preference == BackendPreference.PYTHON_ONLY
+
+        # Try Rust turbo_parse if allowed
         turbo_parse = cls._get_turbo_parse()
-        if turbo_parse["available"]:
-            try:
-                from turbo_parse import health_check
+        if not is_python_only and is_enabled:
+            if turbo_parse.get("available") and turbo_parse.get("health_check"):
+                try:
+                    result = turbo_parse["health_check"]()
+                    # Ensure consistent response format
+                    return {
+                        "available": result.get("available", True),
+                        "version": result.get("version"),
+                        "languages": result.get("languages", []),
+                        "cache_available": result.get("cache_available", False),
+                        "backend": "turbo_parse",
+                    }
+                except Exception as e:
+                    logger.debug(f"turbo_parse health_check failed: {e}")
 
-                return health_check()
-            except Exception:
-                pass
-
-        # Elixir doesn't have health_check, return basic info
-        if cls._is_elixir_available():
+        # Return appropriate unavailable response
+        if is_python_only:
             return {
-                "available": True,
-                "version": "elixir",
-                "languages": ["python", "javascript", "typescript", "rust", "elixir"],
+                "available": False,
+                "version": None,
+                "languages": [],
                 "cache_available": False,
+                "backend": "disabled",
+                "reason": "python_only_mode",
             }
-
+        if not is_enabled:
+            return {
+                "available": False,
+                "version": None,
+                "languages": [],
+                "cache_available": False,
+                "backend": "disabled",
+                "reason": "capability_disabled",
+            }
         return {
             "available": False,
             "version": None,
             "languages": [],
             "cache_available": False,
+            "backend": "unavailable",
         }
 
     @classmethod
@@ -1619,22 +1902,29 @@ class NativeBackend:
         """Get parsing statistics.
 
         bd-93: Phase 4 - NativeBackend method for turbo_parse stats.
+        bd-13-fix: Now turbo_parse-specific; respects PYTHON_ONLY and capability state.
 
         Returns:
             Dict with total_parses, cache_hits, cache_misses, etc.
         """
-        # Try Rust first since stats is Rust-specific
+        # bd-13-fix: Check if we should even try turbo_parse (PYTHON_ONLY or disabled)
+        is_enabled = cls.is_enabled(cls.Capabilities.PARSE)
+        is_python_only = cls._backend_preference == BackendPreference.PYTHON_ONLY
+
+        # Try Rust turbo_parse if allowed
         turbo_parse = cls._get_turbo_parse()
-        if turbo_parse["available"]:
-            try:
-                from turbo_parse import stats
+        if not is_python_only and is_enabled:
+            if turbo_parse.get("available") and turbo_parse.get("stats"):
+                try:
+                    result = turbo_parse["stats"]()
+                    # Merge with backend info
+                    result["backend"] = "turbo_parse"
+                    return result
+                except Exception as e:
+                    logger.debug(f"turbo_parse stats failed: {e}")
 
-                return stats()
-            except Exception:
-                pass
-
-        # Return empty stats for Elixir/Python
-        return {
+        # Return empty stats with reason for unavailability
+        result = {
             "total_parses": 0,
             "average_parse_time_ms": 0.0,
             "languages_used": {},
@@ -1642,7 +1932,40 @@ class NativeBackend:
             "cache_misses": 0,
             "cache_evictions": 0,
             "cache_hit_ratio": 0.0,
+            "backend": "disabled" if (not is_enabled or is_python_only) else "unavailable",
         }
+        if is_python_only:
+            result["reason"] = "python_only_mode"
+        elif not is_enabled:
+            result["reason"] = "capability_disabled"
+        return result
+
+    @classmethod
+    def verify_routing(cls) -> dict[str, Any]:
+        """Log and return the active routing table for all capabilities.
+
+        bd-13: Runtime routing verification — call during startup to log
+        which backend will handle each capability.
+
+        Returns:
+            Dict mapping capability name to routing info.
+        """
+        routing_table = {}
+        for cap in [
+            cls.Capabilities.MESSAGE_CORE,
+            cls.Capabilities.FILE_OPS,
+            cls.Capabilities.REPO_INDEX,
+            cls.Capabilities.PARSE,
+        ]:
+            routing = cls.get_capability_routing(cap)
+            routing_table[cap] = routing
+            logger.info(
+                "Routing %s: will_use=%s preference=%s",
+                cap,
+                routing.get("will_use", "unknown"),
+                routing.get("preference", "unknown"),
+            )
+        return routing_table
 
 
 # Convenience module-level functions for direct import

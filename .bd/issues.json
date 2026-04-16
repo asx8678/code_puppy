@@ -1,5 +1,5 @@
 {
-  "counter": 6,
+  "counter": 13,
   "issues": {
     "bd-1": {
       "id": "bd-1",
@@ -107,6 +107,108 @@
       "updated_at": "2026-04-16T05:34:53.196840",
       "comments": [
         "**bd-6 - Autosave O(N) per turn:**\n- Added debouncing (2s minimum between saves)\n- Added fingerprint-based deduplication (history length + SHA256 of last message)\n- should_skip_autosave() checks both conditions before any heavy work\n- mark_autosave_complete() updates tracking state after successful save\n- Skips unnecessary saves when history unchanged\n\nResult: Long sessions no longer spam disk with redundant saves."
+      ]
+    },
+    "bd-7": {
+      "id": "bd-7",
+      "title": "Integrate EOL normalization overlay into Elixir FileOps",
+      "description": "The eol.ex module exists in rewrite/code_puppy_elixir_rewrite_bundle/overlay/ but is orphaned and not in the production Elixir tree. This issue tracks integrating BOM stripping and CRLF\u2192LF normalization into the main FileOps implementation.\n\n**References:**\n- Overlay file: rewrite/code_puppy_elixir_rewrite_bundle/overlay/elixir/code_puppy_control/lib/code_puppy_control/text/eol.ex\n- Python source: code_puppy/utils/eol.py (normalize_eol, strip_bom, restore_bom, looks_textish)\n\n**Acceptance criteria:**\n1. Move/adapt eol.ex to elixir/code_puppy_control/lib/code_puppy_control/text/eol.ex\n2. Add tests at elixir/code_puppy_control/test/code_puppy_control/text/eol_test.exs\n3. Update FileOps.read_file to optionally apply EOL normalization\n4. Ensure parity with Python heuristic (90% printable threshold, NUL detection)\n5. Add integration test for BOM stripping on file read\n\n**Priority reason:** FileOps parity blocker for Python\u2192Elixir migration (code_puppy_python_to_elixir_plan.md PR 2)",
+      "status": "open",
+      "priority": 1,
+      "type": "task",
+      "labels": [],
+      "dependencies": {},
+      "created_at": "2026-04-16T07:16:21.437333",
+      "updated_at": "2026-04-16T07:16:21.437340",
+      "comments": []
+    },
+    "bd-8": {
+      "id": "bd-8",
+      "title": "Port gitignore-aware filtering to Elixir FileOps",
+      "description": "Python FileOps has gitignore-aware filtering via code_puppy/utils/gitignore.py (using pathspec library). Elixir FileOps currently walks directories without respecting .gitignore patterns, causing divergence in list_files and grep results between Python and Elixir backends.\n\n**References:**\n- Python source: code_puppy/utils/gitignore.py\n- Elixir target: elixir/code_puppy_control/lib/code_puppy_control/file_ops.ex\n- Usage: GitignoreMatcher.for_directory() caches compiled pathspec\n\n**Acceptance criteria:**\n1. Create CodePuppyControl.Gitignore module for pattern matching\n2. Implement ancestor-walking to collect all applicable .gitignore files\n3. Add pattern compilation caching (similar to Python LRU cache)\n4. Integrate filtering into list_files and grep operations\n5. Parity tests against Python fixtures with same .gitignore patterns\n\n**Open questions:**\n- Use nimble_parsec for pattern parsing or shell out to git check-ignore?\n- Support .plandexignore/.cpignore later (out of scope for this issue)\n\n**Priority reason:** Blocking FileOps parity - users see different file lists depending on backend (code_puppy_python_to_elixir_plan.md PR 3)",
+      "status": "open",
+      "priority": 1,
+      "type": "task",
+      "labels": [],
+      "dependencies": {
+        "blocks": [
+          "bd-9"
+        ]
+      },
+      "created_at": "2026-04-16T07:16:25.434979",
+      "updated_at": "2026-04-16T07:16:39.459353",
+      "comments": []
+    },
+    "bd-9": {
+      "id": "bd-9",
+      "title": "Promote Repo Compass Elixir indexer from rewrite/ to production",
+      "description": "The Repo Compass Elixir indexer was developed in rewrite/ folder (repo_compass.ex, indexer.ex, port.ex, repo_compass_test.exs) but never integrated into the production Elixir tree. The Python indexer in code_puppy/plugins/repo_compass/indexer.py remains the default.\n\n**References:**\n- Orphaned files: rewrite/repo_compass.ex, rewrite/indexer.ex, rewrite/port.ex, rewrite/repo_compass_test.exs\n- Python entry: code_puppy/plugins/repo_compass/indexer.py\n- NativeBackend route: code_puppy/native_backend.py::index_directory()\n- Analysis: rewrite/ELIXIR_FIRST_REWRITE_ANALYSIS.md\n\n**Acceptance criteria:**\n1. Move rewrite/repo_compass.ex to elixir/code_puppy_control/lib/code_puppy_control/indexer/repo_compass.ex\n2. Update rewrite/indexer.ex delegates and move to production\n3. Ensure repo_compass_index/2 and repo_compass_index!/2 are exported\n4. Route NativeBackend.index_directory() through Elixir when available\n5. Verify parity: Python-style symbol summaries (class Greeter methods=hello,later, def wave(person, times))\n6. Run integration tests and update port.ex routing if needed\n\n**Dependencies:**\n- Should follow bd-8 (gitignore support) for consistent file filtering\n\n**Priority reason:** ELIXIR_FIRST_REWRITE_ANALYSIS.md identified this as highest-leverage first slice. Currently orphaned work.",
+      "status": "open",
+      "priority": 1,
+      "type": "task",
+      "labels": [],
+      "dependencies": {
+        "blocks": [
+          "bd-8"
+        ]
+      },
+      "created_at": "2026-04-16T07:16:30.972936",
+      "updated_at": "2026-04-16T07:16:33.101461",
+      "comments": []
+    },
+    "bd-10": {
+      "id": "bd-10",
+      "title": "Implement standalone Elixir transport outside bridge mode",
+      "description": "Currently Elixir functionality is only available through PythonWorker.Port (bridge mode) which requires Python \u2194 Elixir integration. For full turbo_ops parity, Elixir file operations need to be accessible via standalone transport for non-Python consumers or direct usage.\n\n**Current state:**\n- Elixir control plane in elixir/code_puppy_control/\n- Only entry point: CodePuppyControl.PythonWorker.Port.handle_file_request/3\n- No standalone stdio service or socket interface\n\n**References:**\n- Current bridge: elixir/code_puppy_control/lib/code_puppy_control/python_worker/port.ex\n- Target API: list_files, grep, read_file (equivalent to Python turbo_ops)\n- fast_puppy_elixir_rewrite_plan.md Phase 2\n\n**Acceptance criteria:**\n1. Design transport protocol (stdio line JSON, Unix socket, or TCP)\n2. Implement standalone service module in Elixir\n3. Support request/response JSON-RPC style protocol\n4. Maintain same security validations (sensitive path checks)\n5. Python client adapter that mimics current FileOps API\n6. Document when to use bridge vs standalone mode\n\n**Open questions:**\n- Keep Port for embedded use case, add service for standalone?\n- Single-shot (CLI style) vs persistent daemon mode?\n\n**Priority reason:** fast_puppy_elixir_rewrite_plan.md: Elixir becomes single native runtime surface, not just a bridge target",
+      "status": "open",
+      "priority": 2,
+      "type": "feature",
+      "labels": [],
+      "dependencies": {},
+      "created_at": "2026-04-16T07:16:45.205484",
+      "updated_at": "2026-04-16T07:16:45.205493",
+      "comments": []
+    },
+    "bd-11": {
+      "id": "bd-11",
+      "title": "Complete parse contract in NativeBackend (bd-64 follow-through)",
+      "description": "NativeBackend has parse methods (parse_file, parse_source, parse_batch, parse_health_check, parse_stats) with bd-64 ghost reference in code, but the Elixir NIF routing may not be complete. The turbo_parse_nif.ex exists but integration status is unclear.\n\n**Ghost reference:** native_backend.py line 64: 'bd-64: Phase 4 \u2014 Add Elixir NIF routing for parse operations'\n\n**Current state:**\n- turbo_parse_nif.ex exists: elixir/code_puppy_control/lib/code_puppy_control/turbo_parse_nif.ex\n- NativeBackend.parse_* methods exist\n- Phase 4 was described as 'Parse operations now route through NativeBackend with Elixir-first routing' in system prompt\n- NativeBackend methods: parse_file (line 1130), parse_source (line 1189), parse_batch (line 1389)\n\n**Verification needed:**\n1. Does NativeBackend.parse_file actually route to Elixir NIF when elixir_first profile active?\n2. Are parse_health_check and parse_stats implemented on Elixir side?\n3. Does extract_syntax_diagnostics exist in NativeBackend?\n4. Compare turbo_parse_bridge direct usage vs NativeBackend routing\n\n**Acceptance criteria:**\n1. Verify parse methods route to Elixir when available (elixir_first profile)\n2. Add missing NativeBackend.extract_syntax_diagnostics wrapper\n3. Ensure parse_stats/parse_health_check parity\n4. Document which parse features use Elixir vs Rust vs Python\n5. Remove ghost bd-64 reference or file follow-up issue\n\n**Priority reason:** Phase 4 is claimed done in docs but verify actual implementation completeness.",
+      "status": "open",
+      "priority": 1,
+      "type": "task",
+      "labels": [],
+      "dependencies": {},
+      "created_at": "2026-04-16T07:16:49.961366",
+      "updated_at": "2026-04-16T07:16:49.961373",
+      "comments": []
+    },
+    "bd-12": {
+      "id": "bd-12",
+      "title": "Consolidate migration planning documents into single source of truth",
+      "description": "Repository has multiple migration planning documents that may contain drift or stale references:\n\n**Existing docs:**\n1. ELIXIR_MIGRATION_ROADMAP.md \u2014 Rust\u2192Elixir analysis, tiered migration candidates\n2. fast_puppy_elixir_rewrite_plan.md \u2014 Historical doc, still references removed Zig architecture\n3. rewrite/ELIXIR_FIRST_REWRITE_ANALYSIS.md \u2014 Repo Compass indexer first slice justification\n4. rewrite/code_puppy_elixir_rewrite_bundle/PLAN/code_puppy_python_to_elixir_plan.md \u2014 Practical PR sequence\n\n**Identified problems:**\n- fast_puppy_elixir_rewrite_plan.md: Zig references are historical/stale\n- Multiple docs describe overlapping phases but with different numbering\n- ELIXIR_FIRST_REWRITE_ANALYSIS.md says repo_compass is integrated, but code is in rewrite/ (orphaned)\n- No single doc reflects current bd-7 through bd-12 work\n\n**Acceptance criteria:**\n1. Audit all four documents for conflicts and stale info\n2. Update fast_puppy_elixir_rewrite_plan.md to remove Zig references (or mark historical)\n3. Either:\n   a) Consolidate into MIGRATION_STATUS.md with current state, OR\n   b) Create clear hierarchy: ROADMAP (vision) + STATUS (current work) + PLAN (tactical)\n4. Ensure all bd-* references in code match actual filed issues\n5. Document which migration phases are DONE vs IN-PROGRESS vs TODO\n\n**Priority reason:** Prevents confusion about what's actually implemented vs planned. Currently developers must check 4+ docs to understand state.",
+      "status": "open",
+      "priority": 2,
+      "type": "chore",
+      "labels": [],
+      "dependencies": {},
+      "created_at": "2026-04-16T07:16:56.047151",
+      "updated_at": "2026-04-16T07:16:56.047165",
+      "comments": []
+    },
+    "bd-13": {
+      "id": "bd-13",
+      "title": "Fix NativeBackend routing semantics - make it single Python entry point to native",
+      "description": "NativeBackend routing currently has semantic drift between the named preference (RUST_FIRST) and actual behavior. This issue tracks fixing the backend to be the truthful source-of-truth for all native capability routing.\n\n**Current Problems:**\n1. **Misleading preference names**: RUST_FIRST profile silently prefers Elixir backends in practice - the naming doesn't match reality\n2. **Direct native imports scattered**: Code outside of adapter paths imports directly from native bridges (turbo_parse_bridge, etc.) rather than going through NativeBackend\n3. **Implicit capability routing**: It's unclear which backend (Rust crate vs Elixir service) handles file_ops, repo_index, parse, and message_core\n\n**Required Fixes:**\n1. Make backend preference semantics truthful:\n   - RUST_FIRST should actually prefer Rust crates first\n   - Add ELIXIR_FIRST for current Elixir-preferring behavior\n   - Ensure profile naming matches actual routing behavior\n   \n2. Eliminate/track direct native imports:\n   - Audit codebase for direct imports of turbo_parse_bridge, file_service_bridge, etc.\n   - Route all native calls through NativeBackend adapter methods\n   - Add linting or detection for direct bridge imports\n   \n3. Make capability routing explicit:\n   - Document which backend handles each capability (file_ops, repo_index, parse, message_core)\n   - Add runtime verification that NativeBackend routes to correct backend per capability\n   - Ensure fallback chain (Elixir NIF \u2192 Rust \u2192 Python) is explicit and testable\n\n**Migration Impact:**\nThis is a prerequisite for clean Phase 4 migration (bd-93, bd-64). Without truthful routing semantics, Pack Leader cannot accurately predict which backend will handle parse operations.\n\n**Acceptance Criteria:**\n- [ ] Profile semantics match names (RUST_FIRST = Rust first, not Elixir)\n- [ ] Zero direct bridge imports outside NativeBackend adapter\n- [ ] Capability routing table documented and verified at runtime\n- [ ] Tests confirm correct backend selection per profile/capability",
+      "status": "open",
+      "priority": 0,
+      "type": "task",
+      "labels": [],
+      "dependencies": {},
+      "created_at": "2026-04-16T07:23:25.865612",
+      "updated_at": "2026-04-16T09:27:26.513206",
+      "comments": [
+        "Claimed by planning-agent-019d94 for implementation. Beginning work on NativeBackend routing semantics fixes.",
+        "Claimed by planning-agent-019d95 for implementation."
       ]
     }
   }

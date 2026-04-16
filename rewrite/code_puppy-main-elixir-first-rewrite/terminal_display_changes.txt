@@ -1,0 +1,21 @@
+Updated files:
+- code_puppy/messaging/rich_renderer.py
+- code_puppy/status_display.py
+- tests/test_rich_renderer.py
+- tests/messaging/test_rich_renderer.py
+
+Main UI improvements:
+- Shell commands now render as structured panels with command, directory, mode, and timeout.
+- Shell completions now show exit code, duration, stdout/stderr line counts, and preview stderr on failures.
+- stderr streaming is visually separated from stdout.
+- Grep results now include searched-file scope and use a compact aligned summary table in concise mode.
+- Verbose grep output now shows per-file line summaries before detailed matches.
+- Status panels now escape unsafe markup and render more compactly.
+- Live status line now shows message, token count, current rate, and elapsed time.
+- Final completion line is shorter and easier to scan.
+
+Verification performed here:
+- Python syntax check passed for the modified source and test files via py_compile.
+
+Note:
+- I could not run the full project test suite in this environment because the project targets Python >= 3.14, while the available runtime here is older.

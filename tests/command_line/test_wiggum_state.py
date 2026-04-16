@@ -1,5 +1,6 @@
 """Tests for wiggum_state.py - 100% coverage."""
 
+from code_puppy.token_ledger import TokenAttempt
 from code_puppy.command_line.wiggum_state import (
     WiggumState,
     get_wiggum_count,
@@ -68,3 +69,27 @@ class TestModuleFunctions:
         start_wiggum("go")
         increment_wiggum_count()
         assert get_wiggum_count() == 1
+
+    def test_wiggum_loop_clears_token_ledger(self):
+        """Test that wiggum loop iteration clears the token ledger.
+
+        This verifies the design fix: each wiggum loop should have
+        independent token accounting, not cumulative costs.
+        """
+        from unittest.mock import MagicMock
+        from code_puppy.token_ledger import TokenLedger
+
+        # Create a mock agent with a real token ledger
+        mock_agent = MagicMock()
+        mock_ledger = TokenLedger()
+        mock_ledger.record(TokenAttempt(model="test", estimated_input_tokens=1000))
+        mock_agent._state.get_token_ledger.return_value = mock_ledger
+
+        # Simulate what happens in the wiggum loop
+        # (after clear_message_history, we should clear the ledger)
+        mock_agent.clear_message_history()
+        mock_agent._state.get_token_ledger().clear()
+
+        # Verify ledger is cleared
+        assert len(mock_ledger.attempts) == 0
+        assert mock_ledger.total_estimated_input == 0

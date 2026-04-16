@@ -141,3 +141,59 @@ iex -S mix
 
 - Python 3.14 free-threading: All crates support no-GIL operation
 - Additional backends evaluated based on FFI sensitivity and ecosystem maturity
+
+## Capability Routing Table (bd-13)
+
+NativeBackend routes operations to the optimal backend based on the active profile. Use `NativeBackend.get_capability_routing(capability)` to introspect at runtime.
+
+### Routing by Profile
+
+| Capability | `elixir_first` (default) | `rust_first` | `python_only` |
+|------------|-------------------------|-------------|---------------|
+| **message_core** | Rust → Python | Rust → Python | Python |
+| **file_ops** | Elixir → Python | Elixir → Python | Python |
+| **repo_index** | Elixir → Python | Elixir → Python | Python |
+| **parse** | Elixir → Rust → Python | Rust → Elixir → Python | Python |
+
+### Fallback Behavior
+
+- Each backend is tried in order; first available wins
+- Python fallback is always available (never fails to import)
+- `rust_first` for PARSE: skips Elixir when `turbo_parse` Rust crate is available
+- `rust_first` for FILE_OPS/REPO_INDEX: still uses Elixir (no Rust backend exists since turbo_ops removed in bd-76)
+
+### Runtime Introspection
+
+```python
+from code_puppy.native_backend import NativeBackend
+
+# Get routing plan for a capability
+routing = NativeBackend.get_capability_routing("parse")
+print(routing["will_use"])     # "elixir", "turbo_parse", or "python_fallback"
+print(routing["backends"])     # [("elixir", True), ("turbo_parse", False), ...]
+print(routing["preference"])   # "elixir_first"
+
+# Get full status
+for cap, info in NativeBackend.get_status().items():
+    print(f"{cap}: {info.status} (configured={info.configured})")
+
+# Check specific availability
+NativeBackend.is_available(NativeBackend.Capabilities.PARSE)  # bool
+NativeBackend.is_active(NativeBackend.Capabilities.PARSE)     # bool (available AND enabled)
+```
+
+### Direct Bridge Imports (Deprecated)
+
+Direct imports from `turbo_parse_bridge` are **deprecated** (bd-13). Use NativeBackend methods instead:
+
+| Deprecated Import | NativeBackend Equivalent |
+|-------------------|--------------------------|
+| `turbo_parse_bridge.parse_source(src, lang)` | `NativeBackend.parse_source(src, lang)` |
+| `turbo_parse_bridge.parse_file(path, lang)` | `NativeBackend.parse_file(path, lang)` |
+| `turbo_parse_bridge.extract_symbols(src, lang)` | `NativeBackend.extract_symbols(src, lang)` |
+| `turbo_parse_bridge.stats()` | `NativeBackend.parse_stats()` |
+| `turbo_parse_bridge.health_check()` | `NativeBackend.parse_health_check()` |
+| `turbo_parse_bridge.TURBO_PARSE_AVAILABLE` | `NativeBackend.is_available(NativeBackend.Capabilities.PARSE)` |
+| `turbo_parse_bridge.parse_files_batch(paths)` | `NativeBackend.parse_batch(paths)` |
+
+A CI lint guard (`tests/test_no_direct_bridge_imports.py`) enforces this.

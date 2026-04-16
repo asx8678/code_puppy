@@ -1,0 +1,77 @@
+pre-commit:
+  parallel: true
+  commands:
+    isort:
+      glob: "*.py"
+      run: |
+        if command -v uv >/dev/null 2>&1 && uv run isort --version >/dev/null 2>&1; then
+          uv run isort --profile black {staged_files}
+        elif command -v isort >/dev/null 2>&1; then
+          isort --profile black {staged_files}
+        else
+          echo "isort not found; using ruff import sorter";
+          if command -v uv >/dev/null 2>&1; then
+            uv run ruff check --select I --fix {staged_files}
+          else
+            ruff check --select I --fix {staged_files}
+          fi
+        fi
+      stage_fixed: true
+    ruff-format:
+      glob: "*.py"
+      run: |
+        if command -v uv >/dev/null 2>&1; then
+          uv run ruff format {staged_files}
+        else
+          ruff format {staged_files}
+        fi
+      stage_fixed: true
+    ruff-lint:
+      glob: "*.py"
+      run: |
+        if command -v uv >/dev/null 2>&1; then
+          uv run ruff check --fix {staged_files}
+        else
+          ruff check --fix {staged_files}
+        fi
+      stage_fixed: true
+    # Optional Rust formatting (requires rustfmt)
+    rustfmt:
+      glob: "*.rs"
+      run: |
+        if command -v cargo >/dev/null 2>&1 && cargo fmt --version >/dev/null 2>&1; then
+          echo "Running rustfmt on staged Rust files...";
+          cargo fmt -- {staged_files}
+        else
+          echo "rustfmt not found; skipping Rust formatting. Install with: rustup component add rustfmt";
+        fi
+      stage_fixed: true
+    # Optional Rust clippy (requires clippy)
+    clippy:
+      glob: "*.rs"
+      run: |
+        if command -v cargo >/dev/null 2>&1 && cargo clippy --version >/dev/null 2>&1; then
+          echo "Running clippy on turbo_parse crate...";
+          cargo clippy -p turbo_parse -- -D warnings || echo "Clippy found issues (non-blocking)";
+        else
+          echo "clippy not found; skipping. Install with: rustup component add clippy";
+        fi
+      fail_text: "Clippy found warnings (not blocking commit)"
+
+
+    # Plugin-focused pytest for pack_parallelism (pre-commit, not assuming pytest-timeout)
+    plugin-tests:
+      glob: "code_puppy/plugins/**/*.py"
+      run: |
+        if command -v uv >/dev/null 2>&1 && uv run pytest --version >/dev/null 2>&1; then
+          echo "Running plugin-focused tests...";
+          uv run pytest tests/plugins/pack_parallelism/ -v -x --tb=short || echo "Plugin tests found issues (non-blocking)";
+        elif command -v pytest >/dev/null 2>&1; then
+          echo "Running plugin-focused tests...";
+          pytest tests/plugins/pack_parallelism/ -v -x --tb=short || echo "Plugin tests found issues (non-blocking)";
+        else
+          echo "pytest not found; skipping plugin tests. Install with: uv add --dev pytest";
+        fi
+      fail_text: "Plugin tests found issues (not blocking commit)"
+
+# pre-push hook removed - tests run in CI only

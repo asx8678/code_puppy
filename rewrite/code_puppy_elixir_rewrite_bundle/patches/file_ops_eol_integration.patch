@@ -1,0 +1,34 @@
+--- a/elixir/code_puppy_control/lib/code_puppy_control/file_ops.ex
++++ b/elixir/code_puppy_control/lib/code_puppy_control/file_ops.ex
+@@ -14,6 +14,7 @@
+   require Logger
+ 
+   alias CodePuppyControl.Indexer.Constants
++  alias CodePuppyControl.Text.EOL
+ 
+   @type file_info :: %{
+           path: String.t(),
+@@ -549,7 +550,9 @@
+             content_result =
+               case File.read(file_path) do
+                 {:ok, content} ->
+-                  process_content(content, start_line, num_lines)
++                  content
++                  |> prepare_content()
++                  |> process_content(start_line, num_lines)
+ 
+                 {:error, reason} ->
+                   {:error, "Failed to read file: #{inspect(reason)}"}
+@@ -575,6 +578,12 @@
+             {:error, "Failed to stat file: #{inspect(reason)}"}
+         end
+     end
++  end
++
++  defp prepare_content(content) do
++    normalized = EOL.normalize_eol(content)
++    {stripped, _bom} = EOL.strip_bom(normalized)
++    stripped
+   end
+ 
+   defp process_content(content, nil, nil) do
