@@ -199,16 +199,17 @@
       "id": "bd-13",
       "title": "Fix NativeBackend routing semantics - make it single Python entry point to native",
       "description": "NativeBackend routing currently has semantic drift between the named preference (RUST_FIRST) and actual behavior. This issue tracks fixing the backend to be the truthful source-of-truth for all native capability routing.\n\n**Current Problems:**\n1. **Misleading preference names**: RUST_FIRST profile silently prefers Elixir backends in practice - the naming doesn't match reality\n2. **Direct native imports scattered**: Code outside of adapter paths imports directly from native bridges (turbo_parse_bridge, etc.) rather than going through NativeBackend\n3. **Implicit capability routing**: It's unclear which backend (Rust crate vs Elixir service) handles file_ops, repo_index, parse, and message_core\n\n**Required Fixes:**\n1. Make backend preference semantics truthful:\n   - RUST_FIRST should actually prefer Rust crates first\n   - Add ELIXIR_FIRST for current Elixir-preferring behavior\n   - Ensure profile naming matches actual routing behavior\n   \n2. Eliminate/track direct native imports:\n   - Audit codebase for direct imports of turbo_parse_bridge, file_service_bridge, etc.\n   - Route all native calls through NativeBackend adapter methods\n   - Add linting or detection for direct bridge imports\n   \n3. Make capability routing explicit:\n   - Document which backend handles each capability (file_ops, repo_index, parse, message_core)\n   - Add runtime verification that NativeBackend routes to correct backend per capability\n   - Ensure fallback chain (Elixir NIF \u2192 Rust \u2192 Python) is explicit and testable\n\n**Migration Impact:**\nThis is a prerequisite for clean Phase 4 migration (bd-93, bd-64). Without truthful routing semantics, Pack Leader cannot accurately predict which backend will handle parse operations.\n\n**Acceptance Criteria:**\n- [ ] Profile semantics match names (RUST_FIRST = Rust first, not Elixir)\n- [ ] Zero direct bridge imports outside NativeBackend adapter\n- [ ] Capability routing table documented and verified at runtime\n- [ ] Tests confirm correct backend selection per profile/capability",
-      "status": "open",
+      "status": "closed",
       "priority": 0,
       "type": "task",
       "labels": [],
       "dependencies": {},
       "created_at": "2026-04-16T07:23:25.865612",
-      "updated_at": "2026-04-16T09:27:26.513206",
+      "updated_at": "2026-04-16T09:40:04.115065",
       "comments": [
         "Claimed by planning-agent-019d94 for implementation. Beginning work on NativeBackend routing semantics fixes.",
-        "Claimed by planning-agent-019d95 for implementation."
+        "Claimed by planning-agent-019d95 for implementation.",
+        "Completed by planning-agent-019d95. All 4 acceptance criteria met:\n1. Profile semantics match names (RUST_FIRST/ELIXIR_FIRST/PYTHON_ONLY) \u2014 done in prior work, verified\n2. Zero direct bridge imports outside NativeBackend adapter \u2014 ~60 imports migrated, lint guard added\n3. Capability routing table documented and verified at runtime \u2014 docs/acceleration.md + verify_routing()\n4. Tests confirm correct backend selection per profile/capability \u2014 145 tests pass (routing + fast_puppy + lint guard)\n\nChanges pushed in commit 681e957e."
       ]
     }
   }
