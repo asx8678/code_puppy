@@ -456,8 +456,11 @@ defmodule CodePuppyControl.PythonWorker.Port do
   # bd-11: Added handlers for missing parse contract methods
   defp handle_file_request("is_language_supported", params) do
     language = params["language"]
-    supported = CodePuppyControl.Parser.nif_available?() and
-                CodePuppyControl.TurboParseNif.is_language_supported(language)
+
+    supported =
+      CodePuppyControl.Parser.nif_available?() and
+        CodePuppyControl.TurboParseNif.is_language_supported(language)
+
     Protocol.encode_response(%{"supported" => supported}, nil)
   end
 
@@ -537,6 +540,25 @@ defmodule CodePuppyControl.PythonWorker.Port do
 
       {:error, reason} ->
         Protocol.encode_error(-32000, "Index failed: #{inspect(reason)}", nil, nil)
+    end
+  end
+
+  # bd-9: Repo Compass compact indexing
+  defp handle_file_request("repo_compass_index", params) do
+    root = Map.get(params, "root", ".")
+    max_files = Map.get(params, "max_files", 40)
+    max_symbols_per_file = Map.get(params, "max_symbols_per_file", 8)
+
+    case CodePuppyControl.Indexer.repo_compass_index(root,
+           max_files: max_files,
+           max_symbols_per_file: max_symbols_per_file
+         ) do
+      {:ok, summaries} ->
+        result = CodePuppyControl.Indexer.FileSummary.to_maps(summaries)
+        Protocol.encode_response(%{"files" => result, "count" => length(result)}, nil)
+
+      {:error, reason} ->
+        Protocol.encode_error(-32000, "Repo Compass index failed: #{inspect(reason)}", nil, nil)
     end
   end
 

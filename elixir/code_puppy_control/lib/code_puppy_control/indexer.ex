@@ -35,7 +35,7 @@ defmodule CodePuppyControl.Indexer do
   All modules are designed to be composable and can be used independently.
   """
 
-  alias CodePuppyControl.Indexer.DirectoryIndexer
+  alias CodePuppyControl.Indexer.{DirectoryIndexer, RepoCompass}
 
   @doc """
   Indexes a directory and returns file summaries.
@@ -50,4 +50,17 @@ defmodule CodePuppyControl.Indexer do
   See `DirectoryIndexer.index!/2` for options.
   """
   defdelegate index!(root, opts \\ []), to: DirectoryIndexer
+
+  @doc """
+  Builds the compact Repo Compass structure map.
+
+  This delegate targets the prompt-oriented Elixir port of the Python
+  `repo_compass/indexer.py` implementation.
+  """
+  defdelegate repo_compass_index(root, opts \\ []), to: RepoCompass, as: :index
+
+  @doc """
+  Bang variant of `repo_compass_index/2`.
+  """
+  defdelegate repo_compass_index!(root, opts \\ []), to: RepoCompass, as: :index!
 end
