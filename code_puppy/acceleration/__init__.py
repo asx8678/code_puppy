@@ -4,6 +4,7 @@ bd-70: Simplified to route all queries through NativeBackend instead of
 importing directly from _core_bridge and turbo_parse_bridge.
 bd-94: Removed turbo_ops - file operations route through Elixir control plane.
 bd-13: Removed turbo_parse_bridge dependency; NativeBackend is single routing boundary.
+bd-31: Removed turbo_parse_bridge, content_prep_bridge, path_classify_bridge modules.
 
 Configuration:
     Use environment variables to override backends:

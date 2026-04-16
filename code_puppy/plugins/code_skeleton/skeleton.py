@@ -5,7 +5,7 @@ class declarations, and top-level constants. Dramatically reduces token
 usage when providing file context to LLMs.
 
 Inspired by Agentless ``compress_file.py`` (libcst-based, Python-only).
-This implementation uses tree-sitter via ``turbo_parse_bridge`` for
+This implementation uses tree-sitter via ``NativeBackend`` for
 multi-language support, with a regex fallback for when tree-sitter is
 unavailable.
 
@@ -50,9 +50,9 @@ def _lang_from_path(path: str) -> str | None:
 # ---------------------------------------------------------------------------
 
 def _skeleton_via_treesitter(content: str, language: str) -> str | None:
-    """Generate skeleton using turbo_parse_bridge symbol extraction.
+    """Generate skeleton using NativeBackend symbol extraction.
 
-    Returns None if turbo_parse is unavailable or fails.
+    Returns None if NativeBackend is unavailable or fails.
     """
     # bd-71: Route through NativeBackend (single native boundary)
     try:

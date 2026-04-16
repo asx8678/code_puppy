@@ -493,7 +493,7 @@
       "id": "bd-29",
       "title": "Fix Python 2 except syntax bugs (18 instances across 5 files)",
       "description": "18 instances of `except X, Y:` without parentheses. Python 3.14 accepts this but with WRONG semantics: catches ONLY the first exception, shadows the second name as a local variable. The second exception type is NEVER caught.\n\nConfirmed by runtime test \u2014 `except ImportError, SystemError:` only catches ImportError and rebinds the name SystemError to the caught exception object.\n\nFiles affected:\n- code_puppy/config.py (10 instances: lines 305, 350, 1221, 1277, 1340, 1602, 1681, 1697, 1818, 1839)\n- code_puppy/agents/agent_manager.py (5 instances: lines 94, 141, 175, 198, 225)\n- code_puppy/plugins/elixir_bridge/register_callbacks.py (1 instance: line 100)\n- code_puppy/plugins/elixir_bridge/bridge_controller.py (1 instance: line 604)\n- code_puppy/content_prep_bridge.py (1 instance: line 16)\n\nFix: Add parentheses \u2014 `except (ValueError, TypeError):`\nRisk: Low \u2014 purely additive fix, adds catching of previously-missed exception types.",
-      "status": "open",
+      "status": "closed",
       "priority": 0,
       "type": "bug",
       "labels": [
@@ -501,7 +501,7 @@
       ],
       "dependencies": {},
       "created_at": "2026-04-16T14:18:07.672006",
-      "updated_at": "2026-04-16T14:20:12.163169",
+      "updated_at": "2026-04-16T14:23:35.324916",
       "comments": [
         "Claimed by planning-agent-019d96. Starting fix."
       ]
@@ -537,14 +537,16 @@
         ]
       },
       "created_at": "2026-04-16T14:18:11.967648",
-      "updated_at": "2026-04-16T14:18:43.138624",
-      "comments": []
+      "updated_at": "2026-04-16T14:26:39.386059",
+      "comments": [
+        "Claimed by planning-agent-019d96. User chose: Remove all 3 bridges + tests."
+      ]
     },
     "bd-32": {
       "id": "bd-32",
       "title": "Clean up dead directories and disk artifacts (~101 MB)",
       "description": "Untracked directories and files wasting disk space:\n\n- MagicMock/ (388 KB) \u2014 pytest mock state artifacts, already .gitignored\n- fast_puppy/ (12 KB) \u2014 empty dir, only .DS_Store\n- fast_puppy_core/ (99 MB!) \u2014 Rust target/ build artifacts, not tracked\n- 10x .coverage.air.* files (~1.5 MB) \u2014 parallel test coverage artifacts\n- code_puppy/.coverage (52 KB) \u2014 stale coverage data\n\nTotal recoverable: ~101 MB\nAction: rm -rf MagicMock/ fast_puppy/ fast_puppy_core/ .coverage.air.* code_puppy/.coverage",
-      "status": "open",
+      "status": "closed",
       "priority": 3,
       "type": "task",
       "labels": [
@@ -552,8 +554,10 @@
       ],
       "dependencies": {},
       "created_at": "2026-04-16T14:18:14.307136",
-      "updated_at": "2026-04-16T14:18:14.307145",
-      "comments": []
+      "updated_at": "2026-04-16T14:26:39.385631",
+      "comments": [
+        "Claimed by planning-agent-019d96. Starting cleanup."
+      ]
     },
     "bd-33": {
       "id": "bd-33",

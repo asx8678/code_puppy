@@ -35,7 +35,7 @@ CRATES = [
         "name": "turbo_parse",
         "dir": "turbo_parse",
         "probe": "turbo_parse",
-        "bridges": ["code_puppy.turbo_parse_bridge"],
+        "bridges": [],  # bd-31: turbo_parse_bridge removed; NativeBackend handles routing
         # No patch_targets - NativeBackend handles routing
     },
 ]

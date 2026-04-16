@@ -4,12 +4,11 @@ This test scans all Python source files and fails if any file imports directly
 from bridge modules instead of routing through NativeBackend.
 
 Allowed files (the adapter boundary itself):
-- code_puppy/turbo_parse_bridge.py (IS the bridge module)
 - code_puppy/native_backend.py (IS the NativeBackend adapter)
 - code_puppy/acceleration/__init__.py (facade that delegates to NativeBackend)
 
-Allowed test files (bridge compatibility tests):
-- tests/plugins/test_turbo_parse_integration.py (tests the bridge itself)
+Note: turbo_parse_bridge was removed in bd-31. These patterns now guard
+against accidental re-introduction of direct bridge imports.
 """
 
 import re
@@ -21,20 +20,19 @@ import pytest
 # Files that are ALLOWED to import from bridge modules
 # (they are the adapter boundary or test the bridge itself)
 ALLOWED_FILES = {
-    # The bridge module itself
-    "code_puppy/turbo_parse_bridge.py",
     # The NativeBackend adapter (uses _core_bridge for type re-exports)
     "code_puppy/native_backend.py",
     # Facade that delegates to NativeBackend
     "code_puppy/acceleration/__init__.py",
-    # Bridge compatibility test suite (deliberately tests bridge module)
-    "tests/plugins/test_turbo_parse_integration.py",
+    # Bridge modules (adapter boundary)
+    "code_puppy/_edit_bridge.py",
     # Test files that legitimately test the bridge/backends directly
     "tests/test_native_backend.py",
     "tests/test_rust_core.py",
     "tests/bench_rust_vs_python.py",
     "tests/profile_bridge_bottlenecks.py",
     "tests/test_hashline.py",
+    "tests/test_edit_bridge.py",
 }
 
 # Patterns that indicate direct bridge imports
