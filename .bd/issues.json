@@ -1,5 +1,5 @@
 {
-  "counter": 33,
+  "counter": 42,
   "issues": {
     "bd-1": {
       "id": "bd-1",
@@ -563,7 +563,7 @@
       "id": "bd-33",
       "title": "Clean up stale tracked documentation files",
       "description": "Several tracked docs are stale or misplaced:\n\n- terminal_display_changes.txt \u2014 one-time PR change notes for a landed commit (a511dcf0). Should be removed.\n- mutmut-config.md \u2014 mutation testing config docs. Keep if mutmut active, else remove.\n- benchmark_results_2026-04-14.md \u2014 point-in-time benchmarks. Consider moving to docs/.\n- benchmark_results_bd103.md \u2014 point-in-time benchmarks. Consider moving to docs/.\n- fast_puppy_elixir_rewrite_plan.md \u2014 migration planning. Consider moving to docs/.\n- speed_rust.md \u2014 Rust performance notes. Consider moving to docs/.",
-      "status": "open",
+      "status": "closed",
       "priority": 3,
       "type": "task",
       "labels": [
@@ -571,10 +571,167 @@
       ],
       "dependencies": {},
       "created_at": "2026-04-16T14:18:16.627408",
-      "updated_at": "2026-04-16T14:30:07.331483",
+      "updated_at": "2026-04-16T14:30:37.978549",
       "comments": [
         "Claimed by planning-agent-019d96. Starting cleanup."
       ]
+    },
+    "bd-34": {
+      "id": "bd-34",
+      "title": "Migrate content_prep.rs to pure Elixir (Text.ContentPrep)",
+      "description": "Migrate code_puppy_core/src/content_prep.rs (12.7 KB) to pure Elixir.\n\nWHAT EXISTS: Elixir Text.EOL already implements looks_textish/1, normalize_eol/1, strip_bom/1 \u2014 covers ~80% of the Rust module.\n\nWHAT'S MISSING: A unified prepare_content/1 function returning {content, is_text, had_bom, had_crlf} as a single pass. The Rust version uses SIMD-accelerated scanning (memchr) for NUL detection.\n\nFILES TO CREATE/MODIFY:\n- Extend or create: elixir/.../text/content_prep.ex (or extend eol.ex)\n- Create: test/.../text/content_prep_test.exs\n- Modify: code_puppy/native_backend.py \u2014 route content_prep through Elixir transport\n- Delete: code_puppy_core/src/content_prep.rs + remove from lib.rs\n\nVALIDATION: Port existing Rust tests. Cross-check binary/BOM/CRLF edge cases against Python fallback.\n\nEFFORT: ~2 days",
+      "status": "open",
+      "priority": 1,
+      "type": "task",
+      "labels": [
+        "migration,elixir,rust-removal,phase-1"
+      ],
+      "dependencies": {},
+      "created_at": "2026-04-16T14:39:49.623410",
+      "updated_at": "2026-04-16T14:39:49.623427",
+      "comments": []
+    },
+    "bd-35": {
+      "id": "bd-35",
+      "title": "Migrate path_classify/ to pure Elixir (FileOps.PathClassifier)",
+      "description": "Migrate code_puppy_core/src/path_classify/ (21.4 KB: mod.rs, patterns.rs, sensitive.rs, tests.rs) to pure Elixir.\n\nWHAT EXISTS: Elixir FileOps.Security (path validation, sensitive detection) + Gitignore (pattern matching) cover significant ground.\n\nWHAT'S MISSING: Unified PathClassifier with should_ignore/2, is_sensitive/2, classify_path/2. The Rust version uses pre-compiled globset patterns.\n\nKEY CONCERN: Pattern lists in patterns.rs (DIR_PATTERNS, FILE_PATTERNS) and sensitive.rs (SensitivePathData) must be exactly ported.\n\nFILES TO CREATE/MODIFY:\n- Create: elixir/.../file_ops/path_classifier.ex\n- Port: patterns.rs glob lists to Elixir\n- Port: sensitive.rs to extend Security module\n- Create: test/.../file_ops/path_classifier_test.exs\n- Modify: native_backend.py \u2014 route classify_path through Elixir\n- Delete: code_puppy_core/src/path_classify/ directory\n\nVALIDATION: Property-based tests comparing Elixir vs Python fallback on real repo trees.\n\nEFFORT: ~3 days",
+      "status": "open",
+      "priority": 1,
+      "type": "task",
+      "labels": [
+        "migration,elixir,rust-removal,phase-1"
+      ],
+      "dependencies": {},
+      "created_at": "2026-04-16T14:39:53.143955",
+      "updated_at": "2026-04-16T14:39:53.143961",
+      "comments": []
+    },
+    "bd-36": {
+      "id": "bd-36",
+      "title": "Migrate line_numbers.rs to pure Elixir (Text.LineNumbers)",
+      "description": "Migrate code_puppy_core/src/line_numbers.rs (14.8 KB) to pure Elixir.\n\nCore logic: cat -n style formatting with continuation markers for long lines (>5000 chars split into 5.1, 5.2, 5.3).\n\nKEY SUBTLETY: Must use character-based chunking (not byte-based) for UTF-8 parity with Python. Elixir String.length/1 counts graphemes \u2014 verify parity with Python len().\n\nFILES TO CREATE/MODIFY:\n- Create: elixir/.../text/line_numbers.ex\n- Create: test/.../text/line_numbers_test.exs\n- Modify: native_backend.py \u2014 route format_line_numbers through Elixir\n- Delete: code_puppy_core/src/line_numbers.rs\n\nVALIDATION: UTF-8 edge cases (emoji, CJK, combining chars). Port Rust tests + property tests.\n\nEFFORT: ~2 days",
+      "status": "open",
+      "priority": 2,
+      "type": "task",
+      "labels": [
+        "migration,elixir,rust-removal,phase-2"
+      ],
+      "dependencies": {},
+      "created_at": "2026-04-16T14:39:58.000778",
+      "updated_at": "2026-04-16T14:39:58.000789",
+      "comments": []
+    },
+    "bd-37": {
+      "id": "bd-37",
+      "title": "Migrate unified_diff.rs to pure Elixir (Text.Diff)",
+      "description": "Migrate code_puppy_core/src/unified_diff.rs (7.7 KB) to pure Elixir.\n\nFOUNDATION for replace_engine \u2014 must be done first.\n\nCore logic: Generate unified diff format (like diff -u) between two strings.\n\nELIXIR ADVANTAGE: Can leverage List.myers_difference/2 (built into Erlang) and :io_lib.format/2 for formatting.\n\nFILES TO CREATE/MODIFY:\n- Create: elixir/.../text/diff.ex\n- Create: test/.../text/diff_test.exs\n- Modify: _edit_bridge.py \u2014 route unified_diff to Elixir when available\n- Delete: code_puppy_core/src/unified_diff.rs\n\nVALIDATION: Exact output parity with Python difflib.unified_diff and existing Rust implementation.\n\nEFFORT: ~3 days",
+      "status": "open",
+      "priority": 1,
+      "type": "task",
+      "labels": [
+        "migration,elixir,rust-removal,phase-3,edit-engine"
+      ],
+      "dependencies": {},
+      "created_at": "2026-04-16T14:40:24.419494",
+      "updated_at": "2026-04-16T14:40:24.419503",
+      "comments": []
+    },
+    "bd-38": {
+      "id": "bd-38",
+      "title": "Migrate fuzzy_match.rs to pure Elixir (Text.FuzzyMatch)",
+      "description": "Migrate code_puppy_core/src/fuzzy_match.rs (12.8 KB) to pure Elixir. HARDEST TASK.\n\nCore logic:\n- Jaro-Winkler similarity scoring\n- Sliding window search over file lines\n- Prefix-sum pre-filters for O(1) length estimation\n- Aggressive early rejection heuristics\n\nPERFORMANCE RISK: CPU-intensive. Pure Elixir will be 5-10x slower than Rust.\nMITIGATION:\n1. Pre-filter aggressively (keep Rust heuristics)\n2. Use binary operations for scoring\n3. Consider :binary.match/3 for fast substring scanning\n4. MUST benchmark against Rust \u2014 if >3x slower on 100KB files, pivot to Rustler NIF\n\nFILES TO CREATE/MODIFY:\n- Create: elixir/.../text/fuzzy_match.ex\n- Create: elixir/.../text/jaro_winkler.ex (pure scoring algorithm)\n- Create: test/.../text/fuzzy_match_test.exs\n- Create: bench/fuzzy_match_bench.exs (CRITICAL benchmark)\n- Modify: _edit_bridge.py \u2014 route fuzzy_match_window to Elixir\n- Delete: code_puppy_core/src/fuzzy_match.rs\n\nVALIDATION: Benchmark suite comparing Rust vs Elixir on real-world edits (1KB, 10KB, 100KB files). Functional parity tests.\n\nEFFORT: ~5 days",
+      "status": "open",
+      "priority": 1,
+      "type": "task",
+      "labels": [
+        "migration,elixir,rust-removal,phase-3,edit-engine"
+      ],
+      "dependencies": {},
+      "created_at": "2026-04-16T14:40:28.187314",
+      "updated_at": "2026-04-16T14:40:28.187321",
+      "comments": []
+    },
+    "bd-39": {
+      "id": "bd-39",
+      "title": "Migrate replace_engine.rs to pure Elixir (Text.ReplaceEngine)",
+      "description": "Migrate code_puppy_core/src/replace_engine.rs (14 KB) to pure Elixir.\n\nDEPENDS ON: unified_diff (Text.Diff) + fuzzy_match (Text.FuzzyMatch) \u2014 both must be completed first.\n\nCore logic:\n- Exact match \u2192 replace\n- Fuzzy match fallback (uses FuzzyMatch)\n- Generate unified diff of changes (uses Diff)\n- Handle multi-line replacements\n\nFILES TO CREATE/MODIFY:\n- Create: elixir/.../text/replace_engine.ex\n- Create: test/.../text/replace_engine_test.exs\n- Modify: _edit_bridge.py \u2014 route replace_in_content to Elixir\n- Delete: code_puppy_core/src/replace_engine.rs\n\nVALIDATION: End-to-end test with real file edits through full bridge path.\n\nEFFORT: ~5 days",
+      "status": "open",
+      "priority": 1,
+      "type": "task",
+      "labels": [
+        "migration,elixir,rust-removal,phase-3,edit-engine"
+      ],
+      "dependencies": {
+        "blocks": [
+          "bd-37",
+          "bd-38"
+        ]
+      },
+      "created_at": "2026-04-16T14:40:31.017982",
+      "updated_at": "2026-04-16T14:41:22.461150",
+      "comments": []
+    },
+    "bd-40": {
+      "id": "bd-40",
+      "title": "Slim down code_puppy_core after Elixir migration",
+      "description": "After Phase 1-3 migrations complete, clean up code_puppy_core Cargo.toml and lib.rs.\n\nREMOVE from lib.rs:\n- content_prep module\n- path_classify module\n- line_numbers module (format_line_numbers PyO3 export)\n- fuzzy_match module\n- replace_engine module\n- unified_diff module\n\nREMOVE Cargo.toml deps (if no longer needed):\n- similar (used by unified_diff)\n- globset (used by path_classify)\n- dirs (used by path_classify)\n- memchr (used by content_prep)\n\nKEEP: token_estimation, pruning, serialization, message_hashing, types, hashline\n\nRESULT: code_puppy_core shrinks from ~148 KB to ~26 KB of Rust.\n\nEFFORT: ~1 day",
+      "status": "open",
+      "priority": 2,
+      "type": "task",
+      "labels": [
+        "migration,rust-removal,phase-4,cleanup"
+      ],
+      "dependencies": {
+        "blocks": [
+          "bd-34",
+          "bd-35",
+          "bd-36",
+          "bd-37",
+          "bd-38",
+          "bd-39"
+        ]
+      },
+      "created_at": "2026-04-16T14:40:55.997290",
+      "updated_at": "2026-04-16T14:41:31.131206",
+      "comments": []
+    },
+    "bd-41": {
+      "id": "bd-41",
+      "title": "Update Python bridges for Elixir edit routing",
+      "description": "Update _edit_bridge.py, _core_bridge.py, and native_backend.py for Elixir-first edit routing.\n\nCHANGES TO _edit_bridge.py:\n- Route fuzzy_match_window, replace_in_content, unified_diff through Elixir\n- Remove Rust fallback paths for migrated functions\n- Keep Python-only fallback for when Elixir is disconnected\n\nCHANGES TO _core_bridge.py:\n- Remove content_prep, path_classify, line_numbers imports from _code_puppy_core\n- Simplify to only message-core imports\n\nCHANGES TO native_backend.py:\n- Add new capability: EDIT_OPS routing through Elixir\n- Update get_status() to reflect new Elixir capabilities\n- Update get_detailed_status() and get_capability_routing()\n\nEFFORT: ~2 days",
+      "status": "open",
+      "priority": 2,
+      "type": "task",
+      "labels": [
+        "migration,python,phase-4,cleanup"
+      ],
+      "dependencies": {
+        "blocks": [
+          "bd-40"
+        ]
+      },
+      "created_at": "2026-04-16T14:40:58.464029",
+      "updated_at": "2026-04-16T14:41:32.953568",
+      "comments": []
+    },
+    "bd-42": {
+      "id": "bd-42",
+      "title": "Full regression test for Rust-to-Elixir migration",
+      "description": "Comprehensive regression testing after all 6 Rust modules migrated to Elixir.\n\nTEST MATRIX:\n1. Full test suite pass (pytest + mix test)\n2. Benchmark edit operations: fuzzy_match, replace, unified_diff end-to-end\n3. Verify Python fallback works when Elixir is disconnected\n4. Verify Rust hot path (message processing) still works unaffected\n5. Test with all three profiles: elixir_first, rust_only, python_only\n6. Edge cases: UTF-8 content, binary files, large repos, empty files\n\nPERFORMANCE GATES:\n- fuzzy_match: must be <3x slower than Rust on 100KB files\n- replace_engine: end-to-end latency acceptable for interactive use\n- content_prep/line_numbers: no regression from Python fallback\n\nIf fuzzy_match fails performance gate, file follow-up issue to convert to Rustler NIF.\n\nEFFORT: ~2 days",
+      "status": "open",
+      "priority": 1,
+      "type": "task",
+      "labels": [
+        "migration,testing,phase-4,qa"
+      ],
+      "dependencies": {
+        "blocks": [
+          "bd-41"
+        ]
+      },
+      "created_at": "2026-04-16T14:41:01.230906",
+      "updated_at": "2026-04-16T14:41:34.449392",
+      "comments": []
     }
   }
 }
