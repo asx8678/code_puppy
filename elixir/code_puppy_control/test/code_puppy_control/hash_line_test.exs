@@ -24,11 +24,6 @@ defmodule CodePuppyControl.HashLineTest do
   alias CodePuppyControl.HashLine
   alias CodePuppyControl.HashlineNif
 
-  # Check if NIF is available for parity testing
-  defp nif_loaded? do
-    HashLine.nif_loaded?()
-  end
-
   # ============================================================================
   # Section 1: Basic functionality (mirrors hashline_nif_test.exs)
   # ============================================================================
@@ -40,11 +35,13 @@ defmodule CodePuppyControl.HashLineTest do
       assert hash =~ ~r/^[A-Z]{2}$/
     end
 
-    test "different indices produce different hashes for whitespace-only lines" do
+    test "whitespace-only lines are deterministic and validate for their own idx" do
       h1 = HashLine.compute_line_hash(1, "   ")
       h2 = HashLine.compute_line_hash(2, "   ")
       assert String.length(h1) == 2
       assert String.length(h2) == 2
+      assert HashLine.validate_hashline_anchor(1, "   ", h1)
+      assert HashLine.validate_hashline_anchor(2, "   ", h2)
     end
 
     test "strips trailing whitespace before hashing" do
@@ -198,13 +195,12 @@ defmodule CodePuppyControl.HashLineTest do
       refute HashLine.validate_hashline_anchor(5, "different code", hash)
     end
 
-    test "wrong idx for blank line" do
+    test "wrong idx for blank line validates only for own content" do
       h1 = HashLine.compute_line_hash(1, "")
       h2 = HashLine.compute_line_hash(100, "")
-      # Each hash validates for its own idx
       assert HashLine.validate_hashline_anchor(1, "", h1)
       assert HashLine.validate_hashline_anchor(100, "", h2)
-      # Hash for idx=1 must NOT validate as idx=1 with wrong content
+      # Only assert content mismatch, NOT that h1 != h2 (collisions possible)
       refute HashLine.validate_hashline_anchor(1, "x", h1)
     end
 
@@ -226,68 +222,35 @@ defmodule CodePuppyControl.HashLineTest do
   # ============================================================================
 
   describe "known reference values" do
-    # Note: These tests verify algorithm behavior without hardcoding specific
-    # hash values (which may change if xxHash implementation details vary).
-    # The key invariant is that HashLine and HashlineNif produce identical results.
-
-    test "compute_line_hash produces known reference values" do
-      # Note: These values will need to be updated once we have the real implementation
-      # For now, we verify determinism only
-      result = HashLine.compute_line_hash(0, "hello world")
-      assert String.length(result) == 2
-      # determinism check
-      assert result == HashLine.compute_line_hash(0, "hello world")
+    test "compute_line_hash: known outputs for alnum content" do
+      # These are pinned from HashlineNif (Rust xxHash32 reference)
+      assert HashLine.compute_line_hash(0, "hello world") == "MM"
+      assert HashLine.compute_line_hash(1, "foo") == "BK"
+      assert HashLine.compute_line_hash(5, "some code") == "WP"
+      assert HashLine.compute_line_hash(1, "café 🚀") == "ZZ"
     end
 
-    test "reference: hello world with idx=0" do
-      # xxHash32("hello world", seed=0) -> specific 2-char output
-      # When real implementation is available, replace with actual expected value
-      result = HashLine.compute_line_hash(0, "hello world")
-      assert String.length(result) == 2
-      assert result =~ ~r/^[A-Z]{2}$/
+    test "compute_line_hash: known outputs for whitespace/empty/punctuation (seed=idx)" do
+      # Note: collisions are possible in 2-char space - "KM" appears for both empty idx=1 and spaces idx=2
+      assert HashLine.compute_line_hash(1, "") == "KM"
+      assert HashLine.compute_line_hash(1, "!@#$%") == "JB"
+      assert HashLine.compute_line_hash(2, "   ") == "KM"
     end
 
-    test "reference: foo with different indices (same hash - alnum content)" do
+    test "compute_line_hash: alnum ignores idx (seed=0)" do
       h1 = HashLine.compute_line_hash(1, "foo")
       h2 = HashLine.compute_line_hash(2, "foo")
       h99 = HashLine.compute_line_hash(99, "foo")
 
       # All should be identical (seed=0 for alnum content)
+      assert h1 == "BK"
       assert h1 == h2
       assert h2 == h99
     end
 
-    test "reference: empty string uses idx as seed (deterministic per idx)" do
-      # Empty strings with different indices may produce different hashes
-      # (depending on xxHash32 seed behavior - collisions are possible but rare)
-      h1 = HashLine.compute_line_hash(1, "")
-      h2 = HashLine.compute_line_hash(2, "")
-
-      # Both should be 2-char uppercase strings
-      assert String.length(h1) == 2
-      assert String.length(h2) == 2
-      assert h1 =~ ~r/^[A-Z]{2}$/
-      assert h2 =~ ~r/^[A-Z]{2}$/
-
-      # Each should validate with its own index
-      assert HashLine.validate_hashline_anchor(1, "", h1)
-      assert HashLine.validate_hashline_anchor(2, "", h2)
-    end
-
-    test "reference: whitespace-only uses idx as seed" do
-      h1_spaces = HashLine.compute_line_hash(1, "   ")
-      h1_tabs = HashLine.compute_line_hash(1, "\t\t")
-      h2_spaces = HashLine.compute_line_hash(2, "   ")
-
-      # Same idx should produce same hash regardless of whitespace type
-      # (both are whitespace-only, so they become empty after stripping)
-      assert h1_spaces == h1_tabs
-
-      # All should be valid 2-char hashes
-      assert String.length(h1_spaces) == 2
-      assert String.length(h2_spaces) == 2
-      assert h1_spaces =~ ~r/^[A-Z]{2}$/
-      assert h2_spaces =~ ~r/^[A-Z]{2}$/
+    test "format_hashlines: known output" do
+      assert HashLine.format_hashlines("foo\nbar", 1) == "1#BK:foo\n2#MJ:bar"
+      assert HashLine.format_hashlines("", 1) == "1#KM:"
     end
   end
 
@@ -296,239 +259,189 @@ defmodule CodePuppyControl.HashLineTest do
   # ============================================================================
 
   describe "parity: compute_line_hash/2" do
-    @tag :parity
-    test "produces identical results to NIF for alnum content" do
-      if nif_loaded?() do
-        test_cases = [
-          {1, "hello world"},
-          {2, "def foo():"},
-          {100, "import os"},
-          {5, "x = 42"},
-          {999, "class Bar:"}
-        ]
-
-        for {idx, line} <- test_cases do
-          nif_hash = HashlineNif.compute_line_hash(idx, line)
-          elixir_hash = HashLine.compute_line_hash(idx, line)
-
-          assert elixir_hash == nif_hash,
-                 "Mismatch for idx=#{idx}, line='#{line}': NIF=#{nif_hash}, Elixir=#{elixir_hash}"
-        end
+    setup context do
+      if function_exported?(HashlineNif, :compute_line_hash, 2) do
+        {:ok, context}
       else
-        IO.puts("Skipping parity test - NIF not loaded")
+        {:skip, "HashlineNif not loaded"}
       end
     end
 
-    @tag :parity
-    test "produces identical results to NIF for whitespace-only content" do
-      if nif_loaded?() do
-        test_cases = [
-          {1, ""},
-          {2, ""},
-          {1, "   "},
-          {5, "\t\t"},
-          {10, "     "},
-          {100, "\r\n"}
-        ]
+    test "matches NIF for alnum content across multiple indices" do
+      for {idx, line} <- [
+            {0, "hello world"},
+            {1, "foo"},
+            {99, "foo"},
+            {5, "some code"},
+            {0, "café 🚀"},
+            {1, "日本語"}
+          ] do
+        expected = HashlineNif.compute_line_hash(idx, line)
 
-        for {idx, line} <- test_cases do
-          nif_hash = HashlineNif.compute_line_hash(idx, line)
-          elixir_hash = HashLine.compute_line_hash(idx, line)
-
-          assert elixir_hash == nif_hash,
-                 "Mismatch for idx=#{idx}, line='#{inspect(line)}': NIF=#{nif_hash}, Elixir=#{elixir_hash}"
-        end
-      else
-        IO.puts("Skipping parity test - NIF not loaded")
+        assert HashLine.compute_line_hash(idx, line) == expected,
+               "mismatch for idx=#{idx}, line=#{inspect(line)}"
       end
     end
 
-    @tag :parity
-    test "produces identical results to NIF for unicode content" do
-      if nif_loaded?() do
-        test_cases = [
-          {1, "café"},
-          {2, "日本語"},
-          {5, "🚀 emoji 🎉"},
-          {10, "Ümläuts"},
-          {99, "한국어"}
-        ]
+    test "matches NIF for empty and whitespace-only lines" do
+      for {idx, line} <- [
+            {0, ""},
+            {1, ""},
+            {2, ""},
+            {1, "   "},
+            {2, "\t"},
+            {3, "\r"}
+          ] do
+        expected = HashlineNif.compute_line_hash(idx, line)
 
-        for {idx, line} <- test_cases do
-          nif_hash = HashlineNif.compute_line_hash(idx, line)
-          elixir_hash = HashLine.compute_line_hash(idx, line)
-
-          assert elixir_hash == nif_hash,
-                 "Mismatch for idx=#{idx}, line='#{line}': NIF=#{nif_hash}, Elixir=#{elixir_hash}"
-        end
-      else
-        IO.puts("Skipping parity test - NIF not loaded")
+        assert HashLine.compute_line_hash(idx, line) == expected,
+               "mismatch for idx=#{idx}, line=#{inspect(line)}"
       end
     end
 
-    @tag :parity
-    test "produces identical results to NIF for edge cases" do
-      if nif_loaded?() do
-        test_cases = [
-          {1, "# comment"},
-          {2, "// another comment"},
-          {5, "123 numbers"},
-          {10, "special!@#$%chars"},
-          {99, "mixed123ABCxyz"},
-          {1, "trailing  "},
-          {1, "trailing\t"},
-          {1, "trailing\r"},
-          {1, "trailing\r\n"}
-        ]
+    test "matches NIF for unicode content" do
+      for {idx, line} <- [
+            {1, "café"},
+            {2, "日本語"},
+            {5, "🚀 emoji 🎉"},
+            {10, "Ümläuts"},
+            {99, "한국어"}
+          ] do
+        expected = HashlineNif.compute_line_hash(idx, line)
 
-        for {idx, line} <- test_cases do
-          nif_hash = HashlineNif.compute_line_hash(idx, line)
-          elixir_hash = HashLine.compute_line_hash(idx, line)
+        assert HashLine.compute_line_hash(idx, line) == expected,
+               "mismatch for idx=#{idx}, line=#{inspect(line)}"
+      end
+    end
 
-          assert elixir_hash == nif_hash,
-                 "Mismatch for idx=#{idx}, line='#{inspect(line)}': NIF=#{nif_hash}, Elixir=#{elixir_hash}"
-        end
-      else
-        IO.puts("Skipping parity test - NIF not loaded")
+    test "matches NIF for edge cases" do
+      for {idx, line} <- [
+            {1, "# comment"},
+            {2, "// another comment"},
+            {5, "123 numbers"},
+            {10, "special!@#$%chars"},
+            {99, "mixed123ABCxyz"},
+            {1, "trailing  "},
+            {1, "trailing\t"},
+            {1, "trailing\r"},
+            {1, "trailing\r\n"}
+          ] do
+        expected = HashlineNif.compute_line_hash(idx, line)
+
+        assert HashLine.compute_line_hash(idx, line) == expected,
+               "mismatch for idx=#{idx}, line=#{inspect(line)}"
       end
     end
   end
 
   describe "parity: format_hashlines/2" do
-    @tag :parity
-    test "produces identical results to NIF for simple text" do
-      if nif_loaded?() do
-        test_cases = [
-          {"hello", 1},
-          {"foo\nbar", 1},
-          {"line1\nline2\nline3", 1},
-          {"single", 100},
-          {"a\nb\nc\nd", 50}
-        ]
-
-        for {text, start_line} <- test_cases do
-          nif_result = HashlineNif.format_hashlines(text, start_line)
-          elixir_result = HashLine.format_hashlines(text, start_line)
-
-          assert elixir_result == nif_result,
-                 "Mismatch for start_line=#{start_line}, text='#{inspect(text)}'"
-        end
+    setup context do
+      if function_exported?(HashlineNif, :format_hashlines, 2) do
+        {:ok, context}
       else
-        IO.puts("Skipping parity test - NIF not loaded")
+        {:skip, "HashlineNif not loaded"}
       end
     end
 
-    @tag :parity
-    test "produces identical results to NIF for code text" do
-      if nif_loaded?() do
-        code = """
-        defmodule Foo do
-          def bar do
-            :baz
-          end
-        end
-        """
+    test "matches NIF output exactly" do
+      for {text, start_line} <- [
+            {"", 1},
+            {"\n", 1},
+            {"foo\n\nbar", 1},
+            {"  \nfoo", 10},
+            {"hello world", 1},
+            {"hello", 1},
+            {"foo\nbar", 1},
+            {"line1\nline2\nline3", 1},
+            {"single", 100},
+            {"a\nb\nc\nd", 50}
+          ] do
+        expected = HashlineNif.format_hashlines(text, start_line)
 
-        nif_result = HashlineNif.format_hashlines(code, 1)
-        elixir_result = HashLine.format_hashlines(code, 1)
-        assert elixir_result == nif_result
-      else
-        IO.puts("Skipping parity test - NIF not loaded")
+        assert HashLine.format_hashlines(text, start_line) == expected,
+               "mismatch for text=#{inspect(text)}, start_line=#{start_line}"
       end
     end
 
-    @tag :parity
-    test "produces identical results to NIF for unicode text" do
-      if nif_loaded?() do
-        text = "café\n日本語\n🚀"
-
-        nif_result = HashlineNif.format_hashlines(text, 1)
-        elixir_result = HashLine.format_hashlines(text, 1)
-        assert elixir_result == nif_result
-      else
-        IO.puts("Skipping parity test - NIF not loaded")
+    test "matches NIF for code text" do
+      code = """
+      defmodule Foo do
+        def bar do
+          :baz
+        end
       end
+      """
+
+      expected = HashlineNif.format_hashlines(code, 1)
+      assert HashLine.format_hashlines(code, 1) == expected
+    end
+
+    test "matches NIF for unicode text" do
+      text = "café\n日本語\n🚀"
+      expected = HashlineNif.format_hashlines(text, 1)
+      assert HashLine.format_hashlines(text, 1) == expected
     end
   end
 
   describe "parity: strip_hashline_prefixes/1" do
-    @tag :parity
-    test "produces identical results to NIF for formatted text" do
-      if nif_loaded?() do
-        # First format some text with the NIF
-        original = "line one\nline two\nline three"
-        formatted = HashlineNif.format_hashlines(original, 1)
-
-        # Both should strip to the same result
-        nif_stripped = HashlineNif.strip_hashline_prefixes(formatted)
-        elixir_stripped = HashLine.strip_hashline_prefixes(formatted)
-        assert elixir_stripped == nif_stripped
-        assert elixir_stripped == original
+    setup context do
+      if function_exported?(HashlineNif, :strip_hashline_prefixes, 1) do
+        {:ok, context}
       else
-        IO.puts("Skipping parity test - NIF not loaded")
+        {:skip, "HashlineNif not loaded"}
       end
     end
 
-    @tag :parity
-    test "produces identical results to NIF for mixed text" do
-      if nif_loaded?() do
-        mixed = "1#AB:has prefix\nno prefix here\n2#CD:another prefix"
+    test "matches NIF for formatted text" do
+      original = "line one\nline two\nline three"
+      formatted = HashlineNif.format_hashlines(original, 1)
 
-        nif_stripped = HashlineNif.strip_hashline_prefixes(mixed)
-        elixir_stripped = HashLine.strip_hashline_prefixes(mixed)
-        assert elixir_stripped == nif_stripped
-      else
-        IO.puts("Skipping parity test - NIF not loaded")
-      end
+      expected = HashlineNif.strip_hashline_prefixes(formatted)
+      assert HashLine.strip_hashline_prefixes(formatted) == expected
+      assert expected == original
+    end
+
+    test "matches NIF for mixed text" do
+      mixed = "1#AB:has prefix\nno prefix here\n2#CD:another prefix"
+
+      expected = HashlineNif.strip_hashline_prefixes(mixed)
+      assert HashLine.strip_hashline_prefixes(mixed) == expected
     end
   end
 
   describe "parity: validate_hashline_anchor/3" do
-    @tag :parity
-    test "produces identical results to NIF for valid anchors" do
-      if nif_loaded?() do
-        test_cases = [
-          {1, "hello", HashlineNif.compute_line_hash(1, "hello")},
-          {5, "code", HashlineNif.compute_line_hash(5, "code")},
-          {100, "unicode: 🎉", HashlineNif.compute_line_hash(100, "unicode: 🎉")},
-          {1, "", HashlineNif.compute_line_hash(1, "")},
-          {50, "   ", HashlineNif.compute_line_hash(50, "   ")}
-        ]
-
-        for {idx, line, hash} <- test_cases do
-          nif_valid = HashlineNif.validate_hashline_anchor(idx, line, hash)
-          elixir_valid = HashLine.validate_hashline_anchor(idx, line, hash)
-
-          assert elixir_valid == nif_valid,
-                 "Validation mismatch for idx=#{idx}, line='#{inspect(line)}'"
-        end
+    setup context do
+      if function_exported?(HashlineNif, :validate_hashline_anchor, 3) do
+        {:ok, context}
       else
-        IO.puts("Skipping parity test - NIF not loaded")
+        {:skip, "HashlineNif not loaded"}
       end
     end
 
-    @tag :parity
-    test "produces identical results to NIF for invalid anchors" do
-      if nif_loaded?() do
-        test_cases = [
-          # wrong hash
-          {1, "hello", "XX"},
-          # another wrong hash
-          {1, "hello", "YY"},
-          {5, "modified", HashlineNif.compute_line_hash(5, "original")}
-        ]
+    test "matches NIF for valid anchors" do
+      for {idx, line} <- [
+            {1, "hello"},
+            {5, "code"},
+            {100, "unicode: 🎉"},
+            {1, ""},
+            {50, "   "}
+          ] do
+        hash = HashlineNif.compute_line_hash(idx, line)
+        expected = HashlineNif.validate_hashline_anchor(idx, line, hash)
+        assert HashLine.validate_hashline_anchor(idx, line, hash) == expected
+        assert expected == true
+      end
+    end
 
-        for {idx, line, hash} <- test_cases do
-          nif_valid = HashlineNif.validate_hashline_anchor(idx, line, hash)
-          elixir_valid = HashLine.validate_hashline_anchor(idx, line, hash)
-
-          assert elixir_valid == nif_valid,
-                 "Validation mismatch for idx=#{idx}, line='#{inspect(line)}'"
-
-          refute elixir_valid, "Expected invalid for idx=#{idx}, line='#{inspect(line)}'"
-        end
-      else
-        IO.puts("Skipping parity test - NIF not loaded")
+    test "matches NIF for invalid anchors" do
+      for {idx, line, hash} <- [
+            {1, "hello", "XX"},
+            {1, "hello", "YY"},
+            {5, "modified", HashlineNif.compute_line_hash(5, "original")}
+          ] do
+        expected = HashlineNif.validate_hashline_anchor(idx, line, hash)
+        assert HashLine.validate_hashline_anchor(idx, line, hash) == expected
+        assert expected == false
       end
     end
   end
@@ -662,8 +575,11 @@ defmodule CodePuppyControl.HashLineTest do
 
       # Same idx -> same hash
       assert h1 == h3
-      # Different idx -> different hash
-      refute h1 == h2
+      # Pinned reference value
+      assert h1 == "JB"
+      # Different idx -> validate separately (don't assert h1 != h2 - collisions possible)
+      assert HashLine.validate_hashline_anchor(1, "!@#$%", h1)
+      assert HashLine.validate_hashline_anchor(2, "!@#$%", h2)
     end
 
     test "mixed alphanumeric and punctuation" do
