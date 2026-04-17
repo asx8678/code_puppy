@@ -1169,14 +1169,16 @@
         ]
       },
       "created_at": "2026-04-16T17:51:44.795393",
-      "updated_at": "2026-04-17T03:45:16.136251",
-      "comments": []
+      "updated_at": "2026-04-17T04:22:32.825564",
+      "comments": [
+        "Shepherd: APPROVE (v2). QA: Lint clean. Deprecation markers on all 9 files + runtime warning. Merged to main (d502cf9e)."
+      ]
     },
     "bd-63": {
       "id": "bd-63",
       "title": "Port reflection & policy engine to Elixir",
       "description": "Sources: reflection.py, policy_engine.py (12KB), policy_config.py. Target: Elixir modules.\n\nPart of Phase 2 \u2014 Python runtime services retirement.",
-      "status": "open",
+      "status": "closed",
       "priority": 2,
       "type": "task",
       "labels": [
@@ -1188,8 +1190,10 @@
         ]
       },
       "created_at": "2026-04-16T17:51:44.797943",
-      "updated_at": "2026-04-16T17:51:44.797949",
-      "comments": []
+      "updated_at": "2026-04-17T04:22:32.810953",
+      "comments": [
+        "Shepherd: APPROVE (v2 after 7 fixes). QA: 44/44 tests pass. Security fixes (atom safety), bug fixes (state threading, race condition), file split. Merged to main (1007c565)."
+      ]
     },
     "bd-64": {
       "id": "bd-64",
@@ -1290,7 +1294,7 @@
       "id": "bd-69",
       "title": "Port HTTP client to Elixir",
       "description": "Sources: reopenable_async_client.py (8KB), http_utils.py (13KB). Target: Finch/Req.\n\nPart of Phase 3 \u2014 Python tools retirement.",
-      "status": "open",
+      "status": "closed",
       "priority": 2,
       "type": "task",
       "labels": [
@@ -1302,8 +1306,10 @@
         ]
       },
       "created_at": "2026-04-16T17:51:50.554198",
-      "updated_at": "2026-04-16T17:51:50.554207",
-      "comments": []
+      "updated_at": "2026-04-17T04:22:32.780388",
+      "comments": [
+        "Shepherd: APPROVE (v2 after 6 fixes). QA: 27/27 tests pass. Security fixes (atom safety), bug fixes (format_error, TLS), file split. Merged to main (e4ece124)."
+      ]
     },
     "bd-70": {
       "id": "bd-70",
