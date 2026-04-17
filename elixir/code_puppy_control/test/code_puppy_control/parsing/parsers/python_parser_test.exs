@@ -100,6 +100,14 @@ defmodule CodePuppyControl.Parsing.Parsers.PythonParserTest do
       [symbol] = result.symbols
       assert symbol.doc == "@staticmethod @property"
     end
+
+    test "parses async function definition" do
+      source = "async def fetch():\n    pass"
+      {:ok, result} = PythonParser.parse(source)
+      [symbol] = result.symbols
+      assert symbol.name == "fetch"
+      assert :async in symbol.modifiers
+    end
   end
 
   describe "parse/1 with classes" do
