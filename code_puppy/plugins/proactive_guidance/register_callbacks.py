@@ -15,8 +15,6 @@ Hooks:
 
 from __future__ import annotations
 
-import os
-import re
 from pathlib import Path
 from typing import Any
 
@@ -75,7 +73,9 @@ def _is_enabled() -> bool:
 # ---------------------------------------------------------------------------
 
 
-def _get_write_guidance(file_path: str, content_preview: str | None = None) -> str | None:
+def _get_write_guidance(
+    file_path: str, content_preview: str | None = None
+) -> str | None:
     """Generate guidance after write_file tool usage.
 
     Args:
@@ -93,17 +93,25 @@ def _get_write_guidance(file_path: str, content_preview: str | None = None) -> s
 
     # Check file type and offer relevant next steps
     if extension in (".py", ".js", ".ts", ".jsx", ".tsx", ".rs", ".go", ".java"):
-        suggestions.append(f"💡 Run tests: `/shell pytest {file_path}` or `/shell npm test`")
-        suggestions.append(f"🔍 Check syntax: `/shell python -m py_compile {file_path}`")
+        suggestions.append(
+            f"💡 Run tests: `/shell pytest {file_path}` or `/shell npm test`"
+        )
+        suggestions.append(
+            f"🔍 Check syntax: `/shell python -m py_compile {file_path}`"
+        )
 
     elif extension in (".md", ".rst", ".txt"):
         suggestions.append("📝 Preview: `/shell cat {} | head -20`".format(file_path))
 
     elif extension in (".json", ".yaml", ".yml", ".toml"):
-        suggestions.append(f"✅ Validate: `/shell python -c 'import json; json.load(open(\"{file_path}\"))'`")
+        suggestions.append(
+            f"✅ Validate: `/shell python -c 'import json; json.load(open(\"{file_path}\"))'`"
+        )
 
     elif extension in (".sh", ".bash", ".zsh"):
-        suggestions.append(f"🔐 Check script: `/shell shellcheck {file_path}` (if installed)")
+        suggestions.append(
+            f"🔐 Check script: `/shell shellcheck {file_path}` (if installed)"
+        )
         suggestions.append(f"▶️ Make executable: `/shell chmod +x {file_path}`")
 
     # General suggestions for all files
@@ -140,28 +148,46 @@ def _get_shell_guidance(command: str, exit_code: int = 0) -> str | None:
     # Success case
     if exit_code == 0:
         if any(x in cmd_lower for x in ("pytest", "test", "npm test", "cargo test")):
-            suggestions.append("✅ Tests passed! Ready to commit? `/git commit -m '...'`")
+            suggestions.append(
+                "✅ Tests passed! Ready to commit? `/git commit -m '...'`"
+            )
             if verbosity != "minimal":
-                suggestions.append("📊 Coverage report: `/shell pytest --cov` (if pytest-cov installed)")
+                suggestions.append(
+                    "📊 Coverage report: `/shell pytest --cov` (if pytest-cov installed)"
+                )
 
         elif any(x in cmd_lower for x in ("git add", "git commit")):
-            suggestions.append("🚀 Push changes: `/shell git push origin $(git branch --show-current)`")
+            suggestions.append(
+                "🚀 Push changes: `/shell git push origin $(git branch --show-current)`"
+            )
             if verbosity == "verbose":
-                suggestions.append("🔄 Or create PR: `/shell gh pr create` (if gh CLI installed)")
+                suggestions.append(
+                    "🔄 Or create PR: `/shell gh pr create` (if gh CLI installed)"
+                )
 
-        elif any(x in cmd_lower for x in ("build", "make", "cargo build", "npm run build")):
+        elif any(
+            x in cmd_lower for x in ("build", "make", "cargo build", "npm run build")
+        ):
             suggestions.append("🎯 Build succeeded! Run it: `/shell ./your_binary`")
             if verbosity != "minimal":
                 suggestions.append("📦 Or package: Check your build artifacts")
 
-        elif "pip install" in cmd_lower or "npm install" in cmd_lower or "cargo add" in cmd_lower:
-            suggestions.append("📦 Dependencies updated! Consider locking: `/shell pip freeze > requirements.txt`")
+        elif (
+            "pip install" in cmd_lower
+            or "npm install" in cmd_lower
+            or "cargo add" in cmd_lower
+        ):
+            suggestions.append(
+                "📦 Dependencies updated! Consider locking: `/shell pip freeze > requirements.txt`"
+            )
 
         elif "grep" in cmd_lower or "find" in cmd_lower:
             suggestions.append("🔍 Found matches! Open a file: `/file path/to/file.py`")
 
         elif "ls" in cmd_lower or "tree" in cmd_lower:
-            suggestions.append("📂 Explore further: `/files directory` for detailed listing")
+            suggestions.append(
+                "📂 Explore further: `/files directory` for detailed listing"
+            )
 
         else:
             suggestions.append("✅ Command completed successfully!")
@@ -180,7 +206,9 @@ def _get_shell_guidance(command: str, exit_code: int = 0) -> str | None:
     return "\n".join(suggestions)
 
 
-def _get_agent_guidance(agent_name: str, result_preview: str | None = None) -> str | None:
+def _get_agent_guidance(
+    agent_name: str, result_preview: str | None = None
+) -> str | None:
     """Generate guidance after invoke_agent tool usage.
 
     Args:
@@ -238,7 +266,9 @@ async def _on_post_tool_call(
         if tool_name == "create_file":
             file_path = tool_args.get("file_path", "")
             content = tool_args.get("content", "")
-            guidance = _get_write_guidance(file_path, content[:200] if content else None)
+            guidance = _get_write_guidance(
+                file_path, content[:200] if content else None
+            )
 
         elif tool_name == "replace_in_file":
             file_path = tool_args.get("file_path", "")
@@ -324,7 +354,7 @@ def _handle_custom_command(command: str, name: str) -> bool | str | None:
             _state["verbosity"] = new_verb
             emit_info(f"📢 Guidance verbosity set to: {new_verb}")
         else:
-            emit_info(f"❌ Invalid verbosity. Use: minimal, normal, or verbose")
+            emit_info("❌ Invalid verbosity. Use: minimal, normal, or verbose")
         return True
 
     if sub == "test":
@@ -340,7 +370,9 @@ def _handle_custom_command(command: str, name: str) -> bool | str | None:
         emit_info("🔄 Guidance counter reset")
         return True
 
-    emit_info(f"Unknown /guidance subcommand: {sub!r} (try status|on|off|verbosity|test|reset)")
+    emit_info(
+        f"Unknown /guidance subcommand: {sub!r} (try status|on|off|verbosity|test|reset)"
+    )
     return True
 
 
