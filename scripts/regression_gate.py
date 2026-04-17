@@ -33,27 +33,6 @@ def parse_test_summary(output: str, test_type: str) -> dict:
             + summary["errors"]
         )
 
-    elif test_type == "cargo":
-        # Parse cargo test output - look for "test result:"
-        for line in output.split("\n"):
-            if "test result:" in line:
-                # Example: "test result: ok. 45 passed; 0 failed; 0 ignored;"
-                passed_match = re.search(r"(\d+) passed", line)
-                failed_match = re.search(r"(\d+) failed", line)
-                ignored_match = re.search(r"(\d+) ignored", line)
-
-                if passed_match:
-                    summary["passed"] = int(passed_match.group(1))
-                if failed_match:
-                    summary["failed"] = int(failed_match.group(1))
-                if ignored_match:
-                    summary["skipped"] = int(ignored_match.group(1))
-
-                summary["total"] = (
-                    summary["passed"] + summary["failed"] + summary["skipped"]
-                )
-                break
-
     return summary
 
 
@@ -75,15 +54,6 @@ def load_baseline():
 
 def run_current_tests():
     """Run tests and return results."""
-    print("Running cargo test...")
-    cargo_result = subprocess.run(
-        ["cargo", "test", "--workspace"],
-        capture_output=True,
-        text=True,
-        cwd="/Users/adam2/projects/code_puppy",
-    )
-    cargo_summary = parse_test_summary(cargo_result.stdout, "cargo")
-
     print("Running pytest...")
     pytest_result = subprocess.run(
         [sys.executable, "-m", "pytest", "-v"],
@@ -96,11 +66,6 @@ def run_current_tests():
     )
 
     return {
-        "cargo_test": {
-            "returncode": cargo_result.returncode,
-            "stdout": cargo_result.stdout,
-            "summary": cargo_summary,
-        },
         "pytest": {
             "returncode": pytest_result.returncode,
             "stdout": pytest_result.stdout,
@@ -112,23 +77,6 @@ def run_current_tests():
 def compare_results(baseline, current):
     """Compare test results and report diffs."""
     issues = []
-
-    # Compare cargo test
-    baseline_cargo_passed = baseline["cargo_test"]["summary"]["passed"]
-    current_cargo_passed = current["cargo_test"]["summary"]["passed"]
-
-    if current["cargo_test"]["returncode"] != 0:
-        issues.append(
-            f"FAIL: Cargo tests failed (exit {current['cargo_test']['returncode']})"
-        )
-    elif current_cargo_passed < baseline_cargo_passed:
-        issues.append(
-            f"FAIL: Cargo tests regression: {current_cargo_passed} < {baseline_cargo_passed} passed"
-        )
-    else:
-        print(
-            f"✓ PASS: Cargo tests: {current_cargo_passed} >= {baseline_cargo_passed} baseline"
-        )
 
     # Compare pytest
     baseline_py_passed = baseline["pytest"]["summary"]["passed"]
@@ -170,10 +118,6 @@ def main():
     # Show detailed counts
     print()
     print("Detailed Comparison:")
-    print(
-        f"  Cargo:  {current['cargo_test']['summary']['passed']} passed "
-        f"(baseline: {baseline['cargo_test']['summary']['passed']})"
-    )
     print(
         f"  Pytest: {current['pytest']['summary']['passed']} passed "
         f"(baseline: {baseline['pytest']['summary']['passed']})"

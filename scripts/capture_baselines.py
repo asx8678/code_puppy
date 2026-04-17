@@ -34,27 +34,6 @@ def parse_test_summary(output: str, test_type: str) -> dict:
             + summary["errors"]
         )
 
-    elif test_type == "cargo":
-        # Parse cargo test output - look for "test result:"
-        for line in output.split("\n"):
-            if "test result:" in line:
-                # Example: "test result: ok. 45 passed; 0 failed; 0 ignored;"
-                passed_match = re.search(r"(\d+) passed", line)
-                failed_match = re.search(r"(\d+) failed", line)
-                ignored_match = re.search(r"(\d+) ignored", line)
-
-                if passed_match:
-                    summary["passed"] = int(passed_match.group(1))
-                if failed_match:
-                    summary["failed"] = int(failed_match.group(1))
-                if ignored_match:
-                    summary["skipped"] = int(ignored_match.group(1))
-
-                summary["total"] = (
-                    summary["passed"] + summary["failed"] + summary["skipped"]
-                )
-                break
-
     return summary
 
 
@@ -72,19 +51,6 @@ def capture_baselines():
         cwd="/Users/adam2/projects/code_puppy",
     )
     git_commit = git_result.stdout.strip()
-
-    # Run cargo test
-    print("Running cargo test --workspace...")
-    cargo_result = subprocess.run(
-        ["cargo", "test", "--workspace"],
-        capture_output=True,
-        text=True,
-        cwd="/Users/adam2/projects/code_puppy",
-    )
-    cargo_summary = parse_test_summary(cargo_result.stdout, "cargo")
-    print(
-        f"  Cargo tests: {cargo_summary['passed']} passed, {cargo_summary['failed']} failed, {cargo_summary['skipped']} skipped"
-    )
 
     # Run pytest
     print("Running pytest...")
@@ -104,12 +70,6 @@ def capture_baselines():
     baseline = {
         "timestamp": timestamp,
         "git_commit": git_commit,
-        "cargo_test": {
-            "returncode": cargo_result.returncode,
-            "stdout": cargo_result.stdout,
-            "stderr": cargo_result.stderr,
-            "summary": cargo_summary,
-        },
         "pytest": {
             "returncode": pytest_result.returncode,
             "stdout": pytest_result.stdout,
@@ -126,18 +86,15 @@ def capture_baselines():
         json.dump(baseline, f, indent=2)
 
     print(f"\n✅ Baseline saved to: {output_file}")
-    return output_file, cargo_summary, pytest_summary
+    return output_file, pytest_summary
 
 
 if __name__ == "__main__":
-    output_file, cargo_summary, pytest_summary = capture_baselines()
+    output_file, pytest_summary = capture_baselines()
     print(f"\n{'=' * 60}")
     print("BASELINE CAPTURE SUMMARY")
     print(f"{'=' * 60}")
     print(f"File: {output_file}")
     print(
-        f"\nCargo Tests:  {cargo_summary['passed']:3d} passed, {cargo_summary['failed']:3d} failed, {cargo_summary['skipped']:3d} skipped (total: {cargo_summary['total']})"
-    )
-    print(
-        f"Pytest Tests: {pytest_summary['passed']:3d} passed, {pytest_summary['failed']:3d} failed, {pytest_summary['skipped']:3d} skipped (total: {pytest_summary['total']})"
+        f"\nPytest Tests: {pytest_summary['passed']:3d} passed, {pytest_summary['failed']:3d} failed, {pytest_summary['skipped']:3d} skipped (total: {pytest_summary['total']})"
     )
