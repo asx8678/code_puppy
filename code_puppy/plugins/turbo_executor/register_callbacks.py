@@ -40,12 +40,8 @@ def _on_startup():
     """Initialize the orchestrator on startup."""
     global _orchestrator
     _orchestrator = TurboOrchestrator()
-    # bd-94: Updated to use _native_file_ops_available
-    ops_mode = (
-        "native backend (Elixir)"
-        if _orchestrator._native_file_ops_available
-        else "Python fallback"
-    )
+    # bd-86: Native acceleration removed, always uses Python
+    ops_mode = "Python (native acceleration removed in bd-86)"
     logger.info(f"Turbo Executor plugin initialized (using {ops_mode})")
 
 
@@ -78,24 +74,15 @@ def _handle_turbo_command(command: str, name: str) -> Any:
         emit_info("🚀 Turbo Executor Status:")
         emit_info(f"   Orchestrator ready: {orch is not None}")
         emit_info(f"   Parallel mode: {orch.enable_parallel}")
-        # bd-94: Updated to use _native_file_ops_available
-        ops_source = (
-            "native backend (Elixir)"
-            if orch._native_file_ops_available
-            else "Python fallback"
-        )
-        emit_info(f"   Operations source: {ops_source}")
+        # bd-86: Native acceleration removed, always uses Python
+        emit_info("   Operations source: Python (native acceleration removed in bd-86)")
         emit_info("   Supported operations: list_files, grep, read_files")
         return True
 
     if subcommand == "help":
         orch = _get_orchestrator()
-        # bd-94: Updated to use _native_file_ops_available
-        ops_source = (
-            "native backend (Elixir)"
-            if orch._native_file_ops_available
-            else "Python fallback"
-        )
+        # bd-86: Native acceleration removed, always uses Python
+        ops_source = "Python (native acceleration removed in bd-86)"
         emit_info("🚀 Turbo Executor — Batch File Operations")
         emit_info("")
         emit_info("Usage:")
@@ -115,7 +102,7 @@ def _handle_turbo_command(command: str, name: str) -> Any:
         emit_info("Operations: list_files, grep, read_files")
         emit_info("Priority: lower numbers execute first (default 100)")
         emit_info("")
-        emit_info(f"Backend: {ops_source}")  # bd-94: Updated backend description
+        emit_info(f"Backend: {ops_source}")  # bd-86: Updated backend description
         return True
 
     if subcommand == "plan":
