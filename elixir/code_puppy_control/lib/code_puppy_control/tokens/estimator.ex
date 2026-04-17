@@ -208,26 +208,40 @@ defmodule CodePuppyControl.Tokens.Estimator do
 
   @doc """
   Convert a message part to a string representation for token estimation.
+
+  Accepts maps with either atom or string keys for cross-module compatibility.
   """
   @spec stringify_part_for_tokens(Types.message_part()) :: String.t()
   def stringify_part_for_tokens(part) do
-    result = "#{part[:part_kind]}: "
+    part_kind = field(part, :part_kind)
+    content = field(part, :content)
+    content_json = field(part, :content_json)
+    tool_name = field(part, :tool_name)
+    args = field(part, :args)
 
-    cond do
-      is_binary(part[:content]) and part[:content] != "" ->
-        part[:content]
+    result = "#{part_kind}: "
 
-      is_binary(part[:content_json]) and part[:content_json] != "" ->
-        part[:content_json]
+    result =
+      cond do
+        is_binary(content) and content != "" ->
+          content
 
-      true ->
-        result = part[:tool_name] || result
+        is_binary(content_json) and content_json != "" ->
+          content_json
 
-        if is_binary(part[:args]) and part[:args] != "" do
-          result <> " " <> part[:args]
-        else
+        true ->
           result
-        end
+      end
+
+    # Append tool_name + args unconditionally (matching Rust behavior)
+    if is_binary(tool_name) and tool_name != "" do
+      if is_binary(args) and args != "" do
+        result <> tool_name <> " " <> args
+      else
+        result <> tool_name
+      end
+    else
+      result
     end
   end
 
@@ -240,36 +254,35 @@ defmodule CodePuppyControl.Tokens.Estimator do
           String.t()
         ) :: integer()
   def estimate_context_overhead(tool_defs, mcp_tool_defs, system_prompt) do
-    total = 0
-
     total =
-      if system_prompt != "" do
-        total + estimate_tokens(system_prompt)
+      if is_binary(system_prompt) and system_prompt != "" do
+        estimate_tokens(system_prompt)
       else
-        total
+        0
       end
 
     Enum.reduce(tool_defs ++ mcp_tool_defs, total, fn tool, acc ->
-      acc = acc + estimate_tokens(tool[:name] || "")
+      acc = acc + estimate_tokens(field(tool, :name) || "")
 
       acc =
-        if is_binary(tool[:description]) and tool[:description] != "" do
-          acc + estimate_tokens(tool[:description])
-        else
-          acc
-        end
+        case field(tool, :description) do
+          desc when is_binary(desc) and desc != "" ->
+            acc + estimate_tokens(desc)
 
-      acc =
-        case tool[:input_schema] do
-          nil ->
+          _ ->
             acc
-
-          schema ->
-            json = Jason.encode!(schema)
-            acc + estimate_tokens(json)
         end
 
-      acc
+      case field(tool, :input_schema) do
+        nil ->
+          acc
+
+        schema ->
+          case Jason.encode(schema) do
+            {:ok, json} -> acc + estimate_tokens(json)
+            {:error, _} -> acc
+          end
+      end
     end)
   end
 
@@ -316,12 +329,23 @@ defmodule CodePuppyControl.Tokens.Estimator do
   @spec estimate_message_tokens(Types.message()) :: integer()
   def estimate_message_tokens(msg) do
     tokens =
-      (msg[:parts] || [])
+      (field(msg, :parts) || [])
       |> Enum.map(&stringify_part_for_tokens/1)
       |> Enum.filter(fn s -> s != "" end)
       |> Enum.map(&estimate_tokens/1)
       |> Enum.sum()
 
     max(1, tokens)
+  end
+
+  # Access a field from a map that may use atom or string keys.
+  # This allows cross-module compatibility when data comes from JSON (string keys)
+  # or from Elixir code (atom keys).
+  @doc false
+  defp field(map, key) when is_atom(key) do
+    case Map.get(map, key) do
+      nil -> Map.get(map, Atom.to_string(key))
+      val -> val
+    end
   end
 end

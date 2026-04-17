@@ -170,7 +170,7 @@ defmodule CodePuppyControl.Tokens.EstimatorTest do
       }
 
       result = Estimator.stringify_part_for_tokens(part)
-      assert result == "my_tool {\"arg\": 1}"
+      assert result == "tool_call: my_tool {\"arg\": 1}"
     end
   end
 
