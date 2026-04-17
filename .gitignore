@@ -1,6 +1,9 @@
 # Rust build artifacts
 target/
 
+# Rust lockfile (workspace not actively built — Phase 6 retirement)
+Cargo.lock
+
 # User config directory — contains OAuth tokens, session keys, and local state
 # Must NEVER be committed (even if copied/symlinked into the repo)
 .code_puppy/
