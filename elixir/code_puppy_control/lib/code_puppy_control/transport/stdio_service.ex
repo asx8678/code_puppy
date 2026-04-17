@@ -128,6 +128,17 @@ defmodule CodePuppyControl.Transport.StdioService do
   - `shell.kill_all` - Kill all running shell processes
   - `shell.running_count` - Get count of running processes
 
+  ### Message Processing (bd-182)
+  - `message.prune_and_filter` - Prune orphaned tool calls and oversized messages
+  - `message.truncation_indices` - Calculate which messages to keep within token budget
+  - `message.split_for_summarization` - Split messages into summarize vs protected groups
+  - `message.serialize_session` - Serialize messages to base64-encoded MessagePack
+  - `message.deserialize_session` - Deserialize base64-encoded MessagePack to messages
+  - `message.serialize_incremental` - Append new messages to existing serialized data
+  - `message.hash` - Compute content hash for a message (for deduplication)
+  - `message.hash_batch` - Compute hashes for multiple messages
+  - `message.stringify_part` - Get canonical string representation of a message part
+
   ### Utility
   - `health_check` - Service health status
   - `ping` - Simple ping/pong
@@ -157,6 +168,10 @@ defmodule CodePuppyControl.Transport.StdioService do
   alias CodePuppyControl.RoundRobinModel
   alias CodePuppyControl.Tools.CommandRunner
   alias CodePuppyControl.Tools.SchedulerTools
+
+  alias CodePuppyControl.Messages.Hasher
+  alias CodePuppyControl.Messages.Pruner
+  alias CodePuppyControl.Messages.Serializer
 
   defstruct [:io_device, :buffer, :request_counter]
 
@@ -1960,6 +1975,205 @@ defmodule CodePuppyControl.Transport.StdioService do
   defp handle_request("shell.running_count", _params, id) do
     count = CommandRunner.running_count()
     Protocol.encode_response(%{"count" => count}, id)
+  end
+
+  # ============================================================================
+  # Message Processing (bd-182, bd-183, bd-184, bd-190)
+  # ============================================================================
+
+  # message.prune_and_filter - Prune orphaned tool calls and oversized messages (bd-183)
+  defp handle_request("message.prune_and_filter", params, id) do
+    messages = params["messages"]
+
+    if is_nil(messages) or not is_list(messages) do
+      Protocol.encode_error(-32602, "Missing or invalid param: messages", nil, id)
+    else
+      max_tokens = params["max_tokens_per_message"] || 50_000
+      result = Pruner.prune_and_filter(messages, max_tokens)
+      Protocol.encode_response(result, id)
+    end
+  end
+
+  # message.truncation_indices - Calculate which messages to keep within token budget (bd-183)
+  defp handle_request("message.truncation_indices", params, id) do
+    per_message_tokens = params["per_message_tokens"]
+    protected_tokens = params["protected_tokens"]
+
+    cond do
+      is_nil(per_message_tokens) or not is_list(per_message_tokens) ->
+        Protocol.encode_error(-32602, "Missing or invalid param: per_message_tokens", nil, id)
+
+      is_nil(protected_tokens) or not is_integer(protected_tokens) ->
+        Protocol.encode_error(-32602, "Missing or invalid param: protected_tokens", nil, id)
+
+      true ->
+        second_has_thinking = params["second_has_thinking"] || false
+
+        indices =
+          Pruner.truncation_indices(
+            per_message_tokens,
+            protected_tokens,
+            second_has_thinking
+          )
+
+        Protocol.encode_response(%{"indices" => indices}, id)
+    end
+  end
+
+  # message.split_for_summarization - Split messages into summarize vs protected groups (bd-183)
+  defp handle_request("message.split_for_summarization", params, id) do
+    per_message_tokens = params["per_message_tokens"]
+    messages = params["messages"]
+    protected_tokens_limit = params["protected_tokens_limit"]
+
+    cond do
+      is_nil(per_message_tokens) or not is_list(per_message_tokens) ->
+        Protocol.encode_error(-32602, "Missing or invalid param: per_message_tokens", nil, id)
+
+      is_nil(messages) or not is_list(messages) ->
+        Protocol.encode_error(-32602, "Missing or invalid param: messages", nil, id)
+
+      is_nil(protected_tokens_limit) or not is_integer(protected_tokens_limit) ->
+        Protocol.encode_error(-32602, "Missing or invalid param: protected_tokens_limit", nil, id)
+
+      true ->
+        result =
+          Pruner.split_for_summarization(
+            per_message_tokens,
+            messages,
+            protected_tokens_limit
+          )
+
+        Protocol.encode_response(result, id)
+    end
+  end
+
+  # message.serialize_session - Serialize messages to MessagePack (bd-184)
+  defp handle_request("message.serialize_session", params, id) do
+    messages = params["messages"]
+
+    if is_nil(messages) or not is_list(messages) do
+      Protocol.encode_error(-32602, "Missing or invalid param: messages", nil, id)
+    else
+      case Serializer.serialize_session(messages) do
+        {:ok, binary} ->
+          # Base64 encode for JSON transport
+          Protocol.encode_response(%{"data" => Base.encode64(binary)}, id)
+
+        {:error, reason} ->
+          Protocol.encode_error(-32000, "Serialization failed: #{reason}", nil, id)
+      end
+    end
+  end
+
+  # message.deserialize_session - Deserialize MessagePack to messages (bd-184)
+  defp handle_request("message.deserialize_session", params, id) do
+    data = params["data"]
+
+    if is_nil(data) or not is_binary(data) do
+      Protocol.encode_error(-32602, "Missing or invalid param: data", nil, id)
+    else
+      case Base.decode64(data) do
+        {:ok, binary} ->
+          case Serializer.deserialize_session(binary) do
+            {:ok, messages} ->
+              Protocol.encode_response(%{"messages" => messages}, id)
+
+            {:error, reason} ->
+              Protocol.encode_error(-32000, "Deserialization failed: #{reason}", nil, id)
+          end
+
+        :error ->
+          Protocol.encode_error(-32602, "Invalid base64 encoding in param: data", nil, id)
+      end
+    end
+  end
+
+  # message.serialize_incremental - Append messages to existing serialized data (bd-184)
+  defp handle_request("message.serialize_incremental", params, id) do
+    new_messages = params["new_messages"]
+    existing_data = params["existing_data"]
+
+    if is_nil(new_messages) or not is_list(new_messages) do
+      Protocol.encode_error(-32602, "Missing or invalid param: new_messages", nil, id)
+    else
+      # Decode existing data if provided
+      decoded_existing =
+        cond do
+          is_nil(existing_data) ->
+            {:ok, nil}
+
+          is_binary(existing_data) ->
+            case Base.decode64(existing_data) do
+              {:ok, binary} -> {:ok, binary}
+              :error -> {:error, "Invalid base64 encoding"}
+            end
+
+          true ->
+            {:error, "Invalid existing_data type"}
+        end
+
+      case decoded_existing do
+        {:ok, existing_binary} ->
+          case Serializer.serialize_session_incremental(
+                 new_messages,
+                 existing_binary
+               ) do
+            {:ok, binary} ->
+              Protocol.encode_response(%{"data" => Base.encode64(binary)}, id)
+
+            {:error, reason} ->
+              Protocol.encode_error(-32000, "Incremental serialization failed: #{reason}", nil, id)
+          end
+
+        {:error, reason} ->
+          Protocol.encode_error(-32602, reason, nil, id)
+      end
+    end
+  end
+
+  # message.hash - Compute content hash for a message (bd-190)
+  defp handle_request("message.hash", params, id) do
+    message = params["message"]
+
+    if is_nil(message) or not is_map(message) do
+      Protocol.encode_error(-32602, "Missing or invalid param: message", nil, id)
+    else
+      hash = Hasher.hash_message(message)
+      Protocol.encode_response(%{"hash" => hash}, id)
+    end
+  end
+
+  # message.hash_batch - Compute hashes for multiple messages (bd-190)
+  defp handle_request("message.hash_batch", params, id) do
+    messages = params["messages"]
+
+    if is_nil(messages) or not is_list(messages) do
+      Protocol.encode_error(-32602, "Missing or invalid param: messages", nil, id)
+    else
+      hashes =
+        Enum.map(messages, fn msg ->
+          if is_map(msg) do
+            Hasher.hash_message(msg)
+          else
+            nil
+          end
+        end)
+
+      Protocol.encode_response(%{"hashes" => hashes}, id)
+    end
+  end
+
+  # message.stringify_part - Get canonical string for a message part (bd-190)
+  defp handle_request("message.stringify_part", params, id) do
+    part = params["part"]
+
+    if is_nil(part) or not is_map(part) do
+      Protocol.encode_error(-32602, "Missing or invalid param: part", nil, id)
+    else
+      stringified = Hasher.stringify_part_for_hash(part)
+      Protocol.encode_response(%{"stringified" => stringified}, id)
+    end
   end
 
   # Method not found handler

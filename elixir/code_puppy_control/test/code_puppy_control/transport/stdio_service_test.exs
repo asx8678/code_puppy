@@ -969,11 +969,273 @@ defmodule CodePuppyControl.Transport.StdioServiceTest do
     end
   end
 
+  # ============================================================================
+  # Message Processing Tests (bd-182)
+  # ============================================================================
+
+  describe "message.prune_and_filter" do
+    test "prunes messages with orphaned tool calls" do
+      messages = [
+        %{
+          "kind" => "request",
+          "role" => "user",
+          "parts" => [%{"part_kind" => "text", "content" => "Hello"}]
+        },
+        %{
+          "kind" => "response",
+          "role" => "assistant",
+          "parts" => [
+            %{"part_kind" => "tool-call", "tool_call_id" => "orphan-123", "tool_name" => "test"}
+          ]
+        }
+      ]
+
+      request = encode_request("message.prune_and_filter", %{"messages" => messages}, 1)
+      output = capture_stdio([request])
+      response = decode_response(output)
+      assert response["id"] == 1
+      assert response["result"]["surviving_indices"] == [0]
+      assert response["result"]["dropped_count"] == 1
+      assert response["result"]["had_pending_tool_calls"] == true
+    end
+
+    test "returns error for missing messages param" do
+      request = encode_request("message.prune_and_filter", %{}, 1)
+      output = capture_stdio([request])
+      response = decode_response(output)
+      assert response["error"]["code"] == -32602
+    end
+  end
+
+  describe "message.truncation_indices" do
+    test "calculates truncation indices within budget" do
+      per_message_tokens = [100, 200, 300, 400, 500]
+      request = encode_request(
+        "message.truncation_indices",
+        %{"per_message_tokens" => per_message_tokens, "protected_tokens" => 700},
+        1
+      )
+      output = capture_stdio([request])
+      response = decode_response(output)
+      assert response["id"] == 1
+      assert is_list(response["result"]["indices"])
+      assert 0 in response["result"]["indices"]
+    end
+
+    test "respects second_has_thinking flag" do
+      per_message_tokens = [100, 50, 200, 300]
+      request = encode_request(
+        "message.truncation_indices",
+        %{
+          "per_message_tokens" => per_message_tokens,
+          "protected_tokens" => 400,
+          "second_has_thinking" => true
+        },
+        1
+      )
+      output = capture_stdio([request])
+      response = decode_response(output)
+      assert 0 in response["result"]["indices"]
+      assert 1 in response["result"]["indices"]
+    end
+  end
+
+  describe "message.split_for_summarization" do
+    test "splits messages for summarization" do
+      messages = [
+        %{"kind" => "request", "parts" => []},
+        %{"kind" => "response", "parts" => []},
+        %{"kind" => "request", "parts" => []},
+        %{"kind" => "response", "parts" => []}
+      ]
+      per_message_tokens = [100, 200, 150, 250]
+      request = encode_request(
+        "message.split_for_summarization",
+        %{
+          "per_message_tokens" => per_message_tokens,
+          "messages" => messages,
+          "protected_tokens_limit" => 400
+        },
+        1
+      )
+      output = capture_stdio([request])
+      response = decode_response(output)
+      assert response["id"] == 1
+      assert is_list(response["result"]["summarize_indices"])
+      assert is_list(response["result"]["protected_indices"])
+      assert is_integer(response["result"]["protected_token_count"])
+    end
+  end
+
+  describe "message.serialize_session" do
+    test "serializes messages to base64-encoded MessagePack" do
+      messages = [%{"kind" => "request", "role" => "user", "parts" => []}]
+      request = encode_request("message.serialize_session", %{"messages" => messages}, 1)
+      output = capture_stdio([request])
+      response = decode_response(output)
+      assert response["id"] == 1
+      assert is_binary(response["result"]["data"])
+      assert {:ok, _} = Base.decode64(response["result"]["data"])
+    end
+
+    test "returns error for missing messages param" do
+      request = encode_request("message.serialize_session", %{}, 1)
+      output = capture_stdio([request])
+      response = decode_response(output)
+      assert response["error"]["code"] == -32602
+    end
+  end
+
+  describe "message.deserialize_session" do
+    test "deserializes base64-encoded MessagePack to messages" do
+      messages = [%{"kind" => "request", "role" => "user", "parts" => []}]
+      {:ok, binary} = CodePuppyControl.Messages.Serializer.serialize_session(messages)
+      encoded = Base.encode64(binary)
+      request = encode_request("message.deserialize_session", %{"data" => encoded}, 1)
+      output = capture_stdio([request])
+      response = decode_response(output)
+      assert response["id"] == 1
+      assert is_list(response["result"]["messages"])
+      assert length(response["result"]["messages"]) == 1
+    end
+
+    test "returns error for invalid base64" do
+      request = encode_request("message.deserialize_session", %{"data" => "not-valid-base64!!!"}, 1)
+      output = capture_stdio([request])
+      response = decode_response(output)
+      assert response["error"]["code"] == -32602
+    end
+  end
+
+  describe "message.serialize_incremental" do
+    test "appends new messages to existing serialized data" do
+      initial = [%{"kind" => "request", "role" => "user", "parts" => []}]
+      {:ok, binary} = CodePuppyControl.Messages.Serializer.serialize_session(initial)
+      existing_data = Base.encode64(binary)
+      new_messages = [%{"kind" => "response", "role" => "assistant", "parts" => []}]
+      request = encode_request(
+        "message.serialize_incremental",
+        %{"new_messages" => new_messages, "existing_data" => existing_data},
+        1
+      )
+      output = capture_stdio([request])
+      response = decode_response(output)
+      assert response["id"] == 1
+      assert is_binary(response["result"]["data"])
+      {:ok, combined_binary} = Base.decode64(response["result"]["data"])
+      {:ok, combined} = CodePuppyControl.Messages.Serializer.deserialize_session(combined_binary)
+      assert length(combined) == 2
+    end
+
+    test "handles nil existing_data (fresh start)" do
+      new_messages = [%{"kind" => "request", "parts" => []}]
+      request = encode_request(
+        "message.serialize_incremental",
+        %{"new_messages" => new_messages, "existing_data" => nil},
+        1
+      )
+      output = capture_stdio([request])
+      response = decode_response(output)
+      assert response["id"] == 1
+      assert is_binary(response["result"]["data"])
+    end
+  end
+
+  describe "message.hash" do
+    test "computes hash for a message" do
+      message = %{
+        "kind" => "request",
+        "role" => "user",
+        "parts" => [%{"part_kind" => "text", "content" => "Hello world"}]
+      }
+      request = encode_request("message.hash", %{"message" => message}, 1)
+      output = capture_stdio([request])
+      response = decode_response(output)
+      assert response["id"] == 1
+      assert is_integer(response["result"]["hash"])
+      assert response["result"]["hash"] >= 0
+    end
+
+    test "produces consistent hashes for same content" do
+      message = %{
+        "kind" => "request",
+        "role" => "user",
+        "parts" => [%{"part_kind" => "text", "content" => "Test content"}]
+      }
+      request1 = encode_request("message.hash", %{"message" => message}, 1)
+      request2 = encode_request("message.hash", %{"message" => message}, 2)
+      output1 = capture_stdio([request1])
+      output2 = capture_stdio([request2])
+      response1 = decode_response(output1)
+      response2 = decode_response(output2)
+      assert response1["result"]["hash"] == response2["result"]["hash"]
+    end
+
+    test "returns error for missing message param" do
+      request = encode_request("message.hash", %{}, 1)
+      output = capture_stdio([request])
+      response = decode_response(output)
+      assert response["error"]["code"] == -32602
+    end
+  end
+
+  describe "message.hash_batch" do
+    test "computes hashes for multiple messages" do
+      messages = [
+        %{"kind" => "request", "role" => "user", "parts" => []},
+        %{"kind" => "response", "role" => "assistant", "parts" => []}
+      ]
+      request = encode_request("message.hash_batch", %{"messages" => messages}, 1)
+      output = capture_stdio([request])
+      response = decode_response(output)
+      assert response["id"] == 1
+      assert is_list(response["result"]["hashes"])
+      assert length(response["result"]["hashes"]) == 2
+      assert Enum.all?(response["result"]["hashes"], &is_integer/1)
+    end
+  end
+
+  describe "message.stringify_part" do
+    test "returns canonical string for a message part" do
+      part = %{
+        "part_kind" => "text",
+        "content" => "Hello",
+        "tool_call_id" => nil,
+        "tool_name" => nil
+      }
+      request = encode_request("message.stringify_part", %{"part" => part}, 1)
+      output = capture_stdio([request])
+      response = decode_response(output)
+      assert response["id"] == 1
+      assert is_binary(response["result"]["stringified"])
+      assert response["result"]["stringified"] =~ "text"
+      assert response["result"]["stringified"] =~ "content=Hello"
+    end
+  end
+
   # Helper Functions
   # ============================================================================
 
   # Delegate to shared test helper
-  defp capture_stdio(inputs, fun) do
+  defp capture_stdio(inputs, fun \\ nil) do
     StdioTestHelper.capture_stdio(inputs, fun)
+  end
+
+  # JSON-RPC request encoder
+  defp encode_request(method, params, id) do
+    %{"jsonrpc" => "2.0", "id" => id, "method" => method, "params" => params}
+    |> Jason.encode!()
+  end
+
+  # JSON-RPC response decoder
+  defp decode_response(output) do
+    output
+    |> String.split("
+")
+    |> Enum.find(&(String.starts_with?(&1, "{") and &1 != ""))
+    |> case do
+      nil -> %{}
+      line -> Jason.decode!(line)
+    end
   end
 end
