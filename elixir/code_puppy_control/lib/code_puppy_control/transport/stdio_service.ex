@@ -917,7 +917,6 @@ defmodule CodePuppyControl.Transport.StdioService do
     Protocol.encode_response(%{"result" => result, "type" => "markdown"}, id)
   end
 
-
   # ============================================================================
   # Round-Robin Model Operations (bd-71)
   # ============================================================================

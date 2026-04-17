@@ -3,7 +3,7 @@ defmodule CodePuppyControl.ModelsDevParserTest do
   Tests for the ModelsDevParser module.
   """
 
-  use ExUnit.Case, async: false
+  use ExUnit.Case, async: true
 
   alias CodePuppyControl.ModelsDevParser
   alias CodePuppyControl.ModelsDevParser.{ProviderInfo, ModelInfo, Registry}
@@ -136,19 +136,15 @@ defmodule CodePuppyControl.ModelsDevParserTest do
     File.write!(@test_json_path, Jason.encode!(test_data))
   end
 
+  # FIX: Use unique names per test instance to avoid GenServer naming collisions
   setup do
     # Write fresh test data for each test
     write_test_data()
 
-    # Stop any running global registry first, then start fresh unnamed one
-    try do
-      GenServer.stop(CodePuppyControl.ModelsDevParser.Registry)
-    catch
-      _, _ -> :ok
-    end
+    # Generate unique name for this test instance
+    name = :"test_registry_#{:erlang.unique_integer([:positive])}"
 
-    # Start a fresh registry for each test (unnamed)
-    {:ok, pid} = Registry.start_link(json_path: @test_json_path)
+    {:ok, pid} = Registry.start_link(json_path: @test_json_path, name: name)
 
     on_exit(fn ->
       # Ensure registry is stopped
@@ -215,7 +211,8 @@ defmodule CodePuppyControl.ModelsDevParserTest do
       assert model.model_id == "model-1"
       assert model.name == "Model One"
       assert model.attachment == false
-      assert model.temperature == true  # default
+      # default
+      assert model.temperature == true
     end
 
     test "full_id/1 returns correct full identifier" do
@@ -485,10 +482,7 @@ defmodule CodePuppyControl.ModelsDevParserTest do
       assert config["metadata"]["open_weights"] == false
     end
 
-    test "to_config/2 with known provider uses type mapping", %{registry: setup_registry} do
-      # Stop the setup registry since we'll create our own
-      GenServer.stop(setup_registry)
-
+    test "to_config/2 with known provider uses type mapping", %{registry: _setup_registry} do
       # Create a provider with a known ID from the mapping
       provider_data = %{
         "anthropic" => %{
@@ -510,14 +504,15 @@ defmodule CodePuppyControl.ModelsDevParserTest do
 
       File.write!(@test_json_path, Jason.encode!(provider_data))
 
-      # Start registry with new data
-      {:ok, new_registry} = Registry.start_link(json_path: @test_json_path)
+      # Start registry with new data using a unique name
+      name = :"mapping_test_registry_#{:erlang.unique_integer([:positive])}"
+      {:ok, new_registry} = Registry.start_link(json_path: @test_json_path, name: name)
 
       model = Registry.get_model(new_registry, "anthropic", "claude-3-opus")
       assert model != nil
 
       config = Registry.to_config(new_registry, model)
-      # Provider type should be "anthropic" (from mapping, not "anthropic" as ID)
+      # Provider type should be "anthropic" (from mapping)
       assert config["type"] == "anthropic"
       assert config["provider_id"] == "anthropic"
 
@@ -542,10 +537,7 @@ defmodule CodePuppyControl.ModelsDevParserTest do
   # ============================================================================
 
   describe "error handling" do
-    test "handles missing provider fields gracefully", %{registry: setup_registry} do
-      # Stop setup registry
-      GenServer.stop(setup_registry)
-
+    test "handles missing provider fields gracefully", %{registry: _setup_registry} do
       bad_data = %{
         "bad-provider" => %{
           # Missing "name" and "env"
@@ -554,7 +546,8 @@ defmodule CodePuppyControl.ModelsDevParserTest do
       }
 
       File.write!(@test_json_path, Jason.encode!(bad_data))
-      {:ok, registry} = Registry.start_link(json_path: @test_json_path)
+      name = :"bad_provider_test_#{:erlang.unique_integer([:positive])}"
+      {:ok, registry} = Registry.start_link(json_path: @test_json_path, name: name)
 
       # Should have 0 providers since the only one was malformed
       assert Registry.get_providers(registry) == []
@@ -562,10 +555,7 @@ defmodule CodePuppyControl.ModelsDevParserTest do
       GenServer.stop(registry)
     end
 
-    test "handles missing model name gracefully", %{registry: setup_registry} do
-      # Stop setup registry
-      GenServer.stop(setup_registry)
-
+    test "handles missing model name gracefully", %{registry: _setup_registry} do
       bad_data = %{
         "test-provider" => %{
           "id" => "test-provider",
@@ -585,7 +575,8 @@ defmodule CodePuppyControl.ModelsDevParserTest do
       }
 
       File.write!(@test_json_path, Jason.encode!(bad_data))
-      {:ok, registry} = Registry.start_link(json_path: @test_json_path)
+      name = :"bad_model_test_#{:erlang.unique_integer([:positive])}"
+      {:ok, registry} = Registry.start_link(json_path: @test_json_path, name: name)
 
       # Should have 1 model (the good one)
       models = Registry.get_models(registry)
@@ -595,10 +586,7 @@ defmodule CodePuppyControl.ModelsDevParserTest do
       GenServer.stop(registry)
     end
 
-    test "handles negative context length gracefully", %{registry: setup_registry} do
-      # Stop setup registry
-      GenServer.stop(setup_registry)
-
+    test "handles negative context length gracefully", %{registry: _setup_registry} do
       bad_data = %{
         "test-provider" => %{
           "id" => "test-provider",
@@ -617,7 +605,8 @@ defmodule CodePuppyControl.ModelsDevParserTest do
       }
 
       File.write!(@test_json_path, Jason.encode!(bad_data))
-      {:ok, registry} = Registry.start_link(json_path: @test_json_path)
+      name = :"neg_context_test_#{:erlang.unique_integer([:positive])}"
+      {:ok, registry} = Registry.start_link(json_path: @test_json_path, name: name)
 
       # Model should be skipped due to negative context
       assert Registry.get_models(registry) == []
@@ -633,7 +622,6 @@ defmodule CodePuppyControl.ModelsDevParserTest do
   describe "Module convenience API" do
     test "delegates to Registry", %{registry: registry} do
       # Test that the module-level functions delegate correctly
-      # by using the registry's named functions
       providers = ModelsDevParser.get_providers(registry)
       assert length(providers) == 2
 
