@@ -1,7 +1,12 @@
 """Scheduler daemon for Code Puppy.
 
+# DEPRECATED(bd-62): Use Elixir scheduler. This module is retained for backward compatibility only.
+# The Elixir scheduler at CodePuppyControl.Scheduler.CronScheduler is now the production implementation.
+
 Runs as a background process, checking for and executing scheduled tasks.
 Uses pure Python timing (no external scheduler dependencies).
+
+DEPRECATED: This daemon is no longer used in production. The Elixir scheduler handles all task scheduling.
 """
 
 import atexit

@@ -1,7 +1,12 @@
 """Task executor for the Code Puppy scheduler.
 
+# DEPRECATED(bd-62): Use Elixir scheduler. This module is retained for backward compatibility only.
+# The Elixir scheduler at CodePuppyControl.Scheduler.Worker is now the production implementation.
+
 Handles executing scheduled tasks by invoking code-puppy CLI
 with the configured prompt, model, and agent.
+
+DEPRECATED: Task execution is now handled by Oban workers in Elixir.
 """
 
 import os

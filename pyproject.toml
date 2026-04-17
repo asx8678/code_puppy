@@ -83,6 +83,7 @@ target-version = "py314"
 "code_puppy/main.py" = ["E402"]
 "code_puppy/cli_runner.py" = ["E402"]
 "code_puppy/messaging/__init__.py" = ["E402"]
+"code_puppy/scheduler/__init__.py" = ["E402"]
 "code_puppy/config.py" = ["F821"]  # Lazy-evaluated path constants via __getattr__
 
 [tool.pytest.ini_options]

@@ -1,7 +1,12 @@
 """CLI subcommands for the scheduler.
 
+# DEPRECATED(bd-62): Use Elixir scheduler. This module is retained for backward compatibility only.
+# The Elixir scheduler API provides these functions via HTTP endpoints.
+
 Handles command-line operations like starting/stopping the daemon,
 listing tasks, and running tasks immediately.
+
+DEPRECATED: Use the Elixir scheduler API or /scheduler slash command instead.
 """
 
 from code_puppy.messaging import emit_error, emit_info, emit_success, emit_warning
