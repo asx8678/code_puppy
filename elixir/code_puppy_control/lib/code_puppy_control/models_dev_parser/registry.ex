@@ -10,25 +10,12 @@ defmodule CodePuppyControl.ModelsDevParser.Registry do
 
   require Logger
 
-  alias CodePuppyControl.HttpClient
+  alias CodePuppyControl.ModelsDevParser.ApiClient
+  alias CodePuppyControl.ModelsDevParser.ConfigBuilder
   alias CodePuppyControl.ModelsDevParser.ProviderInfo
   alias CodePuppyControl.ModelsDevParser.ModelInfo
 
-  # Module constants (redefined here for visibility)
-  @models_dev_api_url "https://models.dev/api.json"
   @bundled_json_filename "models_dev_api.json"
-  @cache_ttl_seconds 300
-
-  @provider_type_map %{
-    "anthropic" => "anthropic",
-    "openai" => "openai",
-    "google" => "gemini",
-    "deepseek" => "deepseek",
-    "ollama" => "ollama",
-    "groq" => "groq",
-    "cohere" => "cohere",
-    "mistral" => "mistral"
-  }
 
   defstruct [
     :providers,
@@ -190,7 +177,7 @@ defmodule CodePuppyControl.ModelsDevParser.Registry do
 
   @impl true
   def handle_info(:async_load, state) do
-    case load_data_async(state) do
+    case ApiClient.load_data_async(state) do
       {:ok, new_state} ->
         Logger.info("ModelsDev registry loaded: #{new_state.data_source}")
         {:noreply, new_state}
@@ -272,7 +259,7 @@ defmodule CodePuppyControl.ModelsDevParser.Registry do
 
   @impl true
   def handle_call({:to_config, model}, _from, state) do
-    config = build_config(model, state.providers[model.provider_id])
+    config = ConfigBuilder.build(model, state.providers[model.provider_id])
     {:reply, config, state}
   end
 
@@ -286,7 +273,7 @@ defmodule CodePuppyControl.ModelsDevParser.Registry do
     # Clear cache and reload
     new_state = %{state | cached_data: nil, cache_time: nil}
 
-    case load_data_async(new_state) do
+    case ApiClient.load_data_async(new_state) do
       {:ok, loaded_state} -> {:reply, :ok, loaded_state}
       {:error, reason} -> {:reply, {:error, reason}, state}
     end
@@ -299,109 +286,17 @@ defmodule CodePuppyControl.ModelsDevParser.Registry do
   defp load_data_sync(state) do
     cond do
       state.json_path != nil ->
-        load_from_file(state, state.json_path)
+        ApiClient.load_from_file(state, state.json_path)
 
       true ->
         # Fall back to bundled JSON (no live API in sync mode)
         bundled_path = get_bundled_json_path()
 
         if File.exists?(bundled_path) do
-          load_from_file(state, bundled_path)
+          ApiClient.load_from_file(state, bundled_path)
         else
           {:error, "No data source available: bundled file not found at #{bundled_path}"}
         end
-    end
-  end
-
-  # BUG FIX: Normalized return type to 2-tuple {:ok, new_state}
-  defp load_data_async(state) do
-    cond do
-      state.json_path != nil ->
-        load_from_file(state, state.json_path)
-
-      true ->
-        # Try live API first
-        case fetch_from_api(state) do
-          {:ok, data} ->
-            new_state = %{state | data_source: "live:models.dev"}
-            {:ok, parse_data(new_state, data)}
-
-          {:error, _} ->
-            # Fall back to bundled
-            bundled_path = get_bundled_json_path()
-
-            if File.exists?(bundled_path) do
-              load_from_file(state, bundled_path)
-            else
-              {:error, "No data source available: API failed and bundled file not found"}
-            end
-        end
-    end
-  end
-
-  defp load_from_file(state, path) do
-    case File.read(path) do
-      {:ok, content} ->
-        case Jason.decode(content) do
-          {:ok, data} ->
-            data_source =
-              if path == get_bundled_json_path() do
-                "bundled:#{@bundled_json_filename}"
-              else
-                "file:#{path}"
-              end
-
-            new_state = %{state | data_source: data_source}
-            {:ok, parse_data(new_state, data)}
-
-          {:error, reason} ->
-            {:error, "Invalid JSON in #{path}: #{inspect(reason)}"}
-        end
-
-      {:error, reason} ->
-        {:error, "Failed to read #{path}: #{inspect(reason)}"}
-    end
-  end
-
-  defp fetch_from_api(%{cached_data: data, cache_time: time} = state)
-       when not is_nil(data) and not is_nil(time) do
-    now = System.monotonic_time(:second)
-    age = now - time
-
-    if age < @cache_ttl_seconds do
-      Logger.info("Using cached models data (#{age}s old)")
-      {:ok, data}
-    else
-      do_fetch_from_api(state)
-    end
-  end
-
-  defp fetch_from_api(state) do
-    do_fetch_from_api(state)
-  end
-
-  # BUG FIX: Now returns 2-tuple {:ok, data} to match expected return type
-  defp do_fetch_from_api(state) do
-    case HttpClient.get(@models_dev_api_url, timeout: 10_000) do
-      {:ok, %{status: 200, body: body}} ->
-        case Jason.decode(body) do
-          {:ok, data} when is_map(data) and map_size(data) > 0 ->
-            now = System.monotonic_time(:second)
-            # Update cache in state but return just the data
-            _new_state = %{state | cached_data: data, cache_time: now}
-            {:ok, data}
-
-          _ ->
-            {:error, :invalid_response}
-        end
-
-      {:ok, %{status: status}} ->
-        Logger.warning("models.dev API returned #{status}, using fallback")
-        {:error, {:http_error, status}}
-
-      {:error, reason} ->
-        Logger.warning("Failed to fetch from models.dev API: #{inspect(reason)}")
-        {:error, reason}
     end
   end
 
@@ -415,33 +310,17 @@ defmodule CodePuppyControl.ModelsDevParser.Registry do
   # Private Functions - Data Parsing
   # ============================================================================
 
-  defp parse_data(state, data) when is_map(data) do
-    providers = %{}
-    models = %{}
-
+  @doc """
+  Parses raw JSON data into provider and model structs.
+  Public so ApiClient can delegate back here after loading.
+  """
+  @spec parse_data(map(), map()) :: map()
+  def parse_data(state, data) when is_map(data) do
     {providers, models} =
-      Enum.reduce(data, {providers, models}, fn {provider_id, provider_data}, {ps, ms} ->
+      Enum.reduce(data, {%{}, %{}}, fn {provider_id, provider_data}, {ps, ms} ->
         try do
           provider = parse_provider(provider_id, provider_data)
-
-          # Parse models nested under the provider
-          models_data = Map.get(provider_data, "models", %{})
-
-          ms =
-            Enum.reduce(models_data, ms, fn {model_id, model_data}, acc ->
-              try do
-                model = parse_model(provider_id, model_id, model_data)
-                Map.put(acc, ModelInfo.full_id(model), model)
-              rescue
-                e ->
-                  Logger.warning(
-                    "Skipping malformed model #{provider_id}::#{model_id}: #{inspect(e)}"
-                  )
-
-                  acc
-              end
-            end)
-
+          ms = parse_models(provider, provider_data, ms)
           {Map.put(ps, provider_id, provider), ms}
         rescue
           e ->
@@ -453,6 +332,23 @@ defmodule CodePuppyControl.ModelsDevParser.Registry do
     Logger.info("Loaded #{map_size(providers)} providers and #{map_size(models)} models")
 
     %{state | providers: providers, models: models}
+  end
+
+  defp parse_models(provider, provider_data, models_acc) do
+    provider_id = provider.id
+    models_data = Map.get(provider_data, "models", %{})
+
+    Enum.reduce(models_data, models_acc, fn {model_id, model_data}, acc ->
+      try do
+        model = parse_model(provider_id, model_id, model_data)
+        Map.put(acc, ModelInfo.full_id(model), model)
+      rescue
+        e ->
+          Logger.warning("Skipping malformed model #{provider_id}::#{model_id}: #{inspect(e)}")
+
+          acc
+      end
+    end)
   end
 
   defp parse_provider(provider_id, data) do
@@ -584,94 +480,5 @@ defmodule CodePuppyControl.ModelsDevParser.Registry do
   # ============================================================================
   # Private Functions - Config Conversion
   # ============================================================================
-
-  defp build_config(model, provider) do
-    provider_type = Map.get(@provider_type_map, provider.id, provider.id)
-
-    # Basic configuration
-    config = %{
-      "type" => provider_type,
-      "model" => model.model_id,
-      "enabled" => true,
-      "provider_id" => provider.id,
-      "env_vars" => provider.env
-    }
-
-    # Add optional fields
-    config = if provider.api, do: Map.put(config, "api_url", provider.api), else: config
-    config = if provider.npm, do: Map.put(config, "npm_package", provider.npm), else: config
-
-    # Add cost information
-    config =
-      if model.cost_input,
-        do: Map.put(config, "input_cost_per_token", model.cost_input),
-        else: config
-
-    config =
-      if model.cost_output,
-        do: Map.put(config, "output_cost_per_token", model.cost_output),
-        else: config
-
-    config =
-      if model.cost_cache_read,
-        do: Map.put(config, "cache_read_cost_per_token", model.cost_cache_read),
-        else: config
-
-    # Add limits
-    config =
-      if model.context_length > 0,
-        do: Map.put(config, "max_tokens", model.context_length),
-        else: config
-
-    config =
-      if model.max_output > 0,
-        do: Map.put(config, "max_output_tokens", model.max_output),
-        else: config
-
-    # Add capabilities
-    capabilities = %{
-      "attachment" => model.attachment,
-      "reasoning" => model.reasoning,
-      "tool_call" => model.tool_call,
-      "temperature" => model.temperature,
-      "structured_output" => model.structured_output
-    }
-
-    config = Map.put(config, "capabilities", capabilities)
-
-    # Add modalities
-    config =
-      if model.input_modalities != [],
-        do: Map.put(config, "input_modalities", model.input_modalities),
-        else: config
-
-    config =
-      if model.output_modalities != [],
-        do: Map.put(config, "output_modalities", model.output_modalities),
-        else: config
-
-    # Add metadata
-    metadata = %{}
-
-    metadata =
-      if model.knowledge, do: Map.put(metadata, "knowledge", model.knowledge), else: metadata
-
-    metadata =
-      if model.release_date,
-        do: Map.put(metadata, "release_date", model.release_date),
-        else: metadata
-
-    metadata =
-      if model.last_updated,
-        do: Map.put(metadata, "last_updated", model.last_updated),
-        else: metadata
-
-    metadata = Map.put(metadata, "open_weights", model.open_weights)
-
-    if map_size(metadata) > 0 do
-      Map.put(config, "metadata", metadata)
-    else
-      config
-    end
-  end
+  # Config conversion now delegated to ConfigBuilder module
 end

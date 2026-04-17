@@ -632,4 +632,341 @@ defmodule CodePuppyControl.ModelsDevParserTest do
       assert model.name == "Test Model One"
     end
   end
+
+  # ============================================================================
+  # Async API Regression Tests (bd-74)
+  # ============================================================================
+
+  describe "ApiClient async API path" do
+    alias CodePuppyControl.ModelsDevParser.ApiClient
+
+    # Mock HTTP client module that returns successful responses
+    defmodule MockHttpClientSuccess do
+      def get("https://models.dev/api.json", _opts) do
+        data = %{
+          "test-provider" => %{
+            "id" => "test-provider",
+            "name" => "Test Provider",
+            "env" => ["TEST_API_KEY"],
+            "api" => "https://api.test.com/v1",
+            "models" => %{
+              "test-model-1" => %{
+                "id" => "test-model-1",
+                "name" => "Test Model One",
+                "modalities" => %{"input" => ["text"], "output" => ["text"]},
+                "cost" => %{"input" => 0.001, "output" => 0.002},
+                "limit" => %{"context" => 128_000, "output" => 4096}
+              }
+            }
+          }
+        }
+
+        {:ok, %{status: 200, body: Jason.encode!(data)}}
+      end
+    end
+
+    # Mock HTTP client that returns HTTP error
+    defmodule MockHttpClientError do
+      def get("https://models.dev/api.json", _opts) do
+        {:ok, %{status: 500, body: "Internal Server Error"}}
+      end
+    end
+
+    # Mock HTTP client that returns network failure
+    defmodule MockHttpClientNetworkError do
+      def get("https://models.dev/api.json", _opts) do
+        {:error, :econnrefused}
+      end
+    end
+
+    # Mock HTTP client that returns empty JSON
+    defmodule MockHttpClientEmpty do
+      def get("https://models.dev/api.json", _opts) do
+        {:ok, %{status: 200, body: Jason.encode!(%{})}}
+      end
+    end
+
+    # Mock HTTP client for fresh data
+    defmodule MockHttpClientFresh do
+      def get("https://models.dev/api.json", _opts) do
+        data = %{"fresh" => "data"}
+        {:ok, %{status: 200, body: Jason.encode!(data)}}
+      end
+    end
+
+    # Mock HTTP client that always fails (for fallback testing)
+    defmodule MockHttpClientAlwaysFail do
+      def get("https://models.dev/api.json", _opts) do
+        {:error, :nxdomain}
+      end
+    end
+
+    test "do_fetch_from_api returns {:ok, data} on successful API fetch" do
+      state = %{
+        cached_data: nil,
+        cache_time: nil,
+        http_client: MockHttpClientSuccess
+      }
+
+      # Should return {:ok, decoded_data} tuple
+      assert {:ok, data} = ApiClient.do_fetch_from_api(state)
+      assert is_map(data)
+      assert Map.has_key?(data, "test-provider")
+    end
+
+    test "do_fetch_from_api returns {:error, reason} on HTTP error" do
+      state = %{
+        cached_data: nil,
+        cache_time: nil,
+        http_client: MockHttpClientError
+      }
+
+      # Should return {:error, {:http_error, 500}} tuple
+      assert {:error, {:http_error, 500}} = ApiClient.do_fetch_from_api(state)
+    end
+
+    test "do_fetch_from_api returns {:error, reason} on network failure" do
+      state = %{
+        cached_data: nil,
+        cache_time: nil,
+        http_client: MockHttpClientNetworkError
+      }
+
+      # Should return {:error, :econnrefused}
+      assert {:error, :econnrefused} = ApiClient.do_fetch_from_api(state)
+    end
+
+    test "do_fetch_from_api returns {:error, :invalid_response} on empty JSON" do
+      state = %{
+        cached_data: nil,
+        cache_time: nil,
+        http_client: MockHttpClientEmpty
+      }
+
+      # Should return {:error, :invalid_response} for empty map
+      assert {:error, :invalid_response} = ApiClient.do_fetch_from_api(state)
+    end
+
+    test "fetch_from_api uses cache when cache is fresh" do
+      cached_data = %{"cached" => "data"}
+      now = System.monotonic_time(:second)
+
+      state = %{
+        json_path: nil,
+        cached_data: cached_data,
+        cache_time: now,
+        data_source: "test",
+        http_client: nil
+      }
+
+      # Should return cached data without making HTTP request
+      assert {:ok, ^cached_data} = ApiClient.fetch_from_api(state)
+    end
+
+    test "fetch_from_api fetches from API when cache is expired" do
+      # Create a very old cache time
+      old_time = System.monotonic_time(:second) - 400
+
+      state = %{
+        json_path: nil,
+        cached_data: %{"old" => "data"},
+        cache_time: old_time,
+        data_source: "test",
+        http_client: MockHttpClientFresh
+      }
+
+      # Should fetch fresh data since cache is expired
+      assert {:ok, data} = ApiClient.fetch_from_api(state)
+      assert data == %{"fresh" => "data"}
+    end
+
+    test "load_data_async falls back to bundled file when API fails" do
+      # Create a temporary bundled file for testing
+      priv_dir = :code.priv_dir(:code_puppy_control)
+      bundled_path = Path.join(priv_dir, "models_dev_api.json")
+
+      fallback_data = %{
+        "fallback-provider" => %{
+          "id" => "fallback-provider",
+          "name" => "Fallback Provider",
+          "env" => ["KEY"],
+          "models" => %{}
+        }
+      }
+
+      # Ensure priv dir exists
+      File.mkdir_p!(priv_dir)
+      File.write!(bundled_path, Jason.encode!(fallback_data))
+
+      on_exit(fn ->
+        if File.exists?(bundled_path) do
+          File.rm!(bundled_path)
+        end
+      end)
+
+      state = %{
+        json_path: nil,
+        cached_data: nil,
+        cache_time: nil,
+        data_source: "unknown",
+        providers: %{},
+        models: %{},
+        http_client: MockHttpClientAlwaysFail
+      }
+
+      # Should fall back to bundled file
+      assert {:ok, new_state} = ApiClient.load_data_async(state)
+      assert new_state.data_source =~ "bundled:"
+      assert Map.has_key?(new_state.providers, "fallback-provider")
+
+      # Cleanup
+      File.rm!(bundled_path)
+    end
+
+    test "load_data_async returns error when both API and bundled file fail" do
+      priv_dir = :code.priv_dir(:code_puppy_control)
+      bundled_path = Path.join(priv_dir, "models_dev_api.json")
+
+      # Ensure bundled file does not exist
+      if File.exists?(bundled_path) do
+        File.rm!(bundled_path)
+      end
+
+      state = %{
+        json_path: nil,
+        cached_data: nil,
+        cache_time: nil,
+        data_source: "unknown",
+        providers: %{},
+        models: %{},
+        http_client: MockHttpClientAlwaysFail
+      }
+
+      # Should return error since both API and fallback failed
+      assert {:error, error_message} = ApiClient.load_data_async(state)
+      assert error_message =~ "No data source available"
+    end
+
+    test "load_data_async uses custom json_path when provided" do
+      # Write test data to a temp file
+      temp_path = Path.join(System.tmp_dir!(), "test_api_client_#{System.monotonic_time()}.json")
+
+      custom_data = %{
+        "custom-provider" => %{
+          "id" => "custom-provider",
+          "name" => "Custom Provider",
+          "env" => ["CUSTOM_KEY"],
+          "models" => %{}
+        }
+      }
+
+      File.write!(temp_path, Jason.encode!(custom_data))
+
+      on_exit(fn ->
+        if File.exists?(temp_path) do
+          File.rm(temp_path)
+        end
+      end)
+
+      state = %{
+        json_path: temp_path,
+        cached_data: nil,
+        cache_time: nil,
+        data_source: "unknown",
+        providers: %{},
+        models: %{},
+        http_client: nil
+      }
+
+      # Should load from custom path, not API
+      assert {:ok, new_state} = ApiClient.load_data_async(state)
+      assert new_state.data_source == "file:#{temp_path}"
+      assert Map.has_key?(new_state.providers, "custom-provider")
+    end
+  end
+
+  # ============================================================================
+  # ConfigBuilder Tests
+  # ============================================================================
+
+  describe "ConfigBuilder" do
+    alias CodePuppyControl.ModelsDevParser.ConfigBuilder
+
+    test "maybe_put adds value when condition is met" do
+      result = ConfigBuilder.maybe_put(%{}, "key", "value")
+      assert result == %{"key" => "value"}
+    end
+
+    test "maybe_put skips nil values" do
+      result = ConfigBuilder.maybe_put(%{}, "key", nil)
+      assert result == %{}
+    end
+
+    test "maybe_put skips empty strings" do
+      result = ConfigBuilder.maybe_put(%{}, "key", "")
+      assert result == %{}
+    end
+
+    test "maybe_put skips empty lists" do
+      result = ConfigBuilder.maybe_put(%{}, "key", [])
+      assert result == %{}
+    end
+
+    test "maybe_put with custom condition" do
+      result = ConfigBuilder.maybe_put(%{}, "key", 5, &(&1 > 10))
+      assert result == %{}
+
+      result = ConfigBuilder.maybe_put(%{}, "key", 15, &(&1 > 10))
+      assert result == %{"key" => 15}
+    end
+
+    test "build with nil provider returns minimal config" do
+      model = %ModelInfo{
+        provider_id: "test",
+        model_id: "model-1",
+        name: "Test Model",
+        attachment: true,
+        tool_call: false,
+        temperature: false
+      }
+
+      config = ConfigBuilder.build(model, nil)
+
+      assert config["type"] == "test"
+      assert config["model"] == "model-1"
+      assert config["capabilities"]["attachment"] == true
+      assert config["capabilities"]["tool_call"] == false
+      assert config["capabilities"]["temperature"] == false
+    end
+
+    test "build omits zero/empty values" do
+      provider = %ProviderInfo{
+        id: "test",
+        name: "Test",
+        env: ["KEY"]
+      }
+
+      model = %ModelInfo{
+        provider_id: "test",
+        model_id: "model-1",
+        name: "Test Model",
+        context_length: 0,
+        max_output: 0,
+        input_modalities: [],
+        output_modalities: [],
+        cost_input: nil,
+        cost_output: nil
+      }
+
+      config = ConfigBuilder.build(model, provider)
+
+      # Should not have zero/empty values
+      refute Map.has_key?(config, "max_tokens")
+      refute Map.has_key?(config, "max_output_tokens")
+      refute Map.has_key?(config, "input_modalities")
+      refute Map.has_key?(config, "output_modalities")
+      refute Map.has_key?(config, "input_cost_per_token")
+      refute Map.has_key?(config, "output_cost_per_token")
+    end
+  end
 end
