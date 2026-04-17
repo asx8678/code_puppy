@@ -85,24 +85,27 @@ defmodule Mix.Tasks.CodePuppy.StdioService do
 
   @impl true
   def run(_args) do
+    # Start required applications without the full Phoenix stack
+    Application.ensure_all_started(:logger)
+    Application.ensure_all_started(:jason)
+
+    # Suppress application logs during stdio service operation
+    # All logging must go to stderr, or be suppressed for JSON-RPC protocol compliance
+    Logger.configure_backend(:console, device: :stderr)
+    Logger.put_application_level(:code_puppy_control, :none)
+
     # Ensure the required modules are available
     Code.ensure_loaded(CodePuppyControl.FileOps)
     Code.ensure_loaded(CodePuppyControl.Protocol)
     Code.ensure_loaded(CodePuppyControl.RuntimeState)
 
-    # Start required applications without the full Phoenix stack
-    Application.ensure_all_started(:logger)
-    Application.ensure_all_started(:jason)
-
-    # Configure logger to use stderr only (not stdout which is for JSON-RPC)
-    Logger.configure_backend(:console, device: :stderr)
-
-    :logger.add_handler_filter(:default, :stderr_only, fn log_event, _ ->
-      {:log, Map.put(log_event, :io_device, :stderr)}
-    end)
-
     # Start RuntimeState GenServer for runtime state management (bd-75)
     {:ok, _} = CodePuppyControl.RuntimeState.start_link([])
+
+    # Start model services for RPC handlers (bd-96)
+    {:ok, _} = CodePuppyControl.ModelRegistry.start_link([])
+    {:ok, _} = CodePuppyControl.ModelAvailability.start_link([])
+    {:ok, _} = CodePuppyControl.ModelPacks.start_link([])
 
     # Give the service a moment to suppress any startup output
     Process.sleep(100)

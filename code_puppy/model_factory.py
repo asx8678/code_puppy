@@ -807,6 +807,34 @@ def invalidate_model_config_cache() -> None:
         _model_config_cache = None
 
 
+def _call_elixir_model_registry(method: str, params: dict | None = None) -> dict | None:
+    """Call a model_registry method on the Elixir control plane (bd-96).
+
+    Tries to use the Elixir bridge if available. Returns the result dict
+    on success, or None if bridge is unavailable or call fails.
+
+    Args:
+        method: Method name (e.g., "get_config", "list_models")
+        params: Optional parameters dict
+
+    Returns:
+        Response result dict from Elixir, or None if unavailable/error
+    """
+    try:
+        from code_puppy.plugins.elixir_bridge import is_connected, call_method
+
+        if not is_connected():
+            return None
+
+        # Call the model_registry method via the bridge
+        full_method = f"model_registry.{method}"
+        result = call_method(full_method, params or {}, timeout=5.0)
+        return result
+    except Exception:
+        # Bridge unavailable or call failed - return None to trigger fallback
+        return None
+
+
 class ModelFactory:
     """A factory for creating and managing different AI models."""
 
@@ -844,12 +872,21 @@ class ModelFactory:
                 )
             config = callbacks.on_load_model_config()[0]
         else:
-            # Always load from the bundled models.json so upstream
-            # updates propagate automatically.  User additions belong
-            # in extra_models.json (overlay loaded below).
-            bundled_models = pathlib.Path(__file__).parent / "models.json"
-            with open(bundled_models, "r") as f:
-                config = json.load(f)
+            # bd-96: Try Elixir bridge first for model configuration
+            bridge_result = _call_elixir_model_registry("get_all_configs")
+            if bridge_result and "configs" in bridge_result:
+                config = bridge_result["configs"]
+                logging.getLogger(__name__).debug(
+                    "Loaded model config from Elixir bridge (%d models)",
+                    len(config)
+                )
+            else:
+                # Always load from the bundled models.json so upstream
+                # updates propagate automatically.  User additions belong
+                # in extra_models.json (overlay loaded below).
+                bundled_models = pathlib.Path(__file__).parent / "models.json"
+                with open(bundled_models, "r") as f:
+                    config = json.load(f)
 
         # Build list of extra model sources
         extra_sources: list[tuple[pathlib.Path, str, bool]] = [
@@ -920,6 +957,24 @@ class ModelFactory:
         return frozen
 
     @staticmethod
+    def get_config_from_bridge(model_name: str) -> dict[str, Any] | None:
+        """Get model config from Elixir bridge (bd-96).
+
+        Tries to resolve model configuration via the Elixir bridge.
+        Returns None if bridge is unavailable or model not found.
+
+        Args:
+            model_name: Name of the model to look up
+
+        Returns:
+            Model config dict, or None if not available
+        """
+        result = _call_elixir_model_registry("get_config", {"model_name": model_name})
+        if result and result.get("config"):
+            return result["config"]
+        return None
+
+    @staticmethod
     def get_model(model_name: str, config: dict[str, Any]) -> Any:
         """Returns a configured model instance based on the provided name and config.
 
@@ -929,6 +984,11 @@ class ModelFactory:
         a fallback, so raising here enables automatic recovery.
         """
         model_config = config.get(model_name)
+
+        # bd-96: Try Elixir bridge if config not found locally
+        if not model_config:
+            model_config = ModelFactory.get_config_from_bridge(model_name)
+
         if not model_config:
             raise ValueError(f"Model '{model_name}' not found in configuration.")
 

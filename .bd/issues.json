@@ -1846,14 +1846,16 @@
       "id": "bd-96",
       "title": "Model services RPC handlers + Python bridge integration",
       "description": "Add JSON-RPC handlers in Elixir for model_registry, model_availability, model_packs, model_utils services. Update Python model_factory.py to route config loading through Elixir when bridge is available. Part of bd-70.",
-      "status": "open",
+      "status": "closed",
       "priority": 2,
       "type": "task",
       "labels": [],
       "dependencies": {},
       "created_at": "2026-04-17T10:16:53.489836",
-      "updated_at": "2026-04-17T10:16:53.489843",
-      "comments": []
+      "updated_at": "2026-04-17T16:25:48.894721",
+      "comments": [
+        "Fixed final regression in follow-up: moved disabled-test-model out of priv/models.json into test/fixtures/test_models.json, updated model_services_rpc_test to override :bundled_models_path for the regression case, and added non-map params validation coverage."
+      ]
     },
     "bd-97": {
       "id": "bd-97",
