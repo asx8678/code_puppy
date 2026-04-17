@@ -916,7 +916,6 @@ defmodule CodePuppyControl.Transport.StdioService do
     Protocol.encode_response(%{"result" => result, "type" => "markdown"}, id)
   end
 
-
   # ============================================================================
   # Round-Robin Model Operations (bd-71)
   # ============================================================================
@@ -1038,10 +1037,13 @@ defmodule CodePuppyControl.Transport.StdioService do
 
         case CodePuppyControl.Routing.CompositeStrategy.route(router, context) do
           {:ok, decision} ->
-            Protocol.encode_response(%{
-              "model_name" => decision.model_name,
-              "metadata" => decision.metadata
-            }, id)
+            Protocol.encode_response(
+              %{
+                "model_name" => decision.model_name,
+                "metadata" => decision.metadata
+              },
+              id
+            )
 
           {:error, reason} ->
             Protocol.encode_error(
@@ -1068,11 +1070,14 @@ defmodule CodePuppyControl.Transport.StdioService do
     else
       snapshot = CodePuppyControl.Routing.ModelAvailability.snapshot(model_name)
 
-      Protocol.encode_response(%{
-        "model" => model_name,
-        "available" => snapshot.available,
-        "reason" => snapshot.reason
-      }, id)
+      Protocol.encode_response(
+        %{
+          "model" => model_name,
+          "available" => snapshot.available,
+          "reason" => snapshot.reason
+        },
+        id
+      )
     end
   end
 
@@ -1086,12 +1091,21 @@ defmodule CodePuppyControl.Transport.StdioService do
         Protocol.encode_error(-32602, "Missing required param: model_name", nil, id)
 
       reason not in ["quota", "capacity", "retry_once_per_turn", "unknown"] ->
-        Protocol.encode_error(-32602, "Invalid reason: must be one of quota, capacity, retry_once_per_turn, unknown", nil, id)
+        Protocol.encode_error(
+          -32602,
+          "Invalid reason: must be one of quota, capacity, retry_once_per_turn, unknown",
+          nil,
+          id
+        )
 
       true ->
         reason_atom = String.to_existing_atom(reason)
         :ok = CodePuppyControl.Routing.mark_terminal(model_name, reason_atom)
-        Protocol.encode_response(%{"marked" => true, "model" => model_name, "reason" => reason}, id)
+
+        Protocol.encode_response(
+          %{"marked" => true, "model" => model_name, "reason" => reason},
+          id
+        )
     end
   end
 
@@ -1103,7 +1117,11 @@ defmodule CodePuppyControl.Transport.StdioService do
       Protocol.encode_error(-32602, "Missing required param: model_name", nil, id)
     else
       :ok = CodePuppyControl.Routing.mark_healthy(model_name)
-      Protocol.encode_response(%{"marked" => true, "model" => model_name, "status" => "healthy"}, id)
+
+      Protocol.encode_response(
+        %{"marked" => true, "model" => model_name, "status" => "healthy"},
+        id
+      )
     end
   end
 
@@ -1130,6 +1148,125 @@ defmodule CodePuppyControl.Transport.StdioService do
   defp handle_request("routing.get_last_resort_models", _params, id) do
     models = CodePuppyControl.Routing.get_last_resort_models()
     Protocol.encode_response(%{"models" => models, "count" => length(models)}, id)
+  end
+
+  # ============================================================================
+  # Code Context Operations (bd-87)
+  # ============================================================================
+
+  # code_context.explore_file - Explore a single file with symbols
+  defp handle_request("code_context.explore_file", params, id) do
+    file_path = params["file_path"] || params["path"]
+
+    if is_nil(file_path) do
+      Protocol.encode_error(-32602, "Missing required param: file_path", nil, id)
+    else
+      opts = params_to_code_context_opts(params)
+
+      case CodePuppyControl.CodeContext.explore_file(file_path, opts) do
+        {:ok, result} ->
+          Protocol.encode_response(serialize_code_context_result(result), id)
+
+        {:error, reason} ->
+          Protocol.encode_error(
+            -32000,
+            "Code context explore failed: #{format_error(reason)}",
+            nil,
+            id
+          )
+      end
+    end
+  end
+
+  # code_context.get_outline - Get hierarchical symbol outline
+  defp handle_request("code_context.get_outline", params, id) do
+    file_path = params["file_path"] || params["path"]
+
+    if is_nil(file_path) do
+      Protocol.encode_error(-32602, "Missing required param: file_path", nil, id)
+    else
+      max_depth = params["max_depth"]
+      opts = if max_depth, do: [max_depth: max_depth], else: []
+
+      case CodePuppyControl.CodeContext.get_outline(file_path, opts) do
+        {:ok, result} ->
+          Protocol.encode_response(%{"outline" => result}, id)
+
+        {:error, reason} ->
+          Protocol.encode_error(
+            -32000,
+            "Outline extraction failed: #{format_error(reason)}",
+            nil,
+            id
+          )
+      end
+    end
+  end
+
+  # code_context.explore_directory - Explore directory with symbol extraction
+  defp handle_request("code_context.explore_directory", params, id) do
+    directory = params["directory"] || "."
+    opts = params_to_code_context_directory_opts(params)
+
+    case CodePuppyControl.CodeContext.explore_directory(directory, opts) do
+      {:ok, results} ->
+        serialized = Enum.map(results, &serialize_code_context_result/1)
+        Protocol.encode_response(%{"files" => serialized, "count" => length(serialized)}, id)
+
+      {:error, reason} ->
+        Protocol.encode_error(
+          -32000,
+          "Directory exploration failed: #{format_error(reason)}",
+          nil,
+          id
+        )
+    end
+  end
+
+  # code_context.find_symbol_definitions - Find symbol across directory
+  defp handle_request("code_context.find_symbol_definitions", params, id) do
+    directory = params["directory"] || "."
+    symbol_name = params["symbol_name"] || params["symbol"]
+
+    cond do
+      is_nil(symbol_name) ->
+        Protocol.encode_error(-32602, "Missing required param: symbol_name", nil, id)
+
+      not is_binary(symbol_name) or symbol_name == "" ->
+        Protocol.encode_error(
+          -32602,
+          "Invalid param: symbol_name must be non-empty string",
+          nil,
+          id
+        )
+
+      true ->
+        case CodePuppyControl.CodeContext.find_symbol_definitions(directory, symbol_name) do
+          {:ok, matches} ->
+            Protocol.encode_response(%{"matches" => matches, "count" => length(matches)}, id)
+
+          {:error, reason} ->
+            Protocol.encode_error(
+              -32000,
+              "Symbol search failed: #{format_error(reason)}",
+              nil,
+              id
+            )
+        end
+    end
+  end
+
+  # code_context.cache_stats - Get cache statistics
+  defp handle_request("code_context.cache_stats", _params, id) do
+    stats = CodePuppyControl.CodeContext.cache_stats()
+    Protocol.encode_response(%{"stats" => stats}, id)
+  end
+
+  # code_context.invalidate_cache - Invalidate cache entries
+  defp handle_request("code_context.invalidate_cache", params, id) do
+    file_path = params["file_path"]
+    removed = CodePuppyControl.CodeContext.invalidate_cache(file_path)
+    Protocol.encode_response(%{"removed" => removed, "file_path" => file_path}, id)
   end
 
   # Method not found handler
@@ -1287,6 +1424,64 @@ defmodule CodePuppyControl.Transport.StdioService do
       file_pattern: Map.get(params, "file_pattern", "*"),
       context_lines: Map.get(params, "context_lines", 0)
     ]
+  end
+
+  # Code Context parameter conversion (bd-87)
+  defp params_to_code_context_opts(params) do
+    opts = []
+
+    opts =
+      if params["include_content"],
+        do: [{:include_content, params["include_content"]} | opts],
+        else: [{:include_content, true} | opts]
+
+    opts =
+      if params["force_refresh"],
+        do: [{:force_refresh, params["force_refresh"]} | opts],
+        else: opts
+
+    opts
+  end
+
+  defp params_to_code_context_directory_opts(params) do
+    opts = []
+
+    opts =
+      if params["pattern"],
+        do: [{:pattern, params["pattern"]} | opts],
+        else: [{:pattern, "*"} | opts]
+
+    opts =
+      if params["recursive"],
+        do: [{:recursive, params["recursive"]} | opts],
+        else: [{:recursive, true} | opts]
+
+    opts =
+      if params["max_files"],
+        do: [{:max_files, params["max_files"]} | opts],
+        else: [{:max_files, 50} | opts]
+
+    opts =
+      if params["include_content"],
+        do: [{:include_content, params["include_content"]} | opts],
+        else: [{:include_content, false} | opts]
+
+    opts
+  end
+
+  defp serialize_code_context_result(result) do
+    %{
+      "file_path" => result.file_path,
+      "content" => result.content,
+      "language" => result.language,
+      "outline" => result.outline,
+      "file_size" => result.file_size,
+      "num_lines" => result.num_lines,
+      "num_tokens" => result.num_tokens,
+      "parse_time_ms" => result.parse_time_ms,
+      "has_errors" => result.has_errors,
+      "error_message" => result.error_message
+    }
   end
 
   # ============================================================================
