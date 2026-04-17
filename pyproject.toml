@@ -58,7 +58,6 @@ repository = "https://github.com/mpfaffenberger/code_puppy"
 HomePage = "https://github.com/mpfaffenberger/code_puppy"
 
 [project.optional-dependencies]
-rust = ["maturin>=1.12.6"]
 dbos = [
     "dbos>=2.16.0",
     "psycopg[c]>=3.3.0",
@@ -76,18 +75,6 @@ ignore_no_config = true
 packages = ["code_puppy"]
 
 [tool.hatch.build.targets.wheel]
-# Force-include Rust source directories into the wheel
-# These will be placed at the wheel root alongside code_puppy/
-[tool.hatch.build.targets.wheel.force-include]
-"Cargo.toml" = "Cargo.toml"
-"Cargo.lock" = "Cargo.lock"
-"code_puppy_core/Cargo.toml" = "code_puppy_core/Cargo.toml"
-"code_puppy_core/pyproject.toml" = "code_puppy_core/pyproject.toml"
-"code_puppy_core/src" = "code_puppy_core/src"
-"turbo_parse/Cargo.toml" = "turbo_parse/Cargo.toml"
-"turbo_parse/pyproject.toml" = "turbo_parse/pyproject.toml"
-"turbo_parse/src" = "turbo_parse/src"
-"turbo_parse/queries" = "turbo_parse/queries"
 
 [tool.ruff]
 target-version = "py314"
@@ -142,7 +129,6 @@ dev = [
     "pytest-xdist>=3.6.0",
     "ruff>=0.15.8",
     "pexpect>=4.9.0",
-    "maturin>=1.12.6",
     "hypothesis>=6.150.0",
     "pytest-randomly>=4.0.1",
 ]
