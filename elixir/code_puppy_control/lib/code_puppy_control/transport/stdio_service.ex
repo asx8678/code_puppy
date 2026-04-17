@@ -60,6 +60,16 @@ defmodule CodePuppyControl.Transport.StdioService do
   - `hashline_strip` - Strip hashline prefixes from text
   - `hashline_validate` - Validate hashline anchor
 
+  ### Scheduler Tools (bd-67)
+  - `scheduler.list_tasks` - List all scheduled tasks with status
+  - `scheduler.create_task` - Create a new scheduled task
+  - `scheduler.delete_task` - Delete a task by ID or name
+  - `scheduler.toggle_task` - Toggle task enabled/disabled state
+  - `scheduler.status` - Get scheduler status
+  - `scheduler.run_task` - Run a task immediately
+  - `scheduler.view_log` - View task execution history
+  - `scheduler.force_check` - Force immediate schedule evaluation
+
   ### Utility
   - `health_check` - Service health status
   - `ping` - Simple ping/pong
@@ -83,6 +93,7 @@ defmodule CodePuppyControl.Transport.StdioService do
   alias CodePuppyControl.AgentModelPinning
   alias CodePuppyControl.FileOps
   alias CodePuppyControl.Protocol
+  alias CodePuppyControl.Tools.SchedulerTools
 
   defstruct [:io_device, :buffer, :request_counter]
 
@@ -708,6 +719,95 @@ defmodule CodePuppyControl.Transport.StdioService do
     pin_list = Enum.map(pins, fn {agent, model} -> %{"agent_name" => agent, "model" => model} end)
     Protocol.encode_response(%{"pins" => pin_list, "count" => length(pin_list)}, id)
   end
+
+  # ============================================================================
+  # Scheduler Tools (bd-67)
+  # ============================================================================
+
+  # scheduler.list_tasks - List all scheduled tasks with status
+  defp handle_request("scheduler.list_tasks", _params, id) do
+    result = SchedulerTools.list_tasks()
+    Protocol.encode_response(%{"result" => result, "type" => "markdown"}, id)
+  end
+
+  # scheduler.create_task - Create a new scheduled task
+  defp handle_request("scheduler.create_task", params, id) do
+    attrs =
+      %{
+        name: params["name"],
+        prompt: params["prompt"],
+        agent_name: params["agent_name"] || params["agent"],
+        model: params["model"],
+        schedule_type: params["schedule_type"] || "interval",
+        schedule_value: params["schedule_value"],
+        working_directory: params["working_directory"] || "."
+      }
+      |> Enum.reject(fn {_, v} -> is_nil(v) end)
+      |> Map.new()
+
+    result = SchedulerTools.create_task(attrs)
+    Protocol.encode_response(%{"result" => result, "type" => "markdown"}, id)
+  end
+
+  # scheduler.delete_task - Delete a task by ID or name
+  defp handle_request("scheduler.delete_task", params, id) do
+    task_id = params["task_id"] || params["id"]
+
+    if is_nil(task_id) do
+      Protocol.encode_error(-32602, "Missing required param: task_id", nil, id)
+    else
+      result = SchedulerTools.delete_task(task_id)
+      Protocol.encode_response(%{"result" => result, "type" => "markdown"}, id)
+    end
+  end
+
+  # scheduler.toggle_task - Toggle task enabled/disabled state
+  defp handle_request("scheduler.toggle_task", params, id) do
+    task_id = params["task_id"] || params["id"]
+
+    if is_nil(task_id) do
+      Protocol.encode_error(-32602, "Missing required param: task_id", nil, id)
+    else
+      result = SchedulerTools.toggle_task(task_id)
+      Protocol.encode_response(%{"result" => result, "type" => "markdown"}, id)
+    end
+  end
+
+  # scheduler.status - Get scheduler status
+  defp handle_request("scheduler.status", _params, id) do
+    result = SchedulerTools.scheduler_status()
+    Protocol.encode_response(%{"result" => result, "type" => "markdown"}, id)
+  end
+
+  # scheduler.run_task - Run a task immediately
+  defp handle_request("scheduler.run_task", params, id) do
+    task_id = params["task_id"] || params["id"]
+
+    if is_nil(task_id) do
+      Protocol.encode_error(-32602, "Missing required param: task_id", nil, id)
+    else
+      result = SchedulerTools.run_task(task_id)
+      Protocol.encode_response(%{"result" => result, "type" => "markdown"}, id)
+    end
+  end
+
+  # scheduler.view_log - View task execution history
+  defp handle_request("scheduler.view_log", params, id) do
+    task_id = params["task_id"] || params["id"]
+    lines = params["lines"] || 10
+
+    if is_nil(task_id) do
+      Protocol.encode_error(-32602, "Missing required param: task_id", nil, id)
+    else
+      result = SchedulerTools.view_log(task_id, lines)
+      Protocol.encode_response(%{"result" => result, "type" => "markdown"}, id)
+    end
+  end
+
+  # scheduler.force_check - Force immediate schedule evaluation
+  defp handle_request("scheduler.force_check", _params, id) do
+    result = SchedulerTools.force_check()
+    Protocol.encode_response(%{"result" => result, "type" => "markdown"}, id)
   end
 
   # Method not found handler
