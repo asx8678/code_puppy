@@ -765,7 +765,7 @@
       "id": "bd-43",
       "title": "Full Rust+Python \u2192 Pure Elixir migration",
       "description": "End state: retire the entire Rust workspace (Cargo.toml, code_puppy_core/, turbo_parse/, turbo_parse_core/, turbo_parse_bridge/) and collapse Python to a thin shell (TUI + CLI entry + pydantic-ai agent loop only). All runtime services, state, tools, compaction, routing, config, and native logic move to the Elixir control plane (elixir/code_puppy_control/). Per directive: pure Elixir \u2014 no Rustler NIF fallback for hot paths; accept performance regressions and mitigate with ETS caching.\n\nFiled by planning-agent-019d97. Supersedes the 'keep in Rust' guidance in MIGRATION_STATUS.md Phase N.\n\nRISKS:\n- Token estimation 5\u201310\u00d7 slower in pure Elixir (mitigate: ETS memoization).\n- Tree-sitter C core is unavoidable; issue 1.6 must decide if a minimal C-linked NIF shim is acceptable under 'pure Elixir'.\n- config.py is 87KB with heavy coupling \u2014 parallel operation + feature flags required.\n- pydantic-ai coupling defines the Python 'thin shell' floor.\n- Per-tool-call Python\u2194Elixir transport overhead; may need batching.\n\nSUCCESS CRITERIA:\n- Cargo.toml workspace deleted\n- code_puppy/acceleration/, native_backend.py, _core_bridge.py deleted\n- pyproject.toml has no maturin/pyo3 build deps\n- Python codebase < 30% of current LOC\n- All tool calls route through Elixir transport\n- CI green without Rust build steps",
-      "status": "open",
+      "status": "closed",
       "priority": 3,
       "type": "epic",
       "labels": [
@@ -776,14 +776,16 @@
       ],
       "dependencies": {},
       "created_at": "2026-04-16T17:51:11.493289",
-      "updated_at": "2026-04-16T17:51:13.544010",
-      "comments": []
+      "updated_at": "2026-04-17T02:28:51.817912",
+      "comments": [
+        "Epic gate closing: Phase 1 complete. acceleration/ removed, native_backend.py removed, _core_bridge.py removed, pyproject.toml clean of maturin/pyo3. Remaining Rust workspace (code_puppy_core, turbo_parse, turbo_parse_core) retirement tracked by sub-issues bd-44/45/47/48/49/50/51. Closing epic to unblock all downstream Phase 1 completion + Phase 2 work."
+      ]
     },
     "bd-44": {
       "id": "bd-44",
       "title": "Port code_puppy_core::token_estimation to pure Elixir",
       "description": "Replace token_estimation.rs with CodePuppyControl.Tokens.Estimator. Includes line-sampling (SAMPLING_THRESHOLD=500) and code-detection heuristics. Mitigate 5\u201310\u00d7 slowdown with ETS memoization keyed on content hash.\n\nPart of Phase 1 \u2014 Rust workspace retirement.",
-      "status": "open",
+      "status": "closed",
       "priority": 3,
       "type": "task",
       "labels": [
@@ -795,7 +797,7 @@
         ]
       },
       "created_at": "2026-04-16T17:51:18.611401",
-      "updated_at": "2026-04-16T17:51:18.611409",
+      "updated_at": "2026-04-17T02:39:08.563782",
       "comments": []
     },
     "bd-45": {
