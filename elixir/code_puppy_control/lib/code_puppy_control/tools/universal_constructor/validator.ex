@@ -116,13 +116,7 @@ defmodule CodePuppyControl.Tools.UniversalConstructor.Validator do
   """
   @spec extract_function_info(String.t()) :: validation_result()
   def extract_function_info(code) when is_binary(code) do
-    result = validate_syntax(code)
-
-    if result.valid do
-      result
-    else
-      result
-    end
+    validate_syntax(code)
   end
 
   @doc """
@@ -342,18 +336,113 @@ defmodule CodePuppyControl.Tools.UniversalConstructor.Validator do
     }
   end
 
-  defp parse_meta_map(map_str) do
-    try do
-      {result, _} = Code.eval_string(map_str, [], [])
+  # ============================================================================
+  # Safe Literal Parsing (Security: No Code.eval_string on user input)
+  # ============================================================================
 
-      if is_map(result) do
-        {:ok, result}
-      else
-        {:error, "@uc_tool is not a map"}
+  @doc """
+  Safely parses a map string containing only literal values.
+
+  Uses Code.string_to_quoted/1 to parse as AST, then validates that the
+  AST contains only literal values (strings, atoms, booleans, numbers) before
+  constructing the result map.
+
+  This prevents arbitrary code execution from user-provided @uc_tool content.
+  """
+  @spec safe_parse_literal_map(String.t()) :: {:ok, map()} | {:error, String.t()}
+  def safe_parse_literal_map(map_str) when is_binary(map_str) do
+    try do
+      case Code.string_to_quoted(map_str) do
+        {:ok, ast} ->
+          case parse_map_ast(ast) do
+            {:ok, map} when is_map(map) ->
+              {:ok, map}
+
+            {:error, reason} ->
+              {:error, reason}
+
+            _ ->
+              {:error, "@uc_tool is not a map"}
+          end
+
+        {:error, {line, error_msg, _}} ->
+          {:error, "Parse error at line #{line}: #{error_msg}"}
+
+        {:error, reason} ->
+          {:error, "Invalid @uc_tool metadata: #{inspect(reason)}"}
       end
     rescue
       e ->
         {:error, "Invalid @uc_tool metadata: #{inspect(e)}"}
     end
+  end
+
+  # Parse a map AST into an Elixir map (only allows literal values)
+  defp parse_map_ast({:%{}, _, kvs}) when is_list(kvs) do
+    result =
+      Enum.reduce_while(kvs, %{}, fn {key_ast, val_ast}, acc ->
+        with {:ok, key} <- parse_key(key_ast),
+             {:ok, val} <- parse_literal(val_ast) do
+          {:cont, Map.put(acc, key, val)}
+        else
+          {:error, reason} -> {:halt, {:error, reason}}
+        end
+      end)
+
+    case result do
+      {:error, _} = err -> err
+      map -> {:ok, map}
+    end
+  end
+
+  defp parse_map_ast(other) do
+    {:error, "Expected a map literal, got: #{inspect(other)}"}
+  end
+
+  # Keys must be atoms (bare or quoted)
+  defp parse_key({_, _, nil} = atom) when is_atom(atom), do: {:ok, atom}
+  defp parse_key(atom) when is_atom(atom), do: {:ok, atom}
+
+  defp parse_key({:__aliases__, _, [atom]}) when is_atom(atom),
+    do: {:ok, atom}
+
+  defp parse_key(other),
+    do: {:error, "Invalid key in @uc_tool map: #{inspect(other)}"}
+
+  # Parse literal values (strings, atoms, booleans, nil, numbers, lists of literals)
+  defp parse_literal(string) when is_binary(string), do: {:ok, string}
+  defp parse_literal(atom) when is_atom(atom), do: {:ok, atom}
+  defp parse_literal(int) when is_integer(int), do: {:ok, int}
+  defp parse_literal(float) when is_float(float), do: {:ok, float}
+
+  defp parse_literal({:__block__, _, [single]}), do: parse_literal(single)
+
+  defp parse_literal(list) when is_list(list) do
+    Enum.reduce_while(list, {:ok, []}, fn item, {:ok, acc} ->
+      case parse_literal(item) do
+        {:ok, val} -> {:cont, {:ok, [val | acc]}}
+        {:error, reason} -> {:halt, {:error, reason}}
+      end
+    end)
+    |> case do
+      {:ok, vals} -> {:ok, Enum.reverse(vals)}
+      {:error, _} = err -> err
+    end
+  end
+
+  defp parse_literal({:{}, _, elems}) do
+    # Tuple - convert to list for simplicity
+    case parse_literal(elems) do
+      {:ok, vals} -> {:ok, List.to_tuple(vals)}
+      {:error, _} = err -> err
+    end
+  end
+
+  defp parse_literal(other) do
+    {:error, "Non-literal value in @uc_tool map: #{inspect(other)}"}
+  end
+
+  defp parse_meta_map(map_str) do
+    safe_parse_literal_map(map_str)
   end
 end

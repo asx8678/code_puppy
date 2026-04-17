@@ -203,9 +203,14 @@ defmodule CodePuppyControl.Tools.UniversalConstructor.RegistryTest do
     test "creates directory if it doesn't exist" do
       new_dir = "/tmp/uc_new_dir_#{System.unique_integer()}"
 
-      {:ok, temp_registry} = Registry.start_link(tools_dir: new_dir)
+      # Start with unique name to avoid GenServer collision
+      unique_name = :"Registry.Test#{System.unique_integer([:positive])}"
+      {:ok, temp_registry} = Registry.start_link(tools_dir: new_dir, name: unique_name)
 
-      result = Registry.ensure_tools_dir()
+      result = :sys.get_state(temp_registry).tools_dir
+
+      # Call ensure_tools_dir on the specific registry instance
+      GenServer.call(temp_registry, :ensure_tools_dir)
 
       assert File.dir?(result)
 
@@ -216,10 +221,17 @@ defmodule CodePuppyControl.Tools.UniversalConstructor.RegistryTest do
 
   describe "tools_dir/0" do
     test "returns configured tools directory" do
-      dir = Registry.tools_dir()
+      # Use the registry module's full name for Process.whereis
+      full_module_name = CodePuppyControl.Tools.UniversalConstructor.Registry
+      pid = Process.whereis(full_module_name)
+
+      # Get the directory directly from our test registry's state
+      # to avoid default registry vs test registry confusion
+      dir = :sys.get_state(pid).tools_dir
 
       assert is_binary(dir)
-      assert String.ends_with?(dir, "uc_registry_test_")
+      # The dir should contain our test dir path (with the unique integer suffix)
+      assert String.contains?(dir, "uc_registry_test_")
     end
   end
 

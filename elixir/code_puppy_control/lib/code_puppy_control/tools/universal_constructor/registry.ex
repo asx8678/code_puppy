@@ -35,6 +35,7 @@ defmodule CodePuppyControl.Tools.UniversalConstructor.Registry do
   require Logger
 
   alias CodePuppyControl.Tools.UniversalConstructor.Models
+  alias CodePuppyControl.Tools.UniversalConstructor.Validator
 
   @default_tools_dir "~/.code_puppy/plugins/universal_constructor"
 
@@ -43,7 +44,9 @@ defmodule CodePuppyControl.Tools.UniversalConstructor.Registry do
   # ============================================================================
 
   def start_link(opts \\ []) do
-    GenServer.start_link(__MODULE__, opts, name: __MODULE__)
+    # Support custom name for testing (avoid GenServer collisions)
+    name = Keyword.get(opts, :name, __MODULE__)
+    GenServer.start_link(__MODULE__, opts, name: name)
   end
 
   def child_spec(opts) do
@@ -345,22 +348,18 @@ defmodule CodePuppyControl.Tools.UniversalConstructor.Registry do
   end
 
   defp parse_meta_map(map_str) do
-    # Safely parse the Elixir map using Code.eval_string (safe for known format)
-    # In production, this would use a proper parser, but for tool metadata
-    # we expect a simple literal map
-    try do
-      {result, _} = Code.eval_string(map_str, [], [])
-
-      if is_map(result) do
+    # Delegate to Validator for safe literal parsing (security fix: no Code.eval_string)
+    case Validator.safe_parse_literal_map(map_str) do
+      {:ok, result} when is_map(result) ->
         meta =
           %{
-            name: result[:name] || "",
-            namespace: result[:namespace] || "",
-            description: result[:description] || "",
-            enabled: result[:enabled] || true,
-            version: result[:version] || "1.0.0",
-            author: result[:author] || "",
-            created_at: result[:created_at]
+            name: Map.get(result, :name, ""),
+            namespace: Map.get(result, :namespace, ""),
+            description: Map.get(result, :description, ""),
+            enabled: Map.get(result, :enabled, true),
+            version: Map.get(result, :version, "1.0.0"),
+            author: Map.get(result, :author, ""),
+            created_at: Map.get(result, :created_at)
           }
 
         if meta.name == "" do
@@ -368,12 +367,9 @@ defmodule CodePuppyControl.Tools.UniversalConstructor.Registry do
         else
           {:ok, meta}
         end
-      else
-        {:error, "@uc_tool is not a map"}
-      end
-    rescue
-      e ->
-        {:error, "Invalid @uc_tool metadata: #{inspect(e)}"}
+
+      {:error, reason} ->
+        {:error, reason}
     end
   end
 
