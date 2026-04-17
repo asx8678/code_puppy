@@ -78,6 +78,13 @@ defmodule CodePuppyControl.Transport.StdioService do
   - `scheduler.view_log` - View task execution history
   - `scheduler.force_check` - Force immediate schedule evaluation
 
+  ### Universal Constructor (bd-68)
+  - `uc.list` - List all UC tools with metadata
+  - `uc.call` - Execute a UC tool with arguments
+  - `uc.create` - Create a new UC tool from Elixir code
+  - `uc.update` - Update an existing UC tool
+  - `uc.info` - Get detailed info about a UC tool
+
   ### HTTP Client
   - `http.request` - Make HTTP request with retry logic
   - `http.get` - Simple GET request
@@ -906,6 +913,192 @@ defmodule CodePuppyControl.Transport.StdioService do
     Protocol.encode_response(%{"result" => result, "type" => "markdown"}, id)
   end
 
+  # ============================================================================
+  # Universal Constructor Operations (bd-68)
+  # ============================================================================
+
+  alias CodePuppyControl.Tools.UniversalConstructor
+
+  # uc.list - List all UC tools
+  defp handle_request("uc.list", _params, id) do
+    tools = UniversalConstructor.run(action: "list")
+
+    result = %{
+      "success" => tools.success,
+      "action" => tools.action,
+      "tools" =>
+        if tools.list_result do
+          Enum.map(tools.list_result.tools, fn t ->
+            %{
+              "full_name" => t.full_name,
+              "name" => t.meta.name,
+              "namespace" => t.meta.namespace,
+              "description" => t.meta.description,
+              "enabled" => t.meta.enabled,
+              "version" => t.meta.version,
+              "signature" => t.signature,
+              "source_path" => t.source_path
+            }
+          end)
+        else
+          []
+        end,
+      "total_count" => if(tools.list_result, do: tools.list_result.total_count, else: 0),
+      "enabled_count" => if(tools.list_result, do: tools.list_result.enabled_count, else: 0),
+      "formatted" =>
+        if tools.list_result do
+          UniversalConstructor.format_tools(tools.list_result.tools)
+        else
+          ""
+        end
+    }
+
+    Protocol.encode_response(result, id)
+  end
+
+  # uc.call - Execute a UC tool
+  defp handle_request("uc.call", params, id) do
+    tool_name = params["tool_name"] || params["name"]
+    tool_args = params["tool_args"] || params["args"] || %{}
+
+    if is_nil(tool_name) do
+      Protocol.encode_error(-32602, "Missing required param: tool_name", nil, id)
+    else
+      result =
+        UniversalConstructor.run(action: "call", tool_name: tool_name, tool_args: tool_args)
+
+      Protocol.encode_response(
+        %{
+          "success" => result.success,
+          "action" => result.action,
+          "tool_name" => if(result.call_result, do: result.call_result.tool_name, else: nil),
+          "result" => if(result.call_result, do: result.call_result.result, else: nil),
+          "execution_time" =>
+            if(result.call_result, do: result.call_result.execution_time, else: nil),
+          "error" => result.error
+        },
+        id
+      )
+    end
+  end
+
+  # uc.create - Create a new UC tool
+  defp handle_request("uc.create", params, id) do
+    tool_name = params["tool_name"] || params["name"]
+    elixir_code = params["elixir_code"] || params["code"]
+    description = params["description"]
+
+    if is_nil(elixir_code) do
+      Protocol.encode_error(-32602, "Missing required param: elixir_code", nil, id)
+    else
+      result =
+        UniversalConstructor.run(
+          action: "create",
+          tool_name: tool_name,
+          elixir_code: elixir_code,
+          description: description
+        )
+
+      Protocol.encode_response(
+        %{
+          "success" => result.success,
+          "action" => result.action,
+          "tool_name" => if(result.create_result, do: result.create_result.tool_name, else: nil),
+          "source_path" =>
+            if(result.create_result, do: result.create_result.source_path, else: nil),
+          "preview" => if(result.create_result, do: result.create_result.preview, else: nil),
+          "validation_warnings" =>
+            if(result.create_result, do: result.create_result.validation_warnings, else: []),
+          "error" => result.error
+        },
+        id
+      )
+    end
+  end
+
+  # uc.update - Update an existing UC tool
+  defp handle_request("uc.update", params, id) do
+    tool_name = params["tool_name"] || params["name"]
+    elixir_code = params["elixir_code"] || params["code"]
+
+    cond do
+      is_nil(tool_name) ->
+        Protocol.encode_error(-32602, "Missing required param: tool_name", nil, id)
+
+      is_nil(elixir_code) ->
+        Protocol.encode_error(-32602, "Missing required param: elixir_code", nil, id)
+
+      true ->
+        result =
+          UniversalConstructor.run(
+            action: "update",
+            tool_name: tool_name,
+            elixir_code: elixir_code
+          )
+
+        Protocol.encode_response(
+          %{
+            "success" => result.success,
+            "action" => result.action,
+            "tool_name" =>
+              if(result.update_result, do: result.update_result.tool_name, else: nil),
+            "source_path" =>
+              if(result.update_result, do: result.update_result.source_path, else: nil),
+            "preview" => if(result.update_result, do: result.update_result.preview, else: nil),
+            "changes_applied" =>
+              if(result.update_result, do: result.update_result.changes_applied, else: []),
+            "error" => result.error
+          },
+          id
+        )
+    end
+  end
+
+  # uc.info - Get info about a UC tool
+  defp handle_request("uc.info", params, id) do
+    tool_name = params["tool_name"] || params["name"]
+
+    if is_nil(tool_name) do
+      Protocol.encode_error(-32602, "Missing required param: tool_name", nil, id)
+    else
+      result = UniversalConstructor.run(action: "info", tool_name: tool_name)
+
+      response =
+        if result.success and result.info_result do
+          tool = result.info_result.tool
+          source_code = result.info_result.source_code
+
+          %{
+            "success" => true,
+            "formatted" => UniversalConstructor.format_tool(tool, source_code),
+            "tool" =>
+              if tool do
+                %{
+                  "full_name" => tool.full_name,
+                  "name" => tool.meta.name,
+                  "namespace" => tool.meta.namespace,
+                  "description" => tool.meta.description,
+                  "enabled" => tool.meta.enabled,
+                  "version" => tool.meta.version,
+                  "author" => tool.meta.author,
+                  "created_at" => tool.meta.created_at,
+                  "signature" => tool.signature,
+                  "function_name" => tool.function_name,
+                  "source_path" => tool.source_path,
+                  "docstring" => tool.docstring
+                }
+              else
+                nil
+              end,
+            "source_code" => source_code
+          }
+        else
+          %{"success" => false, "error" => result.error}
+        end
+
+      Protocol.encode_response(response, id)
+    end
+  end
 
   # ============================================================================
   # Round-Robin Model Operations (bd-71)
@@ -993,6 +1186,8 @@ defmodule CodePuppyControl.Transport.StdioService do
   defp handle_request("round_robin.list_models", _params, id) do
     models = RoundRobinModel.list_models()
     Protocol.encode_response(%{"models" => models, "count" => length(models)}, id)
+  end
+
   # Method not found handler
   defp handle_request(method, _params, id) do
     Protocol.encode_error(
