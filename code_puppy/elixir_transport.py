@@ -28,29 +28,12 @@ matches = transport.grep("def ", ".", case_sensitive=True)
 transport.stop()
 ```
 
-## Comparison with turbo_ops
-
-| Feature | turbo_ops (Rust) | elixir_transport |
-|---------|-----------------|------------------|
-| list_files | ✅ | ✅ |
-| grep | ✅ | ✅ |
-| read_file | ✅ | ✅ |
-| read_files (batch) | ✅ | ✅ |
-| JSON-RPC protocol | Content-Length | Newline-delimited |
-| Streaming | No | No |
-| Security checks | ✅ | ✅ (same validation) |
-
 ## When to Use
 
 **Use elixir_transport when:**
 - You need the Elixir FileOps implementation standalone
 - You're building scripts that work with the Elixir control plane
 - You want simple subprocess communication without Rust dependencies
-
-**Use turbo_ops (Rust) when:**
-- Maximum performance is critical
-- You want zero Python dependency in the worker
-- You need the optimized native implementation
 
 **Use bridge mode (PythonWorker.Port) when:**
 - Running within the full CodePuppy application
