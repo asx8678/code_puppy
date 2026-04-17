@@ -2312,7 +2312,7 @@ _CODEPUPPY_ENV_ALLOWLIST: set[str] = {
     "PUPPY_PROTECTED_TOKEN_COUNT",
     # Feature toggles
     "PUP_DISABLE_CALLBACK_PLUGIN_LOADING",
-    "PUPPY_DISABLE_RUST_AUTOBUILD",
+    # bd-50: PUPPY_DISABLE_RUST_AUTOBUILD removed - Rust integration deleted
     "CODE_PUPPY_SKIP_TUTORIAL",
     "CODE_PUPPY_NO_TUI",
     "CODE_PUPPY_NO_COLOR",
@@ -2553,14 +2553,9 @@ def get_memory_extraction_model() -> str | None:
 # =============================================================================
 
 # Default acceleration backend configuration
-# Architecture:
-# - Rust (PyO3): puppy_core, turbo_parse (performance critical, FFI-sensitive)
-# - file_ops via NativeBackend (Elixir control plane or Python fallback)
-# bd-86: turbo_ops removed, file_ops now routes through Elixir or Python
+# bd-50: Rust backends removed, only Elixir and Python remain
 ACCELERATION_BACKENDS = {
-    "puppy_core": "rust",  # Rust for message processing
-    "turbo_parse": "rust",  # Rust for tree-sitter grammars
-    "file_ops": "elixir",  # Elixir/Python for file I/O (was turbo_ops)
+    "file_ops": "elixir",  # Elixir/Python for file I/O
 }
 
 # Environment variable prefix for overrides
@@ -2570,17 +2565,18 @@ _ACCEL_ENV_PREFIX = "PUP_ACCEL_"
 def get_acceleration_config() -> dict:
     """Get acceleration backend configuration with environment overrides.
 
+    bd-50: Rust backends removed, only elixir|python remain.
+
     Returns the current acceleration configuration with any environment
     variable overrides applied. Environment variables follow the pattern:
-    PUP_ACCEL_<BACKEND_NAME> = elixir|rust|python
+    PUP_ACCEL_<BACKEND_NAME> = elixir|python
 
     Example:
-        PUP_ACCEL_PUPPY_CORE=python   # Force Python fallback for puppy_core
         PUP_ACCEL_FILE_OPS=elixir     # Use Elixir for file ops (default)
         PUP_ACCEL_FILE_OPS=python     # Force Python fallback for file ops
 
     Returns:
-        Dict mapping backend names to their configured language (elixir|rust|python)
+        Dict mapping backend names to their configured language (elixir|python)
     """
     config = ACCELERATION_BACKENDS.copy()
 
@@ -2588,7 +2584,7 @@ def get_acceleration_config() -> dict:
     for backend in config:
         env_var = f"{_ACCEL_ENV_PREFIX}{backend.upper()}"
         override = os.environ.get(env_var)
-        if override and override.lower() in ("rust", "python", "elixir"):
+        if override and override.lower() in ("python", "elixir"):
             config[backend] = override.lower()
 
     return config
@@ -2597,11 +2593,13 @@ def get_acceleration_config() -> dict:
 def get_acceleration_backend(backend_name: str) -> str:
     """Get the configured backend for a specific acceleration module.
 
+    bd-50: Rust backends removed, only elixir and python remain.
+
     Args:
-        backend_name: Name of the backend (puppy_core, turbo_parse, file_ops)
+        backend_name: Name of the backend (file_ops)
 
     Returns:
-        The configured language for the backend (rust, python, or elixir)
+        The configured language for the backend (python or elixir)
     """
     config = get_acceleration_config()
     return config.get(backend_name, "python")
@@ -2610,19 +2608,21 @@ def get_acceleration_backend(backend_name: str) -> str:
 def set_acceleration_backend(backend_name: str, language: str) -> None:
     """Set the acceleration backend for a specific module via config.
 
+    bd-50: Rust backends removed, only elixir and python remain.
+
     Note: This sets the persistent configuration value in puppy.cfg.
     For runtime-only changes, use environment variables.
 
     Args:
-        backend_name: Name of the backend (puppy_core, turbo_parse, file_ops)
-        language: Language to use (rust, python, or elixir)
+        backend_name: Name of the backend (file_ops)
+        language: Language to use (python or elixir)
 
     Raises:
         ValueError: If backend_name or language is invalid
     """
-    # bd-86: Updated valid languages to include "elixir"
+    # bd-50: Removed "rust" option, now only elixir and python
     valid_backends = set(ACCELERATION_BACKENDS.keys())
-    valid_languages = ("rust", "python", "elixir")  # bd-86: Added "elixir"
+    valid_languages = ("python", "elixir")
 
     if backend_name not in valid_backends:
         raise ValueError(f"Invalid backend: {backend_name}. Valid: {valid_backends}")

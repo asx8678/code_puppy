@@ -40,9 +40,7 @@ try:
 except ImportError:
     DBOSAgent = None  # type: ignore[assignment,misc]
 
-# bd-86: Native acceleration layer removed - using pure Python only
-# Message batch handle is now just a type alias for the raw messages
-MessageBatchHandle = list[dict] | None
+# bd-50: Native acceleration layer removed - using pure Python only
 
 from pydantic_ai.messages import (
     ModelMessage,
@@ -101,24 +99,6 @@ from code_puppy.utils.binary_token_estimation import (
     estimate_binary_content_tokens as _estimate_binary_content_tokens,
 )
 
-
-def _rust_enabled() -> bool:
-    """Check current Rust acceleration state.
-
-    bd-86: Native acceleration layer removed, always returns False.
-    """
-    return False
-
-
-def create_message_batch(messages: list[Any]) -> MessageBatchHandle:
-    """Stub for create_message_batch - native acceleration removed.
-
-    bd-86: Native acceleration layer removed. Returns None since
-    Python implementation doesn't use message batching.
-    """
-    return None
-
-
 _reload_count = 0
 
 
@@ -165,35 +145,6 @@ class BaseAgent(ABC, AgentPromptMixin):
         self.id = str(uuid.uuid7())  # time-sortable for chronological ordering
         # Mutable runtime state container - separates state from immutable config
         self._state = AgentRuntimeState()
-
-        # Message batch cache for avoiding repeated serialization
-        self._cached_batch: MessageBatchHandle | None = None
-        self._cached_batch_messages_id: int | None = None
-        self._cached_batch_messages_len: int = 0
-
-    def _get_or_create_batch(self, messages: list[ModelMessage]) -> MessageBatchHandle:
-        """Return cached batch if messages unchanged, else create new.
-
-        bd-86: Native acceleration removed. Returns None since Python
-        implementation doesn't use message batching.
-
-        Args:
-            messages: The message list to create a batch for
-
-        Returns:
-            None - batching is not used in Python implementation
-        """
-        return None
-
-    def _invalidate_batch_cache(self) -> None:
-        """Invalidate the cached message batch.
-
-        Call this after mutating the message history to ensure
-        the next batch creation reflects the changes.
-        """
-        self._cached_batch = None
-        self._cached_batch_messages_id = None
-        self._cached_batch_messages_len = 0
 
     # Backward-compatible properties that delegate to _state for migration support
     @property
@@ -942,30 +893,19 @@ class BaseAgent(ABC, AgentPromptMixin):
     def filter_huge_messages(
         self,
         messages: list[ModelMessage],
-        serialized_messages: list[dict] | MessageBatchHandle | None = None,
+        serialized_messages: list[dict] | None = None,
     ) -> list[ModelMessage]:
         """Filter out messages that exceed the token threshold.
 
+        bd-50: Removed Rust acceleration - now pure Python only.
+
         Args:
             messages: List of messages to filter
-            serialized_messages: Pre-serialized messages or MessageBatchHandle for Rust (if available)
+            serialized_messages: Unused (kept for API compatibility)
 
         Returns:
             Filtered list of messages
         """
-        if _rust_enabled():
-            try:
-                # Use MessageBatchHandle if provided, otherwise create one
-                if isinstance(serialized_messages, MessageBatchHandle):
-                    batch = serialized_messages
-                else:
-                    batch = create_message_batch(messages)
-                result = batch.prune_and_filter(50000)
-                return [messages[i] for i in result.surviving_indices]
-            except Exception as exc:
-                logger.debug(
-                    "Rust fallback in filter_huge_messages: %s", exc, exc_info=True
-                )
         filtered = [m for m in messages if self.estimate_tokens_for_message(m) < 50000]
         # Pass serialized_messages through to avoid re-serialization
         pruned = self.prune_interrupted_tool_calls(
@@ -1033,14 +973,16 @@ class BaseAgent(ABC, AgentPromptMixin):
     def split_messages_for_protected_summarization(
         self,
         messages: list[ModelMessage],
-        serialized_messages: list[dict] | MessageBatchHandle | None = None,
+        serialized_messages: list[dict] | None = None,
     ) -> tuple[list[ModelMessage], list[ModelMessage]]:
         """
         Split messages into two groups: messages to summarize and protected recent messages.
 
+        bd-50: Removed Rust acceleration - now pure Python only.
+
         Args:
             messages: Full message list to split
-            serialized_messages: Pre-serialized messages or MessageBatchHandle for Rust (if available)
+            serialized_messages: Unused (kept for API compatibility)
 
         Returns:
             Tuple of (messages_to_summarize, protected_messages)
@@ -1073,45 +1015,7 @@ class BaseAgent(ABC, AgentPromptMixin):
         # Use the keep_tokens (protected zone) from computed thresholds
         protected_tokens_limit = thresholds.keep_tokens
 
-        # --- Rust fast path ------------------------------------------------
-        if _rust_enabled():
-            try:
-                # Use MessageBatchHandle if provided, otherwise create one
-                if isinstance(serialized_messages, MessageBatchHandle):
-                    batch = serialized_messages
-                else:
-                    batch = create_message_batch(messages)
-                # Process to populate per-message tokens (cached in batch)
-                batch.process([], [], "")
-
-                # bd-67: Use batch method directly — fixes dead code where
-                # _core_bridge.rust_split_for_summarization (wrong name) always
-                # threw AttributeError. The batch method has the correct Rust binding.
-                split_result = batch.split_for_summarization(protected_tokens_limit)
-
-                # Convert indices back to message lists
-                messages_to_summarize = [
-                    messages[i] for i in split_result.summarize_indices
-                ]
-                protected_messages = [
-                    messages[i] for i in split_result.protected_indices
-                ]
-                protected_token_count = split_result.protected_token_count
-
-                # Emit info messages (consistent with Python path)
-                emit_info(
-                    f"🔒 Protecting {len(protected_messages)} recent messages ({protected_token_count} tokens, limit: {protected_tokens_limit})"
-                )
-                emit_info(f"📝 Summarizing {len(messages_to_summarize)} older messages")
-
-                return messages_to_summarize, protected_messages
-            except Exception:
-                logger.debug(
-                    "Rust bridge failed, falling back to Python", exc_info=True
-                )
-        # ----------------------------------------------------------------
-
-        # Calculate tokens for messages from most recent backwards (excluding system message)
+        # bd-50: Calculate tokens for messages from most recent backwards (excluding system message)
         protected_messages = []
         protected_token_count = system_tokens  # Start with system message tokens
 
@@ -1330,9 +1234,11 @@ class BaseAgent(ABC, AgentPromptMixin):
         self,
         messages: list[ModelMessage],
         with_protection: bool = True,
-        serialized_messages: list[dict] | MessageBatchHandle | None = None,
+        serialized_messages: list[dict] | None = None,
     ) -> tuple[list[ModelMessage], list[ModelMessage]]:
         """Summarize messages while protecting recent messages up to PROTECTED_TOKENS.
+
+        bd-50: Removed Rust acceleration - now pure Python only.
 
         Uses a binary-split strategy: when the messages to summarize exceed
         the summarizer's context window, the batch is recursively split in
@@ -1347,7 +1253,7 @@ class BaseAgent(ABC, AgentPromptMixin):
         Args:
             messages: Messages to summarize
             with_protection: Whether to protect recent messages
-            serialized_messages: Pre-serialized messages or MessageBatchHandle for Rust (if available)
+            serialized_messages: Unused (kept for API compatibility)
 
         Returns:
             Tuple of (compacted_messages, summarized_source_messages)
@@ -1632,10 +1538,12 @@ class BaseAgent(ABC, AgentPromptMixin):
     def prune_interrupted_tool_calls(
         self,
         messages: list[ModelMessage],
-        serialized_messages: list[dict] | MessageBatchHandle | None = None,
+        serialized_messages: list[dict] | None = None,
     ) -> list[ModelMessage]:
         """
         Remove any messages that participate in mismatched tool call sequences.
+
+        bd-50: Removed Rust acceleration - now pure Python only.
 
         A mismatched tool call id is one that appears in a ToolCall (model/tool request)
         without a corresponding tool return, or vice versa. We preserve original order
@@ -1643,33 +1551,13 @@ class BaseAgent(ABC, AgentPromptMixin):
 
         Args:
             messages: List of messages to prune
-            serialized_messages: Pre-serialized messages or MessageBatchHandle for Rust (if available)
+            serialized_messages: Unused (kept for API compatibility)
 
         Returns:
             Pruned list of messages with mismatched tool calls removed
         """
         if not messages:
             return messages
-
-        # Rust fast path — prune_and_filter handles mismatched tool-call pruning
-        # in a single pass, plus filters empty thinking parts and trailing responses
-        if _rust_enabled():
-            try:
-                # Use MessageBatchHandle if provided, otherwise create one
-                if isinstance(serialized_messages, MessageBatchHandle):
-                    batch = serialized_messages
-                else:
-                    batch = create_message_batch(messages)
-                result = batch.prune_and_filter(999_999_999)
-                return [messages[i] for i in result.surviving_indices]
-            except Exception as exc:
-                logger.debug(
-                    "Rust fallback in prune_interrupted_tool_calls: %s",
-                    exc,
-                    exc_info=True,
-                )
-
-        # Python fallback — original implementation
         tool_call_ids, tool_return_ids = self._collect_tool_call_ids(messages)
         mismatched: set[str] = tool_call_ids.symmetric_difference(tool_return_ids)
         if not mismatched:
@@ -1693,71 +1581,18 @@ class BaseAgent(ABC, AgentPromptMixin):
     def message_history_processor(
         self, ctx: RunContext, messages: list[ModelMessage]
     ) -> list[ModelMessage]:
+        """Process message history for context management.
+
+        bd-50: Removed Rust acceleration - now pure Python only.
+        """
         # First, prune any interrupted/mismatched tool-call conversations
         model_max = self.get_model_context_length()
 
-        # Create MessageBatchHandle once and reuse for all Rust operations within this pipeline
-        _message_batch: MessageBatchHandle | None = None
-
-        # Use Rust batch processing when available (single pass for tokens + hashes)
-        if _rust_enabled():
-            try:
-                _message_batch = self._get_or_create_batch(messages)
-                # Extract actual tool definitions for accurate context overhead
-                # Use cached tool_defs (only computed once per agent lifecycle)
-                # Uses _state.code_generation_agent for tool lookup
-                if self._state.cached_tool_defs is None:
-                    _build_tool_defs = []
-                    pydantic_agent = self._state.code_generation_agent
-                    if pydantic_agent:
-                        _tools = getattr(pydantic_agent, "_tools", None)
-                        if _tools and isinstance(_tools, dict):
-                            import json as _json
-
-                            for tname, tfunc in _tools.items():
-                                td = {
-                                    "name": tname,
-                                    "description": getattr(tfunc, "__doc__", "") or "",
-                                }
-                                schema = getattr(tfunc, "schema", None)
-                                if schema and isinstance(schema, dict):
-                                    td["inputSchema"] = _json.dumps(schema)
-                                _build_tool_defs.append(td)
-                    self._state.cached_tool_defs = _build_tool_defs
-                tool_defs = self._state.cached_tool_defs
-                mcp_defs = self._state.mcp_tool_definitions_cache or []
-                # Use cached system prompt (only computed once per agent lifecycle)
-                # Include puppy rules to match actual request path in _init_pydantic_agent()
-                if self._state.cached_system_prompt is None:
-                    _sp = (
-                        self.get_full_system_prompt()
-                        if hasattr(self, "get_full_system_prompt")
-                        else ""
-                    )
-                    _pr = self.load_puppy_rules()
-                    if _pr:
-                        _sp += f"\n{_pr}"
-                    self._state.cached_system_prompt = _sp
-                system_prompt = self._state.cached_system_prompt
-                batch_result = _message_batch.process(tool_defs, mcp_defs, system_prompt)
-                message_tokens = batch_result.total_message_tokens
-                context_overhead = batch_result.context_overhead_tokens
-                self._state.rust_per_message_tokens = batch_result.per_message_tokens
-            except Exception as exc:
-                logger.debug(
-                    "Rust fallback in message_history_processor: %s", exc, exc_info=True
-                )
-                # Fall back to Python on any Rust error
-                _message_batch = None  # Reset batch on failure
-                message_tokens = sum(
-                    self.estimate_tokens_for_message(msg) for msg in messages
-                )
-                context_overhead = self.estimate_context_overhead_tokens()
-        else:
-            message_tokens = sum(
-                self.estimate_tokens_for_message(msg) for msg in messages
-            )
-            context_overhead = self.estimate_context_overhead_tokens()
+        # bd-50: Use Python token estimation (Rust acceleration removed)
+        message_tokens = sum(
+            self.estimate_tokens_for_message(msg) for msg in messages
+        )
+        context_overhead = self.estimate_context_overhead_tokens()
         total_current_tokens = message_tokens + context_overhead
         proportion_used = total_current_tokens / model_max
 
@@ -1793,17 +1628,10 @@ class BaseAgent(ABC, AgentPromptMixin):
             if compaction_strategy == "truncation":
                 # Use truncation instead of summarization
                 protected_tokens = cfg.protected_token_count
-                # Pass MessageBatchHandle to avoid re-serialization
-                filtered_messages = self.filter_huge_messages(
-                    messages, serialized_messages=_message_batch
-                )
-                # Pass cached per_message_tokens when available from Rust batch processing
-                cached_tokens = self._state.rust_per_message_tokens
+                filtered_messages = self.filter_huge_messages(messages)
                 result_messages = self.truncation(
                     filtered_messages,
                     protected_tokens,
-                    per_message_tokens=cached_tokens,
-                    serialized_messages=_message_batch,
                 )
                 # Track dropped messages by hash so message_history_accumulator
                 # won't re-inject them from pydantic-ai's full message list on
@@ -1814,21 +1642,15 @@ class BaseAgent(ABC, AgentPromptMixin):
                     for m in filtered_messages
                     if self.hash_message(m) not in result_hashes
                 ]
-                # Calculate final token count efficiently using cached per-message tokens
-                # Sum tokens for messages that were kept (result_messages is a subset of filtered_messages)
-                final_token_count = self._calculate_kept_tokens(
-                    filtered_messages, result_messages, cached_tokens
+                # Calculate final token count
+                final_token_count = sum(
+                    self.estimate_tokens_for_message(msg) for msg in result_messages
                 )
             else:
                 # Default to summarization (safe to proceed - no pending tool calls)
-                # Pass MessageBatchHandle to avoid re-serialization
-                filtered_messages = self.filter_huge_messages(
-                    messages, serialized_messages=_message_batch
-                )
-                # Also pass MessageBatchHandle to summarize_messages for split_messages_for_protected_summarization
+                filtered_messages = self.filter_huge_messages(messages)
                 result_messages, summarized_messages = self.summarize_messages(
                     filtered_messages,
-                    serialized_messages=_message_batch,
                 )
                 # For summarization, we need to estimate tokens since messages are transformed
                 final_token_count = sum(
@@ -1852,15 +1674,16 @@ class BaseAgent(ABC, AgentPromptMixin):
         messages: list[ModelMessage],
         protected_tokens: int,
         per_message_tokens: list[int | None] = None,
-        serialized_messages: list[dict] | MessageBatchHandle | None = None,
     ) -> list[ModelMessage]:
         """
         Truncate message history to manage token usage.
 
+        bd-50: Removed Rust acceleration - now pure Python only.
+
         Protects:
         - The first message (system prompt) - always kept
-        - The second message if it contains a ThinkingPart (extended thinking context)
-        - The most recent messages up to protected_tokens
+        - The second message if it contains thinking parts (kept for reasoning models)
+        - Recent messages up to protected_tokens limit
 
         Args:
             messages: List of messages to truncate
@@ -1868,40 +1691,11 @@ class BaseAgent(ABC, AgentPromptMixin):
             per_message_tokens: Optional pre-computed per-message token counts.
                 When provided (e.g., from message_history_processor), avoids
                 re-serializing and re-computing token counts.
-            serialized_messages: Optional pre-serialized messages or MessageBatchHandle for Rust.
-                When provided and per_message_tokens is not available, avoids re-serializing.
 
         Returns:
             Truncated list of messages
         """
         emit_info("Truncating message history to manage token usage")
-
-        # Try Rust fast path
-        if _rust_enabled():
-            try:
-                # Use MessageBatchHandle if provided, otherwise create one
-                if isinstance(serialized_messages, MessageBatchHandle):
-                    batch = serialized_messages
-                else:
-                    batch = create_message_batch(messages)
-                # Ensure process() has been called to populate token counts
-                if batch.get_per_message_tokens() is None:
-                    batch.process([], [], "")
-
-                second_has_thinking = len(messages) > 1 and any(
-                    isinstance(p, ThinkingPart) for p in messages[1].parts
-                )
-                # bd-67: Use batch method directly — fixes dead code where
-                # _core_bridge.rust_truncation_indices (wrong name) always
-                # threw AttributeError.
-                kept = batch.truncation_indices(protected_tokens, second_has_thinking)
-                result = [messages[i] for i in kept]
-                result = self.prune_interrupted_tool_calls(result)
-                return result
-            except Exception as exc:
-                logger.debug("Rust fallback in truncation: %s", exc, exc_info=True)
-
-        # Python fallback
         result = [messages[0]]
         skip_second = False
         if len(messages) > 1:

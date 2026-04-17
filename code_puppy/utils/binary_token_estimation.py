@@ -1,12 +1,8 @@
-"""Shared binary content token estimation for Python and Rust bridge paths.
+"""Shared binary content token estimation.
 
-This module provides a single source of truth for estimating the token cost
-of binary content (images, PDFs, generic files) across both the Python
-fallback and Rust fast path. Keeping the logic in one place prevents the
-two paths from drifting.
-
-See: token flow audit — duplicate estimation logic was identified as a
-maintenance risk between base_agent.py and _core_bridge.py.
+bd-50: Rust bridge paths removed - now Python only.
+Provides a single source of truth for estimating the token cost
+of binary content (images, PDFs, generic files).
 """
 
 from __future__ import annotations

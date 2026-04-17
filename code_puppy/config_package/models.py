@@ -86,7 +86,7 @@ class PuppyConfig:
 
         # Feature flags
         session_logger_enabled: Enable session logging
-        rust_autobuild_disabled: Disable Rust auto-building (puppy.cfg: disable_rust_autobuild)
+        # bd-50: rust_autobuild_disabled removed - Rust integration deleted
         enable_dbos: Enable DBOS integration
         enable_streaming: Enable SSE streaming responses
         enable_agent_memory: Enable agent memory features
@@ -148,7 +148,7 @@ class PuppyConfig:
     # Feature Flags
     # ─────────────────────────────────────────────────────────────
     session_logger_enabled: bool
-    rust_autobuild_disabled: bool
+    # bd-50: rust_autobuild_disabled removed - Rust integration deleted
     enable_dbos: bool
     enable_streaming: bool
     # DEPRECATED(audit-2026): Legacy config key, use memory_enabled instead
