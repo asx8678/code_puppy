@@ -55,23 +55,26 @@ class TestWriteGuidance:
         assert "✨ Next steps for your new file:" in guidance
 
     def test_javascript_file_guidance(self, plugin_module, fresh_state):
-        """Test guidance for JavaScript files."""
+        """Test guidance for JavaScript files uses npm/eslint, not pytest."""
         guidance = plugin_module._get_write_guidance("app.js", "console.log('hi')")
         assert guidance is not None
-        assert "pytest" in guidance  # Uses generic guidance for code files
-        assert "py_compile" in guidance
+        assert "npm test" in guidance
+        assert "eslint" in guidance
+        assert "pytest" not in guidance
+        assert "py_compile" not in guidance
 
     def test_typescript_file_guidance(self, plugin_module, fresh_state):
-        """Test guidance for TypeScript files."""
+        """Test guidance for TypeScript files uses npm/eslint, not pytest."""
         guidance = plugin_module._get_write_guidance("app.ts", "const x: number = 1")
         assert guidance is not None
-        assert "pytest" in guidance
+        assert "npm test" in guidance
+        assert "eslint" in guidance
+        assert "pytest" not in guidance
 
     def test_markdown_file_guidance(self, plugin_module, fresh_state):
         """Test guidance for markdown files."""
         guidance = plugin_module._get_write_guidance("README.md", "# Title")
         assert guidance is not None
-        assert "cat" in guidance
         assert "head -20" in guidance
 
     def test_json_file_guidance(self, plugin_module, fresh_state):
@@ -82,10 +85,12 @@ class TestWriteGuidance:
         assert "json.load" in guidance
 
     def test_yaml_file_guidance(self, plugin_module, fresh_state):
-        """Test guidance for YAML files."""
+        """Test guidance for YAML files uses yaml.safe_load, not json.load."""
         guidance = plugin_module._get_write_guidance("config.yaml", "key: val")
         assert guidance is not None
         assert "Validate" in guidance
+        assert "yaml" in guidance
+        assert "json.load" not in guidance
 
     def test_shell_script_guidance(self, plugin_module, fresh_state):
         """Test guidance for shell scripts includes shellcheck and chmod."""
@@ -101,16 +106,20 @@ class TestWriteGuidance:
         assert "shellcheck" in guidance
 
     def test_rust_file_guidance(self, plugin_module, fresh_state):
-        """Test guidance for Rust files."""
+        """Test guidance for Rust files uses cargo test/check, not pytest."""
         guidance = plugin_module._get_write_guidance("main.rs", "fn main() {}")
         assert guidance is not None
-        assert "pytest" in guidance
+        assert "cargo test" in guidance
+        assert "cargo check" in guidance
+        assert "pytest" not in guidance
 
     def test_go_file_guidance(self, plugin_module, fresh_state):
-        """Test guidance for Go files."""
+        """Test guidance for Go files uses go test/build, not pytest."""
         guidance = plugin_module._get_write_guidance("main.go", "package main")
         assert guidance is not None
-        assert "pytest" in guidance
+        assert "go test" in guidance
+        assert "go build" in guidance
+        assert "pytest" not in guidance
 
     def test_minimal_verbosity_no_view_option(self, plugin_module, fresh_state):
         """Test that minimal verbosity excludes view file option."""
@@ -130,6 +139,41 @@ class TestWriteGuidance:
         assert (
             guidance.count("\n") >= 4
         )  # Should have header + 4 suggestions in verbose mode
+
+
+
+    def test_toml_file_guidance(self, plugin_module, fresh_state):
+        """Test guidance for TOML files uses tomllib, not json.load."""
+        guidance = plugin_module._get_write_guidance("pyproject.toml", "[project]")
+        assert guidance is not None
+        assert "Validate" in guidance
+        assert "tomllib" in guidance
+        assert "json.load" not in guidance
+
+    def test_java_file_guidance(self, plugin_module, fresh_state):
+        """Test guidance for Java files uses javac/mvn, not pytest."""
+        guidance = plugin_module._get_write_guidance("Main.java", "public class Main {}")
+        assert guidance is not None
+        assert "javac" in guidance
+        assert "mvn test" in guidance
+        assert "pytest" not in guidance
+
+    def test_tsx_file_guidance(self, plugin_module, fresh_state):
+        """Test guidance for TSX files uses npm/eslint, not pytest."""
+        guidance = plugin_module._get_write_guidance("Component.tsx", "const x = 1")
+        assert guidance is not None
+        assert "npm test" in guidance
+        assert "eslint" in guidance
+        assert "pytest" not in guidance
+
+    def test_python_file_does_use_pytest(self, plugin_module, fresh_state):
+        """Test that Python files still correctly suggest pytest."""
+        guidance = plugin_module._get_write_guidance("test.py", "def test_it(): pass")
+        assert guidance is not None
+        assert "pytest" in guidance
+        assert "py_compile" in guidance
+        assert "npm" not in guidance
+        assert "cargo" not in guidance
 
     def test_empty_suggestions_returns_none(self, plugin_module, fresh_state):
         """Test that files with no specific guidance return None in minimal mode."""

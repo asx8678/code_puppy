@@ -230,8 +230,10 @@ class TestCallbackRegistration:
         on_post_tool = plugin_module._on_post_tool_call
         on_custom_cmd = plugin_module._handle_custom_command
         on_help = plugin_module._on_custom_help
+        on_agent_start = plugin_module._on_agent_run_start
 
         # Verify they're registered in the callback registry
         assert on_post_tool in get_callbacks("post_tool_call")
         assert on_custom_cmd in get_callbacks("custom_command")
         assert on_help in get_callbacks("custom_command_help")
+        assert on_agent_start in get_callbacks("agent_run_start")
