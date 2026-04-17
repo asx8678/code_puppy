@@ -78,7 +78,7 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
-# Check if task file exists and is readable
+# Check if task file exists and is readable with valid id field
 check_task_file() {
     if [[ ! -f "$TASK_FILE" ]]; then
         return 1
@@ -86,8 +86,9 @@ check_task_file() {
     if [[ ! -r "$TASK_FILE" ]]; then
         return 2
     fi
-    # Validate it's valid JSON with at least an 'id' field
-    if ! jq -e '.id' "$TASK_FILE" > /dev/null 2>&1; then
+    # Validate it's valid JSON with 'id' as non-empty string
+    # Rejects: null, empty string, non-string types
+    if ! jq -e '(.id | type == "string") and (.id | length > 0)' "$TASK_FILE" > /dev/null 2>&1; then
         return 3
     fi
     return 0
@@ -102,65 +103,74 @@ read_task_data() {
     TASK_STATUS=$(jq -r '.status // "active"' "$TASK_FILE" 2>/dev/null || echo "active")
 }
 
-# Escape string for JSON output
-json_escape() {
-    local s="$1"
-    s="${s//\\/\\\\}"
-    s="${s//\"/\\\"}"
-    s="${s//$'\t'/\\t}"
-    s="${s//$'\n'/\\n}"
-    s="${s//$'\r'/\\r}"
-    printf '%s' "$s"
-}
-
-# JSON output
+# JSON output using jq for safety - handles arbitrary content correctly
 output_json() {
     local file_exists="false"
     local file_readable="false"
     local has_valid_task="false"
-    
+
     if [[ -f "$TASK_FILE" ]]; then
         file_exists="true"
         if [[ -r "$TASK_FILE" ]]; then
             file_readable="true"
-            if jq -e '.id' "$TASK_FILE" > /dev/null 2>&1; then
+            # Validate: id must be a non-empty string
+            if jq -e '(.id | type == "string") and (.id | length > 0)' "$TASK_FILE" > /dev/null 2>&1; then
                 has_valid_task="true"
             fi
         fi
     fi
-    
+
     if [[ "$has_valid_task" == "true" ]]; then
-        read_task_data
-        cat <<EOF
+        # Use jq to safely build JSON - handles all escaping automatically
+        jq --arg file_path "$TASK_FILE" \
+           --argjson file_exists "$file_exists" \
+           --argjson file_readable "$file_readable" \
+           '{
+               active: true,
+               task: {
+                   id: (.id // "unknown"),
+                   category: (.category // "uncategorized"),
+                   priority: (.priority // "normal"),
+                   description: (.description // ""),
+                   status: (.status // "active")
+               },
+               file: {
+                   path: $file_path,
+                   exists: $file_exists,
+                   readable: $file_readable
+               }
+           }' "$TASK_FILE" 2>/dev/null || cat <<EOF
 {
     "active": true,
     "task": {
-        "id": "$(json_escape "$TASK_ID")",
-        "category": "$(json_escape "$TASK_CATEGORY")",
-        "priority": "$(json_escape "$TASK_PRIORITY")",
-        "description": "$(json_escape "$TASK_DESCRIPTION")",
-        "status": "$(json_escape "$TASK_STATUS")"
+        "id": "unknown",
+        "category": "uncategorized",
+        "priority": "normal",
+        "description": "",
+        "status": "active"
     },
     "file": {
-        "path": "$(json_escape "$TASK_FILE")",
+        "path": "$TASK_FILE",
         "exists": $file_exists,
         "readable": $file_readable
     }
 }
 EOF
     else
-        cat <<EOF
-{
-    "active": false,
-    "task": null,
-    "file": {
-        "path": "$(json_escape "$TASK_FILE")",
-        "exists": $file_exists,
-        "readable": $file_readable
-    },
-    "warning": "No active task found"
-}
-EOF
+        # No valid task - output safe error JSON using jq
+        jq -n --arg file_path "$TASK_FILE" \
+              --argjson file_exists "$file_exists" \
+              --argjson file_readable "$file_readable" \
+              '{
+                  active: false,
+                  task: null,
+                  file: {
+                      path: $file_path,
+                      exists: $file_exists,
+                      readable: $file_readable
+                  },
+                  warning: "No active task found"
+              }'
     fi
 }
 
@@ -170,20 +180,23 @@ output_text() {
     echo -e "${BOLD}           📋 KIRO - ACTIVE TASK CONTEXT            ${RESET}"
     echo -e "${BOLD}═══════════════════════════════════════════════════${RESET}"
     echo ""
-    
-    if ! check_task_file; then
-        local exit_code=$?
+
+    # Check file status first to capture exit code properly
+    local exit_code=0
+    check_task_file || exit_code=$?
+
+    if [[ $exit_code -ne 0 ]]; then
         echo -e "${YELLOW}⚠️  WARNING: No active task${RESET}"
         echo ""
         if [[ $exit_code -eq 1 ]]; then
             echo -e "   Task file not found:"
-            echo -e "   ${GRAY}$TASK_FILE${RESET}"
+            echo -e "   ${GRAY}${TASK_FILE}${RESET}"
         elif [[ $exit_code -eq 2 ]]; then
             echo -e "   Task file not readable:"
-            echo -e "   ${GRAY}$TASK_FILE${RESET}"
+            echo -e "   ${GRAY}${TASK_FILE}${RESET}"
         elif [[ $exit_code -eq 3 ]]; then
             echo -e "   Task file exists but contains no valid task ID"
-            echo -e "   ${GRAY}$TASK_FILE${RESET}"
+            echo -e "   ${GRAY}${TASK_FILE}${RESET}"
         fi
         echo ""
         echo -e "   ${CYAN}To set an active task:${RESET}"
@@ -192,13 +205,13 @@ output_text() {
         echo -e "${BOLD}═══════════════════════════════════════════════════${RESET}"
         return 1
     fi
-    
+
     read_task_data
-    
+
     # Task ID (prominent)
-    echo -e "${BOLD}${CYAN}🆔 Task ID:${RESET} ${BOLD}$TASK_ID${RESET}"
+    echo -e "${BOLD}${CYAN}🆔 Task ID:${RESET} ${BOLD}${TASK_ID}${RESET}"
     echo ""
-    
+
     # Category
     local category_icon="📁"
     case "$TASK_CATEGORY" in
@@ -211,7 +224,7 @@ output_text() {
         release)        category_icon="🚀" ;;
     esac
     echo -e "${BOLD}Category:${RESET}  $category_icon $TASK_CATEGORY"
-    
+
     # Priority with color
     local priority_color="$GRAY"
     case "$TASK_PRIORITY" in
@@ -221,7 +234,7 @@ output_text() {
         4|low)               priority_color="$GREEN" ;;
     esac
     echo -e "${BOLD}Priority:${RESET}  ${priority_color}$TASK_PRIORITY${RESET}"
-    
+
     # Status
     local status_icon="⏳"
     [[ "$TASK_STATUS" == "active" ]] && status_icon="▶️"
@@ -229,7 +242,7 @@ output_text() {
     [[ "$TASK_STATUS" == "done" ]] && status_icon="✅"
     echo -e "${BOLD}Status:${RESET}    $status_icon $TASK_STATUS"
     echo ""
-    
+
     # Description
     if [[ -n "$TASK_DESCRIPTION" ]]; then
         echo -e "${BOLD}${BLUE}📝 Description:${RESET}"
@@ -237,7 +250,7 @@ output_text() {
         echo "$TASK_DESCRIPTION" | fold -s -w 50 | sed 's/^/   /'
         echo ""
     fi
-    
+
     echo -e "${BOLD}═══════════════════════════════════════════════════${RESET}"
     echo -e "${GRAY}Task file: $TASK_FILE${RESET}"
     return 0
@@ -246,7 +259,7 @@ output_text() {
 # Main
 main() {
     local exit_code=0
-    
+
     case "$OUTPUT_FORMAT" in
         json)
             if [[ "$QUIET" == true ]]; then
@@ -271,7 +284,7 @@ main() {
             fi
             ;;
     esac
-    
+
     exit $exit_code
 }
 
