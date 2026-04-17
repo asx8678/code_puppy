@@ -10,6 +10,7 @@ defmodule CodePuppyControl.Application do
   4. CodePuppyControl.RuntimeState - Global runtime state (autosave ID, session model)
   5. CodePuppyControl.PolicyEngine - Priority-based policy rule engine
   6. CodePuppyControl.AgentModelPinning - Agent-to-model pin configuration (ETS-backed)
+  6a. CodePuppyControl.Tools.AgentCatalogue - Agent catalogue with descriptions
   7. CodePuppyControl.RoundRobinModel - Round-robin model rotation (ETS-backed)
   7a. CodePuppyControl.ModelsDevParser.Registry - Models.dev API registry (bd-74)
   8. CodePuppyControl.Run.Registry - Process registry for run tracking
@@ -38,6 +39,7 @@ defmodule CodePuppyControl.Application do
       CodePuppyControl.RuntimeState,
       CodePuppyControl.PolicyEngine,
       CodePuppyControl.AgentModelPinning,
+      CodePuppyControl.Tools.AgentCatalogue,
       CodePuppyControl.RoundRobinModel,
       CodePuppyControl.ModelsDevParser.Registry,
       CodePuppyControl.Run.Registry,
