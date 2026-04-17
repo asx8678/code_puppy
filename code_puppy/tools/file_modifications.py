@@ -36,6 +36,10 @@ from code_puppy.utils.eol import strip_bom, restore_bom
 from code_puppy.utils.file_mutex import file_lock
 from code_puppy.utils.file_display import safe_write_file
 from code_puppy.utils.whitespace import strip_added_blank_lines
+from code_puppy.tools.common import _find_best_window
+
+# Threshold for fuzzy matching
+_FUZZY_THRESHOLD = 0.95
 
 # Syntax validation imports (bd code_puppy-31a.10)
 # Deferred to function level to fail-open if imports break
@@ -358,25 +362,61 @@ def _replace_in_file(
         # Strip BOM for matching (LLM output never has BOM)
         original, bom = strip_bom(original)
 
-        # bd-41: Route through _edit_bridge for Elixir-first routing
-        from code_puppy._edit_bridge import replace_in_content as _bridge_replace
+        # bd-86: Pure Python implementation (acceleration layer removed)
+        modified = original
+        modified_lines: list[str] | None = None
+        last_jw_score: float | None = None
 
-        # Convert replacements from list[dict] to list[tuple] for the bridge
-        bridge_replacements = [
-            (rep.get("old_str", ""), rep.get("new_str", ""))
-            for rep in replacements
-        ]
-        result = _bridge_replace(original, bridge_replacements)
+        for rep in replacements:
+            old_str = rep.get("old_str", "")
+            new_str = rep.get("new_str", "")
 
-        if not result["success"]:
-            return {
-                "error": result["error"] or "No suitable match in file (JW < 0.95)",
-                "jw_score": result["jw_score"],
-                "received": None,
-                "diff": "",
-            }
+            # Skip empty old_str - nothing to match
+            if not old_str:
+                continue
 
-        modified = result["modified"]
+            # Fast path: exact match - replace first occurrence only
+            if old_str in modified:
+                modified = modified.replace(old_str, new_str, 1)
+                # Invalidate cached lines since content changed
+                modified_lines = None
+                continue
+
+            # Lazy initialization of cached lines for fuzzy matching
+            if modified_lines is None:
+                modified_lines = modified.splitlines()
+
+            # Pre-compute needle lines and length for cache
+            needle_stripped = old_str.rstrip("\n")
+            needle_lines = needle_stripped.splitlines()
+            needle_len = len(needle_stripped)
+
+            loc, score = _find_best_window(
+                modified_lines,
+                old_str,
+                _needle_lines_cache=needle_lines,
+                _needle_len_cache=needle_len,
+            )
+
+            last_jw_score = score
+
+            if score < _FUZZY_THRESHOLD or loc is None:
+                return {
+                    "error": f"No suitable match in content (JW {score:.3f} < {_FUZZY_THRESHOLD})",
+                    "jw_score": score,
+                    "received": None,
+                    "diff": "",
+                }
+
+            start, end = loc
+            # Use slice-assignment to modify lines in-place, preserving cache
+            new_lines = new_str.rstrip("\n").splitlines()
+            modified_lines[start:end] = new_lines
+
+            # Rebuild the string for subsequent exact matches
+            modified = "\n".join(modified_lines)
+            if original.endswith("\n") and not modified.endswith("\n"):
+                modified += "\n"
 
         # Strip surplus blank lines that the LLM may have hallucinated
         modified = strip_added_blank_lines(original, modified)

@@ -50,32 +50,15 @@ def _lang_from_path(path: str) -> str | None:
 # ---------------------------------------------------------------------------
 
 def _skeleton_via_treesitter(content: str, language: str) -> str | None:
-    """Generate skeleton using NativeBackend symbol extraction.
+    """Generate skeleton using tree-sitter symbol extraction.
 
-    Returns None if NativeBackend is unavailable or fails.
+    bd-86: Tree-sitter acceleration removed - now always returns None
+    to fall back to regex-based implementation.
+
+    Returns None to trigger Python fallback.
     """
-    # bd-71: Route through NativeBackend (single native boundary)
-    try:
-        from code_puppy.native_backend import NativeBackend
-    except ImportError:
-        return None
-
-    if not NativeBackend.is_active(NativeBackend.Capabilities.PARSE):
-        return None
-
-    if not NativeBackend.is_language_supported(language):
-        return None
-
-    try:
-        symbols = NativeBackend.extract_symbols(content, language)
-    except Exception as exc:
-        logger.debug("code_skeleton: turbo_parse failed for %s: %s", language, exc)
-        return None
-
-    if not isinstance(symbols, list) or not symbols:
-        return None
-
-    return _render_symbols(symbols, content)
+    # bd-86: Tree-sitter native acceleration removed, use Python fallback
+    return None
 
 
 def _render_symbols(symbols: list[dict], source: str) -> str:

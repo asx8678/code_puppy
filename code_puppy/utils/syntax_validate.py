@@ -112,91 +112,16 @@ def _get_language_from_ext(path: str) -> str | None:
 
 
 def _validate_via_native_backend(path: str, content: str) -> ValidationResult:
-    """Attempt to validate using NativeBackend's extract_syntax_diagnostics.
+    """Attempt to validate using native backend's extract_syntax_diagnostics.
 
-    bd-93: Migrated from direct turbo_parse_bridge to NativeBackend for
-    Elixir-first routing and unified acceleration access.
+    bd-86: Native acceleration layer removed. Returns PARSER_UNAVAILABLE
+    to trigger Python fallback validation.
 
     Interpretation:
-    - If NativeBackend returns diagnostics with error_count == 0, treat as VALID.
-    - If diagnostics have errors, surface them as INVALID with markers.
-    - If NativeBackend is unavailable, treat as PARSER_UNAVAILABLE.
-    - Any exception is treated as PARSER_UNAVAILABLE (fail open).
+    - PARSER_UNAVAILABLE is fail-open: validation won't block operations.
     """
-    try:
-        from code_puppy.native_backend import NativeBackend
-    except ImportError:
-        return ValidationResult(status=ValidationStatus.PARSER_UNAVAILABLE)
-
-    # bd-93: Check if PARSE capability is available via NativeBackend
-    if not NativeBackend.is_available(NativeBackend.Capabilities.PARSE):
-        return ValidationResult(status=ValidationStatus.PARSER_UNAVAILABLE)
-
-    language = _get_language_from_ext(path)
-    if language is None:
-        return ValidationResult(status=ValidationStatus.PARSER_UNAVAILABLE)
-
-    # bd-93: Check if the language is supported via NativeBackend
-    if not NativeBackend.is_language_supported(language):
-        return ValidationResult(status=ValidationStatus.PARSER_UNAVAILABLE)
-
-    try:
-        # bd-93: Use NativeBackend for syntax diagnostics (Elixir-first routing)
-        result = NativeBackend.extract_syntax_diagnostics(content, language)
-
-        # Check for backend unavailability in result
-        if isinstance(result, dict) and result.get("error"):
-            # Backend is available but couldn't parse this file
-            # This could be a parser limitation, not syntax error
-            error_msg = result.get("error", "")
-            if "not available" in error_msg.lower() or "disabled" in error_msg.lower():
-                return ValidationResult(status=ValidationStatus.PARSER_UNAVAILABLE)
-
-        # Check for actual syntax errors
-        if isinstance(result, dict):
-            error_count = result.get("error_count", 0)
-            if error_count == 0:
-                return ValidationResult(
-                    status=ValidationStatus.VALID, language=language
-                )
-
-            # Collect error messages from diagnostics
-            diagnostics = result.get("diagnostics", [])
-            errors: list[str] = []
-            for diag in diagnostics:
-                if isinstance(diag, dict) and diag.get("severity") in (
-                    "error",
-                    "ERROR",
-                ):
-                    line = diag.get("line", 0)
-                    message = diag.get("message", "Unknown error")
-                    col = diag.get("column", 0)
-                    if line > 0:
-                        errors.append(f"Line {line}:{col} - {message}")
-                    else:
-                        errors.append(message)
-
-            # Deduplicate errors
-            seen: set[str] = set()
-            unique_errors: list[str] = []
-            for err in errors:
-                if err not in seen:
-                    seen.add(err)
-                    unique_errors.append(err)
-
-            return ValidationResult(
-                status=ValidationStatus.INVALID,
-                errors=unique_errors if unique_errors else ["Syntax error detected"],
-                language=language,
-            )
-
-        # Unexpected result format, fail open
-        return ValidationResult(status=ValidationStatus.PARSER_UNAVAILABLE)
-
-    except Exception as e:
-        # Parser itself raised — treat as unavailable (fail open).
-        logger.debug("syntax_validate: parser raised for %s: %s", path, e)
-        return ValidationResult(status=ValidationStatus.PARSER_UNAVAILABLE)
+    # bd-86: Native acceleration removed, always return unavailable
+    return ValidationResult(status=ValidationStatus.PARSER_UNAVAILABLE)
 
 
 def validate_file_sync(

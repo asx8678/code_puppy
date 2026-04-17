@@ -41,64 +41,41 @@ _HASHLINE_PREFIX_RE = re.compile(r"^\d+#[A-Z]{2}:(.*)", re.DOTALL)
 
 
 def _try_elixir_compute_line_hash(idx: int, line: str) -> str | None:
-    """Try Elixir hashline_compute, return None on failure."""
-    try:
-        from code_puppy.native_backend import NativeBackend
+    """Try Elixir hashline_compute, return None on failure.
 
-        if not NativeBackend._should_use_elixir("edit_ops"):
-            return None
-        result = NativeBackend._call_elixir(
-            "hashline_compute", {"idx": idx, "line": line}
-        )
-        return result.get("hash")
-    except Exception:
-        return None
+    bd-86: Native acceleration layer removed, always returns None.
+    """
+    # bd-86: Native acceleration removed, always use Python fallback
+    return None
 
 
 def _try_elixir_format_hashlines(text: str, start_line: int) -> str | None:
-    """Try Elixir hashline_format, return None on failure."""
-    try:
-        from code_puppy.native_backend import NativeBackend
+    """Try Elixir hashline_format, return None on failure.
 
-        if not NativeBackend._should_use_elixir("edit_ops"):
-            return None
-        result = NativeBackend._call_elixir(
-            "hashline_format", {"text": text, "start_line": start_line}
-        )
-        return result.get("formatted")
-    except Exception:
-        return None
+    bd-86: Native acceleration layer removed, always returns None.
+    """
+    # bd-86: Native acceleration removed, always use Python fallback
+    return None
 
 
 def _try_elixir_strip_hashline_prefixes(text: str) -> str | None:
-    """Try Elixir hashline_strip, return None on failure."""
-    try:
-        from code_puppy.native_backend import NativeBackend
+    """Try Elixir hashline_strip, return None on failure.
 
-        if not NativeBackend._should_use_elixir("edit_ops"):
-            return None
-        result = NativeBackend._call_elixir("hashline_strip", {"text": text})
-        return result.get("stripped")
-    except Exception:
-        return None
+    bd-86: Native acceleration layer removed, always returns None.
+    """
+    # bd-86: Native acceleration removed, always use Python fallback
+    return None
 
 
 def _try_elixir_validate_hashline_anchor(
     idx: int, line: str, expected_hash: str
 ) -> bool | None:
-    """Try Elixir hashline_validate, return None on failure."""
-    try:
-        from code_puppy.native_backend import NativeBackend
+    """Try Elixir hashline_validate, return None on failure.
 
-        if not NativeBackend._should_use_elixir("edit_ops"):
-            return None
-        result = NativeBackend._call_elixir(
-            "hashline_validate",
-            {"idx": idx, "line": line, "expected_hash": expected_hash},
-        )
-        return result.get("valid")
-    except Exception:
-        return None
+    bd-86: Native acceleration layer removed, always returns None.
+    """
+    # bd-86: Native acceleration removed, always use Python fallback
+    return None
 
 
 # ---------------------------------------------------------------------------
@@ -255,16 +232,11 @@ def validate_hashline_anchor(idx: int, line: str, expected_hash: str) -> bool:
 def is_using_elixir() -> bool:
     """Return ``True`` if the Elixir acceleration is active for this module.
 
-    The Elixir backend (via HashlineNif) produces xxHash32-based hashes
-    compatible with other xxHash32-based tools; the Python backend uses
-    ``zlib.crc32`` and is not cross-compatible.
+    bd-86: Native acceleration layer removed, always returns False.
+    The Python backend uses ``zlib.crc32`` and is not cross-compatible
+    with the xxHash32-based Elixir backend.
 
-    Returns True only if Elixir is available AND the last operation
-    successfully routed through it. This is a best-effort heuristic.
+    Returns False always - Python fallback is used exclusively.
     """
-    try:
-        from code_puppy.native_backend import NativeBackend
-
-        return NativeBackend._should_use_elixir("edit_ops")
-    except Exception:
-        return False
+    # bd-86: Native acceleration removed, always use Python
+    return False

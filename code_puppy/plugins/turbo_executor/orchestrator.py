@@ -27,18 +27,9 @@ try:
 except ImportError:
     _NOTIFICATIONS_AVAILABLE = False
 
-# Import NativeBackend for unified acceleration interface
-from code_puppy.native_backend import NativeBackend
+# bd-86: Native acceleration layer removed, always use Python file operations
+NATIVE_FILE_OPS_AVAILABLE = False
 
-# bd-84: Check native file ops availability
-try:
-    NATIVE_FILE_OPS_AVAILABLE = NativeBackend.is_available(
-        NativeBackend.Capabilities.FILE_OPS
-    )
-except Exception:
-    NATIVE_FILE_OPS_AVAILABLE = False
-
-# Fallback: Import Python-native file operations when native unavailable
 from code_puppy.tools.file_operations import validate_file_path
 
 
@@ -69,21 +60,12 @@ class TurboOrchestrator:
 
         Args:
             enable_parallel: Whether to enable parallel execution (future feature)
-            prefer_native_python: Force use of native Python operations even if native available
+            prefer_native_python: Ignored (bd-86: Python is always used)
         """
         self.enable_parallel = enable_parallel
-        self.prefer_native_python = prefer_native_python
-        self._native_file_ops_available = (
-            NativeBackend.is_available(NativeBackend.Capabilities.FILE_OPS)
-            and not prefer_native_python
-        )
-        # bd-94: Removed _turbo_ops_available - use _native_file_ops_available directly
-        # bd-84: Track actual backend source for accurate reporting
-        self._backend_source = (
-            NativeBackend._get_file_ops_source()
-            if hasattr(NativeBackend, "_get_file_ops_source")
-            else ("elixir" if self._native_file_ops_available else "python")
-        )
+        # bd-86: Native acceleration removed, always use Python
+        self._native_file_ops_available = False
+        self._backend_source = "python"
 
         self._operation_handlers: dict[OperationType, Callable] = {
             OperationType.LIST_FILES: self._execute_list_files,
@@ -93,8 +75,11 @@ class TurboOrchestrator:
 
     @property
     def using_native_ops(self) -> bool:
-        """Check if using native Python operations (fallback mode)."""
-        return not self._native_file_ops_available
+        """Check if using native Python operations.
+
+        bd-86: Always returns True since Python is always used.
+        """
+        return True
 
     async def execute(self, plan: Plan) -> PlanResult:
         """Execute a plan and return results.

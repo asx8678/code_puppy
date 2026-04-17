@@ -6,12 +6,10 @@ from typing import Any
 
 from code_puppy.code_context.models import CodeContext, FileOutline, SymbolInfo
 from code_puppy.tools.file_operations import _read_file_sync
-# bd-68: Route parse operations through NativeBackend (single native boundary)
-from code_puppy.native_backend import NativeBackend
-
-# Derive availability from NativeBackend capability check
-TURBO_PARSE_AVAILABLE = NativeBackend.is_active(NativeBackend.Capabilities.PARSE)
 from code_puppy.utils.symbol_hierarchy import build_symbol_hierarchy
+
+# bd-86: Native acceleration layer removed - always use Python fallback
+TURBO_PARSE_AVAILABLE = False
 
 logger = logging.getLogger(__name__)
 
@@ -116,51 +114,14 @@ class CodeExplorer:
             pass
 
         # Extract symbols if language is supported
-        if language and TURBO_PARSE_AVAILABLE and NativeBackend.is_language_supported(language):
-            try:
-                # bd-68: Use NativeBackend.extract_symbols with already-loaded content
-                raw_symbols = NativeBackend.extract_symbols(content, language)
-                symbol_result = {
-                    "success": bool(raw_symbols),
-                    "symbols": raw_symbols if isinstance(raw_symbols, list) else [],
-                    "extraction_time_ms": 0.0,
-                }
-
-                if symbol_result.get("success"):
-                    raw_symbols = symbol_result.get("symbols", [])
-                    symbol_infos = [SymbolInfo.from_dict(s) for s in raw_symbols]
-
-                    # Build hierarchy using shared utility
-                    hierarchical = build_symbol_hierarchy(symbol_infos)
-
-                    context.outline = FileOutline(
-                        language=language,
-                        symbols=hierarchical,
-                        extraction_time_ms=symbol_result.get("extraction_time_ms", 0.0),
-                        success=True,
-                    )
-                else:
-                    errors = symbol_result.get("errors", [])
-                    context.has_errors = True
-                    context.error_message = "; ".join(str(e) for e in errors)
-                    context.outline = FileOutline(
-                        language=language,
-                        symbols=[],
-                        success=False,
-                        errors=[str(e) for e in errors],
-                    )
-            except Exception as e:
-                logger.warning(f"Symbol extraction failed for {abs_path}: {e}")
-                context.has_errors = True
-                context.error_message = f"Symbol extraction failed: {e}"
-        else:
-            # Language not supported or turbo_parse not available
-            context.outline = FileOutline(
-                language=language or "unknown",
-                symbols=[],
-                success=False,
-                errors=["Symbol extraction not available for this language"],
-            )
+        # bd-86: Native acceleration layer removed, symbol extraction disabled
+        # TURBO_PARSE_AVAILABLE is always False now
+        context.outline = FileOutline(
+            language=language or "unknown",
+            symbols=[],
+            success=False,
+            errors=["Symbol extraction not available for this language"],
+        )
 
         # Cache the result
         if self.enable_cache:

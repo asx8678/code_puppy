@@ -1,9 +1,7 @@
-"""Turbo Parse Plugin — High-performance parsing via Rust module.
+"""Turbo Parse Plugin — High-performance parsing via native modules.
 
-Provides fast code parsing capabilities using the turbo_parse Rust module.
-Falls back to pure Python implementations when Rust module is unavailable.
-
-bd-93: Phase 4 - Now routes through NativeBackend for unified Elixir-first routing.
+bd-86: Native acceleration layer removed. This plugin now always returns
+False for availability checks, as the native backends have been removed.
 """
 
 __version__ = "0.1.0"
@@ -16,13 +14,12 @@ __all__ = [
 
 
 def is_turbo_parse_available() -> bool:
-    """Check if parsing capability is available through NativeBackend.
+    """Check if parsing capability is available.
 
-    bd-93: Phase 4 - Now delegates to NativeBackend for unified capability checking.
+    bd-86: Native acceleration layer removed, always returns False.
+    Parsing operations now use pure Python implementations.
 
     Returns:
-        True if parse capability is available (via Rust, Elixir, or Python).
+        False - native parsing is not available.
     """
-    from code_puppy.native_backend import NativeBackend
-
-    return NativeBackend.is_available(NativeBackend.Capabilities.PARSE)
+    return False
