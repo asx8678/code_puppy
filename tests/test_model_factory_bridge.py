@@ -52,9 +52,7 @@ class TestModelFactoryBridgeIntegration:
 
     def test_call_elixir_model_registry_call_fails(self):
         """Test bridge call when call_method raises an exception."""
-        with patch(
-            "code_puppy.plugins.elixir_bridge.is_connected", return_value=True
-        ):
+        with patch("code_puppy.plugins.elixir_bridge.is_connected", return_value=True):
             with patch(
                 "code_puppy.plugins.elixir_bridge.call_method",
                 side_effect=ConnectionError("Test error"),
@@ -65,9 +63,7 @@ class TestModelFactoryBridgeIntegration:
 
     def test_call_elixir_model_registry_with_params(self):
         """Test bridge call with parameters."""
-        with patch(
-            "code_puppy.plugins.elixir_bridge.is_connected", return_value=True
-        ):
+        with patch("code_puppy.plugins.elixir_bridge.is_connected", return_value=True):
             with patch(
                 "code_puppy.plugins.elixir_bridge.call_method",
                 return_value={"model_name": "test", "config": {"type": "test"}},
@@ -125,7 +121,9 @@ class TestModelFactoryBridgeIntegration:
         ) as mock_bridge:
             result = ModelFactory.get_config_from_bridge("test-model")
 
-            mock_bridge.assert_called_once_with("get_config", {"model_name": "test-model"})
+            mock_bridge.assert_called_once_with(
+                "get_config", {"model_name": "test-model"}
+            )
             assert result == model_config
 
     def test_get_config_from_bridge_no_config(self):

@@ -150,10 +150,13 @@ defmodule CodePuppyControl.Transport.StdioService do
 
   alias CodePuppyControl.AgentModelPinning
   alias CodePuppyControl.FileOps
+  alias CodePuppyControl.ModelAvailability
+  alias CodePuppyControl.ModelPacks
+  alias CodePuppyControl.ModelRegistry
   alias CodePuppyControl.Protocol
-  alias CodePuppyControl.Tools.SchedulerTools
-  alias CodePuppyControl.Tools.CommandRunner
   alias CodePuppyControl.RoundRobinModel
+  alias CodePuppyControl.Tools.CommandRunner
+  alias CodePuppyControl.Tools.SchedulerTools
 
   defstruct [:io_device, :buffer, :request_counter]
 
@@ -1640,17 +1643,6 @@ defmodule CodePuppyControl.Transport.StdioService do
   # Model Services (bd-96)
   # ============================================================================
 
-  alias CodePuppyControl.ModelRegistry
-  alias CodePuppyControl.ModelAvailability
-  alias CodePuppyControl.ModelPacks
-
-  # Validates that params is a map (JSON-RPC object). Returns encoded error if not.
-  defp validate_params_is_map(params, id) when not is_map(params) do
-    Protocol.encode_error(-32602, "Invalid params: expected object", nil, id)
-  end
-
-  defp validate_params_is_map(_params, _id), do: :ok
-
   # model_registry.get_config - Get model configuration by name
   defp handle_request("model_registry.get_config", params, id) do
     with :ok <- validate_params_is_map(params, id) do
@@ -1979,6 +1971,13 @@ defmodule CodePuppyControl.Transport.StdioService do
       id
     )
   end
+
+  # Validates that params is a map (JSON-RPC object). Returns encoded error if not.
+  defp validate_params_is_map(params, id) when not is_map(params) do
+    Protocol.encode_error(-32602, "Invalid params: expected object", nil, id)
+  end
+
+  defp validate_params_is_map(_params, _id), do: :ok
 
   # ============================================================================
   # HTTP Helpers
