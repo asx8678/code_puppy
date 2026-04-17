@@ -1219,7 +1219,7 @@
       "id": "bd-65",
       "title": "Port agent tools to Elixir",
       "description": "Source: tools/agent_tools.py (40KB). Target: Elixir tool registry.\n\nPart of Phase 3 \u2014 Python tools retirement.",
-      "status": "open",
+      "status": "closed",
       "priority": 2,
       "type": "task",
       "labels": [
@@ -1231,8 +1231,10 @@
         ]
       },
       "created_at": "2026-04-16T17:51:48.509788",
-      "updated_at": "2026-04-16T17:51:48.509796",
-      "comments": []
+      "updated_at": "2026-04-17T08:54:57.184931",
+      "comments": [
+        "Shepherd review: REQUEST_CHANGES - (1) BUG: XDG_DATA_HOME missing code_puppy namespace, (2) Dead defstruct on GenServer module, (3) Double file read in save_session_history, (4) O(n*m) filtering perf, (5) N+1 GenServer calls in register_agents, (6) Directory name mismatch sessions vs subagent_sessions"
+      ]
     },
     "bd-66": {
       "id": "bd-66",
