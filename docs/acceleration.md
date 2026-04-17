@@ -1,8 +1,8 @@
 # Native Acceleration (Fast Puppy)
 
-Code Puppy uses a **multi-backend acceleration stack** for native performance, with intelligent routing based on capability type.
+Code Puppy uses a **pure Elixir + Python architecture** for high-performance operations.
 
-## Architecture Overview (Elixir-First)
+## Architecture Overview (Pure Elixir)
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
@@ -11,55 +11,55 @@ Code Puppy uses a **multi-backend acceleration stack** for native performance, w
 │  NativeBackend (unified interface)                              │
 ├─────────────────────────────────────────────────────────────────┤
 │                    Backend Routing                               │
-├───────────────┬───────────────────┬─────────────────────────────┤
-│  Elixir       │  Rust (PyO3)      │  Python (Fallback)          │
-│  ┌─────────┐  │  ┌─────────────┐  │  ┌─────────────────────┐   │
-│  │File Ops │  │  │message_core │  │  │list_files           │   │
-│  │Repo Idx │  │  │- batch      │  │  │grep                 │   │
-│  │Parse NIF│  │  │- pruning    │  │  │read_file            │   │
-│  └─────────┘  │  │- hashing    │  │  └─────────────────────┘   │
-│               │  │- serialize  │  │                             │
-│               │  ├─────────────┤  │                             │
-│               │  │turbo_parse  │  │                             │
-│               │  │- symbols    │  │                             │
-│               │  │- parsing    │  │                             │
-│               │  └─────────────┘  │                             │
-└───────────────┴───────────────────┴─────────────────────────────┘
+├───────────────┬─────────────────────────────────────────────────┤
+│  Elixir       │  Python (Fallback)                               │
+│  ┌─────────┐  │  ┌─────────────────────┐                        │
+│  │File Ops │  │  │list_files           │                        │
+│  │Repo Idx │  │  │grep                 │                        │
+│  │Parse    │  │  │read_file            │                        │
+│  │Message  │  │  │message operations   │                        │
+│  │Core     │  │  └─────────────────────┘                        │
+│  └─────────┘  │                                                  │
+└───────────────┴──────────────────────────────────────────────────┘
 ```
 
 ## Backend Assignment
 
 | Capability | Primary Backend | Fallback | Purpose |
 |------------|-----------------|----------|---------|
-| `message_core` | **Rust** | Python | Message serialization, pruning, hashing |
+| `message_core` | **Elixir** | Python | Message serialization, pruning, hashing |
 | `file_ops` | **Elixir** | Python | Batch file ops (`list_files`, `grep`, `read_file`) |
 | `repo_index` | **Elixir** | Python | Repository indexing |
-| `parse` | **Elixir NIF** → Rust | Python | Tree-sitter parsing, symbols, diagnostics |
+| `parse` | **Elixir** | Python | Tree-sitter parsing, symbols, diagnostics |
 
 ## Backend Profiles
 
-The runtime supports three backend profiles:
+The runtime supports two backend profiles:
 
 ```python
 from code_puppy.native_backend import NativeBackend
 
-# Elixir-first routing (default)
+# Elixir-first routing (default) - all operations route through Elixir
 NativeBackend.set_backend_preference("elixir_first")
-
-# Rust-only (no Elixir)
-NativeBackend.set_backend_preference("rust_only")
 
 # Python-only (no native acceleration)
 NativeBackend.set_backend_preference("python_only")
 ```
 
+> **Note:** The `rust_only` profile has been removed as of bd-167 — Rust has been completely eliminated from the architecture.
+
 ## Why This Architecture?
 
 | Backend | Best For | Rationale |
 |---------|----------|-----------|
-| **Elixir** | File operations, indexing | Distributed coordination, fault tolerance, BEAM VM |
-| **Rust** | Message processing | Minimal FFI overhead for hot paths, memory safety |
-| **Python** | Fallback | Always works, zero build requirements |
+| **Elixir** | All runtime operations | Distributed coordination, fault tolerance, BEAM VM concurrency |
+| **Python** | Agent orchestration, CLI, TUI | Rich ecosystem for LLM integration, rapid development |
+
+**Benefits of pure Elixir + Python:**
+- **Simpler builds**: No Rust toolchain, no PyO3, no maturin
+- **Faster CI**: Python-only builds, no native compilation
+- **Easier onboarding**: Just Python + Elixir knowledge required
+- **Consistent performance**: Single optimized backend (Elixir BEAM/OTP)
 
 ## Unified Bridge API
 
@@ -88,79 +88,75 @@ Environment variables to control acceleration:
 
 | Variable | Effect |
 |----------|--------|
-| `PUP_DISABLE_RUST` | Force Python fallbacks for Rust-backed operations |
-| `PUP_DISABLE_ELIXIR` | Disable Elixir routing |
-| `PUP_DISABLE_ACCELERATION` | Disable all native acceleration |
+| `PUP_DISABLE_ELIXIR` | Disable Elixir routing (use Python fallbacks) |
+| `PUP_DISABLE_ACCELERATION` | Disable all native acceleration (pure Python mode) |
+
+> **Note:** `PUP_DISABLE_RUST` has been removed as Rust is no longer part of the architecture (bd-167).
 
 ## Fallback Chain
 
 Each operation follows this priority:
 
 1. **Try Elixir** (if `elixir_first` profile and available)
-2. **Try Rust** (if `rust_only` profile and available)
-3. **Python implementation**
-4. **Graceful degradation** (return empty/error result)
+2. **Python implementation** (always available)
+3. **Graceful degradation** (return empty/error result)
+
+> **Note:** The Rust step has been removed as Rust has been completely eliminated from the architecture (bd-167).
 
 ## Building
 
-### Rust Components
-
-```bash
-# Build Rust crates
-cargo build --release --workspace
-
-# Or use maturin for individual crates
-uv run maturin develop --release --manifest-path code_puppy_core/Cargo.toml
-uv run maturin develop --release --manifest-path turbo_parse/Cargo.toml
-```
-
 ### Elixir Components
+
+The Elixir control plane provides all native acceleration:
 
 ```bash
 # Start the Elixir control plane
-cd elixir/
+cd code_puppy_control/
 mix deps.get
 iex -S mix
 ```
+
+No additional build steps required — the Python layer communicates with Elixir via JSON-RPC over stdio.
 
 ## Performance Notes
 
 | Operation | Speedup | Backend |
 |-----------|---------|---------|
-| Message processing | 10-30x | Rust |
+| Message processing | 10-30x | Elixir |
 | File operations | 5-20x | Elixir |
-| Parsing | 10-50x | Elixir NIF → Rust |
+| Parsing | 10-50x | Elixir |
 
 ## Migration Notes
 
-- **bd-93**: Parse operations now route through `NativeBackend` with Elixir-first routing
-- **bd-94**: Removed `turbo_ops` crate - file operations now route through Elixir
+- **bd-167**: Rust has been completely eliminated from the architecture
+- **bd-93**: Parse operations route through `NativeBackend` with Elixir-first routing
+- **bd-94**: File operations route through Elixir
 - Direct `turbo_parse_bridge` imports are deprecated — use `NativeBackend`
 
 ## Future Considerations
 
-- Python 3.14 free-threading: All crates support no-GIL operation
-- Additional backends evaluated based on FFI sensitivity and ecosystem maturity
+- Python 3.14 free-threading: Full support for no-GIL operation
+- Elixir BEAM/OTP provides distributed, fault-tolerant operation
+- Future backends evaluated based on FFI sensitivity and ecosystem maturity
 
-## Capability Routing Table (bd-13)
+## Capability Routing Table (bd-13, bd-167)
 
 NativeBackend routes operations to the optimal backend based on the active profile. Use `NativeBackend.get_capability_routing(capability)` to introspect at runtime.
 
 ### Routing by Profile
 
-| Capability | `elixir_first` (default) | `rust_first` | `python_only` |
-|------------|-------------------------|-------------|---------------|
-| **message_core** | Rust → Python | Rust → Python | Python |
-| **file_ops** | Elixir → Python | Elixir → Python | Python |
-| **repo_index** | Elixir → Python | Elixir → Python | Python |
-| **parse** | Elixir → Rust → Python | Rust → Elixir → Python | Python |
+| Capability | `elixir_first` (default) | `python_only` |
+|------------|-------------------------|---------------|
+| **message_core** | Elixir → Python | Python |
+| **file_ops** | Elixir → Python | Python |
+| **repo_index** | Elixir → Python | Python |
+| **parse** | Elixir → Python | Python |
 
 ### Fallback Behavior
 
-- Each backend is tried in order; first available wins
+- Elixir is tried first; Python fallback is always available
 - Python fallback is always available (never fails to import)
-- `rust_first` for PARSE: skips Elixir when `turbo_parse` Rust crate is available
-- `rust_first` for FILE_OPS/REPO_INDEX: still uses Elixir (no Rust backend exists since turbo_ops removed in bd-76)
+- All native operations now route through Elixir (Rust eliminated in bd-167)
 
 ### Runtime Introspection
 
@@ -169,8 +165,8 @@ from code_puppy.native_backend import NativeBackend
 
 # Get routing plan for a capability
 routing = NativeBackend.get_capability_routing("parse")
-print(routing["will_use"])     # "elixir", "turbo_parse", or "python_fallback"
-print(routing["backends"])     # [("elixir", True), ("turbo_parse", False), ...]
+print(routing["will_use"])     # "elixir" or "python_fallback"
+print(routing["backends"])     # [("elixir", True), ("python", True), ...]
 print(routing["preference"])   # "elixir_first"
 
 # Get full status

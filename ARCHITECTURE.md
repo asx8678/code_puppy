@@ -2,13 +2,13 @@
 
 ## High-Level System Architecture
 
-> **Phase 6 Vision (2026-04-16)**: Code Puppy is transitioning to a **thin Python shell** architecture.
+> **Phase 6 Complete (2026-04-17)**: Code Puppy has achieved the **"no Rust, thin Python"** end state.
 > 
 > - **Python layer**: TUI (Textual), CLI interface, pydantic-ai agent loop
-> - **Elixir layer**: ALL runtime operations (file ops, parsing, job scheduling)
-> - **Rust layer**: Scheduled for complete retirement (bd-43 migration epic)
+> - **Elixir layer**: ALL runtime operations (file ops, parsing, job scheduling, message processing)
+> - **Rust layer**: **COMPLETELY ELIMINATED** (bd-167, bd-43 migration epic)
 >
-> Current state: Python + Elixir hybrid | End state: Python shell → Elixir backend only
+> Architecture: Thin Python shell → Elixir backend only (zero Rust)
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────────────┐
@@ -106,11 +106,11 @@
 └─────────────────┘  └─────────────────┘  └─────────────────┘
 
 ┌──────────────────────────────────────────────────────────────────────────────┐
-│  LEGACY RUST COMPONENTS (Scheduled for Retirement - See bd-43)              │
+│  RUST COMPONENTS (DELETED as of bd-167)                                     │
 ├──────────────────────────────────────────────────────────────────────────────┤
-│  • code_puppy_core (msgs/hash) - RETIRING                                    │
-│  • turbo_parse (AST parsing)   - RETIRING                                    │
-│  All functionality migrating to Elixir NIFs or pure Elixir services          │
+│  • code_puppy_core (msgs/hash) - DELETED                                     │
+│  • turbo_parse (AST parsing)   - DELETED                                     │
+│  All functionality migrated to pure Elixir services — zero Rust remaining    │
 └──────────────────────────────────────────────────────────────────────────────┘
     │
     ▼
@@ -130,7 +130,7 @@
 │   CORE PLUGINS     │   AUTH PLUGINS     │     FEATURE PLUGINS                  │
 ├────────────────────┼────────────────────┼────────────────────────────────────┤
 │ • fast_puppy       │ • claude_code_oauth│ • agent_skills (Skill install)       │
-│   (Rust builder)   │ • chatgpt_oauth    │ • turbo_executor (Batch ops)         │
+│   (Elixir backend) │ • chatgpt_oauth    │ • turbo_executor (Batch ops)         │
 │ • file_mentions    │                    │ • shell_safety (Cmd filter)          │
 │   (@file support)  │                    │ • agent_trace (Analytics)            │
 │ • repo_compass     │                    │ • agent_trace (Analytics)            │
@@ -210,7 +210,7 @@ User Input
 | Aspect | Decision | Rationale |
 |--------|----------|-----------|
 | **Plugin System** | Hook-based callbacks | Hot-swappable, zero core modification |
-| **Native Accel** | Elixir-first runtime (bd-43 migration) | Phase 6: Thin Python shell + full Elixir backend |
+| **Native Accel** | Pure Elixir runtime (bd-167 complete) | Thin Python shell + full Elixir backend (zero Rust) |
 | **Agent Concurrency** | Pack Leader with MAX=8 | Prevents resource exhaustion |
 | **Model Routing** | Adaptive rate limiting | Protects against rate limit storms |
 | **MCP Security** | Circuit breaker + whitelist | Defense in depth for external tools |
