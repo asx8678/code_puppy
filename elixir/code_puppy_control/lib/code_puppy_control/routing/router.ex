@@ -146,7 +146,7 @@ defmodule CodePuppyControl.Routing.Router do
   def route_default(opts \\ []) do
     role = Keyword.get(opts, :role, "coder")
     context = Keyword.get(opts, :context, %{})
-    _availability_service = Keyword.get(opts, :availability_service)
+    availability_service = Keyword.get(opts, :availability_service)
 
     # Get models from current pack
     models = get_models_for_role(role)
@@ -157,10 +157,11 @@ defmodule CodePuppyControl.Routing.Router do
       %LastResort{}
     ]
 
-    # Availability service is handled via global ModelAvailability
+    # Build full context with role and optional availability service
     full_context =
       context
       |> Map.put(:role, role)
+      |> maybe_put(:availability_service, availability_service)
 
     route(strategies: strategies, context: full_context)
   end
@@ -191,7 +192,7 @@ defmodule CodePuppyControl.Routing.Router do
   @spec round_robin([String.t()], keyword()) :: {:ok, String.t()} | {:error, term()}
   def round_robin(models, opts \\ []) when is_list(models) do
     rotate_every = Keyword.get(opts, :rotate_every, 1)
-    use_global = Keyword.get(opts, :use_global, false)
+    use_global = Keyword.get(opts, :use_global, true)
 
     strategy = %RoundRobin{
       models: models,
@@ -263,4 +264,8 @@ defmodule CodePuppyControl.Routing.Router do
   defp default_models_for_role("summarizer"), do: ["gemini-2.5-flash", "gpt-4o-mini"]
   defp default_models_for_role("title"), do: ["gpt-4o-mini", "gemini-2.5-flash"]
   defp default_models_for_role(_), do: ["claude-sonnet-4", "gpt-4o", "gemini-2.5-flash"]
+
+  # Helper to optionally put a key-value pair in a map if value is not nil
+  defp maybe_put(map, _key, nil), do: map
+  defp maybe_put(map, key, value), do: Map.put(map, key, value)
 end

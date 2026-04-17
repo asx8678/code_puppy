@@ -107,11 +107,11 @@ defmodule CodePuppyControl.Routing.RouterTest do
 
   describe "round_robin/2 convenience function" do
     test "selects first model when use_global is false" do
-      assert Router.round_robin(["a", "b", "c"]) == {:ok, "a"}
+      assert Router.round_robin(["a", "b", "c"], use_global: false) == {:ok, "a"}
     end
 
     test "accepts rotate_every option" do
-      assert Router.round_robin(["a", "b"], rotate_every: 5) == {:ok, "a"}
+      assert Router.round_robin(["a", "b"], rotate_every: 5, use_global: false) == {:ok, "a"}
     end
   end
 
@@ -152,6 +152,34 @@ defmodule CodePuppyControl.Routing.RouterTest do
 
       # Should get fallback since first is terminal
       assert match?({:ok, _model}, result)
+    end
+
+    test "availability_service is passed to LastResort strategy when all models terminal" do
+      # Mark all primary models as terminal
+      ModelAvailability.mark_terminal("model-a", :quota)
+      ModelAvailability.mark_terminal("model-b", :quota)
+
+      # Mark one last resort model as terminal but leave one available
+      # "last-resort-b" is kept healthy/available
+      ModelAvailability.mark_terminal("last-resort-a", :quota)
+
+      # When we enable last resort availability checking with :global,
+      # the LastResort should use the injected availability_service to check
+      # model health and skip the terminal "last-resort-a", selecting "last-resort-b"
+      result =
+        Router.route(
+          strategies: [
+            %FallbackChain{models: ["model-a", "model-b"]},
+            %LastResort{models: ["last-resort-a", "last-resort-b"]}
+          ],
+          context: %{
+            availability_service: :global,
+            check_last_resort_availability: true
+          }
+        )
+
+      # LastResort should check availability using :global and select "last-resort-b"
+      assert result == {:ok, "last-resort-b"}
     end
   end
 

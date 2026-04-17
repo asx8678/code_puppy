@@ -108,8 +108,15 @@ defmodule CodePuppyControl.Routing.Strategies.LastResort do
           {:ok, hd(available_models)}
 
         _ ->
-          # Optionally check availability using global API
-          result = ModelAvailability.select_first_available(available_models)
+          # Optionally check availability using injected service
+          availability_service =
+            case Map.get(context, :availability_service) do
+              nil -> ModelAvailability
+              :global -> ModelAvailability
+              service -> service
+            end
+
+          result = availability_service.select_first_available(available_models)
 
           case result.selected_model do
             nil -> {:error, :no_last_resort_available}
