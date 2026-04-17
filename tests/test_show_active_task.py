@@ -427,9 +427,16 @@ class TestEnvVarNormalization:
     @pytest.mark.parametrize(
         "env_val",
         [
-            "abc", "twelve", "!@#", "  ", "--",
+            "abc",
+            "twelve",
+            "!@#",
+            "  ",
+            "--",
             # Regression: malformed ranges and negatives (bd-136)
-            "1-2", "0-1", "-5", "1.5",
+            "1-2",
+            "0-1",
+            "-5",
+            "1.5",
         ],
         ids=lambda v: repr(v),
     )
@@ -455,7 +462,9 @@ class TestEnvVarNormalization:
         [("007", 7), ("000", 0), ("010", 10)],
         ids=lambda v: str(v),
     )
-    def test_count_strips_leading_zeros(self, tmp_git_repo: Path, env_val: str, expected: int):
+    def test_count_strips_leading_zeros(
+        self, tmp_git_repo: Path, env_val: str, expected: int
+    ):
         """Leading zeros (e.g. '007') must not produce octal-like output."""
         result = _run_script(tmp_git_repo, {"PUP_GUIDANCE_COUNT": env_val})
         assert result.returncode == 0
