@@ -20,7 +20,9 @@ Code.require_file("support/e2e_case.ex", __DIR__)
 
 # Start parser registry for tests (bd-114: pure Elixir parsers)
 # Registry may already be started by the application supervision tree
-case CodePuppyControl.Parsing.ParserRegistry.start_link(name: CodePuppyControl.Parsing.ParserRegistry) do
+case CodePuppyControl.Parsing.ParserRegistry.start_link(
+       name: CodePuppyControl.Parsing.ParserRegistry
+     ) do
   {:ok, _registry} -> :ok
   {:error, {:already_started, _pid}} -> :ok
 end

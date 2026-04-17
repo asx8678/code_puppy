@@ -93,16 +93,12 @@ defmodule CodePuppyControl.ModelsDevRpcTest do
   describe "get_provider" do
     test "returns specific provider when found" do
       providers = Registry.get_providers()
-      skip_if_empty = length(providers) == 0
+      provider_id = hd(providers).id
+      provider = Registry.get_provider(provider_id)
 
-      unless skip_if_empty do
-        provider_id = hd(providers).id
-        provider = Registry.get_provider(provider_id)
-
-        assert provider != nil
-        assert provider.id == provider_id
-        assert is_binary(provider.name)
-      end
+      assert provider != nil
+      assert provider.id == provider_id
+      assert is_binary(provider.name)
     end
 
     test "returns nil for unknown provider" do
@@ -127,18 +123,14 @@ defmodule CodePuppyControl.ModelsDevRpcTest do
 
     test "filters by provider" do
       providers = Registry.get_providers()
-      skip_if_empty = length(providers) == 0
+      provider_id = hd(providers).id
+      # Must pass Registry as first arg when specifying provider_id
+      models = Registry.get_models(Registry, provider_id)
 
-      unless skip_if_empty do
-        provider_id = hd(providers).id
-        # Must pass Registry as first arg when specifying provider_id
-        models = Registry.get_models(Registry, provider_id)
-
-        # All returned models should be from the specified provider
-        Enum.each(models, fn model ->
-          assert model.provider_id == provider_id
-        end)
-      end
+      # All returned models should be from the specified provider
+      Enum.each(models, fn model ->
+        assert model.provider_id == provider_id
+      end)
     end
   end
 
@@ -168,21 +160,16 @@ defmodule CodePuppyControl.ModelsDevRpcTest do
 
   describe "config conversion" do
     test "to_config creates valid Code Puppy config" do
-      models = Registry.get_models()
-      skip_if_empty = length(models) == 0
+      model = hd(Registry.get_models())
+      config = Registry.to_config(model)
 
-      unless skip_if_empty do
-        model = hd(models)
-        config = Registry.to_config(model)
-
-        assert is_map(config)
-        assert is_binary(config["type"])
-        assert is_binary(config["model"])
-        assert config["enabled"] == true
-        assert is_binary(config["provider_id"])
-        assert is_list(config["env_vars"])
-        assert is_map(config["capabilities"])
-      end
+      assert is_map(config)
+      assert is_binary(config["type"])
+      assert is_binary(config["model"])
+      assert config["enabled"] == true
+      assert is_binary(config["provider_id"])
+      assert is_list(config["env_vars"])
+      assert is_map(config["capabilities"])
     end
   end
 end
