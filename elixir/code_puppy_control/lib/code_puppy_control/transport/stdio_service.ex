@@ -98,6 +98,18 @@ defmodule CodePuppyControl.Transport.StdioService do
   - `models_dev.to_config` - Convert model to Code Puppy config format
   - `models_dev.data_source` - Get data source info
 
+  ### Model Services (bd-96)
+  - `model_registry.get_config` - Get model configuration by name
+  - `model_registry.list_models` - List all available models with configs
+  - `model_registry.get_all_configs` - Get all model configs as map
+  - `model_availability.check` - Check if model is available
+  - `model_availability.snapshot` - Get full availability snapshot
+  - `model_packs.get_pack` - Get model pack by name
+  - `model_packs.get_current` - Get current model pack
+  - `model_packs.list_packs` - List all available packs
+  - `model_packs.get_model_for_role` - Get primary model for role
+  - `model_utils.resolve_model` - Resolve model name to config
+
   ### Universal Constructor (bd-68)
   - `uc.list` - List all UC tools with metadata
   - `uc.call` - Execute a UC tool with arguments
@@ -1625,6 +1637,205 @@ defmodule CodePuppyControl.Transport.StdioService do
   defp handle_request("models_dev.data_source", _params, id) do
     source = CodePuppyControl.ModelsDevParser.Registry.data_source()
     Protocol.encode_response(%{"data_source" => source}, id)
+  end
+
+  # ============================================================================
+  # Model Services (bd-96)
+  # ============================================================================
+
+  alias CodePuppyControl.ModelRegistry
+  alias CodePuppyControl.ModelAvailability
+  alias CodePuppyControl.ModelPacks
+  alias CodePuppyControl.ModelUtils
+
+  # model_registry.get_config - Get model configuration by name
+  defp handle_request("model_registry.get_config", params, id) do
+    model_name = params["model_name"]
+
+    if is_nil(model_name) or not is_binary(model_name) do
+      Protocol.encode_error(-32602, "Missing or invalid param: model_name", nil, id)
+    else
+      config = ModelRegistry.get_config(model_name)
+
+      if config do
+        Protocol.encode_response(%{"model_name" => model_name, "config" => config}, id)
+      else
+        Protocol.encode_response(%{"model_name" => model_name, "config" => nil, "error" => "not_found"}, id)
+      end
+    end
+  end
+
+  # model_registry.list_models - List all available models with configs
+  defp handle_request("model_registry.list_models", _params, id) do
+    models =
+      ModelRegistry.get_all_configs()
+      |> Enum.map(fn {name, config} ->
+        %{
+          "name" => name,
+          "type" => ModelRegistry.get_model_type(config),
+          "enabled" => config["enabled"] || true
+        }
+      end)
+      |> Enum.sort_by(& &1["name"])
+
+    Protocol.encode_response(%{"models" => models, "count" => length(models)}, id)
+  end
+
+  # model_registry.get_all_configs - Get all model configs as map
+  defp handle_request("model_registry.get_all_configs", _params, id) do
+    configs = ModelRegistry.get_all_configs()
+    Protocol.encode_response(%{"configs" => configs, "count" => map_size(configs)}, id)
+  end
+
+  # model_availability.check - Check if model is available
+  defp handle_request("model_availability.check", params, id) do
+    model_name = params["model_name"]
+
+    if is_nil(model_name) or not is_binary(model_name) do
+      Protocol.encode_error(-32602, "Missing or invalid param: model_name", nil, id)
+    else
+      snapshot = ModelAvailability.snapshot(model_name)
+
+      Protocol.encode_response(%{
+        "model_name" => model_name,
+        "available" => snapshot.available,
+        "reason" => snapshot.reason
+      }, id)
+    end
+  end
+
+  # model_availability.snapshot - Get full availability snapshot
+  defp handle_request("model_availability.snapshot", params, id) do
+    model_name = params["model_name"]
+
+    if is_nil(model_name) or not is_binary(model_name) do
+      Protocol.encode_error(-32602, "Missing or invalid param: model_name", nil, id)
+    else
+      snapshot = ModelAvailability.snapshot(model_name)
+      last_resort = ModelAvailability.is_last_resort(model_name)
+
+      Protocol.encode_response(%{
+        "model_name" => model_name,
+        "available" => snapshot.available,
+        "reason" => snapshot.reason,
+        "is_last_resort" => last_resort
+      }, id)
+    end
+  end
+
+  # model_packs.get_pack - Get model pack by name
+  defp handle_request("model_packs.get_pack", params, id) do
+    pack_name = params["pack_name"]
+
+    pack = ModelPacks.get_pack(pack_name)
+
+    serialized = %{
+      "name" => pack.name,
+      "description" => pack.description,
+      "default_role" => pack.default_role,
+      "roles" =>
+        Map.new(pack.roles, fn {role_name, role_config} ->
+          {role_name,
+           %{
+             "primary" => role_config.primary,
+             "fallbacks" => role_config.fallbacks,
+             "trigger" => role_config.trigger
+           }}
+        end),
+      "is_builtin" => ModelPacks.builtin_pack?(pack.name)
+    }
+
+    Protocol.encode_response(%{"pack" => serialized}, id)
+  end
+
+  # model_packs.get_current - Get current model pack
+  defp handle_request("model_packs.get_current", _params, id) do
+    pack = ModelPacks.get_current_pack()
+
+    serialized = %{
+      "name" => pack.name,
+      "description" => pack.description,
+      "default_role" => pack.default_role,
+      "roles" =>
+        Map.new(pack.roles, fn {role_name, role_config} ->
+          {role_name,
+           %{
+             "primary" => role_config.primary,
+             "fallbacks" => role_config.fallbacks,
+             "trigger" => role_config.trigger
+           }}
+        end),
+      "is_builtin" => ModelPacks.builtin_pack?(pack.name)
+    }
+
+    Protocol.encode_response(%{"pack" => serialized}, id)
+  end
+
+  # model_packs.list_packs - List all available packs
+  defp handle_request("model_packs.list_packs", _params, id) do
+    packs =
+      ModelPacks.list_packs()
+      |> Enum.map(fn pack ->
+        %{
+          "name" => pack.name,
+          "description" => pack.description,
+          "default_role" => pack.default_role,
+          "role_count" => map_size(pack.roles),
+          "is_builtin" => ModelPacks.builtin_pack?(pack.name)
+        }
+      end)
+
+    Protocol.encode_response(%{"packs" => packs, "count" => length(packs)}, id)
+  end
+
+  # model_packs.get_model_for_role - Get primary model for role
+  defp handle_request("model_packs.get_model_for_role", params, id) do
+    role = params["role"] || "coder"
+    model = ModelPacks.get_model_for_role(role)
+
+    Protocol.encode_response(%{"role" => role, "model" => model}, id)
+  end
+
+  # model_utils.resolve_model - Resolve model name to config
+  defp handle_request("model_utils.resolve_model", params, id) do
+    model_name = params["model_name"]
+
+    if is_nil(model_name) or not is_binary(model_name) do
+      Protocol.encode_error(-32602, "Missing or invalid param: model_name", nil, id)
+    else
+      # First check the registry
+      config = ModelRegistry.get_config(model_name)
+
+      # If not found directly, try current pack role resolution
+      resolved_config =
+        if config do
+          config
+        else
+          # Check if it's a role alias
+          pack = ModelPacks.get_current_pack()
+          resolved = ModelPacks.ModelPack.get_model_for_role(pack, model_name)
+
+          if resolved && resolved != "auto" do
+            ModelRegistry.get_config(resolved)
+          else
+            nil
+          end
+        end
+
+      if resolved_config do
+        Protocol.encode_response(%{
+          "model_name" => model_name,
+          "config" => resolved_config,
+          "type" => ModelRegistry.get_model_type(resolved_config)
+        }, id)
+      else
+        Protocol.encode_response(%{
+          "model_name" => model_name,
+          "config" => nil,
+          "error" => "not_found"
+        }, id)
+      end
+    end
   end
 
   # ============================================================================
