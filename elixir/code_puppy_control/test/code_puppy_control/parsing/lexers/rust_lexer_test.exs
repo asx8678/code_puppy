@@ -100,7 +100,13 @@ defmodule CodePuppyControl.Parsing.Lexers.RustLexerTest do
       assert {:ok, tokens} = RustLexer.tokenize(source)
       assert {:let, 1} in tokens
       assert {:identifier, 1, :s} in tokens
-      string_token = Enum.find(tokens, fn {:string, 1, _} -> true; _ -> false end)
+
+      string_token =
+        Enum.find(tokens, fn
+          {:string, 1, _} -> true
+          _ -> false
+        end)
+
       assert string_token != nil
     end
 

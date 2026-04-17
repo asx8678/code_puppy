@@ -1,5 +1,5 @@
 {
-  "counter": 116,
+  "counter": 144,
   "issues": {
     "bd-1": {
       "id": "bd-1",
@@ -902,7 +902,6 @@
           "bd-46",
           "bd-47",
           "bd-48",
-          "bd-49",
           "bd-51"
         ]
       },
@@ -2024,8 +2023,7 @@
           "bd-99",
           "bd-100",
           "bd-101",
-          "bd-102",
-          "bd-104"
+          "bd-102"
         ]
       },
       "created_at": "2026-04-17T10:50:11.489860",
@@ -2052,7 +2050,7 @@
       "id": "bd-105",
       "title": "Erlang parser using OTP",
       "description": "Implement Erlang language parser using built-in OTP modules :erl_scan and :erl_parse. Another easy win for Beam languages. Extract function exports, module attributes, and record definitions.",
-      "status": "open",
+      "status": "closed",
       "priority": 1,
       "type": "task",
       "labels": [
@@ -2060,20 +2058,16 @@
         "typescript",
         "yecc"
       ],
-      "dependencies": {
-        "blocks": [
-          "bd-104"
-        ]
-      },
+      "dependencies": {},
       "created_at": "2026-04-17T10:57:46.019841",
-      "updated_at": "2026-04-17T11:02:22.270558",
+      "updated_at": "2026-04-17T11:51:05.216555",
       "comments": []
     },
     "bd-106": {
       "id": "bd-106",
       "title": "Python lexer with Leex",
       "description": "Create Leex lexer for Python tokenization. Handle Python-specific tokens (indent/dedent, async/await, f-strings, decorators). Leex generates Erlang lexer from .xrl file.",
-      "status": "open",
+      "status": "closed",
       "priority": 2,
       "type": "task",
       "labels": [
@@ -2081,20 +2075,16 @@
         "tsx",
         "yecc"
       ],
-      "dependencies": {
-        "blocks": [
-          "bd-104"
-        ]
-      },
+      "dependencies": {},
       "created_at": "2026-04-17T10:57:46.028657",
-      "updated_at": "2026-04-17T11:02:22.274496",
+      "updated_at": "2026-04-17T11:51:05.247938",
       "comments": []
     },
     "bd-107": {
       "id": "bd-107",
       "title": "Python parser with Yecc",
       "description": "Create Yecc parser for Python declarations (def, class, import). Parse function definitions, class hierarchies, and module imports. Yecc generates Erlang parser from .yrl grammar file.",
-      "status": "open",
+      "status": "closed",
       "priority": 2,
       "type": "task",
       "labels": [
@@ -2102,40 +2092,32 @@
         "rust",
         "leex"
       ],
-      "dependencies": {
-        "blocks": [
-          "bd-106"
-        ]
-      },
+      "dependencies": {},
       "created_at": "2026-04-17T10:57:46.043485",
-      "updated_at": "2026-04-17T10:57:46.420494",
+      "updated_at": "2026-04-17T12:08:48.213972",
       "comments": []
     },
     "bd-108": {
       "id": "bd-108",
       "title": "JavaScript lexer with Leex",
       "description": "Create Leex lexer for JavaScript tokenization. Handle JS tokens (keywords, regex literals, template literals, spread/rest operators). Generate Erlang lexer from .xrl file.",
-      "status": "open",
+      "status": "closed",
       "priority": 2,
       "type": "task",
       "labels": [
         "parser",
         "rust"
       ],
-      "dependencies": {
-        "blocks": [
-          "bd-104"
-        ]
-      },
+      "dependencies": {},
       "created_at": "2026-04-17T10:57:46.045858",
-      "updated_at": "2026-04-17T11:02:22.281595",
+      "updated_at": "2026-04-17T11:46:39.385127",
       "comments": []
     },
     "bd-109": {
       "id": "bd-109",
       "title": "TypeScript parser extensions",
       "description": "Extend JavaScript parser for TypeScript-specific features. Add type annotations, interfaces, type aliases, enums, generics, and namespace/module declarations.",
-      "status": "open",
+      "status": "closed",
       "priority": 2,
       "type": "task",
       "labels": [
@@ -2147,27 +2129,23 @@
         ]
       },
       "created_at": "2026-04-17T10:57:46.059285",
-      "updated_at": "2026-04-17T11:02:29.202490",
+      "updated_at": "2026-04-17T12:32:24.968792",
       "comments": []
     },
     "bd-110": {
       "id": "bd-110",
       "title": "JavaScript parser with Yecc",
       "description": "Create Yecc parser for JavaScript declarations (function, class, import/export). Parse function statements, class definitions, and ES module imports/exports. Generate Erlang parser from .yrl grammar file.",
-      "status": "open",
+      "status": "closed",
       "priority": 2,
       "type": "task",
       "labels": [
         "cleanup",
         "rust-retirement"
       ],
-      "dependencies": {
-        "blocks": [
-          "bd-108"
-        ]
-      },
+      "dependencies": {},
       "created_at": "2026-04-17T10:57:46.069427",
-      "updated_at": "2026-04-17T11:02:22.280469",
+      "updated_at": "2026-04-17T12:07:51.096811",
       "comments": []
     },
     "bd-111": {
@@ -2195,7 +2173,7 @@
       "id": "bd-112",
       "title": "Rust lexer with Leex",
       "description": "Create Leex lexer for Rust tokenization. Handle Rust-specific tokens (raw strings, lifetime parameters, macros with !, attributes with #[]). Generate Erlang lexer from .xrl file.",
-      "status": "open",
+      "status": "closed",
       "priority": 2,
       "type": "task",
       "labels": [
@@ -2203,13 +2181,9 @@
         "rust",
         "leex"
       ],
-      "dependencies": {
-        "blocks": [
-          "bd-104"
-        ]
-      },
+      "dependencies": {},
       "created_at": "2026-04-17T10:57:46.261566",
-      "updated_at": "2026-04-17T11:02:29.200948",
+      "updated_at": "2026-04-17T12:07:51.131657",
       "comments": []
     },
     "bd-113": {
@@ -2245,8 +2219,6 @@
       ],
       "dependencies": {
         "blocks": [
-          "bd-105",
-          "bd-116",
           "bd-107",
           "bd-109",
           "bd-111",
@@ -2281,20 +2253,538 @@
       "id": "bd-116",
       "title": "Elixir parser using Code.string_to_quoted",
       "description": "Implement Elixir language parser using built-in Code.string_to_quoted/2. This is an easy win as Elixir has native parsing capabilities. Extract module definitions, function definitions, and macro calls.",
-      "status": "open",
+      "status": "closed",
       "priority": 1,
       "type": "task",
       "labels": [
         "parser",
         "elixir"
       ],
+      "dependencies": {},
+      "created_at": "2026-04-17T10:59:43.602905",
+      "updated_at": "2026-04-17T11:51:05.277508",
+      "comments": []
+    },
+    "bd-117": {
+      "id": "bd-117",
+      "title": "Kiro-CLI Swarm SDK Architecture",
+      "description": "Implement Swarm SDK hook architecture in kiro-cli with planning agent, coding agent, code critic, task discipline, and Bronze/Silver/Gold memory tiers. Focuses on autonomous bug finding with read-only safety, task gating, and proactive guidance.",
+      "status": "open",
+      "priority": 0,
+      "type": "epic",
+      "labels": [],
+      "dependencies": {},
+      "created_at": "2026-04-17T12:14:42.966419",
+      "updated_at": "2026-04-17T12:23:43.192847",
+      "comments": [
+        "Claimed by code-puppy-019d9b - Starting Phase 1: Task Enforcement Infrastructure"
+      ]
+    },
+    "bd-118": {
+      "id": "bd-118",
+      "title": "Phase 1: Task Enforcement Infrastructure",
+      "description": "Create safety infrastructure for task gating: PreToolUse hooks that block write tools without active tasks, and category discipline enforcement. Includes task-gate.sh, category-guard.sh, and state directory structure.",
+      "status": "closed",
+      "priority": 1,
+      "type": "task",
+      "labels": [],
       "dependencies": {
         "blocks": [
-          "bd-104"
+          "bd-117"
         ]
       },
-      "created_at": "2026-04-17T10:59:43.602905",
-      "updated_at": "2026-04-17T11:02:22.273218",
+      "created_at": "2026-04-17T12:14:45.679283",
+      "updated_at": "2026-04-17T12:24:45.501557",
+      "comments": [
+        "Claimed by code-puppy-019d9b - Working on Phase 1 implementation",
+        "Phase 1 complete! Task Enforcement Infrastructure implemented with 4 scripts and directory structure"
+      ]
+    },
+    "bd-119": {
+      "id": "bd-119",
+      "title": "Task 1.1: Create task-gate.sh script",
+      "description": "Create PreToolUse hook at ~/.kiro/scripts/task-gate.sh that blocks write tools (write, shell) if no active task exists. Allows read-only tools (read, grep, glob, thinking, knowledge) always.",
+      "status": "closed",
+      "priority": 2,
+      "type": "task",
+      "labels": [],
+      "dependencies": {
+        "blocks": [
+          "bd-118"
+        ]
+      },
+      "created_at": "2026-04-17T12:14:50.797288",
+      "updated_at": "2026-04-17T12:24:39.078326",
+      "comments": [
+        "Resolution: Created 4 priority-ordered scripts in ~/.kiro/scripts/: security-audit.sh (P100), safety-gate.sh (P96), task-enforce.sh (P95), show-active-task.sh"
+      ]
+    },
+    "bd-120": {
+      "id": "bd-120",
+      "title": "Task 1.2: Create category-guard.sh script",
+      "description": "Create category validator at ~/.kiro/scripts/category-guard.sh that enforces task category discipline. Planning tasks cannot use write tools. Debugging tasks stay focused on their scope.",
+      "status": "closed",
+      "priority": 2,
+      "type": "task",
+      "labels": [],
+      "dependencies": {
+        "blocks": [
+          "bd-118"
+        ]
+      },
+      "created_at": "2026-04-17T12:14:55.347619",
+      "updated_at": "2026-04-17T12:24:32.138340",
+      "comments": []
+    },
+    "bd-121": {
+      "id": "bd-121",
+      "title": "Task 1.3: Create state directory structure",
+      "description": "Create directory structure at ~/.kiro/ with scripts/, state/, and memory/ (bronze/, silver/, gold/) directories. Required for all hook scripts and memory tier system.",
+      "status": "closed",
+      "priority": 2,
+      "type": "task",
+      "labels": [],
+      "dependencies": {
+        "blocks": [
+          "bd-118"
+        ]
+      },
+      "created_at": "2026-04-17T12:15:03.514725",
+      "updated_at": "2026-04-17T12:24:32.167730",
+      "comments": []
+    },
+    "bd-122": {
+      "id": "bd-122",
+      "title": "Phase 2: Memory Tier System (Bronze/Silver/Gold)",
+      "description": "Implement three-tier memory system: Bronze captures ALL events with task correlation via PostToolUse hooks. Silver scores valuable insights for promotion. Gold persists long-term institutional memory via knowledge tool integration.",
+      "status": "closed",
+      "priority": 1,
+      "type": "task",
+      "labels": [],
+      "dependencies": {
+        "blocks": [
+          "bd-117",
+          "bd-121"
+        ]
+      },
+      "created_at": "2026-04-17T12:15:08.940894",
+      "updated_at": "2026-04-17T12:28:04.264905",
+      "comments": [
+        "Phase 2 complete: Memory Tier System fully implemented\n\nBronze: Complete event capture via bronze-capture.sh\nSilver: 5 analyzers for value extraction\nGold: Long-term persistence via gold-consolidate.sh\n\nAll scripts located in ~/.kiro/scripts/"
+      ]
+    },
+    "bd-123": {
+      "id": "bd-123",
+      "title": "Task 2.1: Create Bronze Capture Hook",
+      "description": "Create PostToolUse hook at ~/.kiro/scripts/bronze-capture.sh that logs ALL tool executions with task correlation. Captures: timestamp, task_id, tool name, exit_code, duration_ms to ~/.kiro/memory/bronze/<uuid>.json",
+      "status": "closed",
+      "priority": 2,
+      "type": "task",
+      "labels": [],
+      "dependencies": {
+        "blocks": [
+          "bd-122"
+        ]
+      },
+      "created_at": "2026-04-17T12:15:15.052617",
+      "updated_at": "2026-04-17T12:28:04.174561",
+      "comments": [
+        "Task complete: Created bronze-capture.sh - captures ALL events with task correlation to ~/.kiro/memory/bronze/\n\nFeatures:\n- Date-partitioned JSONL storage\n- Task correlation via ~/.kiro/state/active_task.json\n- Quick-access latest.jsonl (last 100 events)"
+      ]
+    },
+    "bd-124": {
+      "id": "bd-124",
+      "title": "Task 2.2: Create Silver Scoring Script",
+      "description": "Create ~/.kiro/scripts/silver-scorer.sh to promote valuable bronze events to silver tier. Analyze bronze events, score for value, copy high-value insights to ~/.kiro/memory/silver/. Triggered manually or on schedule.",
+      "status": "closed",
+      "priority": 2,
+      "type": "task",
+      "labels": [],
+      "dependencies": {
+        "blocks": [
+          "bd-122",
+          "bd-123"
+        ]
+      },
+      "created_at": "2026-04-17T12:15:20.252325",
+      "updated_at": "2026-04-17T12:28:04.205857",
+      "comments": [
+        "Task complete: Created 5 Silver analyzers in ~/.kiro/scripts/analyzers/\n\n1. error-analyzer.sh - Detects error patterns, promotes to Silver (priority 90)\n2. insight-analyzer.sh - Extracts metrics, coverage, test results\n3. pattern-analyzer.sh - Tracks recurring anti-patterns for Gold tier\n4. steering-analyzer.sh - Suggests efficiency improvements\n5. test-analyzer.sh - Parses test output, extracts pass/fail counts"
+      ]
+    },
+    "bd-125": {
+      "id": "bd-125",
+      "title": "Task 2.3: Gold Persistence Integration",
+      "description": "Configure knowledge tool integration for long-term memory. Set up indexing of ~/.kiro/memory/silver/ and gold/ directories. Enable institutional memory persistence beyond bronze/silver tiers.",
+      "status": "closed",
+      "priority": 2,
+      "type": "task",
+      "labels": [],
+      "dependencies": {
+        "blocks": [
+          "bd-122",
+          "bd-124"
+        ]
+      },
+      "created_at": "2026-04-17T12:15:26.379513",
+      "updated_at": "2026-04-17T12:28:04.235622",
+      "comments": [
+        "Task complete: Created gold-consolidate.sh for memory promotion\n\nFeatures:\n- Promotes high-priority Silver findings (>= 70) to Gold tier\n- Categorizes: bugs/, patterns/, recipes/\n- Cleanup of Bronze files older than 7 days"
+      ]
+    },
+    "bd-126": {
+      "id": "bd-126",
+      "title": "Phase 3: Agent Configurations with Swarm Discipline",
+      "description": "Create 4 specialized agent configurations with Swarm SDK hooks: planner (research mode - read-only), coder (implementation mode - task-gated), critic (review mode - read-only), orchestrator (autonomous - coordinates others). Each with proper tool whitelists and hook configurations.",
+      "status": "closed",
+      "priority": 1,
+      "type": "task",
+      "labels": [],
+      "dependencies": {
+        "blocks": [
+          "bd-117",
+          "bd-118",
+          "bd-122"
+        ]
+      },
+      "created_at": "2026-04-17T12:15:32.730297",
+      "updated_at": "2026-04-17T12:33:02.195170",
+      "comments": [
+        "Starting Phase 3: Creating agent configs with Swarm SDK hooks",
+        "Phase 3 Complete: All 4 agent configs created and validated with Swarm SDK hooks",
+        "Resolution: Phase 3 complete - All 4 agent configs created with Swarm SDK hooks (agentSpawn, userPromptSubmit, preToolUse, postToolUse) and validated"
+      ]
+    },
+    "bd-127": {
+      "id": "bd-127",
+      "title": "Task 3.1: Create Planner Agent Config",
+      "description": "Create ~/.kiro/agents/planner.json - Research Mode agent. Tools: read, grep, glob, thinking, todo_list, knowledge, use_subagent. Write tools blocked via pre_tool hooks to task-gate.sh and category-guard.sh.",
+      "status": "closed",
+      "priority": 2,
+      "type": "task",
+      "labels": [],
+      "dependencies": {
+        "blocks": [
+          "bd-126"
+        ]
+      },
+      "created_at": "2026-04-17T12:15:41.206417",
+      "updated_at": "2026-04-17T12:33:02.208678",
+      "comments": [
+        "Created bug-hunter.json with full hook chain - security-audit, safety-gate, task-enforce preToolUse hooks + 4 postToolUse analyzers",
+        "Resolution: Created bug-hunter.json (Planner\u2192bug-hunter) - Autonomous bug investigator with READ-ONLY constraints and full Swarm SDK hook chain"
+      ]
+    },
+    "bd-128": {
+      "id": "bd-128",
+      "title": "Task 3.2: Create Coder Agent Config",
+      "description": "Create ~/.kiro/agents/coder.json - Implementation Mode agent. Tools: read, grep, glob, thinking, write, shell, todo_list, knowledge, use_subagent. PreToolUse hooks enforce task-gate.sh (writes require active task).",
+      "status": "closed",
+      "priority": 2,
+      "type": "task",
+      "labels": [],
+      "dependencies": {
+        "blocks": [
+          "bd-126"
+        ]
+      },
+      "created_at": "2026-04-17T12:15:45.193960",
+      "updated_at": "2026-04-17T12:33:02.192762",
+      "comments": [
+        "Resolution: Created hypothesis-tester.json (Coder\u2192hypothesis-tester) - Safe hypothesis testing agent for dry-run verification"
+      ]
+    },
+    "bd-129": {
+      "id": "bd-129",
+      "title": "Task 3.3: Create Critic Agent Config",
+      "description": "Create ~/.kiro/agents/critic.json - Review Mode agent. Tools: read, grep, glob, thinking, knowledge, report. Read-only: no write/shell tools. PostToolUse hook to bronze-capture.sh. Quality-focused for code review.",
+      "status": "closed",
+      "priority": 2,
+      "type": "task",
+      "labels": [],
+      "dependencies": {
+        "blocks": [
+          "bd-126"
+        ]
+      },
+      "created_at": "2026-04-17T12:15:49.651498",
+      "updated_at": "2026-04-17T12:33:11.083093",
+      "comments": [
+        "Resolution: Created root-cause.json (Critic\u2192root-cause) - Git archaeology and root cause analysis agent"
+      ]
+    },
+    "bd-130": {
+      "id": "bd-130",
+      "title": "Task 3.4: Create Orchestrator Agent Config",
+      "description": "Create ~/.kiro/agents/orchestrator.json - Autonomous coordinator. Delegates to specialized agents. Hooks: AgentSpawn context message, PreToolUse task-gate for use_subagent, PostToolUse bronze-capture. Pack leader mode.",
+      "status": "closed",
+      "priority": 2,
+      "type": "task",
+      "labels": [],
+      "dependencies": {
+        "blocks": [
+          "bd-126"
+        ]
+      },
+      "created_at": "2026-04-17T12:15:58.149398",
+      "updated_at": "2026-04-17T12:33:02.203121",
+      "comments": [
+        "Resolution: Created orchestrator.json - Autonomous workflow coordinator that delegates to bug-hunter, hypothesis-tester, and root-cause agents"
+      ]
+    },
+    "bd-131": {
+      "id": "bd-131",
+      "title": "Phase 4: System Prompts with Swarm Discipline",
+      "description": "Create 4 system prompt files with Swarm discipline rules embedded: planner.md (read-only discipline), coder.md (task-gated discipline), critic.md (read-only review discipline), orchestrator.md (delegation discipline). Location: ~/.kiro/agents/prompts/",
+      "status": "closed",
+      "priority": 1,
+      "type": "task",
+      "labels": [],
+      "dependencies": {
+        "blocks": [
+          "bd-117",
+          "bd-126"
+        ]
+      },
+      "created_at": "2026-04-17T12:16:02.953906",
+      "updated_at": "2026-04-17T12:38:49.643041",
+      "comments": [
+        "Phase 4 complete: All system prompts created with Swarm SDK discipline"
+      ]
+    },
+    "bd-132": {
+      "id": "bd-132",
+      "title": "Task 4.1: Create Planner System Prompt",
+      "description": "Create ~/.kiro/agents/prompts/planner.md with Swarm discipline: read-only mode rules, workflow (analyze -> think -> plan -> create tasks -> delegate), task categories (planning/implementation/debugging/review), and output format with objectives/analysis/tasks structure.",
+      "status": "closed",
+      "priority": 2,
+      "type": "task",
+      "labels": [],
+      "dependencies": {
+        "blocks": [
+          "bd-131"
+        ]
+      },
+      "created_at": "2026-04-17T12:16:08.891874",
+      "updated_at": "2026-04-17T12:38:49.557793",
+      "comments": [
+        "Phase 4 complete: Created bug-hunter.md with investigation workflow and output format"
+      ]
+    },
+    "bd-133": {
+      "id": "bd-133",
+      "title": "Task 4.2: Create Coder System Prompt",
+      "description": "Create ~/.kiro/agents/prompts/coder.md with task-gated discipline: verify task exists before writes, workflow (verify -> understand -> think -> implement -> test -> complete), quality standards (tests, error handling, docs), and post-implementation guidance.",
+      "status": "closed",
+      "priority": 2,
+      "type": "task",
+      "labels": [],
+      "dependencies": {
+        "blocks": [
+          "bd-131"
+        ]
+      },
+      "created_at": "2026-04-17T12:16:16.801401",
+      "updated_at": "2026-04-17T12:38:49.559790",
+      "comments": [
+        "Phase 4 complete: Created hypothesis-tester.md with safe testing guide"
+      ]
+    },
+    "bd-134": {
+      "id": "bd-134",
+      "title": "Task 4.3: Create Critic System Prompt",
+      "description": "Create ~/.kiro/agents/prompts/critic.md with reviewer discipline: read-only rules, review checklist (security, quality, performance, patterns), output format with review summary table and scoring, memory capture section for institutional knowledge.",
+      "status": "closed",
+      "priority": 2,
+      "type": "task",
+      "labels": [],
+      "dependencies": {
+        "blocks": [
+          "bd-131"
+        ]
+      },
+      "created_at": "2026-04-17T12:16:22.042049",
+      "updated_at": "2026-04-17T12:38:49.569075",
+      "comments": [
+        "Phase 4 complete: Created root-cause.md with git archaeology toolkit"
+      ]
+    },
+    "bd-135": {
+      "id": "bd-135",
+      "title": "Task 4.4: Create Orchestrator System Prompt",
+      "description": "Create ~/.kiro/agents/prompts/orchestrator.md with pack leader discipline: delegation requires tasks, autonomous workflow (plan -> task -> delegate -> review -> iterate -> complete), agent roster table, delegation syntax, and workflow state tracking.",
+      "status": "closed",
+      "priority": 2,
+      "type": "task",
+      "labels": [],
+      "dependencies": {
+        "blocks": [
+          "bd-131"
+        ]
+      },
+      "created_at": "2026-04-17T12:16:34.382918",
+      "updated_at": "2026-04-17T12:38:49.640287",
+      "comments": [
+        "Phase 4 complete: Created orchestrator.md with delegation and synthesis workflow"
+      ]
+    },
+    "bd-136": {
+      "id": "bd-136",
+      "title": "Phase 5: Proactive Guidance System",
+      "description": "Create PostToolUse hooks that inject next-step guidance after tool execution. Includes guidance-injector.sh for suggesting follow-up actions after write/shell/subagent tools, and show-active-task.sh for AgentSpawn context display.",
+      "status": "open",
+      "priority": 1,
+      "type": "task",
+      "labels": [],
+      "dependencies": {
+        "blocks": [
+          "bd-117",
+          "bd-118"
+        ]
+      },
+      "created_at": "2026-04-17T12:16:39.260174",
+      "updated_at": "2026-04-17T12:16:42.355266",
+      "comments": []
+    },
+    "bd-137": {
+      "id": "bd-137",
+      "title": "Task 5.1: Create Guidance Injector Script",
+      "description": "Create ~/.kiro/scripts/guidance-injector.sh - PostToolUse hook that suggests next steps based on tool executed. After write: suggest tests, todo complete, or review. After shell: suggest task completion if tests pass. After use_subagent: suggest reviewing results.",
+      "status": "open",
+      "priority": 2,
+      "type": "task",
+      "labels": [],
+      "dependencies": {
+        "blocks": [
+          "bd-136"
+        ]
+      },
+      "created_at": "2026-04-17T12:16:45.478123",
+      "updated_at": "2026-04-17T12:16:47.870970",
+      "comments": []
+    },
+    "bd-138": {
+      "id": "bd-138",
+      "title": "Task 5.2: Create Show Active Task Script",
+      "description": "Create ~/.kiro/scripts/show-active-task.sh - AgentSpawn hook that displays current task context on agent startup. Reads from ~/.kiro/state/active_task.json and shows task ID, category, and description. Shows warning if no active task.",
+      "status": "open",
+      "priority": 2,
+      "type": "task",
+      "labels": [],
+      "dependencies": {
+        "blocks": [
+          "bd-136"
+        ]
+      },
+      "created_at": "2026-04-17T12:16:51.407577",
+      "updated_at": "2026-04-17T12:16:54.814299",
+      "comments": []
+    },
+    "bd-139": {
+      "id": "bd-139",
+      "title": "Phase 6: Integration and Testing",
+      "description": "Complete end-to-end validation of the Swarm SDK implementation. Test agent validation, task enforcement, category discipline, memory capture, and autonomous workflow. Verify all configs parse correctly and hooks function as expected.",
+      "status": "open",
+      "priority": 1,
+      "type": "task",
+      "labels": [],
+      "dependencies": {
+        "blocks": [
+          "bd-117",
+          "bd-118",
+          "bd-122",
+          "bd-126",
+          "bd-131",
+          "bd-136"
+        ]
+      },
+      "created_at": "2026-04-17T12:16:58.448257",
+      "updated_at": "2026-04-17T12:17:02.520880",
+      "comments": []
+    },
+    "bd-140": {
+      "id": "bd-140",
+      "title": "Task 6.1: Validate All Agent Configs",
+      "description": "Run kiro-cli agent validate --path ~/.kiro/agents/ to verify all JSON configs parse without errors. Check planner.json, coder.json, critic.json, orchestrator.json have valid syntax and required fields.",
+      "status": "open",
+      "priority": 2,
+      "type": "task",
+      "labels": [],
+      "dependencies": {
+        "blocks": [
+          "bd-139"
+        ]
+      },
+      "created_at": "2026-04-17T12:17:07.543546",
+      "updated_at": "2026-04-17T12:17:13.145095",
+      "comments": []
+    },
+    "bd-141": {
+      "id": "bd-141",
+      "title": "Task 6.2: Test Task Enforcement",
+      "description": "Test case: Attempt to write file without active task. Expected: PreToolUse hook blocks with guidance message. Verify task-gate.sh correctly identifies missing task and provides instructions to create one.",
+      "status": "open",
+      "priority": 2,
+      "type": "task",
+      "labels": [],
+      "dependencies": {
+        "blocks": [
+          "bd-139"
+        ]
+      },
+      "created_at": "2026-04-17T12:17:16.762027",
+      "updated_at": "2026-04-17T12:17:18.685230",
+      "comments": []
+    },
+    "bd-142": {
+      "id": "bd-142",
+      "title": "Task 6.3: Test Category Discipline",
+      "description": "Test case: Start planning task, attempt to write code. Expected: category-guard.sh blocks with category violation message. Verify planning category cannot use write tools and requires transition to implementation category.",
+      "status": "open",
+      "priority": 2,
+      "type": "task",
+      "labels": [],
+      "dependencies": {
+        "blocks": [
+          "bd-139"
+        ]
+      },
+      "created_at": "2026-04-17T12:17:20.981269",
+      "updated_at": "2026-04-17T12:17:24.005387",
+      "comments": []
+    },
+    "bd-143": {
+      "id": "bd-143",
+      "title": "Task 6.4: Test Memory Capture",
+      "description": "Test case: Execute several tools, check bronze directory. Expected: Event files created in ~/.kiro/memory/bronze/ with task correlation. Verify bronze-capture.sh correctly logs all PostToolUse events with proper JSON format.",
+      "status": "open",
+      "priority": 2,
+      "type": "task",
+      "labels": [],
+      "dependencies": {
+        "blocks": [
+          "bd-139"
+        ]
+      },
+      "created_at": "2026-04-17T12:17:26.346302",
+      "updated_at": "2026-04-17T12:17:28.344012",
+      "comments": []
+    },
+    "bd-144": {
+      "id": "bd-144",
+      "title": "Task 6.5: Test Autonomous Workflow",
+      "description": "Test case: Ask orchestrator to implement a simple feature. Expected: Creates tasks via /todo -> delegates to coder via use_subagent -> requests review via critic -> completes workflow. Verify full Pack Leader autonomous coordination.",
+      "status": "open",
+      "priority": 2,
+      "type": "task",
+      "labels": [],
+      "dependencies": {
+        "blocks": [
+          "bd-139"
+        ]
+      },
+      "created_at": "2026-04-17T12:17:32.894769",
+      "updated_at": "2026-04-17T12:17:38.588213",
       "comments": []
     }
   }
