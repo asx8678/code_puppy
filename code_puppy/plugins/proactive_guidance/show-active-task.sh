@@ -19,6 +19,18 @@
 
 set -euo pipefail
 
+# Escape a string for safe embedding in a JSON double-quoted value.
+# Handles backslash, double-quote, and common control characters.
+json_escape() {
+    local s="$1"
+    s="${s//\\/\\\\}"   # backslash  → \\
+    s="${s//\"/\\\"}"   # double-quote → \"
+    s="${s//$'\t'/\\t}"  # tab → \t
+    s="${s//$'\n'/\\n}"  # newline → \n
+    s="${s//$'\r'/\\r}"  # carriage-return → \r
+    printf '%s' "$s"
+}
+
 # Configuration
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 OUTPUT_FORMAT="text"
@@ -89,12 +101,12 @@ done
 get_env_info() {
     cat <<EOF
 {
-    "cwd": "$(pwd)",
-    "home": "${HOME:-unknown}",
-    "shell": "${SHELL:-unknown}",
-    "term": "${TERM:-unknown}",
-    "user": "${USER:-unknown}",
-    "pup_task_id": "${PUP_TASK_ID:-${PUPPY_TASK_ID:-auto-detected}}"
+    "cwd": "$(json_escape "$(pwd)")",
+    "home": "$(json_escape "${HOME:-unknown}")",
+    "shell": "$(json_escape "${SHELL:-unknown}")",
+    "term": "$(json_escape "${TERM:-unknown}")",
+    "user": "$(json_escape "${USER:-unknown}")",
+    "pup_task_id": "$(json_escape "${PUP_TASK_ID:-${PUPPY_TASK_ID:-auto-detected}}")"
 }
 EOF
 }
@@ -106,10 +118,10 @@ get_git_info() {
     if git rev-parse --git-dir > /dev/null 2>&1; then
         git_info=$(cat <<EOF
 {
-    "branch": "$(git branch --show-current 2>/dev/null || echo 'unknown')",
-    "commit": "$(git rev-parse --short HEAD 2>/dev/null || echo 'unknown')",
+    "branch": "$(json_escape "$(git branch --show-current 2>/dev/null || echo 'unknown')")",
+    "commit": "$(json_escape "$(git rev-parse --short HEAD 2>/dev/null || echo 'unknown')")",
     "dirty": $(git diff --quiet 2>/dev/null && echo "false" || echo "true"),
-    "remote_url": "$(git remote get-url origin 2>/dev/null || echo 'none')"
+    "remote_url": "$(json_escape "$(git remote get-url origin 2>/dev/null || echo 'none')")"
 }
 EOF
 )
@@ -222,11 +234,11 @@ get_active_tasks() {
     cat <<EOF
 {
     "current_task": {
-        "id": "${task_id:-none}",
-        "name": "$task_name",
-        "status": "$task_status"
+        "id": "$(json_escape "${task_id:-none}")",
+        "name": "$(json_escape "$task_name")",
+        "status": "$(json_escape "$task_status")"
     },
-    "source": "$task_source"
+    "source": "$(json_escape "$task_source")"
 }
 EOF
 }
