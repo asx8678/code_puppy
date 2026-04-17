@@ -32,7 +32,7 @@ package "Core Layer" {
     }
 
     class NativeBackend {
-        +Capabilites: ELIXIR_CONTROL, FILE_OPS, REPO_INDEX, PARSE
+        +Capabilities: MESSAGE_CORE, FILE_OPS, EDIT_OPS, REPO_INDEX, PARSE
         +Profile: ELIXIR_FIRST (Phase 6)
         +get_status()
         +list_files() → Elixir File Service
