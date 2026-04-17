@@ -101,6 +101,12 @@ defmodule CodePuppyControl.Transport.StdioService do
   - `http.get` - Simple GET request
   - `http.post` - POST request with body
 
+  ### Shell Command Runner (bd-64)
+  - `shell.run` - Execute a shell command with streaming output
+  - `shell.run_batch` - Execute multiple shell commands
+  - `shell.kill_all` - Kill all running shell processes
+  - `shell.running_count` - Get count of running processes
+
   ### Utility
   - `health_check` - Service health status
   - `ping` - Simple ping/pong
@@ -125,6 +131,7 @@ defmodule CodePuppyControl.Transport.StdioService do
   alias CodePuppyControl.FileOps
   alias CodePuppyControl.Protocol
   alias CodePuppyControl.Tools.SchedulerTools
+  alias CodePuppyControl.Tools.CommandRunner
   alias CodePuppyControl.RoundRobinModel
 
   defstruct [:io_device, :buffer, :request_counter]
@@ -1110,6 +1117,7 @@ defmodule CodePuppyControl.Transport.StdioService do
       Protocol.encode_response(response, id)
     end
   end
+
   # ============================================================================
   # Round-Robin Model Operations (bd-71)
   # ============================================================================
@@ -1477,6 +1485,80 @@ defmodule CodePuppyControl.Transport.StdioService do
     Protocol.encode_response(%{"data_source" => source}, id)
   end
 
+  # ============================================================================
+  # Shell Command Runner (bd-64)
+  # ============================================================================
+
+  # shell.run - Execute a shell command with streaming output
+  defp handle_request("shell.run", params, id) do
+    command = params["command"]
+
+    if is_nil(command) or not is_binary(command) do
+      Protocol.encode_error(-32602, "Missing or invalid param: command", nil, id)
+    else
+      opts = params_to_shell_opts(params)
+
+      case CommandRunner.run(command, opts) do
+        {:ok, result} ->
+          Protocol.encode_response(serialize_shell_result(result), id)
+
+        {:error, reason} ->
+          Protocol.encode_error(
+            -32000,
+            "Shell command failed: #{format_error(reason)}",
+            nil,
+            id
+          )
+      end
+    end
+  end
+
+  # shell.run_batch - Execute multiple shell commands
+  defp handle_request("shell.run_batch", params, id) do
+    commands = params["commands"]
+
+    if is_nil(commands) or not is_list(commands) do
+      Protocol.encode_error(
+        -32602,
+        "Missing or invalid param: commands (must be a list)",
+        nil,
+        id
+      )
+    else
+      opts = params_to_shell_opts(params)
+
+      # Run commands sequentially and collect results
+      results =
+        Enum.map(commands, fn cmd ->
+          if is_binary(cmd) do
+            case CommandRunner.run(cmd, opts) do
+              {:ok, result} ->
+                serialize_shell_result(result)
+
+              {:error, reason} ->
+                %{"command" => cmd, "error" => to_string(reason), "success" => false}
+            end
+          else
+            %{"command" => inspect(cmd), "error" => "Invalid command type", "success" => false}
+          end
+        end)
+
+      Protocol.encode_response(%{"results" => results, "count" => length(results)}, id)
+    end
+  end
+
+  # shell.kill_all - Kill all running shell processes
+  defp handle_request("shell.kill_all", _params, id) do
+    count = CommandRunner.kill_all()
+    Protocol.encode_response(%{"killed_count" => count}, id)
+  end
+
+  # shell.running_count - Get count of running processes
+  defp handle_request("shell.running_count", _params, id) do
+    count = CommandRunner.running_count()
+    Protocol.encode_response(%{"count" => count}, id)
+  end
+
   # Method not found handler
   defp handle_request(method, _params, id) do
     Protocol.encode_error(
@@ -1541,6 +1623,49 @@ defmodule CodePuppyControl.Transport.StdioService do
       "status" => status,
       "body" => body,
       "headers" => Enum.map(headers, fn {k, v} -> [k, v] end)
+    }
+  end
+
+  # ============================================================================
+  # Shell Helpers (bd-64)
+  # ============================================================================
+
+  defp params_to_shell_opts(params) do
+    opts = []
+
+    # Timeout in seconds (default 60, max 270)
+    timeout = params["timeout"] || 60
+    opts = [{:timeout, min(timeout, 270)} | opts]
+
+    # Working directory
+    opts = if params["cwd"], do: [{:cwd, params["cwd"]} | opts], else: opts
+
+    # Silent mode (no streaming)
+    opts = if params["silent"], do: [{:silent, true} | opts], else: opts
+
+    # Environment variables as keyword list
+    opts =
+      if params["env"] and is_map(params["env"]) do
+        env_list = Enum.map(params["env"], fn {k, v} -> {to_string(k), to_string(v)} end)
+        [{:env, env_list} | opts]
+      else
+        opts
+      end
+
+    opts
+  end
+
+  defp serialize_shell_result(result) do
+    %{
+      "success" => result.success,
+      "command" => result.command,
+      "stdout" => result.stdout,
+      "stderr" => result.stderr,
+      "exit_code" => result.exit_code,
+      "execution_time_ms" => result.execution_time_ms,
+      "timeout" => result.timeout,
+      "error" => result.error,
+      "user_interrupted" => result.user_interrupted
     }
   end
 

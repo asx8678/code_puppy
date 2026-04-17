@@ -19,9 +19,10 @@ defmodule CodePuppyControl.Application do
   12. CodePuppyControl.MCP.Supervisor - DynamicSupervisor for MCP servers
   13. CodePuppyControl.Concurrency.Supervisor - Concurrency limiter (ETS-backed)
   14. CodePuppyControl.RequestTracker - Tracks JSON-RPC request/response correlation
-  15. Oban - Job processing engine with SQLite Lite engine
-  16. CodePuppyControl.Scheduler.CronScheduler - Periodic scheduler for cron tasks
-  17. CodePuppyControlWeb.Endpoint - HTTP API endpoint
+  15. CodePuppyControl.Tools.CommandRunner.ProcessManager - Shell process tracking (bd-64)
+  16. Oban - Job processing engine with SQLite Lite engine
+  17. CodePuppyControl.Scheduler.CronScheduler - Periodic scheduler for cron tasks
+  18. CodePuppyControlWeb.Endpoint - HTTP API endpoint
   """
 
   use Application
@@ -48,6 +49,8 @@ defmodule CodePuppyControl.Application do
       # Concurrency limiter (ETS-backed semaphores for file_ops, api_calls, tool_calls)
       CodePuppyControl.Concurrency.Supervisor,
       CodePuppyControl.RequestTracker,
+      # Shell command runner process tracking (bd-64)
+      CodePuppyControl.Tools.CommandRunner.ProcessManager,
       # Oban job processing with SQLite engine
       {Oban, Application.fetch_env!(:code_puppy_control, Oban)},
       # Periodic scheduler for cron tasks
