@@ -3,6 +3,12 @@ defmodule CodePuppyControl.ParserTest do
 
   alias CodePuppyControl.Parser
 
+  setup do
+    # Ensure parsers are registered before each test (bd-114)
+    CodePuppyControl.Parsing.Parsers.register_all()
+    :ok
+  end
+
   describe "supported_languages/0" do
     test "returns list of languages" do
       languages = Parser.supported_languages()

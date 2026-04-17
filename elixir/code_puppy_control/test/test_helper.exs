@@ -18,6 +18,15 @@ Code.require_file("support/e2e_case.ex", __DIR__)
 
 # Support file is automatically loaded via compilation
 
+# Start parser registry for tests (bd-114: pure Elixir parsers)
+# Registry may already be started by the application supervision tree
+case CodePuppyControl.Parsing.ParserRegistry.start_link(name: CodePuppyControl.Parsing.ParserRegistry) do
+  {:ok, _registry} -> :ok
+  {:error, {:already_started, _pid}} -> :ok
+end
+
+CodePuppyControl.Parsing.Parsers.register_all()
+
 # Configure ExUnit with integration and E2E tests excluded by default
 ExUnit.configure(
   exclude: [:integration, :e2e, :skip],
