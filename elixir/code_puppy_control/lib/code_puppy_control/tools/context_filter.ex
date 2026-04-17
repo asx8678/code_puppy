@@ -136,11 +136,12 @@ defmodule CodePuppyControl.Tools.ContextFilter do
   """
   @spec filter_context_with_custom(context(), list(String.t() | atom())) :: map()
   def filter_context_with_custom(context, custom_excluded) when is_list(custom_excluded) do
+    custom_set = MapSet.new(custom_excluded, &to_string/1)
+
     context
     |> filter_context()
     |> Enum.reject(fn {key, _value} ->
-      key_str = to_string(key)
-      key_str in Enum.map(custom_excluded, &to_string/1)
+      MapSet.member?(custom_set, to_string(key))
     end)
     |> Map.new()
   end

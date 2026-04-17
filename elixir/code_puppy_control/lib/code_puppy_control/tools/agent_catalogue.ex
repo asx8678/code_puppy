@@ -41,8 +41,6 @@ defmodule CodePuppyControl.Tools.AgentCatalogue do
 
   @table :agent_catalogue
 
-  defstruct [:name, :display_name, :description]
-
   @typedoc "Agent information record"
   @type agent_info :: %AgentInfo{
           name: String.t(),
@@ -206,15 +204,7 @@ defmodule CodePuppyControl.Tools.AgentCatalogue do
   @spec register_agents(list({String.t(), String.t(), String.t()})) ::
           {:ok, non_neg_integer()}
   def register_agents(agents) when is_list(agents) do
-    count =
-      Enum.reduce(agents, 0, fn {name, display_name, description}, acc ->
-        case register_agent(name, display_name, description) do
-          :ok -> acc + 1
-          _ -> acc
-        end
-      end)
-
-    {:ok, count}
+    GenServer.call(__MODULE__, {:register_batch, agents})
   end
 
   # ============================================================================
@@ -266,6 +256,19 @@ defmodule CodePuppyControl.Tools.AgentCatalogue do
     :ets.delete_all_objects(@table)
     Logger.debug("AgentCatalogue: cleared all agents")
     {:reply, :ok, state}
+  end
+
+  @impl true
+  def handle_call({:register_batch, agents}, _from, state) do
+    count =
+      Enum.reduce(agents, 0, fn {name, display_name, description}, acc ->
+        info = AgentInfo.new(name, display_name, description)
+        :ets.insert(@table, {name, info})
+        acc + 1
+      end)
+
+    Logger.debug("AgentCatalogue: batch registered #{count} agents")
+    {:reply, {:ok, count}, state}
   end
 
   # ============================================================================

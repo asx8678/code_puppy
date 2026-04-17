@@ -183,12 +183,13 @@ defmodule CodePuppyControl.Tools.AgentSession do
   """
   @spec get_sessions_dir() :: {:ok, Path.t()} | {:error, String.t()}
   def get_sessions_dir do
-    # Use XDG_DATA_HOME or fall back to ~/.local/share
     data_dir =
-      System.get_env("XDG_DATA_HOME") ||
-        Path.expand("~/.local/share/code_puppy")
+      case System.get_env("XDG_DATA_HOME") do
+        nil -> Path.expand("~/.local/share/code_puppy")
+        xdg_base -> Path.join(xdg_base, "code_puppy")
+      end
 
-    sessions_dir = Path.join(data_dir, "sessions")
+    sessions_dir = Path.join(data_dir, "subagent_sessions")
 
     case File.mkdir_p(sessions_dir) do
       :ok -> {:ok, sessions_dir}
@@ -220,28 +221,24 @@ defmodule CodePuppyControl.Tools.AgentSession do
          {:ok, sessions_dir} <- get_sessions_dir() do
       session_path = Path.join(sessions_dir, "#{session_id}.json")
 
-      # Check if we need to preserve initial_prompt from previous save
-      saved_initial_prompt =
-        if is_nil(initial_prompt) and File.exists?(session_path) do
-          case load_session_file(session_path) do
-            {:ok, %{"metadata" => %{"initial_prompt" => existing}}} -> existing
-            _ -> nil
-          end
-        else
-          initial_prompt
-        end
-
       now = DateTime.utc_now() |> DateTime.to_iso8601()
 
-      # Try to get existing created_at if this is an update
-      created_at =
-        if File.exists?(session_path) do
+      # Load existing metadata if updating (single read for both values)
+      {saved_initial_prompt, created_at} =
+        if is_nil(initial_prompt) or File.exists?(session_path) do
           case load_session_file(session_path) do
-            {:ok, %{"metadata" => %{"created_at" => existing}}} -> existing
-            _ -> now
+            {:ok, %{"metadata" => meta}} ->
+              existing_initial =
+                if is_nil(initial_prompt), do: meta["initial_prompt"], else: initial_prompt
+
+              existing_created = meta["created_at"] || now
+              {existing_initial, existing_created}
+
+            _ ->
+              {initial_prompt, now}
           end
         else
-          now
+          {initial_prompt, now}
         end
 
       payload = %{
