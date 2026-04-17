@@ -1,69 +1,146 @@
 defmodule CodePuppyControl.Messages.Hasher do
-  @moduledoc "Fast message hashing. Port of code_puppy_core/src/message_hashing.rs."
+  @moduledoc """
+  Port of `code_puppy_core/src/message_hashing.rs`.
+
+  Fast message hashing using `:erlang.phash2/1` (Erlang's portable hash function).
+  This replaces the Rust FxHash implementation for Elixir-native message processing.
+
+  Hash values are consistent within a single session but do NOT need to match
+  Rust FxHash values - they are only compared within the same Elixir process.
+
+  ## Algorithm
+
+  1. `stringify_part_for_hash/1` - builds canonical string representation of a part:
+     `"part_kind|tool_call_id=X|tool_name=Y|content=Z"` (attributes joined by `|`)
+
+  2. `hash_message/1` - builds header bits (role, instructions), combines with all
+     part strings, joins with `||`, then hashes with `:erlang.phash2/1`
+
+  ## Usage
+
+      alias CodePuppyControl.Messages.Hasher
+
+      message = %{
+        kind: "request",
+        role: "user",
+        instructions: nil,
+        parts: [%{part_kind: "text", content: "hello", content_json: nil,
+                  tool_call_id: nil, tool_name: nil, args: nil}]
+      }
+
+      hash = Hasher.hash_message(message)
+  """
 
   alias CodePuppyControl.Messages.Types
 
   @doc """
   Compute a stable hash for a message.
-  Mirrors `BaseAgent.hash_message()` — builds a canonical string from
-  header bits + part strings, then hashes it.
-  Uses :erlang.phash2 for fast hashing.
+
+  Builds a canonical string from header bits (role, instructions) plus all
+  part strings, then hashes using `:erlang.phash2/1`.
+
+  ## Parameters
+
+    * `msg` - A message map conforming to `Types.message()`
+
+  ## Returns
+
+    * `integer()` - A positive hash value
+
+  ## Examples
+
+      iex> msg = %{kind: "request", role: "user", instructions: nil, parts: []}
+      iex> hash = Hasher.hash_message(msg)
+      iex> is_integer(hash) and hash >= 0
+      true
   """
   @spec hash_message(Types.message()) :: integer()
   def hash_message(msg) do
-    # Build header bits from role and instructions
-    header_bits =
-      []
-      |> maybe_add_header("role", msg[:role])
-      |> maybe_add_header("instructions", msg[:instructions])
+    header_bits = build_header_bits(msg)
+    part_strings = Enum.map(msg.parts, &stringify_part_for_hash/1)
 
-    # Build part strings
-    part_strings = Enum.map(msg[:parts] || [], &stringify_part_for_hash/1)
+    canonical =
+      header_bits
+      |> Enum.concat(part_strings)
+      |> Enum.join("||")
 
-    # Combine all parts into canonical string
-    canonical = Enum.join(header_bits ++ part_strings, "||")
-
-    # Use :erlang.phash2 for fast hashing (converts to signed int like Rust FxHasher)
     :erlang.phash2(canonical)
-  end
-
-  @spec maybe_add_header([String.t()], String.t(), String.t() | nil) :: [String.t()]
-  defp maybe_add_header(bits, _key, nil), do: bits
-  defp maybe_add_header(bits, _key, ""), do: bits
-
-  defp maybe_add_header(bits, key, value) do
-    bits ++ ["#{key}=#{value}"]
   end
 
   @doc """
   Build the canonical string for a part (for hashing).
-  Mirrors `BaseAgent._stringify_part()` in Python.
+
+  Mirrors the Python `BaseAgent._stringify_part()` method.
+  Format: `"part_kind|tool_call_id=X|tool_name=Y|content=Z"`
+
+  ## Parameters
+
+    * `part` - A message part map conforming to `Types.message_part()`
+
+  ## Returns
+
+    * `String.t()` - Canonical string representation
   """
   @spec stringify_part_for_hash(Types.message_part()) :: String.t()
   def stringify_part_for_hash(part) do
+    attributes = [part.part_kind]
+
     attributes =
-      [part[:part_kind]]
-      |> maybe_add_attr("tool_call_id", part[:tool_call_id])
-      |> maybe_add_attr("tool_name", part[:tool_name])
-      |> add_content_attr(part[:content], part[:content_json])
+      if nonempty_string(part.tool_call_id) do
+        attributes ++ ["tool_call_id=#{part.tool_call_id}"]
+      else
+        attributes
+      end
+
+    attributes =
+      if nonempty_string(part.tool_name) do
+        attributes ++ ["tool_name=#{part.tool_name}"]
+      else
+        attributes
+      end
+
+    attributes =
+      cond do
+        # Rust: if let Some(ref content) = part.content (empty string is Some(""))
+        part.content != nil ->
+          attributes ++ ["content=#{part.content}"]
+
+        nonempty_string(part.content_json) ->
+          attributes ++ ["content=#{part.content_json}"]
+
+        true ->
+          attributes ++ ["content=None"]
+      end
 
     Enum.join(attributes, "|")
   end
 
-  @spec maybe_add_attr([String.t()], String.t(), String.t() | nil) :: [String.t()]
-  defp maybe_add_attr(attrs, _key, nil), do: attrs
-  defp maybe_add_attr(attrs, _key, ""), do: attrs
+  # Private functions
 
-  defp maybe_add_attr(attrs, key, value) do
-    attrs ++ ["#{key}=#{value}"]
+  @spec build_header_bits(Types.message()) :: [String.t()]
+  defp build_header_bits(msg) do
+    bits = []
+
+    bits =
+      if nonempty_string(msg.role) do
+        ["role=#{msg.role}" | bits]
+      else
+        bits
+      end
+
+    bits =
+      if nonempty_string(msg.instructions) do
+        ["instructions=#{msg.instructions}" | bits]
+      else
+        bits
+      end
+
+    # Reverse to maintain expected order (role before instructions)
+    Enum.reverse(bits)
   end
 
-  @spec add_content_attr([String.t()], String.t() | nil, String.t() | nil) :: [String.t()]
-  defp add_content_attr(attrs, nil, nil), do: attrs ++ ["content=None"]
-  defp add_content_attr(attrs, "" = _content, nil), do: attrs ++ ["content=None"]
-
-  defp add_content_attr(attrs, content, _json) when is_binary(content),
-    do: attrs ++ ["content=#{content}"]
-
-  defp add_content_attr(attrs, nil, json) when is_binary(json), do: attrs ++ ["content=#{json}"]
+  @spec nonempty_string(String.t() | nil) :: boolean()
+  defp nonempty_string(nil), do: false
+  defp nonempty_string(""), do: false
+  defp nonempty_string(_), do: true
 end
