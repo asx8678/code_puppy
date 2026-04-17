@@ -36,7 +36,7 @@ defmodule CodePuppyControl.Routing do
         strategies: [
           %FallbackChain{models: primary_models},
           %FallbackChain{models: secondary_models},
-          %LastResort{}
+          LastResort.new()
         ],
         context: %{
           availability_service: CodePuppyControl.ModelAvailability

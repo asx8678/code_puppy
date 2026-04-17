@@ -1,1 +1,1 @@
-{"models": []}
+{"test-provider":{"id":"test-provider","name":"Test Provider","env":["KEY"],"models":{}}}

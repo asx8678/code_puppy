@@ -135,7 +135,8 @@ defmodule CodePuppyControl.Routing.IntegrationTest do
     end
 
     test "Routing.round_robin/2" do
-      assert {:ok, _model} = Routing.round_robin(["a", "b", "c"], rotate_every: 2, use_global: false)
+      assert {:ok, _model} =
+               Routing.round_robin(["a", "b", "c"], rotate_every: 2, use_global: false)
     end
   end
 
