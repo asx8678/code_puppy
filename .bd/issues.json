@@ -1790,13 +1790,13 @@
       "id": "bd-95",
       "title": "Dead code removal: rewrite/ dir, deprecated compat, archived docs",
       "description": "Remove dead code identified by planning audit:\n- Deleted rewrite/ directory (~1400 stale snapshot files)\n- Removed deprecated TURBO_OPS_AVAILABLE alias from turbo_executor orchestrator\n- Cleaned stale turbo_ops references from elixir_transport.py docstring\n- Removed stale PUP_ACCEL_TURBO_OPS env var from acceleration/__init__.py\n- Moved 4 archived docs to docs/archived/\n- Updated MIGRATION_STATUS.md reading guide for new paths",
-      "status": "open",
+      "status": "closed",
       "priority": 2,
       "type": "task",
       "labels": [],
       "dependencies": {},
       "created_at": "2026-04-17T01:06:36.560666",
-      "updated_at": "2026-04-17T01:06:36.560673",
+      "updated_at": "2026-04-17T01:06:46.840479",
       "comments": []
     }
   }
