@@ -1,14 +1,14 @@
 defmodule CodePuppyControl.MessageCore.MessageBatch do
   @moduledoc """
-  Message batch struct for batched message processing.
+  Placeholder namespace for message batch functionality.
 
-  This is a placeholder module for future implementation (bd-159).
-  The MessageBatch struct will provide a container for messages with
-  associated metadata for batch processing operations.
+  This is a namespace-only module pending full implementation in bd-159.
+  No public API is available yet.
 
   ## Future Implementation (bd-159)
 
-  The batch will support:
+  The MessageBatch module will provide:
+    * A struct for batched message containers
     * Accumulating messages with metadata
     * Token counting across the batch
     * Iteration and filtering operations
@@ -25,45 +25,13 @@ defmodule CodePuppyControl.MessageCore.MessageBatch do
   ## Current Status
 
   This module exists as a namespace placeholder to complete the MessageCore
-  module hierarchy. Downstream issues requiring this module:
-    * bd-159 - Create MessageBatch Elixir struct
+  module hierarchy. Attempting to use batch functionality before bd-159 will
+  raise `NotImplementedError`.
+
+  Downstream issues:
+    * bd-159 - Create MessageBatch Elixir struct with full API
   """
 
-  alias CodePuppyControl.MessageCore.Types
-
-  @typedoc "Placeholder type for MessageBatch (to be implemented in bd-159)"
-  @type t :: map()
-
-  @doc """
-  Placeholder function - returns an empty batch.
-
-  This is a stub implementation until bd-159 completes the full MessageBatch
-  struct with proper functionality.
-  """
-  @spec new() :: t()
-  def new do
-    %{}
-  end
-
-  @doc """
-  Placeholder function - creates a batch from messages.
-
-  This is a stub implementation until bd-159 completes the full MessageBatch
-  struct with proper functionality.
-  """
-  @spec new([Types.message()]) :: t()
-  def new(_messages) do
-    %{}
-  end
-
-  @doc """
-  Placeholder function - returns batch size.
-
-  This is a stub implementation until bd-159 completes the full MessageBatch
-  struct with proper functionality.
-  """
-  @spec size(t()) :: non_neg_integer()
-  def size(_batch) do
-    0
-  end
+  # This module intentionally has no public API.
+  # Full implementation pending in bd-159.
 end
