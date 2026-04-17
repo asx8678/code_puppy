@@ -249,7 +249,6 @@ def load_puppy_config() -> PuppyConfig:
             False,
             **resolver_ctx,
         ),
-        # bd-50: rust_autobuild_disabled removed - Rust integration deleted
         enable_dbos=resolve_bool(
             ("PUPPY_ENABLE_DBOS", "CODE_PUPPY_ENABLE_DBOS"),
             "enable_dbos",

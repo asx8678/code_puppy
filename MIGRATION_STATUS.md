@@ -308,7 +308,7 @@ Migrated the last portable Rust module from `code_puppy_core`:
 | bd-47 | Message Serialization → Elixir | Phase N | 📋 Open |
 | bd-48 | Message Hashing → Elixir | Phase N | 📋 Open |
 | bd-49 | Delete Rust workspace | Phase 6 | 📋 Open |
-| bd-50 | Remove Python-side Rust integration | Phase 6 | 📋 Open |
+| bd-50 | Remove Python-side Rust integration | Phase 6 | ✅ Done |
 | bd-51 | Port turbo_parse to Elixir | Phase 6 | 📋 Open |
 
 ---

@@ -181,8 +181,7 @@ class TestTokenEstimation:
         filtered = agent.filter_huge_messages([message])
         assert len(filtered) == 1
 
-    @patch("code_puppy.agents.base_agent._rust_enabled", return_value=False)
-    def test_filter_huge_messages_boundary_at_50000(self, mock_rust, agent):
+    def test_filter_huge_messages_boundary_at_50000(self, agent):
         """Test filter_huge_messages behavior at 50000 token boundary (Python path)."""
         # Create a message with approximately 50000 tokens
         # 50000 tokens = 200000 characters (using 4.0 chars per token)
