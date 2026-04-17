@@ -39,7 +39,6 @@ defmodule CodePuppyControl.Text.ContentPrep do
     :original_bom
   ]
 
-
   @typedoc """
   Result of preparing content.
 

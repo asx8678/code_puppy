@@ -295,7 +295,8 @@ defmodule CodePuppyControl.Text.ContentPrepTest do
       result = ContentPrep.prepare_content(input, strip_bom: false)
       assert result.content == <<0xEF, 0xBB, 0xBF, "Hello">>
       assert result.is_text == true
-      assert result.had_bom == false  # We didn't strip, so we didn't "have" one for tracking
+      # We didn't strip, so we didn't "have" one for tracking
+      assert result.had_bom == false
     end
   end
 
@@ -415,7 +416,8 @@ defmodule CodePuppyControl.Text.ContentPrepTest do
       result1 = ContentPrep.prepare_content(content)
       result2 = ContentPrep.prepare_content(result1.content)
       assert result1.content == result2.content
-      assert result2.had_crlf == false  # Already normalized
+      # Already normalized
+      assert result2.had_crlf == false
     end
 
     test "normalization preserves non-EOL content" do
@@ -458,7 +460,8 @@ defmodule CodePuppyControl.Text.ContentPrepTest do
         <<0>>,
         <<"text", 0, "text">>,
         <<0, 0, 0>>,
-        <<0xEF, 0xBB, 0xBF, 0>>  # BOM followed by NUL
+        # BOM followed by NUL
+        <<0xEF, 0xBB, 0xBF, 0>>
       ]
 
       for input <- inputs do
@@ -479,7 +482,8 @@ defmodule CodePuppyControl.Text.ContentPrepTest do
       input = <<0x00, "\r\n", 0x01>>
       result = ContentPrep.prepare_content(input)
       assert result.is_text == false
-      assert result.had_crlf == true  # Still detected even in binary
+      # Still detected even in binary
+      assert result.had_crlf == true
     end
   end
 
@@ -501,7 +505,8 @@ defmodule CodePuppyControl.Text.ContentPrepTest do
       result = ContentPrep.prepare_content(mac_file)
       assert result.content == "First line\nSecond line\nThird line"
       assert result.is_text == true
-      assert result.had_crlf == false  # No CRLF sequences, just orphan CRs
+      # No CRLF sequences, just orphan CRs
+      assert result.had_crlf == false
     end
 
     test "Unix-style files (LF only)" do
@@ -548,7 +553,8 @@ defmodule CodePuppyControl.Text.ContentPrepTest do
 
       result = ContentPrep.prepare_content(lines)
       assert result.is_text == true
-      assert result.had_crlf == true  # At least some CRLF present
+      # At least some CRLF present
+      assert result.had_crlf == true
       # All lines should end with \n now
       refute String.contains?(result.content, "\r\n")
       refute String.contains?(result.content, "\r")

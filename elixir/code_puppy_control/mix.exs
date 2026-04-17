@@ -36,7 +36,9 @@ defmodule CodePuppyControl.MixProject do
       {:telemetry, "~> 1.2"},
       {:rustler, "~> 0.34.0", runtime: false},
       {:benchee, "~> 1.1", only: :dev, runtime: false},
-      {:benchee_markdown, "~> 0.3", only: :dev, runtime: false}
+      {:benchee_markdown, "~> 0.3", only: :dev, runtime: false},
+      # MessagePack for session serialization (bd-47)
+      {:msgpax, "~> 2.4"}
     ]
   end
 
