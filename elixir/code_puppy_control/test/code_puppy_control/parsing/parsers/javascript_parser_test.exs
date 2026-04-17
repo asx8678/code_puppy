@@ -140,8 +140,8 @@ defmodule CodePuppyControl.Parsing.Parsers.JavaScriptParserTest do
       assert length(result.symbols) == 1
 
       [symbol] = result.symbols
-      # String quotes are stripped by the parser
-      assert symbol.name == ~s(import React from react)
+      # The source module name is included (quotes stripped by parser, added back by formatter)
+      assert symbol.name == ~s(import React from 'react')
       assert symbol.kind == :import
     end
 
@@ -152,14 +152,14 @@ defmodule CodePuppyControl.Parsing.Parsers.JavaScriptParserTest do
       assert length(result.symbols) == 1
 
       [symbol] = result.symbols
-      # String quotes are stripped by the parser
-      assert symbol.name == ~s(import {useState, useEffect} from react)
+      # The source module name is included (quotes stripped by parser, added back by formatter)
+      assert symbol.name == ~s(import {useState, useEffect} from 'react')
       assert symbol.kind == :import
     end
   end
 
   describe "export statements" do
-    test "parses export default" do
+    test "parses bare export default" do
       source = "export default"
 
       assert {:ok, result} = JavaScriptParser.parse(source)
@@ -167,6 +167,17 @@ defmodule CodePuppyControl.Parsing.Parsers.JavaScriptParserTest do
 
       [symbol] = result.symbols
       assert symbol.name == "export default"
+      assert symbol.kind == :import
+    end
+
+    test "parses export default with identifier" do
+      source = "export default MyComponent"
+
+      assert {:ok, result} = JavaScriptParser.parse(source)
+      assert length(result.symbols) == 1
+
+      [symbol] = result.symbols
+      assert symbol.name == "export default MyComponent"
       assert symbol.kind == :import
     end
 
@@ -300,7 +311,7 @@ defmodule CodePuppyControl.Parsing.Parsers.JavaScriptParserTest do
 
     test "parses module with class and exports" do
       source = """
-      import helper from utils
+      import helper from 'utils'
 
       const CONFIG = production
 
