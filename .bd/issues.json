@@ -914,7 +914,7 @@
       "id": "bd-50",
       "title": "Remove Python-side Rust integration",
       "description": "Delete code_puppy/_core_bridge.py, code_puppy/acceleration/, Rust branches in code_puppy/native_backend.py. Migrate all callers to Elixir transport.\n\nPart of Phase 1 \u2014 Rust workspace retirement.",
-      "status": "open",
+      "status": "closed",
       "priority": 3,
       "type": "task",
       "labels": [
@@ -926,7 +926,7 @@
         ]
       },
       "created_at": "2026-04-16T17:51:24.212263",
-      "updated_at": "2026-04-16T17:51:24.212270",
+      "updated_at": "2026-04-17T04:37:42.341291",
       "comments": []
     },
     "bd-51": {
