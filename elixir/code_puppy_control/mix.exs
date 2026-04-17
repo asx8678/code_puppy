@@ -8,6 +8,7 @@ defmodule CodePuppyControl.MixProject do
       elixir: "~> 1.15",
       elixirc_paths: elixirc_paths(Mix.env()),
       start_permanent: Mix.env() == :prod,
+      compilers: [:leex] ++ Mix.compilers(),
       aliases: aliases(),
       deps: deps(),
       compilers: [:leex] ++ Mix.compilers()
