@@ -13,8 +13,10 @@ Hooks:
     - custom_command: Provides /guidance command for status/toggle
     - agent_run_start: Surfaces task context when agents begin
 """
+
 from __future__ import annotations
 
+import asyncio
 import logging
 import os
 import subprocess
@@ -43,6 +45,7 @@ _state: dict[str, Any] = {
     "last_agent_model": None,
 }
 
+
 def _get_config_enabled() -> bool:
     """Read the enabled state from puppy.cfg; default to True."""
     try:
@@ -54,6 +57,7 @@ def _get_config_enabled() -> bool:
     except Exception as exc:
         logger.debug("proactive_guidance: config read error: %s", exc)
     return True
+
 
 def _get_config_verbosity() -> str:
     """Read verbosity from puppy.cfg; default to 'normal'."""
@@ -67,9 +71,11 @@ def _get_config_verbosity() -> str:
         logger.debug("proactive_guidance: config read error: %s", exc)
     return "normal"
 
+
 def _is_enabled() -> bool:
     """Check if guidance is enabled (config + runtime state)."""
     return _state["enabled"] and _get_config_enabled()
+
 
 # --------------------------------------------------------------------------
 # Language-specific guidance map
@@ -130,13 +136,14 @@ _STRUCT_VALIDATION: dict[str, tuple[str, str]] = {
     ),
     ".toml": (
         "✅ Validate",
-        "python -c 'import tomllib; tomllib.load(open(\"{path}\", \"rb\"))'",
+        'python -c \'import tomllib; tomllib.load(open("{path}", "rb"))\'',
     ),
 }
 
 # --------------------------------------------------------------------------
 # Guidance generators
 # --------------------------------------------------------------------------
+
 
 def _get_write_guidance(
     file_path: str, content_preview: str | None = None
@@ -202,8 +209,11 @@ def _get_write_guidance(
 
     return "\n".join(["✨ Next steps for your new file:"] + suggestions[:6])
 
+
 def _get_exploratory_guidance(tool_name: str, tool_args: dict) -> str | None:
     """Generate guidance after exploratory tools (read_file, grep, list_files).
+
+    Only emits at verbose verbosity to reduce noise during normal exploration.
 
     Args:
         tool_name: The exploratory tool that was used
@@ -213,16 +223,17 @@ def _get_exploratory_guidance(tool_name: str, tool_args: dict) -> str | None:
         Guidance string or None
     """
     verbosity = _state.get("verbosity", "normal")
+    if verbosity != "verbose":
+        return None
 
     lines = ["📖 Exploratory tool used"]
     lines.append("")
     lines.append("🔍 Next: Use findings to make changes or gather more info")
-
-    if verbosity != "minimal":
-        lines.append("📝 Consider: read_file on interesting files found")
-        lines.append("🎯 Action: Create or modify files based on what you learned")
+    lines.append("📝 Consider: read_file on interesting files found")
+    lines.append("🎯 Action: Create or modify files based on what you learned")
 
     return "\n".join(lines)
+
 
 def _get_shell_guidance(command: str, exit_code: int = 0) -> str | None:
     """Generate guidance after run_shell_command tool usage.
@@ -295,6 +306,7 @@ def _get_shell_guidance(command: str, exit_code: int = 0) -> str | None:
 
     return "\n".join(suggestions)
 
+
 def _get_agent_guidance(
     agent_name: str, result_preview: str | None = None
 ) -> str | None:
@@ -322,9 +334,11 @@ def _get_agent_guidance(
 
     return "\n".join(suggestions)
 
+
 # --------------------------------------------------------------------------
 # Task-context helpers (fail gracefully, never crash)
 # --------------------------------------------------------------------------
+
 
 def _get_git_branch() -> str | None:
     """Best-effort git branch detection."""
@@ -341,6 +355,7 @@ def _get_git_branch() -> str | None:
         logger.debug("proactive_guidance: git branch detection failed: %s", exc)
     return None
 
+
 def _get_git_head_short() -> str | None:
     """Best-effort short HEAD hash."""
     try:
@@ -355,6 +370,7 @@ def _get_git_head_short() -> str | None:
     except Exception as exc:
         logger.debug("proactive_guidance: git rev-parse failed: %s", exc)
     return None
+
 
 def _detect_task_context() -> dict[str, Any]:
     """Gather real context from env/session/git/bd — fail gracefully.
@@ -402,6 +418,7 @@ def _detect_task_context() -> dict[str, Any]:
 
     return ctx
 
+
 def _format_task_context(ctx: dict[str, Any]) -> str:
     """Format task context dict into a human-readable summary."""
     parts: list[str] = ["📋 Task Context"]
@@ -419,9 +436,11 @@ def _format_task_context(ctx: dict[str, Any]) -> str:
         return ""  # No useful context gathered
     return "\n".join(parts)
 
+
 # --------------------------------------------------------------------------
 # Post-tool call hook
 # --------------------------------------------------------------------------
+
 
 async def _on_post_tool_call(
     tool_name: str,
@@ -478,9 +497,11 @@ async def _on_post_tool_call(
         # Never crash the app because of guidance
         logger.debug("proactive_guidance: error in post_tool_call: %s", exc)
 
+
 # --------------------------------------------------------------------------
 # Agent run start hook — surface task context
 # --------------------------------------------------------------------------
+
 
 async def _on_agent_run_start(
     agent_name: str,
@@ -496,7 +517,7 @@ async def _on_agent_run_start(
     _state["last_agent_model"] = model_name
 
     try:
-        ctx = _detect_task_context()
+        ctx = await asyncio.to_thread(_detect_task_context)
         summary = _format_task_context(ctx)
         if not summary:
             return
@@ -507,15 +528,18 @@ async def _on_agent_run_start(
     except Exception as exc:
         logger.debug("proactive_guidance: error in agent_run_start: %s", exc)
 
+
 # --------------------------------------------------------------------------
 # Slash command UX: /guidance status | on | off | test
 # --------------------------------------------------------------------------
+
 
 def _on_custom_help() -> list[tuple[str, str]]:
     return [
         ("/guidance", "Manage proactive guidance (status|on|off|test)"),
         ("/guidance verbosity minimal|normal|verbose", "Set guidance detail level"),
     ]
+
 
 def _handle_custom_command(command: str, name: str) -> bool | str | None:
     if name != "guidance":
@@ -584,6 +608,7 @@ def _handle_custom_command(command: str, name: str) -> bool | str | None:
         f"Unknown /guidance subcommand: {sub!r} (try status|on|off|verbosity|test|reset)"
     )
     return True
+
 
 # --------------------------------------------------------------------------
 # Registration — module scope, as required by plugin loader
