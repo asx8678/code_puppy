@@ -330,7 +330,7 @@ defmodule CodePuppyControl.ModelRegistry do
   end
 
   defp load_bundled_models do
-    models_path = Application.app_dir(:code_puppy_control, "priv/models.json")
+    models_path = bundled_models_path()
 
     case File.read(models_path) do
       {:ok, content} ->
@@ -342,6 +342,14 @@ defmodule CodePuppyControl.ModelRegistry do
       {:error, reason} ->
         {:error, {:file_read_error, models_path, reason}}
     end
+  end
+
+  defp bundled_models_path do
+    Application.get_env(
+      :code_puppy_control,
+      :bundled_models_path,
+      Application.app_dir(:code_puppy_control, "priv/models.json")
+    )
   end
 
   defp load_overlay_files do

@@ -588,25 +588,30 @@ defmodule CodePuppyControl.ModelRegistryTest do
 
   describe "reload/0 error path" do
     test "returns {:error, reason} when bundled JSON is missing" do
-      # Create a temporary registry with a bad priv dir
-      # We'll use the public API by stopping the supervised registry
-      # and starting one that will fail to load
-      old_home = System.get_env("HOME")
-
-      # Use a temp dir with no .code_puppy folder (so only bundled matters)
-      tmp_dir = System.tmp_dir!()
-      System.put_env("HOME", tmp_dir)
+      # Save original config
+      original = Application.get_env(:code_puppy_control, :bundled_models_path)
 
       try do
-        # This is testing via the GenServer's reload functionality
-        # We need to verify the typespec is correct - reload returns :ok or {:error, reason}
-        result = ModelRegistry.reload()
+        # Point to nonexistent file
+        Application.put_env(
+          :code_puppy_control,
+          :bundled_models_path,
+          "/tmp/nonexistent_models.json"
+        )
 
-        # Since the bundled models.json exists, this should return :ok
-        # But the typespec should allow for {:error, term()}
-        assert result == :ok or match?({:error, _}, result)
+        # Reload should fail
+        result = ModelRegistry.reload()
+        assert {:error, _reason} = result
       after
-        System.put_env("HOME", old_home || "~")
+        # Restore
+        if original do
+          Application.put_env(:code_puppy_control, :bundled_models_path, original)
+        else
+          Application.delete_env(:code_puppy_control, :bundled_models_path)
+        end
+
+        # Reload with correct path to restore state
+        ModelRegistry.reload()
       end
     end
   end
