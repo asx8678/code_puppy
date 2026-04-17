@@ -11,6 +11,7 @@ defmodule CodePuppyControl.Application do
   5. CodePuppyControl.PolicyEngine - Priority-based policy rule engine
   6. CodePuppyControl.AgentModelPinning - Agent-to-model pin configuration (ETS-backed)
   7. CodePuppyControl.RoundRobinModel - Round-robin model rotation (ETS-backed)
+  7a. CodePuppyControl.ModelsDevParser.Registry - Models.dev API registry (bd-74)
   8. CodePuppyControl.Run.Registry - Process registry for run tracking
   9. CodePuppyControl.Run.Supervisor - DynamicSupervisor for run processes
   10. CodePuppyControl.PythonWorker.Supervisor - DynamicSupervisor for Python workers
@@ -37,6 +38,7 @@ defmodule CodePuppyControl.Application do
       CodePuppyControl.PolicyEngine,
       CodePuppyControl.AgentModelPinning,
       CodePuppyControl.RoundRobinModel,
+      CodePuppyControl.ModelsDevParser.Registry,
       CodePuppyControl.Run.Registry,
       {CodePuppyControl.Run.Supervisor, []},
       CodePuppyControl.PythonWorker.Supervisor,

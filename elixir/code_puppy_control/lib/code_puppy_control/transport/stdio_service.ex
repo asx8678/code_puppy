@@ -78,6 +78,17 @@ defmodule CodePuppyControl.Transport.StdioService do
   - `scheduler.view_log` - View task execution history
   - `scheduler.force_check` - Force immediate schedule evaluation
 
+  ### Models Dev Parser (bd-74)
+  - `models_dev.get_providers` - Get all model providers
+  - `models_dev.get_provider` - Get specific provider by ID
+  - `models_dev.get_models` - Get models (optionally filtered by provider)
+  - `models_dev.get_model` - Get specific model by provider and model ID
+  - `models_dev.search` - Search models by query and capabilities
+  - `models_dev.filter_by_cost` - Filter models by cost constraints
+  - `models_dev.filter_by_context` - Filter models by context length
+  - `models_dev.to_config` - Convert model to Code Puppy config format
+  - `models_dev.data_source` - Get data source info
+
   ### HTTP Client
   - `http.request` - Make HTTP request with retry logic
   - `http.get` - Simple GET request
@@ -994,6 +1005,7 @@ defmodule CodePuppyControl.Transport.StdioService do
     Protocol.encode_response(%{"models" => models, "count" => length(models)}, id)
   end
 
+
   # ============================================================================
   # Code Context Operations (bd-87)
   # ============================================================================
@@ -1113,6 +1125,166 @@ defmodule CodePuppyControl.Transport.StdioService do
     Protocol.encode_response(%{"removed" => removed, "file_path" => file_path}, id)
   end
 
+  # ============================================================================
+  # Models Dev Parser Operations (bd-74)
+  # ============================================================================
+
+  # models_dev.get_providers - Get all providers (bd-74)
+  defp handle_request("models_dev.get_providers", _params, id) do
+    providers =
+      CodePuppyControl.ModelsDevParser.Registry.get_providers()
+      |> Enum.map(fn p ->
+        %{
+          "id" => p.id,
+          "name" => p.name,
+          "env" => p.env,
+          "api" => p.api,
+          "npm" => p.npm,
+          "doc" => p.doc,
+          "model_count" => CodePuppyControl.ModelsDevParser.ProviderInfo.model_count(p)
+        }
+      end)
+
+    Protocol.encode_response(%{"providers" => providers, "count" => length(providers)}, id)
+  end
+
+  # models_dev.get_provider - Get a specific provider (bd-74)
+  defp handle_request("models_dev.get_provider", params, id) do
+    provider_id = params["provider_id"]
+
+    if is_nil(provider_id) or not is_binary(provider_id) do
+      Protocol.encode_error(-32602, "Missing or invalid param: provider_id", nil, id)
+    else
+      case CodePuppyControl.ModelsDevParser.Registry.get_provider(provider_id) do
+        nil ->
+          Protocol.encode_response(%{"provider" => nil}, id)
+
+        p ->
+          provider = %{
+            "id" => p.id,
+            "name" => p.name,
+            "env" => p.env,
+            "api" => p.api,
+            "npm" => p.npm,
+            "doc" => p.doc,
+            "model_count" => CodePuppyControl.ModelsDevParser.ProviderInfo.model_count(p)
+          }
+
+          Protocol.encode_response(%{"provider" => provider}, id)
+      end
+    end
+  end
+
+  # models_dev.get_models - Get models, optionally filtered by provider (bd-74)
+  defp handle_request("models_dev.get_models", params, id) do
+    provider_id = params["provider_id"]
+
+    models =
+      CodePuppyControl.ModelsDevParser.Registry.get_models(provider_id)
+      |> Enum.map(&serialize_model/1)
+
+    Protocol.encode_response(%{"models" => models, "count" => length(models)}, id)
+  end
+
+  # models_dev.get_model - Get a specific model (bd-74)
+  defp handle_request("models_dev.get_model", params, id) do
+    provider_id = params["provider_id"]
+    model_id = params["model_id"]
+
+    cond do
+      is_nil(provider_id) or not is_binary(provider_id) ->
+        Protocol.encode_error(-32602, "Missing or invalid param: provider_id", nil, id)
+
+      is_nil(model_id) or not is_binary(model_id) ->
+        Protocol.encode_error(-32602, "Missing or invalid param: model_id", nil, id)
+
+      true ->
+        case CodePuppyControl.ModelsDevParser.Registry.get_model(provider_id, model_id) do
+          nil ->
+            Protocol.encode_response(%{"model" => nil}, id)
+
+          m ->
+            Protocol.encode_response(%{"model" => serialize_model(m)}, id)
+        end
+    end
+  end
+
+  # models_dev.search - Search models by query and capabilities (bd-74)
+  defp handle_request("models_dev.search", params, id) do
+    query = params["query"]
+    capability_filters = params["capability_filters"] || %{}
+
+    opts =
+      [capability_filters: capability_filters] ++
+        if query, do: [query: query], else: []
+
+    models =
+      CodePuppyControl.ModelsDevParser.Registry.search_models(opts)
+      |> Enum.map(&serialize_model/1)
+
+    Protocol.encode_response(%{"models" => models, "count" => length(models)}, id)
+  end
+
+  # models_dev.filter_by_cost - Filter models by cost (bd-74)
+  defp handle_request("models_dev.filter_by_cost", params, id) do
+    # Get all models first, then filter
+    models = CodePuppyControl.ModelsDevParser.Registry.get_models()
+    max_input_cost = params["max_input_cost"]
+    max_output_cost = params["max_output_cost"]
+
+    filtered =
+      CodePuppyControl.ModelsDevParser.Registry.filter_by_cost(
+        models,
+        max_input_cost,
+        max_output_cost
+      )
+      |> Enum.map(&serialize_model/1)
+
+    Protocol.encode_response(%{"models" => filtered, "count" => length(filtered)}, id)
+  end
+
+  # models_dev.filter_by_context - Filter by minimum context (bd-74)
+  defp handle_request("models_dev.filter_by_context", params, id) do
+    models = CodePuppyControl.ModelsDevParser.Registry.get_models()
+    min_context = params["min_context_length"] || 0
+
+    filtered =
+      CodePuppyControl.ModelsDevParser.Registry.filter_by_context(models, min_context)
+      |> Enum.map(&serialize_model/1)
+
+    Protocol.encode_response(%{"models" => filtered, "count" => length(filtered)}, id)
+  end
+
+  # models_dev.to_config - Convert model to config format (bd-74)
+  defp handle_request("models_dev.to_config", params, id) do
+    provider_id = params["provider_id"]
+    model_id = params["model_id"]
+
+    cond do
+      is_nil(provider_id) or not is_binary(provider_id) ->
+        Protocol.encode_error(-32602, "Missing or invalid param: provider_id", nil, id)
+
+      is_nil(model_id) or not is_binary(model_id) ->
+        Protocol.encode_error(-32602, "Missing or invalid param: model_id", nil, id)
+
+      true ->
+        case CodePuppyControl.ModelsDevParser.Registry.get_model(provider_id, model_id) do
+          nil ->
+            Protocol.encode_response(%{"config" => nil}, id)
+
+          m ->
+            config = CodePuppyControl.ModelsDevParser.Registry.to_config(m)
+            Protocol.encode_response(%{"config" => config}, id)
+        end
+    end
+  end
+
+  # models_dev.data_source - Get data source info (bd-74)
+  defp handle_request("models_dev.data_source", _params, id) do
+    source = CodePuppyControl.ModelsDevParser.Registry.data_source()
+    Protocol.encode_response(%{"data_source" => source}, id)
+  end
+
   # Method not found handler
   defp handle_request(method, _params, id) do
     Protocol.encode_error(
@@ -1221,6 +1393,34 @@ defmodule CodePuppyControl.Transport.StdioService do
         "match_end" => m.match_end
       }
     end)
+  end
+
+  # Models Dev Parser serialization (bd-74)
+  defp serialize_model(%CodePuppyControl.ModelsDevParser.ModelInfo{} = m) do
+    %{
+      "provider_id" => m.provider_id,
+      "model_id" => m.model_id,
+      "full_id" => CodePuppyControl.ModelsDevParser.ModelInfo.full_id(m),
+      "name" => m.name,
+      "attachment" => m.attachment,
+      "reasoning" => m.reasoning,
+      "tool_call" => m.tool_call,
+      "temperature" => m.temperature,
+      "structured_output" => m.structured_output,
+      "cost_input" => m.cost_input,
+      "cost_output" => m.cost_output,
+      "cost_cache_read" => m.cost_cache_read,
+      "context_length" => m.context_length,
+      "max_output" => m.max_output,
+      "input_modalities" => m.input_modalities,
+      "output_modalities" => m.output_modalities,
+      "has_vision" => CodePuppyControl.ModelsDevParser.ModelInfo.has_vision?(m),
+      "is_multimodal" => CodePuppyControl.ModelsDevParser.ModelInfo.multimodal?(m),
+      "knowledge" => m.knowledge,
+      "release_date" => m.release_date,
+      "last_updated" => m.last_updated,
+      "open_weights" => m.open_weights
+    }
   end
 
   # ============================================================================

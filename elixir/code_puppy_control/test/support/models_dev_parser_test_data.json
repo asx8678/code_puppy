@@ -1,0 +1,1 @@
+{"anthropic":{"api":"https://api.anthropic.com/v1","env":["ANTHROPIC_API_KEY"],"id":"anthropic","models":{"claude-3-opus":{"cost":{},"id":"claude-3-opus","limit":{"context":100000,"output":4096},"modalities":{"input":["text"],"output":["text"]},"name":"Claude 3 Opus"}},"name":"Anthropic"}}
