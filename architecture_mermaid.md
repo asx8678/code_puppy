@@ -296,6 +296,7 @@ flowchart LR
         R3["tree-sitter bindings"]
     end
     Py <-->|JSON-RPC| Ex
+    Py -.->|PyO3 FFI (retiring)| Rs
     Ex <-->|Rustler NIF| Rs
     
     style Py fill:#E3F2FD,stroke:#1976D2
@@ -312,6 +313,7 @@ flowchart LR
 ```
 code_puppy/
 ├── code_puppy/                 # Python thin shell (TUI + CLI + agent loop)
+│   ├── _core_bridge.py         # 🗑️ PyO3 bridge (RETIRING with code_puppy_core)
 │   ├── agents/                 # 28 agent classes
 │   │   ├── base_agent.py       # BaseAgent ABC
 │   │   ├── agent_manager.py    # Discovery + registry
@@ -319,6 +321,7 @@ code_puppy/
 │   │   └── pack/               # Bloodhound, Terrier, etc.
 │   ├── plugins/                # 40+ plugins
 │   │   ├── elixir_bridge/      # Python-Elixir JSON-RPC bridge
+│   │   ├── fast_puppy/         # Runtime backend selector (Python)
 │   │   └── pack_parallelism/   # Run limiter
 │   ├── tools/                  # 18+ tools (routed to Elixir)
 │   ├── messaging/              # MessageBus + renderers
@@ -331,7 +334,6 @@ code_puppy/
 ├── code_puppy_core/            # 🗑️ Rust PyO3 crate (RETIRING)
 ├── turbo_parse/                # 🗑️ Rust PyO3 parse bindings (RETIRING)
 ├── turbo_parse_core/           # 🗑️ Pure Rust parse core (RETIRING)
-├── fast_puppy/                 # 🗑️ Rust builder (RETIRING)
 ├── tests/                      # Python test suite
 ├── pyproject.toml              # Python build
 ├── Cargo.toml                  # 🗑️ Rust workspace (RETIRING)
