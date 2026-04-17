@@ -32,6 +32,20 @@ fi
 # Get verbosity level from env or default to normal
 VERBOSITY="${GUIDANCE_VERBOSITY:-normal}"
 
+# Show help if requested
+if [[ $# -ge 1 && ("$1" == "-h" || "$1" == "--help") ]]; then
+    echo "Usage: guidance-injector.sh <tool_name> [tool_result] [options]"
+    echo ""
+    echo "Injects follow-up guidance after tool execution."
+    echo ""
+    echo "Tools: write_file, replace_in_file, run_shell_command, invoke_agent"
+    echo ""
+    echo "Options:"
+    echo "  --verbosity <level>  Set verbosity (minimal|normal|verbose)"
+    echo "  -h, --help           Show this help message"
+    exit 0
+fi
+
 # Show header
 echo -e "${BOLD}🐾 Proactive Guidance${RESET}"
 echo ""
