@@ -6,7 +6,7 @@ defmodule CodePuppyControl.PolicyConfigTest do
   use ExUnit.Case, async: false
 
   alias CodePuppyControl.{PolicyConfig, PolicyEngine}
-  alias CodePuppyControl.PolicyEngine.Allow
+  alias CodePuppyControl.PolicyEngine.PolicyRule.Allow
 
   setup do
     # Ensure engine is running and reset
@@ -107,10 +107,11 @@ defmodule CodePuppyControl.PolicyConfigTest do
       File.write!(project_path, "{\"rules\": []}")
 
       try do
-        count = PolicyConfig.load_policy_rules(PolicyEngine.get_engine(),
-          user_policy: user_path,
-          project_policy: project_path
-        )
+        count =
+          PolicyConfig.load_policy_rules(PolicyEngine.get_engine(),
+            user_policy: user_path,
+            project_policy: project_path
+          )
 
         assert count == 1
 
@@ -143,10 +144,11 @@ defmodule CodePuppyControl.PolicyConfigTest do
       File.write!(project_path, project_json)
 
       try do
-        count = PolicyConfig.load_policy_rules(PolicyEngine.get_engine(),
-          user_policy: user_path,
-          project_policy: project_path
-        )
+        count =
+          PolicyConfig.load_policy_rules(PolicyEngine.get_engine(),
+            user_policy: user_path,
+            project_policy: project_path
+          )
 
         assert count == 3
       after
@@ -156,10 +158,11 @@ defmodule CodePuppyControl.PolicyConfigTest do
     end
 
     test "handles missing files gracefully" do
-      count = PolicyConfig.load_policy_rules(PolicyEngine.get_engine(),
-        user_policy: "/nonexistent/path.json",
-        project_policy: "/another/nonexistent/path.json"
-      )
+      count =
+        PolicyConfig.load_policy_rules(PolicyEngine.get_engine(),
+          user_policy: "/nonexistent/path.json",
+          project_policy: "/another/nonexistent/path.json"
+        )
 
       assert count == 0
     end

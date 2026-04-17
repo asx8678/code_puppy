@@ -6,7 +6,8 @@ defmodule CodePuppyControl.PolicyEngineTest do
   use ExUnit.Case, async: false
 
   alias CodePuppyControl.PolicyEngine
-  alias CodePuppyControl.PolicyEngine.{PolicyRule, Allow, Deny, AskUser}
+  alias CodePuppyControl.PolicyEngine.PolicyRule
+  alias CodePuppyControl.PolicyEngine.PolicyRule.{Allow, Deny, AskUser}
 
   setup do
     # Reset and start fresh engine for each test
@@ -280,7 +281,14 @@ defmodule CodePuppyControl.PolicyEngineTest do
 
   describe "rule management" do
     test "adds single rule" do
-      :ok = PolicyEngine.add_rule(%PolicyRule{tool_name: "test", decision: :allow, priority: 1, source: "test"})
+      :ok =
+        PolicyEngine.add_rule(%PolicyRule{
+          tool_name: "test",
+          decision: :allow,
+          priority: 1,
+          source: "test"
+        })
+
       rules = PolicyEngine.list_rules()
       assert length(rules) == 1
     end
@@ -297,8 +305,21 @@ defmodule CodePuppyControl.PolicyEngineTest do
     end
 
     test "rules are sorted by priority" do
-      :ok = PolicyEngine.add_rule(%PolicyRule{tool_name: "low", decision: :allow, priority: 1, source: "test"})
-      :ok = PolicyEngine.add_rule(%PolicyRule{tool_name: "high", decision: :deny, priority: 10, source: "test"})
+      :ok =
+        PolicyEngine.add_rule(%PolicyRule{
+          tool_name: "low",
+          decision: :allow,
+          priority: 1,
+          source: "test"
+        })
+
+      :ok =
+        PolicyEngine.add_rule(%PolicyRule{
+          tool_name: "high",
+          decision: :deny,
+          priority: 10,
+          source: "test"
+        })
 
       [first, second] = PolicyEngine.list_rules()
       assert first.priority == 10
@@ -306,8 +327,21 @@ defmodule CodePuppyControl.PolicyEngineTest do
     end
 
     test "removes rules by source" do
-      :ok = PolicyEngine.add_rule(%PolicyRule{tool_name: "keep", decision: :allow, priority: 1, source: "keep"})
-      :ok = PolicyEngine.add_rule(%PolicyRule{tool_name: "remove", decision: :deny, priority: 1, source: "remove"})
+      :ok =
+        PolicyEngine.add_rule(%PolicyRule{
+          tool_name: "keep",
+          decision: :allow,
+          priority: 1,
+          source: "keep"
+        })
+
+      :ok =
+        PolicyEngine.add_rule(%PolicyRule{
+          tool_name: "remove",
+          decision: :deny,
+          priority: 1,
+          source: "remove"
+        })
 
       :ok = PolicyEngine.remove_rules_by_source("remove")
 
@@ -390,7 +424,12 @@ defmodule CodePuppyControl.PolicyEngineTest do
 
   describe "reset/0" do
     test "clears all rules and resets state" do
-      PolicyEngine.add_rule(%PolicyRule{tool_name: "test", decision: :allow, priority: 1, source: "test"})
+      PolicyEngine.add_rule(%PolicyRule{
+        tool_name: "test",
+        decision: :allow,
+        priority: 1,
+        source: "test"
+      })
 
       # Verify rule exists
       assert length(PolicyEngine.list_rules()) == 1
@@ -405,13 +444,14 @@ defmodule CodePuppyControl.PolicyEngineTest do
 
   describe "PolicyRule.new/1" do
     test "creates rule with compiled patterns" do
-      rule = PolicyRule.new(
-        tool_name: "test",
-        decision: :allow,
-        priority: 10,
-        command_pattern: "^git\\s+",
-        source: "test"
-      )
+      rule =
+        PolicyRule.new(
+          tool_name: "test",
+          decision: :allow,
+          priority: 10,
+          command_pattern: "^git\\s+",
+          source: "test"
+        )
 
       assert rule.tool_name == "test"
       assert rule.decision == :allow
@@ -421,12 +461,13 @@ defmodule CodePuppyControl.PolicyEngineTest do
     end
 
     test "handles nil patterns" do
-      rule = PolicyRule.new(
-        tool_name: "test",
-        decision: :allow,
-        priority: 10,
-        source: "test"
-      )
+      rule =
+        PolicyRule.new(
+          tool_name: "test",
+          decision: :allow,
+          priority: 10,
+          source: "test"
+        )
 
       assert rule._compiled_command == nil
       assert rule._compiled_args == nil

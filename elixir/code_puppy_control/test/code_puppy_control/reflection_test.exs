@@ -132,7 +132,9 @@ defmodule CodePuppyControl.ReflectionTest do
   describe "complex module paths" do
     test "handles nested module paths" do
       # Use CodePuppyControl modules which should exist
-      assert {:ok, func} = Reflection.resolve_function("Elixir.CodePuppyControl.Reflection.resolve_function")
+      assert {:ok, func} =
+               Reflection.resolve_function("Elixir.CodePuppyControl.Reflection.resolve_function")
+
       assert is_function(func, 1)
     end
 

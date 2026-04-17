@@ -42,8 +42,14 @@ defmodule CodePuppyControl.PolicyConfig do
 
   # Standard search paths (user then project; project rules win because
   # they are loaded last and can have higher priority values).
+  # Note: User path is compile-time constant, project path is runtime via function.
   @user_policy_path [System.user_home!(), ".code_puppy", "policy.json"]
-  @project_policy_path [File.cwd!(), ".code_puppy", "policy.json"]
+
+  @doc false
+  defp project_policy_path_segments do
+    # Runtime resolution to avoid compile-time working directory capture
+    [File.cwd!(), ".code_puppy", "policy.json"]
+  end
 
   @typedoc "Policy engine process or module reference"
   @type engine :: pid() | atom()
@@ -80,7 +86,7 @@ defmodule CodePuppyControl.PolicyConfig do
   @spec load_policy_rules(engine(), keyword()) :: non_neg_integer()
   def load_policy_rules(engine, opts \\ []) when is_pid(engine) or is_atom(engine) do
     user_path = Keyword.get(opts, :user_policy, Path.join(@user_policy_path))
-    project_path = Keyword.get(opts, :project_policy, Path.join(@project_policy_path))
+    project_path = Keyword.get(opts, :project_policy, Path.join(project_policy_path_segments()))
 
     total = 0
     total = total + PolicyEngine.load_rules_from_file(user_path, "user")
@@ -115,7 +121,7 @@ defmodule CodePuppyControl.PolicyConfig do
   """
   @spec project_policy_path() :: String.t()
   def project_policy_path do
-    Path.join(@project_policy_path)
+    Path.join(project_policy_path_segments())
   end
 
   @doc """

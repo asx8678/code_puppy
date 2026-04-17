@@ -22,18 +22,19 @@ defmodule CodePuppyControl.PolicyEngine do
 
   ## Security
 
-  Regex matching includes timeout protection against ReDoS attacks (1 second default).
+  - Uses allowlist for atom conversion from untrusted JSON input
+  - Regex matching includes timeout protection against ReDoS attacks (1 second default)
 
   ## Examples
 
-      iex> engine = PolicyEngine.new()
-      iex> PolicyEngine.add_rule(engine, %PolicyRule{
+      iex> engine = PolicyEngine.get_engine()
+      iex> PolicyEngine.add_rule(%PolicyRule{
       ...>   tool_name: "read_file",
       ...>   decision: :allow,
       ...>   priority: 10
       ...> })
-      iex> PolicyEngine.check(engine, "read_file", %{"path" => "/etc/passwd"})
-      %Allow{}
+      iex> PolicyEngine.check("read_file", %{"path" => "/etc/passwd"})
+      %PolicyRule.Allow{}
 
   """
 
@@ -42,149 +43,12 @@ defmodule CodePuppyControl.PolicyEngine do
   require Logger
 
   alias CodePuppyControl.PolicyEngine.PolicyRule
-
+  alias CodePuppyControl.PolicyEngine.PolicyRule.{Allow, Deny, AskUser}
   @typedoc "Possible decision atoms"
   @type decision :: :allow | :deny | :ask_user
 
-  # --------------------------------------------------------------------------
-  # Permission Decision Types
-  # --------------------------------------------------------------------------
-
-  defmodule Allow do
-    @moduledoc "The operation is permitted; proceed without further prompting."
-    defstruct []
-
-    @type t :: %__MODULE__{}
-  end
-
-  defmodule Deny do
-    @moduledoc """
-    The operation is denied.
-
-    - `reason` - Machine-readable reason surfaced to the model
-    - `user_feedback` - Optional human-readable feedback
-    """
-    defstruct [:reason, :user_feedback]
-
-    @type t :: %__MODULE__{
-            reason: String.t() | nil,
-            user_feedback: String.t() | nil
-          }
-  end
-
-  defmodule AskUser do
-    @moduledoc """
-    Defer the decision to an interactive user prompt.
-
-    - `prompt` - Question / context to show the user
-    """
-    defstruct [:prompt]
-
-    @type t :: %__MODULE__{prompt: String.t() | nil}
-  end
-
   @typedoc "Permission decision union type"
   @type permission_decision :: Allow.t() | Deny.t() | AskUser.t()
-
-  # --------------------------------------------------------------------------
-  # PolicyRule Struct
-  # --------------------------------------------------------------------------
-
-  defmodule PolicyRule do
-    @moduledoc """
-    A single policy rule evaluated against tool calls.
-
-    ## Fields
-
-    - `tool_name` - Tool name pattern, `*` for all tools
-    - `decision` - One of `:allow`, `:deny`, or `:ask_user`
-    - `priority` - Higher priority rules are evaluated first (default: 0)
-    - `command_pattern` - Optional regex for shell command matching
-    - `args_pattern` - Optional regex for stringified args matching
-    - `source` - Source identifier for the rule (e.g., "user", "project")
-
-    ## Examples
-
-        %PolicyRule{
-          tool_name: "run_shell_command",
-          decision: :allow,
-          priority: 10,
-          command_pattern: "^git\\b",
-          source: "project"
-        }
-
-    """
-
-    defstruct [
-      :tool_name,
-      :decision,
-      :priority,
-      :command_pattern,
-      :args_pattern,
-      :source,
-      :_compiled_command,
-      :_compiled_args,
-      :_command_pattern_valid,
-      :_args_pattern_valid
-    ]
-
-    @type t :: %__MODULE__{
-            tool_name: String.t(),
-            decision: :allow | :deny | :ask_user,
-            priority: integer(),
-            command_pattern: String.t() | nil,
-            args_pattern: String.t() | nil,
-            source: String.t(),
-            _compiled_command: Regex.t() | nil,
-            _compiled_args: Regex.t() | nil,
-            _command_pattern_valid: boolean() | nil,
-            _args_pattern_valid: boolean() | nil
-          }
-
-    @doc """
-    Creates a new PolicyRule with compiled regex patterns.
-    """
-    @spec new(keyword()) :: t()
-    def new(opts \\ []) do
-      rule = struct(__MODULE__, opts)
-      compile_patterns(rule)
-    end
-
-    @doc false
-    @spec compile_patterns(t()) :: t()
-    defp compile_patterns(rule) do
-      rule
-      |> maybe_compile_command()
-      |> maybe_compile_args()
-    end
-
-    defp maybe_compile_command(%{command_pattern: nil} = rule),
-      do: %{rule | _command_pattern_valid: true}
-
-    defp maybe_compile_command(%{command_pattern: pattern} = rule) when is_binary(pattern) do
-      case Regex.compile(pattern) do
-        {:ok, regex} ->
-          %{rule | _compiled_command: regex, _command_pattern_valid: true}
-
-        {:error, reason} ->
-          Logger.warning("Invalid command_pattern regex: #{inspect(reason)}")
-          %{rule | _command_pattern_valid: false}
-      end
-    end
-
-    defp maybe_compile_args(%{args_pattern: nil} = rule), do: %{rule | _args_pattern_valid: true}
-
-    defp maybe_compile_args(%{args_pattern: pattern} = rule) when is_binary(pattern) do
-      case Regex.compile(pattern) do
-        {:ok, regex} ->
-          %{rule | _compiled_args: regex, _args_pattern_valid: true}
-
-        {:error, reason} ->
-          Logger.warning("Invalid args_pattern regex: #{inspect(reason)}")
-          %{rule | _args_pattern_valid: false}
-      end
-    end
-  end
 
   # --------------------------------------------------------------------------
   # PolicyEngine State
@@ -224,14 +88,17 @@ defmodule CodePuppyControl.PolicyEngine do
   @doc """
   Returns the singleton PolicyEngine (creates if needed).
 
-  Thread-safe via GenServer initialization.
+  Thread-safe atomic check-or-create pattern. Handles the race condition
+  where two processes could try to start the engine simultaneously.
   """
   @spec get_engine() :: pid()
   def get_engine do
     case Process.whereis(__MODULE__) do
       nil ->
-        {:ok, pid} = start_link()
-        pid
+        case start_link() do
+          {:ok, pid} -> pid
+          {:error, {:already_started, pid}} -> pid
+        end
 
       pid ->
         pid
@@ -442,8 +309,8 @@ defmodule CodePuppyControl.PolicyEngine do
 
   @impl true
   def handle_call(:load_default_rules, _from, state) do
-    count = do_load_default_rules(state)
-    {:reply, count, state}
+    {count, new_state} = do_load_default_rules(state)
+    {:reply, count, new_state}
   end
 
   # --------------------------------------------------------------------------
@@ -477,10 +344,20 @@ defmodule CodePuppyControl.PolicyEngine do
           "cwd" => cwd
         })
 
+      # Restrictiveness hierarchy: Deny > AskUser > Allow > nil
       cond do
-        match?(%Deny{}, result) -> result
-        match?(%Allow{}, result) and most_restrictive == nil -> result
-        true -> most_restrictive
+        match?(%Deny{}, result) ->
+          result
+
+        match?(%AskUser{}, result) and
+            (most_restrictive == nil or match?(%Allow{}, most_restrictive)) ->
+          result
+
+        match?(%Allow{}, result) and most_restrictive == nil ->
+          result
+
+        true ->
+          most_restrictive
       end
     end)
   end
@@ -654,37 +531,6 @@ defmodule CodePuppyControl.PolicyEngine do
   end
 
   @doc false
-  # Original version - kept for reference, but we use do_load_rules_from_file_and_update for state updates
-  defp do_load_rules_from_file(_state, path, source) do
-    case File.read(path) do
-      {:ok, content} ->
-        case Jason.decode(content) do
-          {:ok, data} ->
-            rules_list = if is_list(data), do: data, else: Map.get(data, "rules", [])
-
-            count =
-              Enum.reduce(rules_list, 0, fn item, count ->
-                case rule_from_map(item, source || path) do
-                  {:ok, _rule} -> count + 1
-                  :skip -> count
-                end
-              end)
-
-            Logger.info("Loaded #{count} policy rules from #{path}")
-            count
-
-          {:error, reason} ->
-            Logger.warning("Failed to parse policy rules from #{path}: #{inspect(reason)}")
-            0
-        end
-
-      {:error, reason} ->
-        Logger.debug("Policy file not found or unreadable #{path}: #{inspect(reason)}")
-        0
-    end
-  end
-
-  @doc false
   defp do_load_rules_from_file_and_update(state, path, source) do
     case File.read(path) do
       {:ok, content} ->
@@ -723,10 +569,10 @@ defmodule CodePuppyControl.PolicyEngine do
     user_path = Path.join([System.user_home!(), ".code_puppy", "policy.json"])
     project_path = Path.join([File.cwd!(), ".code_puppy", "policy.json"])
 
-    count1 = do_load_rules_from_file(state, user_path, "user")
-    count2 = do_load_rules_from_file(state, project_path, "project")
+    {count1, state1} = do_load_rules_from_file_and_update(state, user_path, "user")
+    {count2, state2} = do_load_rules_from_file_and_update(state1, project_path, "project")
 
-    count1 + count2
+    {count1 + count2, state2}
   end
 
   @doc false
@@ -739,7 +585,7 @@ defmodule CodePuppyControl.PolicyEngine do
       rule =
         PolicyRule.new(
           tool_name: tool_name,
-          decision: String.to_atom(Map.get(map, "decision", "ask_user")),
+          decision: PolicyRule.safe_decision_atom(Map.get(map, "decision", "ask_user")),
           priority: Map.get(map, "priority", 0),
           command_pattern: Map.get(map, "command_pattern"),
           args_pattern: Map.get(map, "args_pattern"),
