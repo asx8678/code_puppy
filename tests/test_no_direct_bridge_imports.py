@@ -18,19 +18,11 @@ import pytest
 
 # Files that are ALLOWED to import from bridge modules
 # (they are the adapter boundary or test the bridge itself)
+# bd-86: Cleaned up stale entries for deleted modules (native_backend.py,
+# _edit_bridge.py, test_native_backend.py, test_edit_bridge.py, etc.)
 ALLOWED_FILES = {
-    # The NativeBackend adapter (uses _core_bridge for type re-exports)
-    "code_puppy/native_backend.py",
-    # Bridge modules (adapter boundary)
-    "code_puppy/_edit_bridge.py",
-    # Test files that legitimately test the bridge/backends directly
-    "tests/test_native_backend.py",
-    "tests/test_rust_core.py",
-    "tests/bench_rust_vs_python.py",
-    "tests/profile_bridge_bottlenecks.py",
-    "tests/test_hashline.py",
-    "tests/test_edit_bridge.py",
-    "tests/test_migration_regression.py",
+    # bd-86: All bridge modules deleted, this test now guards against
+    # accidental re-introduction of direct bridge imports.
 }
 
 # Patterns that indicate direct bridge imports
