@@ -9,8 +9,9 @@ This repo uses Lefthook to run fast, low-drama git hooks.
   - ruff format on staged `*.py`
   - ruff check --fix on staged `*.py`
   - pnpm check (only if pnpm is installed)
-- pre-push
-  - pytest (via `uv run` if available, fallback to `pytest`)
+  - plugin tests (pack_parallelism, non-blocking)
+
+Note: pre-push hook has been removed; tests run in CI only.
 
 ## Regression Gate
 
