@@ -7,17 +7,18 @@ defmodule CodePuppyControl.Application do
   2. Phoenix.PubSub - Event distribution
   3. CodePuppyControl.EventStore - ETS-based event history for replay
   4. CodePuppyControl.RuntimeState - Global runtime state (autosave ID, session model)
-  5. CodePuppyControl.AgentModelPinning - Agent-to-model pin configuration (ETS-backed)
-  6. CodePuppyControl.Run.Registry - Process registry for run tracking
-  7. CodePuppyControl.Run.Supervisor - DynamicSupervisor for run processes
-  8. CodePuppyControl.PythonWorker.Supervisor - DynamicSupervisor for Python workers
-  9. CodePuppyControl.MCP.Registry - Process registry for MCP servers
-  10. CodePuppyControl.MCP.Supervisor - DynamicSupervisor for MCP servers
-  11. CodePuppyControl.Concurrency.Supervisor - Concurrency limiter (ETS-backed)
-  12. CodePuppyControl.RequestTracker - Tracks JSON-RPC request/response correlation
-  13. Oban - Job processing engine with SQLite Lite engine
-  14. CodePuppyControl.Scheduler.CronScheduler - Periodic scheduler for cron tasks
-  15. CodePuppyControlWeb.Endpoint - HTTP API endpoint
+  5. CodePuppyControl.PolicyEngine - Priority-based policy rule engine
+  6. CodePuppyControl.AgentModelPinning - Agent-to-model pin configuration (ETS-backed)
+  7. CodePuppyControl.Run.Registry - Process registry for run tracking
+  8. CodePuppyControl.Run.Supervisor - DynamicSupervisor for run processes
+  9. CodePuppyControl.PythonWorker.Supervisor - DynamicSupervisor for Python workers
+  10. CodePuppyControl.MCP.Registry - Process registry for MCP servers
+  11. CodePuppyControl.MCP.Supervisor - DynamicSupervisor for MCP servers
+  12. CodePuppyControl.Concurrency.Supervisor - Concurrency limiter (ETS-backed)
+  13. CodePuppyControl.RequestTracker - Tracks JSON-RPC request/response correlation
+  14. Oban - Job processing engine with SQLite Lite engine
+  15. CodePuppyControl.Scheduler.CronScheduler - Periodic scheduler for cron tasks
+  16. CodePuppyControlWeb.Endpoint - HTTP API endpoint
   """
 
   use Application
@@ -29,6 +30,7 @@ defmodule CodePuppyControl.Application do
       {Phoenix.PubSub, name: CodePuppyControl.PubSub},
       CodePuppyControl.EventStore,
       CodePuppyControl.RuntimeState,
+      CodePuppyControl.PolicyEngine,
       CodePuppyControl.AgentModelPinning,
       CodePuppyControl.Run.Registry,
       {CodePuppyControl.Run.Supervisor, []},

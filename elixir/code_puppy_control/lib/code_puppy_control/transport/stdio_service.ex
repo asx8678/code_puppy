@@ -708,7 +708,6 @@ defmodule CodePuppyControl.Transport.StdioService do
     pin_list = Enum.map(pins, fn {agent, model} -> %{"agent_name" => agent, "model" => model} end)
     Protocol.encode_response(%{"pins" => pin_list, "count" => length(pin_list)}, id)
   end
-  end
 
   # Method not found handler
   defp handle_request(method, _params, id) do
