@@ -31,6 +31,45 @@ json_escape() {
     printf '%s' "$s"
 }
 
+
+# Normalize an env value to a strict JSON boolean (true / false).
+# Accepts: true/false, 1/0, yes/no, on/off (case-insensitive).
+# Anything else defaults to the given fallback (default: true).
+normalize_bool() {
+    local raw="${1:-}"
+    local fallback="${2:-true}"
+    local lower
+    lower=$(printf '%s' "$raw" | tr '[:upper:]' '[:lower:]')
+    case "$lower" in
+        true|1|yes|on)  echo "true"  ;;
+        false|0|no|off) echo "false" ;;
+        "")             echo "$fallback" ;;
+        *)              echo "$fallback" ;;
+    esac
+}
+
+# Normalize an env value to a safe integer.
+# Strips non-numeric prefixes/suffixes; falls back to the given default
+# (default: 0) when the result is empty or negative.
+normalize_int() {
+    local raw="${1:-}"
+    local fallback="${2:-0}"
+    # Strip anything that is not a digit or leading minus
+    local cleaned
+    cleaned=$(printf '%s' "$raw" | tr -cd '0-9-')
+    # Remove leading dashes that are NOT a minus sign
+    cleaned=${cleaned#-}
+    cleaned=${cleaned#-}
+    if [[ -z "$cleaned" ]]; then
+        echo "$fallback"
+        return
+    fi
+    # Strip leading zeros so we don't emit octal-looking values
+    cleaned=$(echo "$cleaned" | sed 's/^0*//' )
+    [[ -z "$cleaned" ]] && cleaned=0
+    echo "$cleaned"
+}
+
 # Configuration
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 OUTPUT_FORMAT="text"
@@ -254,8 +293,8 @@ output_json() {
     "tasks": $(get_active_tasks),
     "plugin": {
         "name": "proactive_guidance",
-        "guidance_count": ${PUP_GUIDANCE_COUNT:-${PUPPY_GUIDANCE_COUNT:-0}},
-        "enabled": ${PUP_GUIDANCE_ENABLED:-${PUPPY_GUIDANCE_ENABLED:-true}}
+        "guidance_count": $(normalize_int "${PUP_GUIDANCE_COUNT:-${PUPPY_GUIDANCE_COUNT:-0}}" 0),
+        "enabled": $(normalize_bool "${PUP_GUIDANCE_ENABLED:-${PUPPY_GUIDANCE_ENABLED:-true}}" true)
     }
 }
 EOF
