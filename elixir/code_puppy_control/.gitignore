@@ -38,3 +38,6 @@ npm-debug.log
 *.db-shm
 *.db-wal
 /priv/*.db
+
+# Generated parser files
+/src/*.erl
