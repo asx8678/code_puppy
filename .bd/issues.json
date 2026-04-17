@@ -1641,7 +1641,7 @@
       "id": "bd-87",
       "title": "Port code context explorer to Elixir",
       "description": "Source: code_puppy/code_context/ (23KB). Ties into Repo Compass indexer (bd-9).\n\nPart of Phase 3 \u2014 Python tools retirement.",
-      "status": "open",
+      "status": "closed",
       "priority": 2,
       "type": "task",
       "labels": [
@@ -1653,7 +1653,7 @@
         ]
       },
       "created_at": "2026-04-16T17:52:35.031464",
-      "updated_at": "2026-04-16T17:52:35.031472",
+      "updated_at": "2026-04-17T06:30:00.764462",
       "comments": []
     },
     "bd-88": {
@@ -1835,11 +1835,6 @@
       "labels": [],
       "dependencies": {},
       "created_at": "2026-04-17T01:06:36.560666",
-      "updated_at": "2026-04-17T01:06:46.840479",
-      "comments": []
-    }
-  }
-}36.560666",
       "updated_at": "2026-04-17T01:06:46.840479",
       "comments": []
     }

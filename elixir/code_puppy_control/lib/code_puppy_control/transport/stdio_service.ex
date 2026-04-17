@@ -68,15 +68,6 @@ defmodule CodePuppyControl.Transport.StdioService do
   - `round_robin.configure` - Configure models and rotation settings
   - `round_robin.list_models` - List configured models
 
-  ### Routing (bd-60)
-  - `routing.route` - Route a request to a model using strategy chain
-  - `routing.get_availability` - Check if a model is available
-  - `routing.mark_terminal` - Mark a model as terminally unavailable
-  - `routing.mark_healthy` - Mark a model as healthy
-  - `routing.reset_turn` - Reset sticky retry states for new turn
-  - `routing.mark_last_resort` - Mark/unmark a model as last-resort fallback
-  - `routing.get_last_resort_models` - Get list of last-resort models
-
   ### Scheduler Tools (bd-67)
   - `scheduler.list_tasks` - List all scheduled tasks with status
   - `scheduler.create_task` - Create a new scheduled task
@@ -115,7 +106,6 @@ defmodule CodePuppyControl.Transport.StdioService do
   alias CodePuppyControl.AgentModelPinning
   alias CodePuppyControl.FileOps
   alias CodePuppyControl.Protocol
-  alias CodePuppyControl.Routing
   alias CodePuppyControl.Tools.SchedulerTools
   alias CodePuppyControl.RoundRobinModel
 
@@ -1005,152 +995,6 @@ defmodule CodePuppyControl.Transport.StdioService do
   end
 
   # ============================================================================
-  # Routing Operations (bd-60)
-  # ============================================================================
-
-  # routing.route - Route a request to a model (bd-60)
-  defp handle_request("routing.route", params, id) do
-    model_name = params["model_name"]
-    config = params["config"] || %{}
-    router_type = params["router"] || "default"
-
-    cond do
-      is_nil(model_name) ->
-        Protocol.encode_error(
-          -32602,
-          "Missing required param: model_name",
-          nil,
-          id
-        )
-
-      not is_binary(model_name) ->
-        Protocol.encode_error(
-          -32602,
-          "Invalid param: model_name must be a string",
-          nil,
-          id
-        )
-
-      true ->
-        router = get_router_by_type(router_type)
-        context = CodePuppyControl.Routing.Strategy.context(model_name, config)
-
-        case CodePuppyControl.Routing.CompositeStrategy.route(router, context) do
-          {:ok, decision} ->
-            Protocol.encode_response(
-              %{
-                "model_name" => decision.model_name,
-                "metadata" => decision.metadata
-              },
-              id
-            )
-
-          {:error, reason} ->
-            Protocol.encode_error(
-              -32603,
-              "Routing failed: #{inspect(reason)}",
-              nil,
-              id
-            )
-        end
-    end
-  end
-
-  # routing.get_availability - Check model availability (bd-60)
-  defp handle_request("routing.get_availability", params, id) do
-    model_name = params["model_name"]
-
-    if is_nil(model_name) do
-      Protocol.encode_error(
-        -32602,
-        "Missing required param: model_name",
-        nil,
-        id
-      )
-    else
-      snapshot = CodePuppyControl.Routing.ModelAvailability.snapshot(model_name)
-
-      Protocol.encode_response(
-        %{
-          "model" => model_name,
-          "available" => snapshot.available,
-          "reason" => snapshot.reason
-        },
-        id
-      )
-    end
-  end
-
-  # routing.mark_terminal - Mark model as unavailable (bd-60)
-  defp handle_request("routing.mark_terminal", params, id) do
-    model_name = params["model_name"]
-    reason = params["reason"] || "quota"
-
-    cond do
-      is_nil(model_name) ->
-        Protocol.encode_error(-32602, "Missing required param: model_name", nil, id)
-
-      reason not in ["quota", "capacity", "retry_once_per_turn", "unknown"] ->
-        Protocol.encode_error(
-          -32602,
-          "Invalid reason: must be one of quota, capacity, retry_once_per_turn, unknown",
-          nil,
-          id
-        )
-
-      true ->
-        reason_atom = String.to_existing_atom(reason)
-        :ok = CodePuppyControl.Routing.mark_terminal(model_name, reason_atom)
-
-        Protocol.encode_response(
-          %{"marked" => true, "model" => model_name, "reason" => reason},
-          id
-        )
-    end
-  end
-
-  # routing.mark_healthy - Mark model as healthy (bd-60)
-  defp handle_request("routing.mark_healthy", params, id) do
-    model_name = params["model_name"]
-
-    if is_nil(model_name) do
-      Protocol.encode_error(-32602, "Missing required param: model_name", nil, id)
-    else
-      :ok = CodePuppyControl.Routing.mark_healthy(model_name)
-
-      Protocol.encode_response(
-        %{"marked" => true, "model" => model_name, "status" => "healthy"},
-        id
-      )
-    end
-  end
-
-  # routing.reset_turn - Reset sticky retry states (bd-60)
-  defp handle_request("routing.reset_turn", _params, id) do
-    :ok = CodePuppyControl.Routing.reset_turn()
-    Protocol.encode_response(%{"reset" => true}, id)
-  end
-
-  # routing.mark_last_resort - Mark model as last-resort (bd-60)
-  defp handle_request("routing.mark_last_resort", params, id) do
-    model_name = params["model_name"]
-    value = Map.get(params, "value", true)
-
-    if is_nil(model_name) do
-      Protocol.encode_error(-32602, "Missing required param: model_name", nil, id)
-    else
-      :ok = CodePuppyControl.Routing.mark_as_last_resort(model_name, value)
-      Protocol.encode_response(%{"marked" => value, "model" => model_name}, id)
-    end
-  end
-
-  # routing.get_last_resort_models - Get last-resort models (bd-60)
-  defp handle_request("routing.get_last_resort_models", _params, id) do
-    models = CodePuppyControl.Routing.get_last_resort_models()
-    Protocol.encode_response(%{"models" => models, "count" => length(models)}, id)
-  end
-
-  # ============================================================================
   # Code Context Operations (bd-87)
   # ============================================================================
 
@@ -1277,24 +1121,6 @@ defmodule CodePuppyControl.Transport.StdioService do
       nil,
       id
     )
-  end
-
-  # ============================================================================
-  # Routing Helpers (bd-60)
-  # ============================================================================
-
-  # Map of router types to factory functions
-  @router_types %{
-    "default" => &Routing.create_default_router/0,
-    "simple" => &Routing.create_simple_router/0,
-    "plugin" => &Routing.create_plugin_only_router/0
-  }
-
-  defp get_router_by_type(type) when is_binary(type) do
-    case Map.fetch(@router_types, type) do
-      {:ok, factory} -> factory.()
-      :error -> Routing.create_default_router()
-    end
   end
 
   # ============================================================================
