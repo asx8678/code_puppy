@@ -1,20 +1,24 @@
 defmodule CodePuppyControl.Parsing.Parsers.PythonParser do
   @moduledoc """
-  Python parser using Yecc-generated parser.
+  Python parser using Leex/Yecc-generated lexer and parser.
 
   Extracts symbols from Python source code including:
-  - Functions (def statements)
+  - Functions (def statements, with async def support)
   - Classes (class statements)
   - Imports (import and from...import statements)
-  - Decorators (@decorator syntax)
+  - Decorators (@decorator syntax with argument support)
+  - Type annotations (return type annotations on functions)
 
-  This parser uses the Python lexer (from bd-106) for tokenization
-  and a Yecc-generated parser for building the AST.
+  This parser uses the Python lexer (python_lexer.xrl) for tokenization
+  and a Yecc-generated parser (python_parser.yrl) for building the AST.
 
   ## Examples
 
       iex> PythonParser.parse("def foo():\\n    pass")
       {:ok, %{language: "python", symbols: [%{name: "foo", kind: :function, ...}], ...}}
+
+      iex> PythonParser.parse("async def bar():\\n    pass")
+      {:ok, %{language: "python", symbols: [%{name: "bar", kind: :function, modifiers: [:async], ...}], ...}}
 
   """
   @behaviour CodePuppyControl.Parsing.ParserBehaviour
@@ -76,8 +80,8 @@ defmodule CodePuppyControl.Parsing.Parsers.PythonParser do
   # Skip :skip atoms (newline placeholders)
   defp node_to_symbol(:skip), do: []
 
-  # Function without decorators: {function, line, name, params}
-  defp node_to_symbol({:function, line, name, _params}) do
+  # Function without decorators: {function, line, name, params, annotation}
+  defp node_to_symbol({:function, line, name, _params, nil}) do
     [
       %{
         name: to_string(name),
@@ -85,13 +89,63 @@ defmodule CodePuppyControl.Parsing.Parsers.PythonParser do
         line: line,
         end_line: nil,
         doc: nil,
-        children: []
+        children: [],
+        modifiers: []
       }
     ]
   end
 
-  # Function with decorators: {function, line, name, params, decorators}
-  defp node_to_symbol({:function, line, name, _params, decorators}) do
+  # Function with async modifier but no decorators: {function, line, name, params, async}
+  defp node_to_symbol({:function, line, name, _params, :async}) do
+    [
+      %{
+        name: to_string(name),
+        kind: :function,
+        line: line,
+        end_line: nil,
+        doc: nil,
+        children: [],
+        modifiers: [:async]
+      }
+    ]
+  end
+
+  # Function with return annotation but no decorators
+  defp node_to_symbol({:function, line, name, _params, annotation}) when is_list(annotation) or is_tuple(annotation) do
+    type_info = format_annotation(annotation)
+
+    [
+      %{
+        name: to_string(name),
+        kind: :function,
+        line: line,
+        end_line: nil,
+        doc: type_info,
+        children: [],
+        modifiers: []
+      }
+    ]
+  end
+
+  # Async function with return annotation: {function, line, name, params, {async, annotation}}
+  defp node_to_symbol({:function, line, name, _params, {:async, annotation}}) do
+    type_info = format_annotation(annotation)
+
+    [
+      %{
+        name: to_string(name),
+        kind: :function,
+        line: line,
+        end_line: nil,
+        doc: type_info,
+        children: [],
+        modifiers: [:async]
+      }
+    ]
+  end
+
+  # Function with decorators (6-tuple format with decorators at end)
+  defp node_to_symbol({:function, line, name, _params, nil, decorators}) do
     decorator_info = format_decorators(decorators)
 
     [
@@ -101,13 +155,48 @@ defmodule CodePuppyControl.Parsing.Parsers.PythonParser do
         line: line,
         end_line: nil,
         doc: decorator_info,
-        children: []
+        children: [],
+        modifiers: []
       }
     ]
   end
 
-  # Class without decorators: {class, line, name, params}
-  defp node_to_symbol({:class, line, name, _params}) do
+  defp node_to_symbol({:function, line, name, _params, :async, decorators}) do
+    decorator_info = format_decorators(decorators)
+
+    [
+      %{
+        name: to_string(name),
+        kind: :function,
+        line: line,
+        end_line: nil,
+        doc: decorator_info,
+        children: [],
+        modifiers: [:async]
+      }
+    ]
+  end
+
+  defp node_to_symbol({:function, line, name, _params, annotation, decorators}) do
+    type_info = format_annotation(annotation)
+    decorator_info = format_decorators(decorators)
+    doc = if decorator_info, do: "#{decorator_info} -> #{type_info}", else: type_info
+
+    [
+      %{
+        name: to_string(name),
+        kind: :function,
+        line: line,
+        end_line: nil,
+        doc: doc,
+        children: [],
+        modifiers: if(is_tuple(annotation) and elem(annotation, 0) == :async, do: [:async], else: [])
+      }
+    ]
+  end
+
+  # Class without decorators: {class, line, name, params, nil}
+  defp node_to_symbol({:class, line, name, _params, nil}) do
     [
       %{
         name: to_string(name),
@@ -115,13 +204,31 @@ defmodule CodePuppyControl.Parsing.Parsers.PythonParser do
         line: line,
         end_line: nil,
         doc: nil,
-        children: []
+        children: [],
+        modifiers: []
       }
     ]
   end
 
-  # Class with decorators: {class, line, name, params, decorators}
-  defp node_to_symbol({:class, line, name, _params, decorators}) do
+  # Class without decorators but with parents: {class, line, name, params, nil}
+  defp node_to_symbol({:class, line, name, params, nil}) when is_list(params) and length(params) > 0 do
+    inheritance = format_params(params)
+
+    [
+      %{
+        name: to_string(name),
+        kind: :class,
+        line: line,
+        end_line: nil,
+        doc: if(inheritance, do: "(#{inheritance})", else: nil),
+        children: [],
+        modifiers: []
+      }
+    ]
+  end
+
+  # Class with decorators: {class, line, name, params, nil, decorators}
+  defp node_to_symbol({:class, line, name, _params, nil, decorators}) do
     decorator_info = format_decorators(decorators)
 
     [
@@ -131,13 +238,14 @@ defmodule CodePuppyControl.Parsing.Parsers.PythonParser do
         line: line,
         end_line: nil,
         doc: decorator_info,
-        children: []
+        children: [],
+        modifiers: []
       }
     ]
   end
 
-  # Import statement: {import, line, module}
-  defp node_to_symbol({:import, line, module}) do
+  # Import statement: {import, line, module, nil}
+  defp node_to_symbol({:import, line, module, nil}) do
     [
       %{
         name: "import #{module}",
@@ -145,7 +253,23 @@ defmodule CodePuppyControl.Parsing.Parsers.PythonParser do
         line: line,
         end_line: line,
         doc: nil,
-        children: []
+        children: [],
+        modifiers: []
+      }
+    ]
+  end
+
+  # Import with alias: {import, line, module, alias}
+  defp node_to_symbol({:import, line, module, alias_name}) do
+    [
+      %{
+        name: "import #{module} as #{alias_name}",
+        kind: :import,
+        line: line,
+        end_line: line,
+        doc: nil,
+        children: [],
+        modifiers: []
       }
     ]
   end
@@ -159,13 +283,34 @@ defmodule CodePuppyControl.Parsing.Parsers.PythonParser do
         line: line,
         end_line: line,
         doc: nil,
-        children: []
+        children: [],
+        modifiers: []
+      }
+    ]
+  end
+
+  # From import all: {from_import_all, line, module}
+  defp node_to_symbol({:from_import_all, line, module}) do
+    [
+      %{
+        name: "from #{module} import *",
+        kind: :import,
+        line: line,
+        end_line: line,
+        doc: nil,
+        children: [],
+        modifiers: []
       }
     ]
   end
 
   # Fallback for unrecognized nodes
-  defp node_to_symbol(_node), do: []
+  defp node_to_symbol(_node) do
+    # Log unhandled nodes for debugging during development
+    # require Logger
+    # Logger.debug("Unhandled Python AST node: #{inspect(_node)}")
+    []
+  end
 
   # ---------------------------------------------------------------------------
   # Helper Functions
@@ -173,11 +318,31 @@ defmodule CodePuppyControl.Parsing.Parsers.PythonParser do
 
   defp format_decorators(decorators) when is_list(decorators) do
     decorators
-    |> Enum.map(fn {:decorator, _line, name} -> "@#{to_string(name)}" end)
+    |> Enum.map(fn
+      {:decorator, _line, name, []} -> "@#{to_string(name)}"
+      {:decorator, _line, name, _args} -> "@#{to_string(name)}(...)"
+    end)
     |> Enum.join(" ")
   end
 
   defp format_decorators(_), do: nil
+
+  defp format_annotation(nil), do: nil
+  defp format_annotation(:async), do: nil
+  defp format_annotation(annotation) when is_list(annotation) or is_binary(annotation) do
+    to_string(annotation)
+  end
+  defp format_annotation(annotation) when is_tuple(annotation) do
+    inspect(annotation)
+  end
+  defp format_annotation(annotation), do: inspect(annotation)
+
+  defp format_params(params) when is_list(params) do
+    params
+    |> Enum.map(&to_string/1)
+    |> Enum.join(", ")
+  end
+  defp format_params(_), do: nil
 
   defp format_error({line, _module, message}) when is_integer(line) do
     %{

@@ -3,6 +3,8 @@ Definitions.
 WHITESPACE = [\s\t]+
 NEWLINE = \n
 COMMENT = #[^\n]*
+TRIPLE_QUOTE = """([^"]|"[^"]|""[^"])*"""
+TRIPLE_SINGLE = '''([^']|'[^']|''[^'])*'''
 STRING = "([^"\\]|\\.)*"
 SSTRING = '([^'\\]|\\.)*'
 INTEGER = [0-9]+
@@ -16,6 +18,8 @@ Rules.
 {COMMENT} : skip_token.
 \r\n : {token, {newline, TokenLine}}.
 \r : {token, {newline, TokenLine}}.
+{TRIPLE_QUOTE} : {token, {string, TokenLine, TokenChars}}.
+{TRIPLE_SINGLE} : {token, {string, TokenLine, TokenChars}}.
 {STRING} : {token, {string, TokenLine, TokenChars}}.
 {SSTRING} : {token, {string, TokenLine, TokenChars}}.
 
@@ -61,22 +65,22 @@ self : {token, {'self', TokenLine}}.
 {FLOAT} : {token, {float, TokenLine, list_to_float(TokenChars)}}.
 
 % Operators and delimiters (longer patterns first for compound operators)
-\*\*= : {token, {'**=', TokenLine}}.
+\*\*\= : {token, {'**=', TokenLine}}.
 \*\* : {token, {'**', TokenLine}}.
-\*= : {token, {'*=', TokenLine}}.
-\+= : {token, {'+=', TokenLine}}.
-\-= : {token, {'-=', TokenLine}}.
-/= : {token, {'/=', TokenLine}}.
-//= : {token, {'//=', TokenLine}}.
-%= : {token, {'%=', TokenLine}}.
-== : {token, {'==', TokenLine}}.
-!= : {token, {'!=', TokenLine}}.
-<= : {token, {'<=', TokenLine}}.
->= : {token, {'>=', TokenLine}}.
+\*\= : {token, {'*=', TokenLine}}.
+\+\= : {token, {'+=', TokenLine}}.
+\-\= : {token, {'-=', TokenLine}}.
+\/\= : {token, {'/=', TokenLine}}.
+\/\/\= : {token, {'//=', TokenLine}}.
+%\= : {token, {'%=', TokenLine}}.
+\=\= : {token, {'==', TokenLine}}.
+!\= : {token, {'!=', TokenLine}}.
+<\= : {token, {'<=', TokenLine}}.
+>\= : {token, {'>=', TokenLine}}.
 << : {token, {'<<', TokenLine}}.
 >> : {token, {'>>', TokenLine}}.
-// : {token, {'//', TokenLine}}.
-\-> : {token, {'->', TokenLine}}.
+\/\/ : {token, {'//', TokenLine}}.
+\-\> : {token, {'->', TokenLine}}.
 \( : {token, {'(', TokenLine}}.
 \) : {token, {')', TokenLine}}.
 \[ : {token, {'[', TokenLine}}.
@@ -92,7 +96,7 @@ self : {token, {'self', TokenLine}}.
 \* : {token, {'*', TokenLine}}.
 / : {token, {'/', TokenLine}}.
 % : {token, {'%', TokenLine}}.
-= : {token, {'=', TokenLine}}.
+\= : {token, {'=', TokenLine}}.
 < : {token, {'<', TokenLine}}.
 > : {token, {'>', TokenLine}}.
 @ : {token, {'@', TokenLine}}.
