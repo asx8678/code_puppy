@@ -1558,7 +1558,7 @@
       "id": "bd-84",
       "title": "Archive ELIXIR_MIGRATION_ROADMAP.md",
       "description": "Final archival note.\n\nPart of Phase 6 \u2014 Documentation & build cleanup.",
-      "status": "open",
+      "status": "closed",
       "priority": 1,
       "type": "task",
       "labels": [
@@ -1566,7 +1566,7 @@
       ],
       "dependencies": {},
       "created_at": "2026-04-16T17:52:14.824804",
-      "updated_at": "2026-04-16T17:52:14.824813",
+      "updated_at": "2026-04-17T02:25:34.053329",
       "comments": []
     },
     "bd-85": {
@@ -1596,7 +1596,7 @@
       "id": "bd-86",
       "title": "Remove acceleration layer",
       "description": "Delete code_puppy/acceleration/, native_backend.py, bridge modules.\n\nPart of Phase 6 \u2014 Documentation & build cleanup.",
-      "status": "open",
+      "status": "closed",
       "priority": 1,
       "type": "task",
       "labels": [
@@ -1604,9 +1604,10 @@
       ],
       "dependencies": {},
       "created_at": "2026-04-16T17:52:29.814509",
-      "updated_at": "2026-04-17T01:35:09.342701",
+      "updated_at": "2026-04-17T02:25:00.979017",
       "comments": [
-        "Shepherd: APPROVE. Watchdog: APPROVE. Merged to main as commit addbaaa0. Conflict on acceleration/__init__.py resolved (accepted deletion)."
+        "Shepherd: APPROVE. Watchdog: APPROVE. Merged to main as commit addbaaa0. Conflict on acceleration/__init__.py resolved (accepted deletion).",
+        "Shepherd: APPROVE (after 4 review rounds). Merged to main via retriever. Deleted native_backend.py (2263 LOC), _core_bridge.py, _edit_bridge.py, 13 test files. ~10,000 lines removed total."
       ]
     },
     "bd-87": {
