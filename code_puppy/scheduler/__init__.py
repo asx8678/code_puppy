@@ -1,5 +1,9 @@
 """Code Puppy Scheduler - Run scheduled prompts automatically.
 
+# DEPRECATED(bd-62): Use Elixir scheduler. This module is retained for backward compatibility only.
+# The Elixir scheduler at CodePuppyControl.Scheduler is now the production implementation.
+# This Python module will be removed once all callers are migrated (tracked in bd-67).
+
 This module provides a cross-platform scheduler daemon that executes
 Code Puppy prompts on configurable schedules (intervals, cron expressions).
 
@@ -8,7 +12,20 @@ Components:
     - daemon: Background scheduler process
     - executor: Task execution logic
     - platform: Cross-platform daemon management
+
+DEPRECATED: All new code should use the Elixir scheduler via transport layer.
 """
+
+import warnings
+
+# Emit deprecation warning when this module is imported
+warnings.warn(
+    "code_puppy.scheduler is deprecated. Use the Elixir scheduler (CodePuppyControl.Scheduler) instead. "
+    "This module is retained for backward compatibility and will be removed in a future release. "
+    "See bd-62 for details.",
+    DeprecationWarning,
+    stacklevel=2,
+)
 
 from code_puppy.scheduler.config import (
     SCHEDULER_LOG_DIR,

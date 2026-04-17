@@ -1,4 +1,10 @@
-"""Windows platform support for scheduler daemon."""
+"""Windows platform support for scheduler daemon.
+
+# DEPRECATED(bd-62): Use Elixir scheduler. This module is retained for backward compatibility only.
+# The Elixir scheduler handles all process management via OTP.
+
+DEPRECATED: Process management is now handled by Elixir/OTP supervision.
+"""
 
 import ctypes
 

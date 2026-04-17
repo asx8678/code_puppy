@@ -1,7 +1,12 @@
 """Scheduler configuration and task management.
 
+# DEPRECATED(bd-62): Use Elixir scheduler. This module is retained for backward compatibility only.
+# The Elixir scheduler at CodePuppyControl.Scheduler.Task is now the production schema.
+
 Handles ScheduledTask dataclass definition and JSON persistence
 for scheduled Code Puppy tasks.
+
+DEPRECATED: New task storage uses the Elixir scheduler's database schema.
 """
 
 import json
