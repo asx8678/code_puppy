@@ -51,6 +51,14 @@ defmodule CodePuppyControl.Transport.StdioService do
   - `agent_pinning.clear` - Clear pin for an agent
   - `agent_pinning.list` - List all agent-to-model pins
 
+  ### Round-Robin Model
+  - `round_robin.get_next` - Get next model, advancing rotation
+  - `round_robin.get_current` - Get current model without advancing
+  - `round_robin.reset` - Reset rotation to initial position
+  - `round_robin.get_state` - Get full rotation state
+  - `round_robin.configure` - Configure models and rotation settings
+  - `round_robin.list_models` - List configured models
+
   ### Text Operations
   - `text_fuzzy_match` - Find best matching window using fuzzy matching
   - `text_unified_diff` - Generate unified diff between two strings
@@ -83,6 +91,7 @@ defmodule CodePuppyControl.Transport.StdioService do
   alias CodePuppyControl.AgentModelPinning
   alias CodePuppyControl.FileOps
   alias CodePuppyControl.Protocol
+  alias CodePuppyControl.RoundRobinModel
 
   defstruct [:io_device, :buffer, :request_counter]
 
@@ -708,6 +717,93 @@ defmodule CodePuppyControl.Transport.StdioService do
     pin_list = Enum.map(pins, fn {agent, model} -> %{"agent_name" => agent, "model" => model} end)
     Protocol.encode_response(%{"pins" => pin_list, "count" => length(pin_list)}, id)
   end
+
+  # ============================================================================
+  # Round-Robin Model Operations (bd-71)
+  # ============================================================================
+
+  # round_robin.get_next - Get next model, advancing rotation (bd-71)
+  defp handle_request("round_robin.get_next", _params, id) do
+    model = RoundRobinModel.advance_and_get()
+    Protocol.encode_response(%{"model" => model}, id)
+  end
+
+  # round_robin.get_current - Get current model without advancing (bd-71)
+  defp handle_request("round_robin.get_current", _params, id) do
+    model = RoundRobinModel.get_current_model()
+    Protocol.encode_response(%{"model" => model}, id)
+  end
+
+  # round_robin.reset - Reset rotation to initial position (bd-71)
+  defp handle_request("round_robin.reset", _params, id) do
+    :ok = RoundRobinModel.reset()
+    Protocol.encode_response(%{"reset" => true}, id)
+  end
+
+  # round_robin.get_state - Get full rotation state (bd-71)
+  defp handle_request("round_robin.get_state", _params, id) do
+    state = RoundRobinModel.get_state()
+
+    result =
+      if state do
+        %{
+          "models" => state.models,
+          "current_index" => state.current_index,
+          "rotate_every" => state.rotate_every,
+          "request_count" => state.request_count,
+          "current_model" => Enum.at(state.models, state.current_index)
+        }
+      else
+        %{
+          "models" => [],
+          "current_index" => 0,
+          "rotate_every" => 1,
+          "request_count" => 0,
+          "current_model" => nil
+        }
+      end
+
+    Protocol.encode_response(result, id)
+  end
+
+  # round_robin.configure - Configure models and rotation settings (bd-71)
+  defp handle_request("round_robin.configure", params, id) do
+    models = params["models"]
+    rotate_every = params["rotate_every"] || 1
+
+    cond do
+      is_nil(models) or not is_list(models) ->
+        Protocol.encode_error(
+          -32602,
+          "Missing or invalid param: models (must be a list)",
+          nil,
+          id
+        )
+
+      models == [] ->
+        Protocol.encode_error(-32602, "Invalid param: models cannot be empty", nil, id)
+
+      rotate_every < 1 ->
+        Protocol.encode_error(-32602, "Invalid param: rotate_every must be >= 1", nil, id)
+
+      true ->
+        case RoundRobinModel.configure(models: models, rotate_every: rotate_every) do
+          :ok ->
+            Protocol.encode_response(
+              %{"configured" => true, "models" => models, "rotate_every" => rotate_every},
+              id
+            )
+
+          {:error, reason} ->
+            Protocol.encode_error(-32602, "Configuration failed: #{reason}", nil, id)
+        end
+    end
+  end
+
+  # round_robin.list_models - List configured models
+  defp handle_request("round_robin.list_models", _params, id) do
+    models = RoundRobinModel.list_models()
+    Protocol.encode_response(%{"models" => models, "count" => length(models)}, id)
   end
 
   # Method not found handler
