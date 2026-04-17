@@ -2974,7 +2974,7 @@
       "id": "bd-149",
       "title": "Create pure Elixir HashLine module",
       "description": "Implement compute_line_hash/2, format_hashlines/2, strip_hashline_prefixes/1, validate_hashline_anchor/3 in pure Elixir. Must match exact interface of hashline_nif Rust NIF for drop-in replacement.",
-      "status": "open",
+      "status": "closed",
       "priority": 2,
       "type": "task",
       "labels": [],
@@ -2984,21 +2984,25 @@
         ]
       },
       "created_at": "2026-04-17T20:59:02.867969",
-      "updated_at": "2026-04-17T20:59:17.426829",
-      "comments": []
+      "updated_at": "2026-04-17T22:46:32.383831",
+      "comments": [
+        "Shepherd: APPROVE - Algorithm correctness fixed (prime constant typo), parity tests pass 63/63. Merged to main."
+      ]
     },
     "bd-150": {
       "id": "bd-150",
       "title": "Parity tests for HashLine",
       "description": "Create comprehensive test suite verifying Elixir HashLine implementation produces identical output to Rust NIF implementation. Test all functions: compute_line_hash, format_hashlines, strip_hashline_prefixes, validate_hashline_anchor.",
-      "status": "open",
+      "status": "closed",
       "priority": 2,
       "type": "task",
       "labels": [],
       "dependencies": {},
       "created_at": "2026-04-17T20:59:02.885454",
-      "updated_at": "2026-04-17T20:59:02.885464",
-      "comments": []
+      "updated_at": "2026-04-17T22:46:25.036442",
+      "comments": [
+        "Shepherd: APPROVE - Real pinned reference values added, proper ExUnit skip behavior, 94 tests pass. Merged to main."
+      ]
     },
     "bd-151": {
       "id": "bd-151",
@@ -3021,7 +3025,7 @@
       "id": "bd-152",
       "title": "Switch to pure Elixir HashLine + delete Rust",
       "description": "Update all callers to use new pure Elixir HashLine module. Remove native/hashline_nif/ directory entirely. Remove Rustler dependency from mix.exs. Verify all tests pass after removal.",
-      "status": "open",
+      "status": "closed",
       "priority": 2,
       "type": "task",
       "labels": [],
@@ -3031,8 +3035,10 @@
         ]
       },
       "created_at": "2026-04-17T20:59:02.913496",
-      "updated_at": "2026-04-17T20:59:17.576472",
-      "comments": []
+      "updated_at": "2026-04-17T23:02:25.488995",
+      "comments": [
+        "Shepherd: APPROVE - HashlineNif converted to delegation, native/ dir removed, .so artifacts removed, Rustler removed from mix.exs, 56 tests pass. Merged to main."
+      ]
     },
     "bd-153": {
       "id": "bd-153",
