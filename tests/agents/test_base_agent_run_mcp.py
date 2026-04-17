@@ -207,7 +207,6 @@ class TestBaseAgentRunMCP:
             ws_history_ttl_seconds=3600,
             # Feature flags
             session_logger_enabled=False,
-            rust_autobuild_disabled=False,
             enable_dbos=True,
             enable_streaming=True,
             enable_agent_memory=False,

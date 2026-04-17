@@ -43,7 +43,6 @@ class TestAgentRuntimeStateInitialization:
 
         # MCP server connections
         assert state.mcp_servers == []
-        assert state.rust_per_message_tokens is None
 
         # Token accounting
         assert state.token_ledger is None

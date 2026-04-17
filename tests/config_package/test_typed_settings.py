@@ -76,7 +76,6 @@ class TestBasicLoad:
         # Bools
         assert isinstance(cfg.allow_parallel_runs, bool)
         assert isinstance(cfg.session_logger_enabled, bool)
-        assert isinstance(cfg.rust_autobuild_disabled, bool)
         assert isinstance(cfg.enable_dbos, bool)
         assert isinstance(cfg.enable_streaming, bool)
         assert isinstance(cfg.enable_agent_memory, bool)
@@ -227,11 +226,6 @@ class TestEnvVarBoolParsing:
         cfg = load_puppy_config()
         assert cfg.session_logger_enabled is True
 
-    def test_rust_autobuild_disabled_env_bool(self, monkeypatch):
-        """PUPPY_DISABLE_RUST_AUTOBUILD should parse as bool."""
-        monkeypatch.setenv("PUPPY_DISABLE_RUST_AUTOBUILD", "true")
-        cfg = load_puppy_config()
-        assert cfg.rust_autobuild_disabled is True
 
 
 class TestEnvVarPathResolution:
@@ -378,7 +372,6 @@ class TestToDict:
             "run_wait_timeout",
             "ws_history_maxlen",
             "session_logger_enabled",
-            "rust_autobuild_disabled",
             "enable_dbos",
             "enable_streaming",
             "enable_agent_memory",
