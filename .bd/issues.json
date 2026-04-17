@@ -1528,8 +1528,10 @@
       ],
       "dependencies": {},
       "created_at": "2026-04-16T17:52:14.805923",
-      "updated_at": "2026-04-16T18:32:07.127927",
-      "comments": []
+      "updated_at": "2026-04-17T01:38:12.479290",
+      "comments": [
+        "Shepherd: APPROVE (2 rounds \u2014 initial review found 5 issues, all fixed, re-review approved). Pack Leader QA: APPROVE (watchdog down). Merged to main as 0048b7d4."
+      ]
     },
     "bd-83": {
       "id": "bd-83",
