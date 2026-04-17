@@ -132,31 +132,11 @@ def validate_file_sync(
 ) -> ValidationResult:
     """Synchronously validate file content, failing open on any error.
 
-    This is the main entrypoint. Returns within ``timeout_s`` wall-clock
-    time (approximately; the underlying parser may not honor cancellation
-    perfectly). Always returns — never raises.
+    This is the main entrypoint. bd-50: Native acceleration removed,
+    always returns PARSER_UNAVAILABLE to use Python fallback validation.
     """
-    if not _ext_is_validatable(path):
-        return ValidationResult(status=ValidationStatus.PARSER_UNAVAILABLE)
-
-    # bd-93: Run the parser in a thread with a timeout via NativeBackend
-    import concurrent.futures
-
-    with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
-        future = executor.submit(_validate_via_native_backend, path, content)
-        try:
-            return future.result(timeout=timeout_s)
-        except concurrent.futures.TimeoutError:
-            logger.debug(
-                "syntax_validate: timed out after %.3fs for %s", timeout_s, path
-            )
-            return ValidationResult(status=ValidationStatus.TIMED_OUT)
-        except Exception as e:
-            # Belt-and-suspenders: fail open on ANY unexpected error
-            logger.debug("syntax_validate: unexpected error for %s: %s", path, e)
-            return ValidationResult(
-                status=ValidationStatus.PARSER_UNAVAILABLE,
-            )
+    # bd-50: Native acceleration removed, parser unavailable
+    return ValidationResult(status=ValidationStatus.PARSER_UNAVAILABLE)
 
 
 async def validate_file_async(

@@ -71,11 +71,7 @@ __all__ = [
     "get_user_agents_directory",
     # Environment
     "load_api_keys_to_environment",
-    # Acceleration backend configuration
-    "ACCELERATION_BACKENDS",
-    "get_acceleration_config",
-    "get_acceleration_backend",
-    "set_acceleration_backend",
+
 ]
 
 # Compiled regex for _sanitize_model_name_for_key - single pass replacement
@@ -778,15 +774,7 @@ def get_default_config_keys():
         "cancel_agent_key",
         # Add resume message count configuration
         "resume_message_count",
-        # DEPRECATED: enable_fast_puppy (bd-92) - migrated to per-capability keys on first load
-        # Legacy key kept for backward compatibility migration only
-        # @deprecated - use fast_puppy.<capability> instead
-        "enable_fast_puppy",
-        # bd-63: Per-capability Fast Puppy control keys (replacement for deprecated enable_fast_puppy)
-        "fast_puppy.message_core",     # Rust: Message serialization, hashing, pruning
-        "fast_puppy.file_ops",         # Elixir: Fast file listing, grep, reading
-        "fast_puppy.repo_index",       # Elixir: Repository indexing
-        "fast_puppy.parse",            # Rust: Tree-sitter code parsing
+
         # SECURITY FIX c9z0: User plugin security settings
         "enable_user_plugins",
         "allowed_user_plugins",
@@ -2547,90 +2535,6 @@ def get_memory_extraction_model() -> str | None:
     """
     return get_value("memory_extraction_model")
 
-
-# =============================================================================
-# Acceleration Backend Configuration (Rust Architecture)
-# =============================================================================
-
-# Default acceleration backend configuration
-# Architecture:
-# - Rust (PyO3): puppy_core, turbo_parse (performance critical, FFI-sensitive)
-# - file_ops via NativeBackend (Elixir control plane or Python fallback)
-# bd-86: turbo_ops removed, file_ops now routes through Elixir or Python
-ACCELERATION_BACKENDS = {
-    "puppy_core": "rust",  # Rust for message processing
-    "turbo_parse": "rust",  # Rust for tree-sitter grammars
-    "file_ops": "elixir",  # Elixir/Python for file I/O (was turbo_ops)
-}
-
-# Environment variable prefix for overrides
-_ACCEL_ENV_PREFIX = "PUP_ACCEL_"
-
-
-def get_acceleration_config() -> dict:
-    """Get acceleration backend configuration with environment overrides.
-
-    Returns the current acceleration configuration with any environment
-    variable overrides applied. Environment variables follow the pattern:
-    PUP_ACCEL_<BACKEND_NAME> = elixir|rust|python
-
-    Example:
-        PUP_ACCEL_PUPPY_CORE=python   # Force Python fallback for puppy_core
-        PUP_ACCEL_FILE_OPS=elixir     # Use Elixir for file ops (default)
-        PUP_ACCEL_FILE_OPS=python     # Force Python fallback for file ops
-
-    Returns:
-        Dict mapping backend names to their configured language (elixir|rust|python)
-    """
-    config = ACCELERATION_BACKENDS.copy()
-
-    # Apply environment variable overrides
-    for backend in config:
-        env_var = f"{_ACCEL_ENV_PREFIX}{backend.upper()}"
-        override = os.environ.get(env_var)
-        if override and override.lower() in ("rust", "python", "elixir"):
-            config[backend] = override.lower()
-
-    return config
-
-
-def get_acceleration_backend(backend_name: str) -> str:
-    """Get the configured backend for a specific acceleration module.
-
-    Args:
-        backend_name: Name of the backend (puppy_core, turbo_parse, file_ops)
-
-    Returns:
-        The configured language for the backend (rust, python, or elixir)
-    """
-    config = get_acceleration_config()
-    return config.get(backend_name, "python")
-
-
-def set_acceleration_backend(backend_name: str, language: str) -> None:
-    """Set the acceleration backend for a specific module via config.
-
-    Note: This sets the persistent configuration value in puppy.cfg.
-    For runtime-only changes, use environment variables.
-
-    Args:
-        backend_name: Name of the backend (puppy_core, turbo_parse, file_ops)
-        language: Language to use (rust, python, or elixir)
-
-    Raises:
-        ValueError: If backend_name or language is invalid
-    """
-    # bd-86: Updated valid languages to include "elixir"
-    valid_backends = set(ACCELERATION_BACKENDS.keys())
-    valid_languages = ("rust", "python", "elixir")  # bd-86: Added "elixir"
-
-    if backend_name not in valid_backends:
-        raise ValueError(f"Invalid backend: {backend_name}. Valid: {valid_backends}")
-    if language not in valid_languages:
-        raise ValueError(f"Invalid language: {language}. Valid: {valid_languages}")
-
-    # Store in config for persistence (without the prefix)
-    set_config_value(f"accel_backend_{backend_name}", language)
 
 # bd-113: Hard token budgets for session and run
 get_max_session_tokens = _make_int_getter(

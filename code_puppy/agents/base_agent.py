@@ -1084,9 +1084,6 @@ class BaseAgent(ABC, AgentPromptMixin):
                 # Process to populate per-message tokens (cached in batch)
                 batch.process([], [], "")
 
-                # bd-67: Use batch method directly — fixes dead code where
-                # _core_bridge.rust_split_for_summarization (wrong name) always
-                # threw AttributeError. The batch method has the correct Rust binding.
                 split_result = batch.split_for_summarization(protected_tokens_limit)
 
                 # Convert indices back to message lists
@@ -1891,9 +1888,6 @@ class BaseAgent(ABC, AgentPromptMixin):
                 second_has_thinking = len(messages) > 1 and any(
                     isinstance(p, ThinkingPart) for p in messages[1].parts
                 )
-                # bd-67: Use batch method directly — fixes dead code where
-                # _core_bridge.rust_truncation_indices (wrong name) always
-                # threw AttributeError.
                 kept = batch.truncation_indices(protected_tokens, second_has_thinking)
                 result = [messages[i] for i in kept]
                 result = self.prune_interrupted_tool_calls(result)

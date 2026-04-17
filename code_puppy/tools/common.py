@@ -1204,14 +1204,8 @@ def _find_best_window(
     Jaro-Winkler similarity to `needle`, along with that score.
     If nothing clears JW_THRESHOLD, return (None, score).
 
-    Optimized version that:
-    1. Accepts pre-split needle lines as cache to avoid repeated splitlines()
-    2. Uses prefix-sum cumulative lengths for O(1) window size estimation
-    3. Skips expensive joins for windows that fail length pre-filter (10-40x speedup)
-
-    bd-86: Now always uses pure Python implementation (acceleration layer removed).
+    bd-50: Now always uses pure Python implementation (acceleration layer removed).
     """
-    # bd-86: Always use Python implementation (_edit_bridge removed)
     return _do_fuzzy_match_python(haystack_lines, needle, _needle_lines_cache, _needle_len_cache)
 
 
@@ -1221,12 +1215,7 @@ def _do_fuzzy_match_python(
     _needle_lines_cache: list[str] | None = None,
     _needle_len_cache: int | None = None,
 ) -> tuple[tuple[int, int | None], float]:
-    """
-    Pure Python fuzzy match implementation - used by _edit_bridge as fallback.
-
-    This is the internal Python implementation that _edit_bridge calls
-    when Elixir is not available. It should NOT route back to the bridge.
-    """
+    """Pure Python fuzzy match implementation."""
     # Use cached needle lines if provided, otherwise compute once
     if _needle_lines_cache is not None:
         needle_lines = _needle_lines_cache
