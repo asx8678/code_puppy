@@ -787,6 +787,188 @@ defmodule CodePuppyControl.Transport.StdioServiceTest do
   end
 
   # ============================================================================
+  # ============================================================================
+  # Runtime State Tests (bd-75)
+  # ============================================================================
+
+  describe "runtime state operations" do
+    test "runtime_get_autosave_id returns valid timestamp-based ID" do
+      request = %{
+        "jsonrpc" => "2.0",
+        "id" => 1,
+        "method" => "runtime_get_autosave_id",
+        "params" => %{}
+      }
+
+      output =
+        capture_stdio([Jason.encode!(request)], fn ->
+          StdioService.run()
+        end)
+
+      response = Jason.decode!(output)
+      assert response["jsonrpc"] == "2.0"
+      assert response["id"] == 1
+      assert Regex.match?(~r/^\d{8}_\d{6}$/, response["result"]["autosave_id"])
+    end
+
+    test "runtime_get_autosave_session_name returns formatted session name" do
+      # get_session_name should return a string starting with "auto_session_"
+      request = %{
+        "jsonrpc" => "2.0",
+        "id" => 1,
+        "method" => "runtime_get_autosave_session_name",
+        "params" => %{}
+      }
+
+      output =
+        capture_stdio([Jason.encode!(request)], fn ->
+          StdioService.run()
+        end)
+
+      response = Jason.decode!(output)
+      session_name = response["result"]["session_name"]
+      assert is_binary(session_name)
+      assert String.starts_with?(session_name, "auto_session_")
+      assert Regex.match?(~r/^auto_session_\d{8}_\d{6}$/, session_name)
+    end
+
+    test "runtime_rotate_autosave_id generates new ID" do
+      request = %{
+        "jsonrpc" => "2.0",
+        "id" => 1,
+        "method" => "runtime_rotate_autosave_id",
+        "params" => %{}
+      }
+
+      output =
+        capture_stdio([Jason.encode!(request)], fn ->
+          StdioService.run()
+        end)
+
+      response = Jason.decode!(output)
+      assert response["jsonrpc"] == "2.0"
+      assert Regex.match?(~r/^\d{8}_\d{6}$/, response["result"]["autosave_id"])
+    end
+
+    test "runtime_set_autosave_from_session extracts ID from session name" do
+      request = %{
+        "jsonrpc" => "2.0",
+        "id" => 1,
+        "method" => "runtime_set_autosave_from_session",
+        "params" => %{"session_name" => "auto_session_20240115_143022"}
+      }
+
+      output =
+        capture_stdio([Jason.encode!(request)], fn ->
+          StdioService.run()
+        end)
+
+      response = Jason.decode!(output)
+      assert response["result"]["autosave_id"] == "20240115_143022"
+    end
+
+    test "runtime_reset_autosave_id resets the ID" do
+      request = %{
+        "jsonrpc" => "2.0",
+        "id" => 1,
+        "method" => "runtime_reset_autosave_id",
+        "params" => %{}
+      }
+
+      output =
+        capture_stdio([Jason.encode!(request)], fn ->
+          StdioService.run()
+        end)
+
+      response = Jason.decode!(output)
+      assert response["result"]["reset"] == true
+    end
+
+    test "runtime_get_session_model returns nil when not set" do
+      request = %{
+        "jsonrpc" => "2.0",
+        "id" => 1,
+        "method" => "runtime_reset_session_model",
+        "params" => %{}
+      }
+
+      capture_stdio([Jason.encode!(request)], fn ->
+        StdioService.run()
+      end)
+
+      request2 = %{
+        "jsonrpc" => "2.0",
+        "id" => 2,
+        "method" => "runtime_get_session_model",
+        "params" => %{}
+      }
+
+      output2 =
+        capture_stdio([Jason.encode!(request2)], fn ->
+          StdioService.run()
+        end)
+
+      response = Jason.decode!(output2)
+      assert response["result"]["session_model"] == nil
+    end
+
+    test "runtime_set_session_model sets the cached model" do
+      request = %{
+        "jsonrpc" => "2.0",
+        "id" => 1,
+        "method" => "runtime_set_session_model",
+        "params" => %{"model" => "claude-3-5-sonnet"}
+      }
+
+      output =
+        capture_stdio([Jason.encode!(request)], fn ->
+          StdioService.run()
+        end)
+
+      response = Jason.decode!(output)
+      assert response["result"]["session_model"] == "claude-3-5-sonnet"
+    end
+
+    test "runtime_reset_session_model resets the model cache" do
+      request = %{
+        "jsonrpc" => "2.0",
+        "id" => 1,
+        "method" => "runtime_reset_session_model",
+        "params" => %{}
+      }
+
+      output =
+        capture_stdio([Jason.encode!(request)], fn ->
+          StdioService.run()
+        end)
+
+      response = Jason.decode!(output)
+      assert response["result"]["reset"] == true
+    end
+
+    test "runtime_get_state returns full state for introspection" do
+      # get_state should return session_start_time; autosave_id may be nil if not generated yet
+      request = %{
+        "jsonrpc" => "2.0",
+        "id" => 1,
+        "method" => "runtime_get_state",
+        "params" => %{}
+      }
+
+      output =
+        capture_stdio([Jason.encode!(request)], fn ->
+          StdioService.run()
+        end)
+
+      response = Jason.decode!(output)
+      # autosave_id may be nil or string depending on whether get_current_autosave_id was called
+      assert Map.has_key?(response["result"], "autosave_id")
+      assert response["result"]["session_start_time"] != nil
+      # session_model may be nil or string
+      assert Map.has_key?(response["result"], "session_model")
+    end
+  end
+
   # Helper Functions
   # ============================================================================
 

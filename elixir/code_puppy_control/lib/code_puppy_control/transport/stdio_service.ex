@@ -572,6 +572,83 @@ defmodule CodePuppyControl.Transport.StdioService do
     end
   end
 
+  # ============================================================================
+  # Runtime State Operations (bd-75)
+  # ============================================================================
+
+  # runtime_get_autosave_id - Get current autosave session ID
+  defp handle_request("runtime_get_autosave_id", _params, id) do
+    autosave_id = CodePuppyControl.RuntimeState.get_current_autosave_id()
+    Protocol.encode_response(%{"autosave_id" => autosave_id}, id)
+  end
+
+  # runtime_get_autosave_session_name - Get full session name
+  defp handle_request("runtime_get_autosave_session_name", _params, id) do
+    session_name = CodePuppyControl.RuntimeState.get_current_autosave_session_name()
+    Protocol.encode_response(%{"session_name" => session_name}, id)
+  end
+
+  # runtime_rotate_autosave_id - Force new autosave ID
+  defp handle_request("runtime_rotate_autosave_id", _params, id) do
+    new_id = CodePuppyControl.RuntimeState.rotate_autosave_id()
+    Protocol.encode_response(%{"autosave_id" => new_id}, id)
+  end
+
+  # runtime_set_autosave_from_session - Set ID from session name
+  defp handle_request("runtime_set_autosave_from_session", params, id) do
+    session_name = params["session_name"]
+
+    if is_nil(session_name) or not is_binary(session_name) do
+      Protocol.encode_error(-32602, "Missing or invalid param: session_name", nil, id)
+    else
+      set_id = CodePuppyControl.RuntimeState.set_current_autosave_from_session_name(session_name)
+      Protocol.encode_response(%{"autosave_id" => set_id}, id)
+    end
+  end
+
+  # runtime_reset_autosave_id - Reset autosave ID to nil
+  defp handle_request("runtime_reset_autosave_id", _params, id) do
+    :ok = CodePuppyControl.RuntimeState.reset_autosave_id()
+    Protocol.encode_response(%{"reset" => true}, id)
+  end
+
+  # runtime_get_session_model - Get cached session model
+  defp handle_request("runtime_get_session_model", _params, id) do
+    model = CodePuppyControl.RuntimeState.get_session_model()
+    Protocol.encode_response(%{"session_model" => model}, id)
+  end
+
+  # runtime_set_session_model - Set session model
+  defp handle_request("runtime_set_session_model", params, id) do
+    model = params["model"]
+    :ok = CodePuppyControl.RuntimeState.set_session_model(model)
+    Protocol.encode_response(%{"session_model" => model}, id)
+  end
+
+  # runtime_reset_session_model - Reset session model cache
+  defp handle_request("runtime_reset_session_model", _params, id) do
+    :ok = CodePuppyControl.RuntimeState.reset_session_model()
+    Protocol.encode_response(%{"reset" => true}, id)
+  end
+
+  # runtime_get_state - Get full runtime state for introspection
+  defp handle_request("runtime_get_state", _params, id) do
+    state = CodePuppyControl.RuntimeState.get_state()
+
+    result = %{
+      "autosave_id" => state.autosave_id,
+      "session_model" => state.session_model,
+      "session_start_time" =>
+        case DateTime.to_iso8601(state.session_start_time) do
+          {:ok, str} -> str
+          str when is_binary(str) -> str
+          _ -> nil
+        end
+    }
+
+    Protocol.encode_response(result, id)
+  end
+
   # Method not found handler
   defp handle_request(method, _params, id) do
     Protocol.encode_error(
