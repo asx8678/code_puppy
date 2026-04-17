@@ -118,35 +118,48 @@ EOF
     echo "$git_info"
 }
 
-# Get project info
-get_project_info() {
-    local project_type="unknown"
-    local project_files="[]"
-    
-    # Detect project type
+# Shared project-type detector (single source of truth for JSON and text).
+# Returns two variables: _proj_type (machine key) and _proj_display (human label).
+detect_project_type() {
     if [[ -f "pyproject.toml" ]]; then
-        project_type="python"
-        project_files='["pyproject.toml", "requirements.txt"]'
+        _proj_type="python"
+        _proj_display="Python"
     elif [[ -f "package.json" ]]; then
-        project_type="nodejs"
-        project_files='["package.json", "package-lock.json", "node_modules/"]'
+        _proj_type="nodejs"
+        _proj_display="Node.js"
     elif [[ -f "Cargo.toml" ]]; then
-        project_type="rust"
-        project_files='["Cargo.toml", "Cargo.lock", "target/"]'
+        _proj_type="rust"
+        _proj_display="Rust"
     elif [[ -f "go.mod" ]]; then
-        project_type="go"
-        project_files='["go.mod", "go.sum"]'
+        _proj_type="go"
+        _proj_display="Go"
     elif [[ -f "pom.xml" ]] || [[ -f "build.gradle" ]]; then
-        project_type="java"
-        project_files='["pom.xml", "build.gradle"]'
+        _proj_type="java"
+        _proj_display="Java"
     elif [[ -f "Makefile" ]] || [[ -f "CMakeLists.txt" ]]; then
-        project_type="c/c++"
-        project_files='["Makefile", "CMakeLists.txt"]'
+        _proj_type="c/c++"
+        _proj_display="C/C++"
+    else
+        _proj_type="unknown"
+        _proj_display="unknown"
     fi
-    
+}
+
+# Get project info (JSON)
+get_project_info() {
+    detect_project_type
+    local project_files="[]"
+    case "$_proj_type" in
+        python)   project_files='["pyproject.toml", "requirements.txt"]' ;;
+        nodejs)   project_files='["package.json", "package-lock.json", "node_modules/"]' ;;
+        rust)     project_files='["Cargo.toml", "Cargo.lock", "target/"]' ;;
+        go)       project_files='["go.mod", "go.sum"]' ;;
+        java)     project_files='["pom.xml", "build.gradle"]' ;;
+        c/c++)    project_files='["Makefile", "CMakeLists.txt"]' ;;
+    esac
     cat <<EOF
 {
-    "type": "$project_type",
+    "type": "$_proj_type",
     "key_files": $project_files
 }
 EOF
@@ -202,7 +215,9 @@ get_active_tasks() {
     fi
 
     local task_source="env/git"
-    [[ -n "$task_id" ]] && task_source="bd"
+    if [[ -n "$task_id" ]] && [[ -n "$bd_output" ]]; then
+        task_source="bd"
+    fi
 
     cat <<EOF
 {
@@ -271,13 +286,8 @@ output_text() {
     
     # Project
     echo -e "${BOLD}${MAGENTA}📁 Project:${RESET}"
-    local proj_type="unknown"
-    if [[ -f "pyproject.toml" ]]; then proj_type="Python"
-    elif [[ -f "package.json" ]]; then proj_type="Node.js"
-    elif [[ -f "Cargo.toml" ]]; then proj_type="Rust"
-    elif [[ -f "go.mod" ]]; then proj_type="Go"
-    fi
-    echo -e "   Type: $proj_type"
+    detect_project_type
+    echo -e "   Type: $_proj_display"
     
     # Detect Code Puppy project specifically
     if [[ -d "code_puppy" ]] && [[ -f "pyproject.toml" ]]; then

@@ -1,0 +1,206 @@
+"""Tests for show-active-task.sh — source accuracy and project-type consistency.
+
+Covers the critic-blocking items:
+  - source is ``env/git`` when PUP_TASK_ID is set but ``bd show`` fails
+  - source is ``bd`` when bd data is actually returned
+  - project-type consistency for a Java marker (pom.xml) between JSON and text
+"""
+
+from __future__ import annotations
+
+import json
+import os
+import subprocess
+from pathlib import Path
+
+import pytest
+
+SCRIPT = (
+    Path(__file__).resolve().parent.parent
+    / "code_puppy"
+    / "plugins"
+    / "proactive_guidance"
+    / "show-active-task.sh"
+)
+
+
+@pytest.fixture()
+def tmp_git_repo(tmp_path: Path):
+    """Create a temporary git repo so the script doesn't fail on git commands."""
+    subprocess.run(["git", "init"], cwd=tmp_path, capture_output=True, check=True)
+    subprocess.run(
+        ["git", "commit", "--allow-empty", "-m", "init"],
+        cwd=tmp_path,
+        capture_output=True,
+        check=True,
+    )
+    return tmp_path
+
+
+def _run_script(
+    repo: Path, extra_env: dict[str, str] | None = None
+) -> subprocess.CompletedProcess[str]:
+    """Run the shell script in *repo* with optional extra env vars."""
+    env = dict(os.environ)
+    env.update(extra_env or {})
+    return subprocess.run(
+        ["bash", str(SCRIPT), "--json"],
+        capture_output=True,
+        text=True,
+        cwd=str(repo),
+        env=env,
+        timeout=15,
+    )
+
+
+# ---------------------------------------------------------------------------
+# Source accuracy
+# ---------------------------------------------------------------------------
+
+
+class TestSourceAccuracy:
+    """Verify that tasks.source reflects the actual data source."""
+
+    def test_source_env_git_when_bd_show_fails(self, tmp_git_repo: Path):
+        """source must be 'env/git' when PUP_TASK_ID is set but bd show fails."""
+        # bd-999999 almost certainly doesn't exist
+        result = _run_script(tmp_git_repo, {"PUP_TASK_ID": "bd-999999"})
+        assert result.returncode == 0, f"Script failed: {result.stderr}"
+        data = json.loads(result.stdout)
+        assert data["tasks"]["source"] == "env/git", (
+            "source should be 'env/git' when bd show fails, "
+            f"got: {data['tasks']['source']!r}"
+        )
+
+    def test_source_bd_when_bd_returns_data(self, tmp_git_repo: Path):
+        """source must be 'bd' when bd show actually returns data.
+
+        Runs in the actual project dir (which has .bd configured) to ensure
+        bd can resolve the issue.
+        """
+        # First check that bd show actually works for bd-136
+        probe = subprocess.run(
+            ["bd", "show", "bd-136"],
+            capture_output=True,
+            text=True,
+            timeout=10,
+            cwd=str(SCRIPT.parent.parent.parent.parent),  # project root
+        )
+        if probe.returncode != 0 or not probe.stdout.strip():
+            pytest.skip("bd-136 not available in this environment")
+
+        # Run in the actual project root so bd can find .bd/
+        project_root = str(SCRIPT.parent.parent.parent.parent)
+        env = dict(os.environ, PUP_TASK_ID="bd-136")
+        result = subprocess.run(
+            ["bash", str(SCRIPT), "--json"],
+            capture_output=True,
+            text=True,
+            cwd=project_root,
+            env=env,
+            timeout=15,
+        )
+        assert result.returncode == 0, f"Script failed: {result.stderr}"
+        data = json.loads(result.stdout)
+        assert data["tasks"]["source"] == "bd", (
+            "source should be 'bd' when bd show succeeds, "
+            f"got: {data['tasks']['source']!r}"
+        )
+
+
+# ---------------------------------------------------------------------------
+# Project-type consistency
+# ---------------------------------------------------------------------------
+
+
+class TestProjectTypeConsistency:
+    """Verify JSON and text modes report the same project type."""
+
+    def test_java_project_type_json_vs_text(self, tmp_git_repo: Path):
+        """Both JSON and text must agree on 'java' for a pom.xml project."""
+        # Create a Java marker file
+        (tmp_git_repo / "pom.xml").write_text("<project></project>\n")
+
+        # JSON output
+        json_result = subprocess.run(
+            ["bash", str(SCRIPT), "--json"],
+            capture_output=True,
+            text=True,
+            cwd=str(tmp_git_repo),
+            timeout=15,
+        )
+        assert json_result.returncode == 0, f"JSON mode failed: {json_result.stderr}"
+        data = json.loads(json_result.stdout)
+        json_type = data["project"]["type"]
+
+        # Text output
+        text_result = subprocess.run(
+            ["bash", str(SCRIPT)],
+            capture_output=True,
+            text=True,
+            cwd=str(tmp_git_repo),
+            timeout=15,
+        )
+        assert text_result.returncode == 0, f"Text mode failed: {text_result.stderr}"
+        # Extract the "Type:" line from text output
+        type_line = ""
+        for line in text_result.stdout.splitlines():
+            if "Type:" in line:
+                type_line = line.strip()
+                break
+        assert type_line, (
+            f"Could not find 'Type:' line in text output:\n{text_result.stdout}"
+        )
+
+        # Both should report Java
+        assert json_type == "java", (
+            f"JSON project type should be 'java', got {json_type!r}"
+        )
+        assert "Java" in type_line, (
+            f"Text type line should contain 'Java', got: {type_line!r}"
+        )
+
+    @pytest.mark.parametrize(
+        "marker_file,expected_json_type,expected_text_label",
+        [
+            ("pyproject.toml", "python", "Python"),
+            ("package.json", "nodejs", "Node.js"),
+            ("Cargo.toml", "rust", "Rust"),
+            ("go.mod", "go", "Go"),
+            ("CMakeLists.txt", "c/c++", "C/C++"),
+        ],
+    )
+    def test_project_type_variants(
+        self,
+        tmp_git_repo: Path,
+        marker_file: str,
+        expected_json_type: str,
+        expected_text_label: str,
+    ):
+        """Parametrized check that JSON and text modes agree on project type."""
+        (tmp_git_repo / marker_file).write_text("")
+
+        json_result = subprocess.run(
+            ["bash", str(SCRIPT), "--json"],
+            capture_output=True,
+            text=True,
+            cwd=str(tmp_git_repo),
+            timeout=15,
+        )
+        assert json_result.returncode == 0
+        data = json.loads(json_result.stdout)
+        assert data["project"]["type"] == expected_json_type
+
+        text_result = subprocess.run(
+            ["bash", str(SCRIPT)],
+            capture_output=True,
+            text=True,
+            cwd=str(tmp_git_repo),
+            timeout=15,
+        )
+        assert text_result.returncode == 0
+        type_lines = [
+            line for line in text_result.stdout.splitlines() if "Type:" in line
+        ]
+        assert type_lines, "No 'Type:' line found in text output"
+        assert expected_text_label in type_lines[0]
