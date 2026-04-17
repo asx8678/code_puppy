@@ -316,3 +316,157 @@ class TestJsonEscaping:
         assert result.returncode == 0
         data = json.loads(result.stdout)
         assert data["tasks"]["current_task"]["name"] == title
+
+
+# ---------------------------------------------------------------------------
+# Env-var normalization for plugin.enabled / plugin.guidance_count
+# Regression tests — bd-136 Shepherd blocker
+# ---------------------------------------------------------------------------
+
+
+class TestEnvVarNormalization:
+    """Verify that --json normalizes env-var values to strict JSON types.
+
+    Previously ``PUP_GUIDANCE_ENABLED=yes`` would emit bare ``yes`` (invalid
+    JSON) and ``PUP_GUIDANCE_COUNT=abc`` would emit bare ``abc`` (also invalid).
+    The ``normalize_bool`` and ``normalize_int`` helpers must prevent this.
+    """
+
+    # --- enabled (boolean) ---------------------------------------------------
+
+    @pytest.mark.parametrize(
+        "env_val,expected",
+        [
+            ("true", True),
+            ("True", True),
+            ("TRUE", True),
+            ("1", True),
+            ("yes", True),
+            ("YES", True),
+            ("on", True),
+            ("ON", True),
+            ("false", False),
+            ("False", False),
+            ("FALSE", False),
+            ("0", False),
+            ("no", False),
+            ("NO", False),
+            ("off", False),
+            ("OFF", False),
+        ],
+        ids=lambda v: str(v),
+    )
+    def test_enabled_known_truthy_falsy(self, tmp_git_repo: Path, env_val: str, expected: bool):
+        """Recognised boolean-ish strings must produce strict JSON bools."""
+        result = _run_script(tmp_git_repo, {"PUP_GUIDANCE_ENABLED": env_val})
+        assert result.returncode == 0, f"Script failed: {result.stderr}"
+        data = json.loads(result.stdout)
+        assert data["plugin"]["enabled"] is expected, (
+            f"PUP_GUIDANCE_ENABLED={env_val!r} → expected {expected}, "
+            f"got {data['plugin']['enabled']!r}"
+        )
+
+    @pytest.mark.parametrize(
+        "env_val",
+        ["maybe", "sure", "2", "enabled", "random"],
+        ids=lambda v: v,
+    )
+    def test_enabled_unrecognised_falls_back_to_true(self, tmp_git_repo: Path, env_val: str):
+        """Unrecognised values must fall back to the default (true)."""
+        result = _run_script(tmp_git_repo, {"PUP_GUIDANCE_ENABLED": env_val})
+        assert result.returncode == 0, f"Script failed: {result.stderr}"
+        data = json.loads(result.stdout)
+        assert data["plugin"]["enabled"] is True, (
+            f"PUP_GUIDANCE_ENABLED={env_val!r} → expected True (fallback), "
+            f"got {data['plugin']['enabled']!r}"
+        )
+
+    def test_enabled_empty_defaults_to_true(self, tmp_git_repo: Path):
+        """Empty/missing PUP_GUIDANCE_ENABLED must default to true."""
+        result = _run_script(tmp_git_repo, {"PUP_GUIDANCE_ENABLED": ""})
+        assert result.returncode == 0
+        data = json.loads(result.stdout)
+        assert data["plugin"]["enabled"] is True
+
+    def test_enabled_puppy_legacy_var(self, tmp_git_repo: Path):
+        """PUPPY_GUIDANCE_ENABLED (legacy) must also be normalised."""
+        env = {"PUPPY_GUIDANCE_ENABLED": "no"}
+        # Ensure PUP_ variant is NOT set so legacy is used
+        env["PUP_GUIDANCE_ENABLED"] = ""
+        result = _run_script(tmp_git_repo, env)
+        assert result.returncode == 0
+        data = json.loads(result.stdout)
+        assert data["plugin"]["enabled"] is False
+
+    # --- guidance_count (integer) -------------------------------------------
+
+    @pytest.mark.parametrize(
+        "env_val,expected",
+        [
+            ("0", 0),
+            ("1", 1),
+            ("42", 42),
+            ("999", 999),
+        ],
+        ids=lambda v: str(v),
+    )
+    def test_count_valid_integer(self, tmp_git_repo: Path, env_val: str, expected: int):
+        """Valid integer strings must parse cleanly."""
+        result = _run_script(tmp_git_repo, {"PUP_GUIDANCE_COUNT": env_val})
+        assert result.returncode == 0
+        data = json.loads(result.stdout)
+        assert data["plugin"]["guidance_count"] == expected, (
+            f"PUP_GUIDANCE_COUNT={env_val!r} → expected {expected}, "
+            f"got {data['plugin']['guidance_count']!r}"
+        )
+
+    @pytest.mark.parametrize(
+        "env_val",
+        ["abc", "twelve", "!@#", "  ", "--"],
+        ids=lambda v: repr(v),
+    )
+    def test_count_invalid_falls_back_to_zero(self, tmp_git_repo: Path, env_val: str):
+        """Non-numeric values must fall back to 0 (safe default)."""
+        result = _run_script(tmp_git_repo, {"PUP_GUIDANCE_COUNT": env_val})
+        assert result.returncode == 0
+        data = json.loads(result.stdout)
+        assert data["plugin"]["guidance_count"] == 0, (
+            f"PUP_GUIDANCE_COUNT={env_val!r} → expected 0 (fallback), "
+            f"got {data['plugin']['guidance_count']!r}"
+        )
+
+    def test_count_empty_defaults_to_zero(self, tmp_git_repo: Path):
+        """Empty/missing PUP_GUIDANCE_COUNT must default to 0."""
+        result = _run_script(tmp_git_repo, {"PUP_GUIDANCE_COUNT": ""})
+        assert result.returncode == 0
+        data = json.loads(result.stdout)
+        assert data["plugin"]["guidance_count"] == 0
+
+    def test_count_strips_leading_zeros(self, tmp_git_repo: Path):
+        """Leading zeros (e.g. '007') must not produce octal-like output."""
+        result = _run_script(tmp_git_repo, {"PUP_GUIDANCE_COUNT": "007"})
+        assert result.returncode == 0
+        data = json.loads(result.stdout)
+        assert data["plugin"]["guidance_count"] == 7
+
+    def test_count_puppy_legacy_var(self, tmp_git_repo: Path):
+        """PUPPY_GUIDANCE_COUNT (legacy) must also be normalised."""
+        env = {"PUPPY_GUIDANCE_COUNT": "15"}
+        env["PUP_GUIDANCE_COUNT"] = ""
+        result = _run_script(tmp_git_repo, env)
+        assert result.returncode == 0
+        data = json.loads(result.stdout)
+        assert data["plugin"]["guidance_count"] == 15
+
+    # --- combined: both invalid at once -------------------------------------
+
+    def test_both_invalid_produces_valid_json(self, tmp_git_repo: Path):
+        """When both env vars are garbage, --json must still emit valid JSON."""
+        result = _run_script(
+            tmp_git_repo,
+            {"PUP_GUIDANCE_ENABLED": "yes", "PUP_GUIDANCE_COUNT": "abc"},
+        )
+        assert result.returncode == 0
+        data = json.loads(result.stdout)  # must not raise
+        assert data["plugin"]["enabled"] is True
+        assert data["plugin"]["guidance_count"] == 0
