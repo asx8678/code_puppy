@@ -40,8 +40,6 @@ try:
 except ImportError:
     DBOSAgent = None  # type: ignore[assignment,misc]
 
-# bd-50: Native acceleration layer removed - using pure Python only
-
 from pydantic_ai.messages import (
     ModelMessage,
     ModelRequest,
@@ -897,8 +895,6 @@ class BaseAgent(ABC, AgentPromptMixin):
     ) -> list[ModelMessage]:
         """Filter out messages that exceed the token threshold.
 
-        bd-50: Removed Rust acceleration - now pure Python only.
-
         Args:
             messages: List of messages to filter
             serialized_messages: Unused (kept for API compatibility)
@@ -978,8 +974,6 @@ class BaseAgent(ABC, AgentPromptMixin):
         """
         Split messages into two groups: messages to summarize and protected recent messages.
 
-        bd-50: Removed Rust acceleration - now pure Python only.
-
         Args:
             messages: Full message list to split
             serialized_messages: Unused (kept for API compatibility)
@@ -1015,7 +1009,7 @@ class BaseAgent(ABC, AgentPromptMixin):
         # Use the keep_tokens (protected zone) from computed thresholds
         protected_tokens_limit = thresholds.keep_tokens
 
-        # bd-50: Calculate tokens for messages from most recent backwards (excluding system message)
+        # Calculate tokens for messages from most recent backwards (excluding system message)
         protected_messages = []
         protected_token_count = system_tokens  # Start with system message tokens
 
@@ -1237,8 +1231,6 @@ class BaseAgent(ABC, AgentPromptMixin):
         serialized_messages: list[dict] | None = None,
     ) -> tuple[list[ModelMessage], list[ModelMessage]]:
         """Summarize messages while protecting recent messages up to PROTECTED_TOKENS.
-
-        bd-50: Removed Rust acceleration - now pure Python only.
 
         Uses a binary-split strategy: when the messages to summarize exceed
         the summarizer's context window, the batch is recursively split in
@@ -1543,8 +1535,6 @@ class BaseAgent(ABC, AgentPromptMixin):
         """
         Remove any messages that participate in mismatched tool call sequences.
 
-        bd-50: Removed Rust acceleration - now pure Python only.
-
         A mismatched tool call id is one that appears in a ToolCall (model/tool request)
         without a corresponding tool return, or vice versa. We preserve original order
         and only drop messages that contain parts referencing mismatched tool_call_ids.
@@ -1584,13 +1574,10 @@ class BaseAgent(ABC, AgentPromptMixin):
         """Process message history for context management.
 
         Returns the processed message list after compaction/truncation.
-
-        bd-50: Removed Rust acceleration - now pure Python only.
         """
         # First, prune any interrupted/mismatched tool-call conversations
         model_max = self.get_model_context_length()
 
-        # bd-50: Use Python token estimation (Rust acceleration removed)
         message_tokens = sum(
             self.estimate_tokens_for_message(msg) for msg in messages
         )
@@ -1679,8 +1666,6 @@ class BaseAgent(ABC, AgentPromptMixin):
     ) -> list[ModelMessage]:
         """
         Truncate message history to manage token usage.
-
-        bd-50: Removed Rust acceleration - now pure Python only.
 
         Protects:
         - The first message (system prompt) - always kept

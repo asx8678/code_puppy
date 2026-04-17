@@ -37,14 +37,13 @@ def get_code_context(
 ) -> CodeContext:
     """Get code context for a file.
 
-    This is the main entry point for accessing code context information.
-    It wraps the turbo_parse results and provides a convenient interface
+    This is the main entry point for accessing code context information
     for code exploration.
 
     Args:
         file_path: Path to the file to analyze
         include_content: Whether to include file content in the result
-        with_symbols: Whether to extract symbols (requires turbo_parse)
+        with_symbols: Whether to extract symbols
 
     Returns:
         CodeContext object with file information and symbols

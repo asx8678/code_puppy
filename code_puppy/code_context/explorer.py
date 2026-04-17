@@ -14,8 +14,7 @@ class CodeExplorer:
     """Enhanced code exploration with symbol extraction and caching.
 
     This class provides methods to explore files and directories with
-    symbol-level understanding, integrating turbo_parse capabilities
-    into the code exploration flow.
+    symbol-level understanding for the code exploration flow.
     """
 
     def __init__(self, enable_cache: bool = True):
@@ -185,8 +184,7 @@ class CodeExplorer:
         """Check if a file has a supported extension.
 
         A file is considered supported if its extension maps to a language
-        we can detect, regardless of whether turbo_parse is available.
-        This allows exploration to work even without the Rust module.
+        we can detect.
         """
         return self._detect_language(file_path) is not None
 

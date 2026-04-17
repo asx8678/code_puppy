@@ -263,17 +263,18 @@ Key unclassified top-level modules:
 | ├─ Replace Engine | Rust `replace_engine.rs` | `Text.ReplaceEngine` | bd-39 |
 | └─ Hashline | Rust `hashline.rs` | `HashlineNif` (Elixir NIF) | bd-88 |
 
-### Scheduled for Migration 📋
+### Migration Completed ✅
 
-| Category | Python Module | Elixir Destination | Issue |
-|----------|---------------|-------------------|-------|
-| **Message Core** | `code_puppy_core/` (Rust) | Pure Elixir | bd-43 |
-| ├─ Token Estimation | `token_estimation.rs` | Elixir + ETS memoization | bd-44 |
-| ├─ Message Pruning | `pruning.rs` | Elixir | bd-45 |
-| ├─ Serialization | `serialization.rs` | Elixir (msgpack) | bd-47 |
-| └─ Message Hashing | `message_hashing.rs` | Elixir (FxHash equiv) | bd-48 |
-| **Parsing** | `turbo_parse/` + `turbo_parse_core/` | Decision pending | bd-51 |
-| | (~13,100 lines) | | |
+> **Historical Note:** All Rust code was removed from the codebase in favor of Elixir NIFs for native operations. The original Rust crates (`code_puppy_core/`, `turbo_parse/`, `turbo_parse_core/`) were successfully migrated to Elixir, with parsing now handled via `turbo_parse_nif` (Elixir NIF).
+
+| Category | Original Component | Elixir Replacement | Issue | Status |
+|----------|------------------|-------------------|-------|--------|
+| **Message Core** | `code_puppy_core/` (Rust) | Pure Elixir | bd-43 | ✅ Migrated |
+| ├─ Token Estimation | `token_estimation.rs` | Elixir + ETS memoization | bd-44 | ✅ Migrated |
+| ├─ Message Pruning | `pruning.rs` | Elixir | bd-45 | ✅ Migrated |
+| ├─ Serialization | `serialization.rs` | Elixir (msgpack) | bd-47 | ✅ Migrated |
+| └─ Message Hashing | `message_hashing.rs` | Elixir (FxHash equiv) | bd-48 | ✅ Migrated |
+| **Parsing** | `turbo_parse/` + `turbo_parse_core/` (Rust) | `turbo_parse_nif` (Elixir NIF) | bd-51 | ✅ Migrated |
 
 ### Candidate for Deletion (Post-Elixir Migration)
 
@@ -439,7 +440,7 @@ RuntimeError               # Elixir returned error response
 
 | Module | Decision | Rationale |
 |--------|----------|-----------|
-| `turbo_parse` (13K lines) | **Decision Pending** | Tree-sitter requires C bindings. Options: (1) Keep minimal Rust NIF, (2) Port to pure Elixir (major effort), (3) Alternative native bindings. Decision target: 2026-Q3 (bd-51). |
+| `turbo_parse` | **Migrated** | Tree-sitter now handled via `turbo_parse_nif` Elixir NIF. Decision resolved: Rust completely removed in favor of Elixir (bd-51). |
 | `messaging/bus.py` | **Conditional** | MessageBus may stay as local event router even with Elixir EventBus for intra-Python events. Hybrid approach likely. |
 | `plugins/*/register_callbacks.py` | **Stay** | Plugin contract is Python-first by design. Elixir plugins would need separate discovery mechanism. |
 
@@ -452,10 +453,10 @@ RuntimeError               # Elixir returned error response
 | Component | Files | Lines | Notes |
 |-----------|-------|-------|-------|
 | **Python files** | 523 | 144,818 | Measured via `find` |
-| **Rust files** | 38 | 119,134 | Includes `turbo_parse/` (112K), `code_puppy_core/` (1.3K), `turbo_parse_core/` (4.3K) |
+| **Rust files** | 0 | 0 | **Removed** — All Rust code migrated to Elixir (2026-Q2) |
 | **Elixir files** | ~121 | — | Per MIGRATION_STATUS.md |
 
-**⚠️ Correction:** Previous doc stated "~50 Rust files, 14,400 lines" — actual measured count is **38 files, 119,134 lines** (the 112K lines in `turbo_parse/` are largely generated/tree-sitter bindings).
+> **Historical Context:** The original Rust components (`code_puppy_core/`, `turbo_parse/`, `turbo_parse_core/`) were completely removed in favor of Elixir NIFs. The `turbo_parse/` directory contained ~112K lines largely from generated tree-sitter bindings.
 
 ### Phase 6 Target (2026-Q3)
 
@@ -463,9 +464,9 @@ RuntimeError               # Elixir returned error response
 |-------|-------|-----------|-------|
 | Python Thin Shell | ~110-130 | ~35,000 | CLI, TUI, agent loop, bridge, command_line/ |
 | Elixir Runtime | ~150+ | ~40,000 | All services, NIFs |
-| Rust (Decision Pending) | TBD | TBD | Options: (1) Keep `turbo_parse_core/` minimal NIF (~4K), (2) Port to pure Elixir (major effort), (3) Hybrid approach |
+| ~~Rust (Decision Pending)~~ | ~~0~~ | ~~0~~ | **Removed** — Decision resolved: Full migration to Elixir complete |
 
-**Deletion Target:** ~350-400 Python files, ~105,000 Rust lines (if fully porting turbo_parse)
+**Deletion Target:** ~350-400 Python files, ~0 Rust lines (Rust migration complete)
 
 ---
 

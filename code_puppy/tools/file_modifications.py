@@ -345,7 +345,6 @@ def _replace_in_file(
 
     Optimized to cache splitlines() results and avoid repeated string operations.
     Uses cached line arrays and pre-computed needle lines for fuzzy matching.
-    Routes to Rust when available for the core replacement logic.
     """
     assert os.path.isabs(path), f"Expected absolute path, got {path!r}"
     file_path = path

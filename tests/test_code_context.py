@@ -20,7 +20,6 @@ from code_puppy.code_context import (
     get_code_context,
     get_file_outline,
 )
-# bd-86: Native acceleration layer removed
 
 
 # -----------------------------------------------------------------------------

@@ -1,7 +1,6 @@
 """Elixir language test fixtures.
 
-This package contains Elixir source code fixtures for testing the turbo_parse
-Rust module's Elixir language support.
+This package contains Elixir source code fixtures for testing Elixir language support.
 
 Fixture categories:
 - Basic fixtures: simple_module.ex, complex_module.ex

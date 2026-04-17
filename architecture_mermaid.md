@@ -1,8 +1,8 @@
 # Code Puppy Architecture (Mermaid)
 
-> **Updated:** 2026-04-16 — Phase 6: Thin Python shell + Elixir-only runtime
+> **Updated:** 2026-04-18 — Phase 4: Elixir-first native acceleration
 > **Stack:** Python 3.14 (TUI/CLI/agent loop) + Elixir/OTP (ALL backend operations)
-> **Migration:** Rust components scheduled for retirement (bd-43 epic)
+> **Architecture:** Fast Puppy runtime backend selector with Elixir-first routing
 
 ---
 
@@ -70,21 +70,13 @@ flowchart TB
         MCPTools["MCP Tool Proxy"]
     end
 
-    subgraph Native["Elixir Runtime Backend (Phase 6)"]
+    subgraph Native["Elixir Runtime Backend"]
         NativeBE["NativeBackend (Elixir-first router)"]
-        subgraph ElixirLayer["Elixir Control Plane (Primary)"]
+        subgraph ElixirLayer["Elixir Control Plane"]
             ElixirCP["OTP Application"]
             FileSvc["File Service (list/grep/read)"]
             ParseSvc["Parse Service (Tree-sitter NIFs)"]
             SchedSvc["Scheduler (Oban jobs)"]
-        end
-        subgraph NIFLayer["Rust NIFs (Rustler - Retiring)"]
-            TPNIF["turbo_parse_nif"]
-            HLNIF["hashline_nif"]
-        end
-        subgraph LegacyRust["Legacy Rust (Scheduled Removal)"]
-            Core_R["code_puppy_core"]
-            TP["turbo_parse (PyO3)"]
         end
     end
 
@@ -114,8 +106,6 @@ flowchart TB
     FileOps --> MCPTools & NativeBE
     NativeBE --> ElixirCP
     ElixirCP --> FileSvc & ParseSvc & SchedSvc
-    ParseSvc --> TPNIF
-    ElixirCP -.->|migration| Core_R & TP
     InvokeAgent --> MCPMgr
     MCPMgr --> MCPServer & Circuit
     State --> Sessions & History
@@ -248,17 +238,11 @@ flowchart LR
 ```mermaid
 flowchart TD
     Req[Request] --> NB{NativeBackend}
-    NB -->|Phase 6| ECP[Elixir Control Plane]
+    NB --> ECP[Elixir Control Plane]
     ECP -->|file ops| FileSvc[File Service]
     ECP -->|parsing| ParseSvc[Parse Service]
     ECP -->|scheduling| SchedSvc[Scheduler]
     
-    subgraph Legacy["Legacy Rust (Retiring - bd-43)"]
-        Rs[Rust PyO3]
-        TP[turbo_parse]
-    end
-    
-    NB -.->|fallback only| Rs
     FileSvc --> Result[Result]
     ParseSvc --> Result
     SchedSvc --> Result
@@ -267,7 +251,6 @@ flowchart TD
     style FileSvc fill:#81C784,stroke:#4CAF50
     style ParseSvc fill:#81C784,stroke:#4CAF50
     style SchedSvc fill:#81C784,stroke:#4CAF50
-    style Legacy fill:#FFCDD2,stroke:#F44336,stroke-dasharray: 5 5
 ```
 
 ---
@@ -288,32 +271,22 @@ flowchart LR
         E3["Ecto SQLite (Persistence)"]
         E4["File Service"]
         E5["Parse Service"]
-        E6["Rustler NIFs (transitional)"]
-    end
-    subgraph Rs["Rust (Retiring - bd-43)"]
-        R1["PyO3 (code_puppy_core)"]
-        R2["turbo_parse"]
-        R3["tree-sitter bindings"]
+        E6["Rustler NIFs (tree-sitter)"]
     end
     Py <-->|JSON-RPC| Ex
-    Py -.->|PyO3 FFI (retiring)| Rs
-    Ex <-->|Rustler NIF| Rs
+    Ex <-->|Rustler NIF| E6
     
     style Py fill:#E3F2FD,stroke:#1976D2
     style Ex fill:#E8F5E9,stroke:#4CAF50
-    style Rs fill:#FFEBEE,stroke:#F44336,stroke-dasharray: 5 5
 ```
 
 ---
 
 ## 8. Repository Structure
 
-> **⚠️ Migration Notice**: Items marked with 🗑️ are scheduled for removal in Phase 6 (bd-43)
-
 ```
 code_puppy/
 ├── code_puppy/                 # Python thin shell (TUI + CLI + agent loop)
-│   ├── _core_bridge.py         # 🗑️ PyO3 bridge (RETIRING with code_puppy_core)
 │   ├── agents/                 # 28 agent classes
 │   │   ├── base_agent.py       # BaseAgent ABC
 │   │   ├── agent_manager.py    # Discovery + registry
@@ -330,28 +303,8 @@ code_puppy/
 │   └── config.py
 ├── elixir/code_puppy_control/  # Elixir OTP application (FULL BACKEND)
 │   ├── lib/                    # OTP app, protocol, file_ops, scheduler
-│   └── native/                 # Rust NIFs (transitional)
-├── code_puppy_core/            # 🗑️ Rust PyO3 crate (RETIRING)
-├── turbo_parse/                # 🗑️ Rust PyO3 parse bindings (RETIRING)
-├── turbo_parse_core/           # 🗑️ Pure Rust parse core (RETIRING)
+│   └── native/                 # Rust NIFs (tree-sitter bindings)
 ├── tests/                      # Python test suite
 ├── pyproject.toml              # Python build
-├── Cargo.toml                  # 🗑️ Rust workspace (RETIRING)
-└── lefthook.yml                # Git hooks
-```
-
-### Phase 6 End-State Structure
-
-```
-code_puppy/
-├── code_puppy/                 # Python thin shell only
-│   ├── agents/                 # Agent orchestration (pydantic-ai)
-│   ├── plugins/                # Elixir-bridge, hooks, etc.
-│   └── tools/                  # Thin wrappers → Elixir RPC
-├── elixir/code_puppy_control/  # Elixir/OTP (ALL runtime)
-│   ├── lib/                    # OTP, file ops, parse, scheduler
-│   └── native/                 # Minimal NIFs (tree-sitter only)
-├── tests/                      # Test suite
-├── pyproject.toml              # Python-only build
 └── lefthook.yml                # Git hooks
 ```

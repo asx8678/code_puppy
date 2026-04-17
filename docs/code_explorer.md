@@ -50,6 +50,8 @@ Extracts symbols from Python, Rust, JavaScript, TypeScript, and Elixir files:
 - Imports and modules
 - Variables and constants
 
+> **Note on Rust support:** Rust (`.rs` files) is supported for **exploring external Rust codebases** (e.g., third-party dependencies, other projects). This is separate from Code Puppy's internal native acceleration, which is now **Elixir-only** (see [ARCHITECTURE.md](../ARCHITECTURE.md#native-acceleration)).
+
 ### Hierarchical Outline
 
 Builds parent-child relationships:

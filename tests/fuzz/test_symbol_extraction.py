@@ -6,6 +6,10 @@ This module provides property-based testing to verify that extract_symbols:
 2. Returns consistent results
 3. Handles edge cases properly
 4. Maintains invariants across all inputs
+
+bd-86/bd-179: ENTIRE MODULE SKIPPED - Native acceleration layer removed.
+These tests depended on turbo_parse which has been removed.
+Keeping file structure for potential future restoration with new parser.
 """
 
 import pytest
@@ -21,6 +25,9 @@ from tests.fuzz.strategies import (
     validate_symbol_outline,
     whitespace_only,
 )
+
+# bd-179: Skip entire module - turbo_parse removed, tests would never run
+pytest.skip("Symbol extraction tests require turbo_parse (removed in bd-86)", allow_module_level=True)
 
 
 # =============================================================================
