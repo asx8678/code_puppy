@@ -3234,7 +3234,7 @@
       "id": "bd-164",
       "title": "Remove code_puppy_core crate",
       "description": "Delete code_puppy_core/ directory entirely. Remove from Cargo.toml workspace. Update any remaining references. Verify build succeeds without the crate.",
-      "status": "open",
+      "status": "closed",
       "priority": 2,
       "type": "task",
       "labels": [],
@@ -3244,7 +3244,7 @@
         ]
       },
       "created_at": "2026-04-17T20:59:03.159391",
-      "updated_at": "2026-04-17T20:59:17.650087",
+      "updated_at": "2026-04-17T23:20:45.471882",
       "comments": []
     },
     "bd-165": {
