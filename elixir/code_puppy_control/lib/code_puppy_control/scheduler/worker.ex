@@ -68,7 +68,8 @@ defmodule CodePuppyControl.Scheduler.Worker do
       Logger.info("Executing scheduled task: #{task.name} (#{task.id})")
 
       # Mark as running and update last_run_at
-      now = DateTime.utc_now()
+      # Truncate microseconds for SQLite compatibility
+      now = DateTime.utc_now() |> DateTime.truncate(:second)
 
       {:ok, task} =
         task
