@@ -1200,7 +1200,7 @@
       "id": "bd-64",
       "title": "Port command runner to Elixir",
       "description": "Source: code_puppy/tools/command_runner.py (65KB). Target: Elixir Port-based subprocess runner with streaming stdout/stderr.\n\nPart of Phase 3 \u2014 Python tools retirement.",
-      "status": "open",
+      "status": "closed",
       "priority": 2,
       "type": "task",
       "labels": [
@@ -1212,7 +1212,7 @@
         ]
       },
       "created_at": "2026-04-16T17:51:48.507065",
-      "updated_at": "2026-04-16T17:51:48.507073",
+      "updated_at": "2026-04-17T08:31:07.765049",
       "comments": []
     },
     "bd-65": {
@@ -1238,7 +1238,7 @@
       "id": "bd-66",
       "title": "Retire Python file operations",
       "description": "Sources: tools/file_operations.py (38KB), tools/file_modifications.py (35KB). Blocked by bd-7, bd-8 (EOL + gitignore parity). Delete Python after parity.\n\nPart of Phase 3 \u2014 Python tools retirement.",
-      "status": "open",
+      "status": "closed",
       "priority": 2,
       "type": "task",
       "labels": [
@@ -1250,7 +1250,7 @@
         ]
       },
       "created_at": "2026-04-16T17:51:48.514668",
-      "updated_at": "2026-04-16T17:51:48.514674",
+      "updated_at": "2026-04-17T08:31:07.734910",
       "comments": []
     },
     "bd-67": {
