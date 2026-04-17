@@ -127,7 +127,9 @@ class TestWriteGuidance:
         assert guidance is not None
         # Verbose mode should include more lines than minimal suggestion count
         # Check for additional suggestions (verbose adds test file and git diff suggestions)
-        assert guidance.count("\n") >= 4  # Should have header + 4 suggestions in verbose mode
+        assert (
+            guidance.count("\n") >= 4
+        )  # Should have header + 4 suggestions in verbose mode
 
     def test_empty_suggestions_returns_none(self, plugin_module, fresh_state):
         """Test that files with no specific guidance return None in minimal mode."""

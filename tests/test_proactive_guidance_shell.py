@@ -231,4 +231,6 @@ class TestAgentGuidance:
         guidance = plugin_module._get_agent_guidance("test_agent")
         assert guidance is not None
         assert "test_agent" in guidance
-        # In minimal mode, no extra suggestions should be included
+        # Verify minimal mode excludes verbose content
+        assert "Review" not in guidance
+        assert "Iterate" not in guidance

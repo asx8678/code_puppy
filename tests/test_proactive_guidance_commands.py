@@ -55,13 +55,17 @@ class TestGuidanceCommand:
 
     def test_ignores_wrong_base_command(self, plugin_module):
         """Test handler returns None for commands that start with different base."""
-        result = plugin_module._handle_custom_command("/guidance_extra", "guidance_extra")
+        result = plugin_module._handle_custom_command(
+            "/guidance_extra", "guidance_extra"
+        )
         assert result is None
 
     def test_status_command(self, plugin_module, fresh_state):
         """Test /guidance status command."""
         with patch("code_puppy.messaging.emit_info") as mock_emit:
-            result = plugin_module._handle_custom_command("/guidance status", "guidance")
+            result = plugin_module._handle_custom_command(
+                "/guidance status", "guidance"
+            )
             assert result is True
             mock_emit.assert_called_once()
             status_msg = mock_emit.call_args[0][0]
@@ -77,10 +81,13 @@ class TestGuidanceCommand:
             status_msg = mock_emit.call_args[0][0]
             assert "Proactive Guidance" in status_msg
 
-    @pytest.mark.parametrize("cmd,expected_state", [
-        ("/guidance on", True),
-        ("/guidance enable", True),
-    ])
+    @pytest.mark.parametrize(
+        "cmd,expected_state",
+        [
+            ("/guidance on", True),
+            ("/guidance enable", True),
+        ],
+    )
     def test_on_commands(self, plugin_module, fresh_state, cmd, expected_state):
         """Test /guidance on and enable commands enable guidance."""
         fresh_state["enabled"] = False
@@ -91,10 +98,13 @@ class TestGuidanceCommand:
             mock_emit.assert_called_once()
             assert "enabled" in mock_emit.call_args[0][0].lower()
 
-    @pytest.mark.parametrize("cmd,expected_state", [
-        ("/guidance off", False),
-        ("/guidance disable", False),
-    ])
+    @pytest.mark.parametrize(
+        "cmd,expected_state",
+        [
+            ("/guidance off", False),
+            ("/guidance disable", False),
+        ],
+    )
     def test_off_commands(self, plugin_module, fresh_state, cmd, expected_state):
         """Test /guidance off and disable commands disable guidance."""
         fresh_state["enabled"] = True
@@ -105,14 +115,21 @@ class TestGuidanceCommand:
             mock_emit.assert_called_once()
             assert "disabled" in mock_emit.call_args[0][0].lower()
 
-    @pytest.mark.parametrize("cmd,expected_verbosity", [
-        ("/guidance verbosity minimal", "minimal"),
-        ("/guidance verbosity normal", "normal"),
-        ("/guidance verbosity verbose", "verbose"),
-    ])
-    def test_verbosity_commands(self, plugin_module, fresh_state, cmd, expected_verbosity):
+    @pytest.mark.parametrize(
+        "cmd,expected_verbosity",
+        [
+            ("/guidance verbosity minimal", "minimal"),
+            ("/guidance verbosity normal", "normal"),
+            ("/guidance verbosity verbose", "verbose"),
+        ],
+    )
+    def test_verbosity_commands(
+        self, plugin_module, fresh_state, cmd, expected_verbosity
+    ):
         """Test /guidance verbosity commands set verbosity correctly."""
-        fresh_state["verbosity"] = "normal" if expected_verbosity != "normal" else "minimal"
+        fresh_state["verbosity"] = (
+            "normal" if expected_verbosity != "normal" else "minimal"
+        )
         with patch("code_puppy.messaging.emit_info") as mock_emit:
             result = plugin_module._handle_custom_command(cmd, "guidance")
             assert result is True
@@ -167,11 +184,14 @@ class TestGuidanceCommand:
 
     def test_emit_import_failure_handling(self, plugin_module):
         """Test that handler returns True even when emit_info import fails."""
-        with patch.dict(
-            "sys.modules", {"code_puppy.messaging": None}
-        ), patch.object(sys, "modules", dict(sys.modules)):
+        with (
+            patch.dict("sys.modules", {"code_puppy.messaging": None}),
+            patch.object(sys, "modules", dict(sys.modules)),
+        ):
             # Force re-import to fail
-            result = plugin_module._handle_custom_command("/guidance status", "guidance")
+            result = plugin_module._handle_custom_command(
+                "/guidance status", "guidance"
+            )
             # Should return True to indicate command was handled (even if display failed)
             assert result is True
 
@@ -204,12 +224,27 @@ class TestCallbackRegistration:
 
     def test_callback_registration_at_module_level(self, plugin_module):
         """Test that callbacks are registered when module is loaded."""
-        # Check that register_callback was called for each expected hook
-        # by verifying the module has the callback functions
-        assert hasattr(plugin_module, "_on_post_tool_call")
-        assert hasattr(plugin_module, "_handle_custom_command")
-        assert hasattr(plugin_module, "_on_custom_help")
-        # These should be callable
-        assert callable(plugin_module._on_post_tool_call)
-        assert callable(plugin_module._handle_custom_command)
-        assert callable(plugin_module._on_custom_help)
+        import importlib
+        from code_puppy.callbacks import get_callbacks
+
+        # Reload the module to trigger registration
+        importlib.reload(plugin_module)
+
+        # Verify callbacks are in the registry
+        post_tool_callbacks = get_callbacks("post_tool_call")
+        custom_cmd_callbacks = get_callbacks("custom_command")
+        custom_help_callbacks = get_callbacks("custom_command_help")
+
+        # Check that callbacks from proactive_guidance module are registered
+        assert any(
+            "proactive_guidance" in getattr(cb, "__module__", str(cb))
+            for cb in post_tool_callbacks
+        )
+        assert any(
+            "proactive_guidance" in getattr(cb, "__module__", str(cb))
+            for cb in custom_cmd_callbacks
+        )
+        assert any(
+            "proactive_guidance" in getattr(cb, "__module__", str(cb))
+            for cb in custom_help_callbacks
+        )

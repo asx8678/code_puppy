@@ -66,7 +66,17 @@ class TestConfigHelpers:
         """Test _get_config_enabled returns False for various false values."""
         from code_puppy import config as config_module
 
-        for false_value in ["false", "False", "FALSE", "0", "no", "No", "off", "OFF", "random"]:
+        for false_value in [
+            "false",
+            "False",
+            "FALSE",
+            "0",
+            "no",
+            "No",
+            "off",
+            "OFF",
+            "random",
+        ]:
             with patch.object(config_module, "get_value", return_value=false_value):
                 result = plugin_module._get_config_enabled()
                 assert result is False, f"Failed for value: {false_value}"
@@ -83,7 +93,9 @@ class TestConfigHelpers:
         """Test _get_config_enabled defaults to True on exception."""
         from code_puppy import config as config_module
 
-        with patch.object(config_module, "get_value", side_effect=Exception("config error")):
+        with patch.object(
+            config_module, "get_value", side_effect=Exception("config error")
+        ):
             result = plugin_module._get_config_enabled()
             assert result is True
 
@@ -116,7 +128,9 @@ class TestConfigHelpers:
         """Test _get_config_verbosity defaults to normal on exception."""
         from code_puppy import config as config_module
 
-        with patch.object(config_module, "get_value", side_effect=Exception("config error")):
+        with patch.object(
+            config_module, "get_value", side_effect=Exception("config error")
+        ):
             result = plugin_module._get_config_verbosity()
             assert result == "normal"
 
@@ -174,9 +188,11 @@ class TestPostToolCall:
         """Test create_file tool triggers write guidance."""
         fresh_state["enabled"] = True
 
-        with patch("code_puppy.messaging.emit_info") as mock_emit, patch.object(
-            plugin_module, "_get_config_enabled", return_value=True
-        ), patch.object(plugin_module, "_is_enabled", return_value=True):
+        with (
+            patch("code_puppy.messaging.emit_info") as mock_emit,
+            patch.object(plugin_module, "_get_config_enabled", return_value=True),
+            patch.object(plugin_module, "_is_enabled", return_value=True),
+        ):
             await plugin_module._on_post_tool_call(
                 "create_file",
                 {"file_path": "test.py", "content": "def hello(): pass"},
@@ -193,8 +209,9 @@ class TestPostToolCall:
         """Test replace_in_file tool triggers write guidance."""
         fresh_state["enabled"] = True
 
-        with patch("code_puppy.messaging.emit_info") as mock_emit, patch.object(
-            plugin_module, "_is_enabled", return_value=True
+        with (
+            patch("code_puppy.messaging.emit_info") as mock_emit,
+            patch.object(plugin_module, "_is_enabled", return_value=True),
         ):
             await plugin_module._on_post_tool_call(
                 "replace_in_file",
@@ -212,8 +229,9 @@ class TestPostToolCall:
         """Test shell command with exit code 0 triggers guidance."""
         fresh_state["enabled"] = True
 
-        with patch("code_puppy.messaging.emit_info") as mock_emit, patch.object(
-            plugin_module, "_is_enabled", return_value=True
+        with (
+            patch("code_puppy.messaging.emit_info") as mock_emit,
+            patch.object(plugin_module, "_is_enabled", return_value=True),
         ):
             await plugin_module._on_post_tool_call(
                 "agent_run_shell_command",
@@ -233,8 +251,9 @@ class TestPostToolCall:
         """Test shell command with non-zero exit code triggers error guidance."""
         fresh_state["enabled"] = True
 
-        with patch("code_puppy.messaging.emit_info") as mock_emit, patch.object(
-            plugin_module, "_is_enabled", return_value=True
+        with (
+            patch("code_puppy.messaging.emit_info") as mock_emit,
+            patch.object(plugin_module, "_is_enabled", return_value=True),
         ):
             await plugin_module._on_post_tool_call(
                 "agent_run_shell_command",
@@ -251,8 +270,9 @@ class TestPostToolCall:
         """Test invoke_agent tool triggers agent guidance."""
         fresh_state["enabled"] = True
 
-        with patch("code_puppy.messaging.emit_info") as mock_emit, patch.object(
-            plugin_module, "_is_enabled", return_value=True
+        with (
+            patch("code_puppy.messaging.emit_info") as mock_emit,
+            patch.object(plugin_module, "_is_enabled", return_value=True),
         ):
             await plugin_module._on_post_tool_call(
                 "invoke_agent",
@@ -271,8 +291,9 @@ class TestPostToolCall:
         """Test unsupported tools don't trigger guidance."""
         fresh_state["enabled"] = True
 
-        with patch("code_puppy.messaging.emit_info") as mock_emit, patch.object(
-            plugin_module, "_is_enabled", return_value=True
+        with (
+            patch("code_puppy.messaging.emit_info") as mock_emit,
+            patch.object(plugin_module, "_is_enabled", return_value=True),
         ):
             await plugin_module._on_post_tool_call(
                 "read_file",
@@ -288,10 +309,10 @@ class TestPostToolCall:
         fresh_state["enabled"] = True
         fresh_state["verbosity"] = "minimal"
 
-        with patch("code_puppy.messaging.emit_info") as mock_emit, patch.object(
-            plugin_module, "_is_enabled", return_value=True
-        ), patch.object(
-            plugin_module, "_get_write_guidance", return_value=None
+        with (
+            patch("code_puppy.messaging.emit_info") as mock_emit,
+            patch.object(plugin_module, "_is_enabled", return_value=True),
+            patch.object(plugin_module, "_get_write_guidance", return_value=None),
         ):
             await plugin_module._on_post_tool_call(
                 "create_file",
@@ -306,8 +327,9 @@ class TestPostToolCall:
         """Test that exceptions in callback are silently caught."""
         fresh_state["enabled"] = True
 
-        with patch("code_puppy.messaging.emit_info") as mock_emit, patch.object(
-            plugin_module, "_is_enabled", return_value=True
+        with (
+            patch("code_puppy.messaging.emit_info") as mock_emit,
+            patch.object(plugin_module, "_is_enabled", return_value=True),
         ):
             # Force an exception to be raised during guidance emission
             mock_emit.side_effect = RuntimeError("Simulated emit error")
@@ -325,7 +347,9 @@ class TestPostToolCall:
                 # If exception propagates, test fails
                 exception_swallowed = False
 
-            assert exception_swallowed, "Exception should have been caught and swallowed"
+            assert exception_swallowed, (
+                "Exception should have been caught and swallowed"
+            )
             # Verify that emit was attempted before the exception
             assert mock_emit.call_count >= 1
 
@@ -333,8 +357,9 @@ class TestPostToolCall:
         """Test shell command handling when result is a dict with exit_code."""
         fresh_state["enabled"] = True
 
-        with patch("code_puppy.messaging.emit_info") as mock_emit, patch.object(
-            plugin_module, "_is_enabled", return_value=True
+        with (
+            patch("code_puppy.messaging.emit_info") as mock_emit,
+            patch.object(plugin_module, "_is_enabled", return_value=True),
         ):
             # Result is a dict without exit_code key
             await plugin_module._on_post_tool_call(
@@ -379,6 +404,8 @@ class TestStateInitialization:
         # All expected keys should be present with valid values
         assert plugin_module._state["enabled"] in (True, False)
         assert plugin_module._state["verbosity"] in plugin_module._VALID_VERBOSITY
-        assert plugin_module._state["last_tool"] is None or isinstance(plugin_module._state["last_tool"], str)
+        assert plugin_module._state["last_tool"] is None or isinstance(
+            plugin_module._state["last_tool"], str
+        )
         assert isinstance(plugin_module._state["guidance_count"], int)
         assert plugin_module._state["guidance_count"] >= 0
