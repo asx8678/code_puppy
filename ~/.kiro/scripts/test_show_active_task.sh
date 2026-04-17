@@ -409,15 +409,43 @@ else
     fail "Non-existent file shows proper warning in text mode"
 fi
 
-# Test 41: File with whitespace-only ID is handled
+# Test 41: Whitespace-only ID is rejected (must be inactive/failure)
 echo '{"id": "   "}' > "$TASK_FILE"
 exit_code=0
 KIRO_TASK_FILE="$TASK_FILE" "$SCRIPT" --quiet 2>/dev/null || exit_code=$?
-# Note: jq length counts whitespace, so 3 spaces = valid ID. This is expected behavior.
-if [[ $exit_code -eq 0 ]]; then
-    pass "Whitespace-only ID is accepted as valid"
+# Shepherd requirement: whitespace-only strings are not valid IDs
+if [[ $exit_code -eq 1 ]]; then
+    pass "Whitespace-only ID rejected (exit code 1)"
 else
-    pass "Whitespace-only ID is rejected"
+    fail "Whitespace-only ID rejected - got $exit_code"
+fi
+
+# Test 42: Whitespace-only ID produces active:false JSON
+json_output=$(KIRO_TASK_FILE="$TASK_FILE" "$SCRIPT" --json)
+if [[ $(echo "$json_output" | jq -r '.active') == "false" ]]; then
+    pass "Whitespace-only ID JSON has active:false"
+else
+    fail "Whitespace-only ID JSON has active:false"
+fi
+
+# Test 43: Tab-only ID is rejected
+echo '{"id": "\t\t\t"}' > "$TASK_FILE"
+exit_code=0
+KIRO_TASK_FILE="$TASK_FILE" "$SCRIPT" --quiet 2>/dev/null || exit_code=$?
+if [[ $exit_code -eq 1 ]]; then
+    pass "Tab-only ID rejected (exit code 1)"
+else
+    fail "Tab-only ID rejected - got $exit_code"
+fi
+
+# Test 44: Mixed whitespace ID is rejected
+echo '{"id": "  \t \n  "}' > "$TASK_FILE"
+exit_code=0
+KIRO_TASK_FILE="$TASK_FILE" "$SCRIPT" --quiet 2>/dev/null || exit_code=$?
+if [[ $exit_code -eq 1 ]]; then
+    pass "Mixed whitespace ID rejected (exit code 1)"
+else
+    fail "Mixed whitespace ID rejected - got $exit_code"
 fi
 
 # Cleanup

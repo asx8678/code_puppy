@@ -86,9 +86,9 @@ check_task_file() {
     if [[ ! -r "$TASK_FILE" ]]; then
         return 2
     fi
-    # Validate it's valid JSON with 'id' as non-empty string
-    # Rejects: null, empty string, non-string types
-    if ! jq -e '(.id | type == "string") and (.id | length > 0)' "$TASK_FILE" > /dev/null 2>&1; then
+    # Validate it's valid JSON with 'id' as non-empty, non-whitespace-only string
+    # Rejects: null, empty string, whitespace-only strings, non-string types
+    if ! jq -e '(.id | type == "string") and (.id | length > 0) and (.id | test("^\\s*$") | not)' "$TASK_FILE" > /dev/null 2>&1; then
         return 3
     fi
     return 0
@@ -113,8 +113,8 @@ output_json() {
         file_exists="true"
         if [[ -r "$TASK_FILE" ]]; then
             file_readable="true"
-            # Validate: id must be a non-empty string
-            if jq -e '(.id | type == "string") and (.id | length > 0)' "$TASK_FILE" > /dev/null 2>&1; then
+            # Validate: id must be a non-empty, non-whitespace-only string
+            if jq -e '(.id | type == "string") and (.id | length > 0) and (.id | test("^\\s*$") | not)' "$TASK_FILE" > /dev/null 2>&1; then
                 has_valid_task="true"
             fi
         fi
