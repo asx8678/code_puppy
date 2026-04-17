@@ -797,14 +797,16 @@
         ]
       },
       "created_at": "2026-04-16T17:51:18.611401",
-      "updated_at": "2026-04-17T02:39:08.563782",
-      "comments": []
+      "updated_at": "2026-04-17T03:05:54.856913",
+      "comments": [
+        "Merged to main. 327-line Tokens.Estimator with ETS memoization. 41 tests pass."
+      ]
     },
     "bd-45": {
       "id": "bd-45",
       "title": "Port code_puppy_core::pruning to pure Elixir",
       "description": "Replace code_puppy_core/src/pruning.rs with CodePuppyControl.Messages.Pruner. Covers single-pass pruning, tool-call pair matching, truncation. Accept perf regression; cache results by message-batch hash.\n\nPart of Phase 1 \u2014 Rust workspace retirement.",
-      "status": "open",
+      "status": "closed",
       "priority": 3,
       "type": "task",
       "labels": [
@@ -816,8 +818,10 @@
         ]
       },
       "created_at": "2026-04-16T17:51:18.622628",
-      "updated_at": "2026-04-16T17:51:18.622635",
-      "comments": []
+      "updated_at": "2026-04-17T03:05:54.872164",
+      "comments": [
+        "Merged to main. Messages.Pruner with 3 algorithms. Fixed reduce\u2192reduce_while bugs. 17 tests pass."
+      ]
     },
     "bd-46": {
       "id": "bd-46",
@@ -842,7 +846,7 @@
       "id": "bd-47",
       "title": "Port code_puppy_core::serialization to pure Elixir",
       "description": "Replace rmp-serde session serialization with msgpax. Round-trip test against existing Python sessions.\n\nPart of Phase 1 \u2014 Rust workspace retirement.",
-      "status": "open",
+      "status": "closed",
       "priority": 3,
       "type": "task",
       "labels": [
@@ -854,14 +858,16 @@
         ]
       },
       "created_at": "2026-04-16T17:51:18.635771",
-      "updated_at": "2026-04-16T17:51:18.635778",
-      "comments": []
+      "updated_at": "2026-04-17T03:05:54.853595",
+      "comments": [
+        "Merged to main. Messages.Serializer using msgpax. 10 tests pass."
+      ]
     },
     "bd-48": {
       "id": "bd-48",
       "title": "Port code_puppy_core::message_hashing to pure Elixir",
       "description": "Merge into Pruner module or standalone CodePuppyControl.Messages.Hasher.\n\nPart of Phase 1 \u2014 Rust workspace retirement.",
-      "status": "open",
+      "status": "closed",
       "priority": 3,
       "type": "task",
       "labels": [
@@ -873,8 +879,10 @@
         ]
       },
       "created_at": "2026-04-16T17:51:18.641261",
-      "updated_at": "2026-04-16T17:51:18.641269",
-      "comments": []
+      "updated_at": "2026-04-17T03:05:54.850387",
+      "comments": [
+        "Merged to main. 146-line Messages.Hasher with comprehensive tests. 29 tests pass."
+      ]
     },
     "bd-49": {
       "id": "bd-49",
