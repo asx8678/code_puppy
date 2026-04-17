@@ -457,9 +457,8 @@ defmodule CodePuppyControl.PythonWorker.Port do
   defp handle_file_request("is_language_supported", params) do
     language = params["language"]
 
-    supported =
-      CodePuppyControl.Parser.nif_available?() and
-        CodePuppyControl.TurboParseNif.is_language_supported(language)
+    # bd-114: Now using Parser.is_language_supported which routes to pure Elixir parsers
+    supported = CodePuppyControl.Parser.is_language_supported(language)
 
     Protocol.encode_response(%{"supported" => supported}, nil)
   end

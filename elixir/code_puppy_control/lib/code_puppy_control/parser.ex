@@ -1,187 +1,244 @@
 defmodule CodePuppyControl.Parser do
   @moduledoc """
-  High-level parsing interface using turbo_parse NIF.
-
-  Falls back to regex-based extraction when NIF unavailable.
+  High-level parsing interface. Routes to pure Elixir parsers.
 
   Also provides hashline formatting for file display with line anchors.
   """
 
-  alias CodePuppyControl.TurboParseNif
+  alias CodePuppyControl.Parsing.Parser, as: PureParser
+  alias CodePuppyControl.Parsing.ParserRegistry
   alias CodePuppyControl.HashlineNif
-  alias CodePuppyControl.Indexer.SymbolExtractor
 
   @doc """
-  Check if NIF is available.
+  Check if parsing is available (always true with pure Elixir parsers).
   """
   def nif_available? do
-    try do
-      TurboParseNif.supported_languages()
-      true
-    rescue
-      _ -> false
-    end
+    # With pure Elixir parsers, parsing is always available
+    true
   end
 
   @doc """
-  Extract symbols from source, with fallback to regex.
+  Extract symbols from source code.
+
+  Returns {:ok, map} with string keys for backward compatibility:
+    - "language" => string
+    - "symbols" => list
+    - "extraction_time_ms" | "parse_time_ms" => float
+    - "success" => boolean
+    - "errors" | "diagnostics" => list
+
+  Can return {:error, reason} for unsupported languages or parse failures.
   """
   def extract_symbols(source, language) do
-    cond do
-      nif_available?() and TurboParseNif.is_language_supported(language) ->
-        # NIF returns {:ok, result} directly — no Jason.decode needed
-        TurboParseNif.extract_symbols(source, language)
+    if PureParser.language_supported?(language) do
+      case PureParser.extract_symbols(source, language) do
+        {:ok, symbols} when is_list(symbols) ->
+          {:ok,
+           %{
+             "language" => language,
+             "symbols" => atom_keys_to_string_keys(symbols),
+             "extraction_time_ms" => 0.0,
+             "success" => true,
+             "errors" => []
+           }}
 
-      language in ["python", "elixir"] ->
-        # Use SymbolExtractor for regex-based fallback on known languages
-        symbols = SymbolExtractor.extract_regex_symbols(source, language)
-
-        outline = %{
-          "language" => language,
-          "symbols" => symbols,
-          "extraction_time_ms" => 0.0,
-          "success" => true,
-          "errors" => []
-        }
-
-        {:ok, outline}
-
-      true ->
-        # Unsupported language - return empty result
-        {:ok,
-         %{
-           "language" => language,
-           "symbols" => [],
-           "extraction_time_ms" => 0.0,
-           "success" => false,
-           "errors" => ["Unsupported language: #{language}"]
-         }}
+        {:error, reason} ->
+          {:error, reason}
+      end
+    else
+      {:ok,
+       %{
+         "language" => language,
+         "symbols" => [],
+         "success" => false,
+         "error" => "unsupported_language"
+       }}
     end
   end
 
   @doc """
-  Extract symbols from file, with fallback.
+  Extract symbols from a file.
+
+  Auto-detects language from file extension if not provided.
   """
   def extract_symbols_from_file(path, language \\ nil) do
     lang = language || detect_language(path)
 
     cond do
-      nif_available?() and is_binary(lang) and TurboParseNif.is_language_supported(lang) ->
-        # NIF returns {:ok, result} directly
-        TurboParseNif.extract_symbols_from_file(path, lang)
+      not is_binary(lang) ->
+        {:error, "Could not detect language for file: #{path}"}
 
-      is_binary(lang) and lang in ["python", "elixir"] ->
-        # Fallback: read file and use regex extraction
+      not PureParser.language_supported?(lang) ->
+        {:error, "Unsupported language: #{lang}"}
+
+      true ->
         case File.read(path) do
           {:ok, content} ->
-            symbols = SymbolExtractor.extract_regex_symbols(content, lang)
-            {:ok, %{"language" => lang, "symbols" => symbols, "success" => true}}
+            extract_symbols(content, lang)
 
           {:error, reason} ->
             {:error, reason}
         end
-
-      true ->
-        {:ok, %{"language" => lang || "unknown", "symbols" => [], "success" => false}}
     end
   end
 
   @doc """
   Parse source code.
+
+  Returns {:ok, map} with string keys for backward compatibility.
   """
   def parse_source(source, language) do
-    TurboParseNif.parse_source(source, language)
-  rescue
-    e -> {:error, Exception.message(e)}
+    case PureParser.parse(source, language) do
+      {:ok, result} ->
+        {:ok, atom_keys_to_string_keys(result)}
+
+      {:error, reason} ->
+        {:error, to_string(reason)}
+    end
   end
 
   @doc """
   Parse a file.
+
+  Auto-detects language from file extension if not provided.
   """
   def parse_file(path, language \\ nil) do
-    TurboParseNif.parse_file(path, language)
-  rescue
-    e -> {:error, Exception.message(e)}
+    lang = language || detect_language(path)
+
+    if is_binary(lang) do
+      parse_source_from_file(path, lang)
+    else
+      {:error, "Could not detect language for file: #{path}"}
+    end
   end
 
   @doc """
-  Extract syntax diagnostics (errors, warnings) from source code.
+  Extract syntax diagnostics from source code.
+
+  Returns {:ok, map} with string keys for backward compatibility,
+  or {:error, reason} for unsupported languages.
   """
   def extract_syntax_diagnostics(source, language) do
-    TurboParseNif.extract_syntax_diagnostics(source, language)
-  rescue
-    e -> {:error, Exception.message(e)}
+    case PureParser.extract_diagnostics(source, language) do
+      {:ok, diagnostics} ->
+        # Count errors and warnings
+        error_count = Enum.count(diagnostics, fn d -> d[:severity] == :error end)
+        warning_count = Enum.count(diagnostics, fn d -> d[:severity] == :warning end)
+
+        {:ok,
+         %{
+           "language" => language,
+           "diagnostics" => atom_keys_to_string_keys(diagnostics),
+           "error_count" => error_count,
+           "warning_count" => warning_count,
+           "success" => true
+         }}
+
+      {:error, reason} ->
+        {:error, reason}
+    end
   end
 
   @doc """
   Get fold ranges for code folding.
+
+  Note: Pure Elixir parsers don't support folding yet. Returns empty for supported languages.
   """
-  def get_folds(source, language) do
-    TurboParseNif.get_folds(source, language)
-  rescue
-    e -> {:error, Exception.message(e)}
+  def get_folds(_source, language) do
+    if PureParser.language_supported?(language) do
+      # Pure parsers don't support folding yet - return empty result
+      {:ok,
+       %{
+         "language" => language,
+         "folds" => [],
+         "success" => true
+       }}
+    else
+      {:error, "Folds not supported for language: #{language}"}
+    end
   end
 
   @doc """
   Get fold ranges from a file.
+
+  Note: Pure Elixir parsers don't support folding yet. Returns empty for supported languages.
   """
   def get_folds_from_file(path, language \\ nil) do
-    TurboParseNif.get_folds_from_file(path, language)
-  rescue
-    e -> {:error, Exception.message(e)}
+    lang = language || detect_language(path)
+
+    if is_binary(lang) and PureParser.language_supported?(lang) do
+      {:ok,
+       %{
+         "language" => lang,
+         "folds" => [],
+         "success" => true
+       }}
+    else
+      {:error, "Could not detect or unsupported language for file: #{path}"}
+    end
   end
 
   @doc """
   Get syntax highlights.
+
+  Note: Pure Elixir parsers don't support highlights yet. Returns empty for supported languages.
   """
-  def get_highlights(source, language) do
-    TurboParseNif.get_highlights(source, language)
-  rescue
-    e -> {:error, Exception.message(e)}
+  def get_highlights(_source, language) do
+    if PureParser.language_supported?(language) do
+      # Pure parsers don't support highlights yet - return empty result
+      {:ok,
+       %{
+         "language" => language,
+         "captures" => [],
+         "success" => true
+       }}
+    else
+      {:error, "Highlights not supported for language: #{language}"}
+    end
   end
 
   @doc """
   Get syntax highlights from a file.
+
+  Note: Pure Elixir parsers don't support highlights yet. Returns empty for supported languages.
   """
   def get_highlights_from_file(path, language \\ nil) do
-    TurboParseNif.get_highlights_from_file(path, language)
-  rescue
-    e -> {:error, Exception.message(e)}
+    lang = language || detect_language(path)
+
+    if is_binary(lang) and PureParser.language_supported?(lang) do
+      {:ok,
+       %{
+         "language" => lang,
+         "captures" => [],
+         "success" => true
+       }}
+    else
+      {:error, "Could not detect or unsupported language for file: #{path}"}
+    end
   end
 
   @doc """
   Check if a language is supported for parsing.
   """
   def is_language_supported(language) do
-    if nif_available?() do
-      TurboParseNif.is_language_supported(language)
-    else
-      language in ["python", "elixir"]
-    end
+    PureParser.language_supported?(language)
   end
 
   @doc """
   Get supported languages.
+
+  Returns list of language names as strings.
   """
   def supported_languages do
-    if nif_available?() do
-      TurboParseNif.supported_languages()
-    else
-      ["python", "elixir"]
-    end
+    PureParser.supported_languages()
+    |> Enum.map(fn {lang, _mod} -> lang end)
   end
 
   @doc """
-  Get the turbo_parse version string.
+  Get the parser version string.
   """
   def version do
-    if nif_available?() do
-      TurboParseNif.version()
-    else
-      "unavailable"
-    end
-  rescue
-    _ -> "unavailable"
+    "pure_elixir_parsers"
   end
 
   @doc """
@@ -193,20 +250,7 @@ defmodule CodePuppyControl.Parser do
     normalize_language("jsx") => "javascript"
   """
   def normalize_language(language) do
-    if nif_available?() do
-      TurboParseNif.normalize_language(language)
-    else
-      # Fallback normalization
-      case String.downcase(language) do
-        "py" -> "python"
-        "js" -> "javascript"
-        "jsx" -> "javascript"
-        "ts" -> "typescript"
-        "ex" -> "elixir"
-        "exs" -> "elixir"
-        other -> other
-      end
-    end
+    PureParser.normalize_language(language)
   end
 
   @doc """
@@ -215,23 +259,19 @@ defmodule CodePuppyControl.Parser do
   Returns {:ok, info} or {:error, :unsupported_language}.
   """
   def get_language_info(language) do
-    if nif_available?() do
-      TurboParseNif.get_language_info(language)
+    if is_language_supported(language) do
+      normalized = normalize_language(language)
+
+      {:ok,
+       %{
+         "name" => normalized,
+         "highlights_available" => true,
+         "folds_available" => true,
+         "indents_available" => true
+       }}
     else
-      if language in ["python", "elixir"] do
-        {:ok,
-         %{
-           "name" => language,
-           "highlights_available" => true,
-           "folds_available" => true,
-           "indents_available" => true
-         }}
-      else
-        {:error, :unsupported_language}
-      end
+      {:error, :unsupported_language}
     end
-  rescue
-    _ -> {:error, :unsupported_language}
   end
 
   # ---------------------------------------------------------------------------
@@ -283,18 +323,66 @@ defmodule CodePuppyControl.Parser do
     end
   end
 
+  # ---------------------------------------------------------------------------
   # Private helpers
+  # ---------------------------------------------------------------------------
 
-  defp detect_language(path) do
-    case Path.extname(path) do
-      ".py" -> "python"
-      ".rs" -> "rust"
-      ".js" -> "javascript"
-      ".ts" -> "typescript"
-      ".tsx" -> "tsx"
-      ".ex" -> "elixir"
-      ".exs" -> "elixir"
-      _ -> nil
+  defp parse_source_from_file(path, language) do
+    case File.read(path) do
+      {:ok, content} ->
+        parse_source(content, language)
+
+      {:error, reason} ->
+        {:error, to_string(reason)}
     end
   end
+
+  defp detect_language(path) do
+    ext = Path.extname(path) |> String.downcase()
+
+    case ParserRegistry.for_extension(ext) do
+      {:ok, parser_module} ->
+        parser_module.language()
+
+      :error ->
+        # Fallback for common extensions not yet in registry
+        case ext do
+          ".py" -> "python"
+          ".rs" -> "rust"
+          ".js" -> "javascript"
+          ".ts" -> "typescript"
+          ".tsx" -> "tsx"
+          ".ex" -> "elixir"
+          ".exs" -> "elixir"
+          _ -> nil
+        end
+    end
+  end
+
+  # Recursively convert atom keys and values to strings for backward compatibility
+  # The NIF-based original returned string keys and string values
+  defp atom_keys_to_string_keys(data) when is_map(data) do
+    data
+    |> Enum.map(fn {k, v} ->
+      string_key = if is_atom(k), do: to_string(k), else: k
+      {string_key, atom_keys_to_string_keys(v)}
+    end)
+    |> Enum.into(%{})
+  end
+
+  defp atom_keys_to_string_keys(data) when is_list(data) do
+    Enum.map(data, &atom_keys_to_string_keys/1)
+  end
+
+  # Keep boolean and nil values as-is
+  defp atom_keys_to_string_keys(true), do: true
+  defp atom_keys_to_string_keys(false), do: false
+  defp atom_keys_to_string_keys(nil), do: nil
+
+  # Convert other atom values (like :module, :function) to strings
+  defp atom_keys_to_string_keys(data) when is_atom(data) do
+    to_string(data)
+  end
+
+  defp atom_keys_to_string_keys(data), do: data
 end

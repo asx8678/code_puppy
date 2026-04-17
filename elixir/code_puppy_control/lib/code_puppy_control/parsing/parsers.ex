@@ -8,27 +8,41 @@ defmodule CodePuppyControl.Parsing.Parsers do
 
   alias CodePuppyControl.Parsing.ParserRegistry
 
+  # List of built-in parser modules
+  @parser_modules [
+    CodePuppyControl.Parsing.Parsers.ElixirParser,
+    CodePuppyControl.Parsing.Parsers.PythonParser,
+    CodePuppyControl.Parsing.Parsers.JavaScriptParser,
+    CodePuppyControl.Parsing.Parsers.TypeScriptParser,
+    CodePuppyControl.Parsing.Parsers.TsxParser,
+    CodePuppyControl.Parsing.Parsers.RustParser
+  ]
+
   @doc """
   Registers all built-in language parsers with the ParserRegistry.
 
   Should be called after the ParserRegistry has started.
+
+  Note: This function ensures all parser modules are loaded via Code.ensure_loaded/1
+  before attempting registration. This is necessary because Elixir modules are lazily
+  loaded and the ParserRegistry uses function_exported?/3 to verify behaviour compliance.
   """
   @spec register_all() :: :ok
   def register_all do
-    parsers = [
-      CodePuppyControl.Parsing.Parsers.ElixirParser,
-      CodePuppyControl.Parsing.Parsers.PythonParser,
-      CodePuppyControl.Parsing.Parsers.JavaScriptParser,
-      CodePuppyControl.Parsing.Parsers.TypeScriptParser,
-      CodePuppyControl.Parsing.Parsers.TsxParser,
-      CodePuppyControl.Parsing.Parsers.RustParser
-    ]
+    Enum.each(@parser_modules, fn parser_module ->
+      # Ensure module is loaded before registering
+      # This is critical because function_exported?/3 only works on loaded modules
+      case Code.ensure_loaded(parser_module) do
+        {:module, ^parser_module} ->
+          case ParserRegistry.register(parser_module) do
+            :ok -> :ok
+            {:error, :unsupported} -> :ok
+            {:error, :invalid_module} -> :ok
+          end
 
-    Enum.each(parsers, fn parser ->
-      case ParserRegistry.register(parser) do
-        :ok -> :ok
-        {:error, :unsupported} -> :ok
-        {:error, :invalid_module} -> :ok
+        {:error, _reason} ->
+          # Module could not be loaded, skip it
+          :ok
       end
     end)
 
