@@ -20,6 +20,7 @@ defmodule CodePuppyControl.Parsing.Parsers do
       CodePuppyControl.Parsing.Parsers.PythonParser,
       CodePuppyControl.Parsing.Parsers.JavaScriptParser,
       CodePuppyControl.Parsing.Parsers.TypeScriptParser,
+      CodePuppyControl.Parsing.Parsers.TsxParser,
       CodePuppyControl.Parsing.Parsers.RustParser
     ]
 
