@@ -76,6 +76,27 @@ defmodule CodePuppyControl.Transport.ModelServicesRpcTest do
       assert is_list(response["result"]["models"])
       assert is_integer(response["result"]["count"])
     end
+
+    test "returns enabled:false for disabled models (bd-96 regression test)" do
+      # Regression test for bd-96: verify enabled field is correctly preserved
+      request = %{
+        "jsonrpc" => "2.0",
+        "id" => 1,
+        "method" => "model_registry.get_config",
+        "params" => %{"model_name" => "disabled-test-model"}
+      }
+
+      output =
+        capture_stdio([Jason.encode!(request)], fn ->
+          StdioService.run()
+        end)
+
+      response = Jason.decode!(output)
+      assert response["jsonrpc"] == "2.0"
+      assert response["id"] == 1
+      # The disabled-test-model has "enabled" => false in models.json
+      assert response["result"]["config"]["enabled"] == false
+    end
   end
 
   describe "model_registry.get_all_configs" do

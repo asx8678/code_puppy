@@ -161,12 +161,10 @@ class TestModelFactoryBridgeIntegration:
                 "code_puppy.model_factory._MODEL_BUILDERS",
                 {"openai": MagicMock(return_value=MagicMock())},
             ):
-                with patch(
-                    "code_puppy.model_factory._load_plugin_model_providers"
-                ):
-                    with pytest.raises(Exception):
-                        # get_model will raise ValueError for API key but that's expected
-                        # the point is it should try to get config from bridge first
-                        ModelFactory.get_model("missing-model", {})
+                with patch("code_puppy.model_factory._load_plugin_model_providers"):
+                    # Should succeed since we mocked the builder
+                    result = ModelFactory.get_model("missing-model", {})
 
+                    # Verify bridge was consulted for missing config
                     mock_bridge.assert_called_once_with("missing-model")
+                    assert result is not None
