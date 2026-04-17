@@ -327,6 +327,12 @@ fi
 # Test 33: Object ID is rejected
 echo '{"id": {"task": "bd-123"}}' > "$TASK_FILE"
 exit_code=0
+KIRO_TASK_FILE="$TASK_FILE" "$SCRIPT" --quiet 2>/dev/null || exit_code=$?
+if [[ $exit_code -eq 1 ]]; then
+    pass "Object ID rejected (exit code 1)"
+else
+    fail "Object ID rejected - got $exit_code"
+fi
 
 # Test 34: JSON with REAL special characters - double quotes, backslashes, newlines
 # Using jq to generate proper JSON with real escape sequences
