@@ -1256,7 +1256,7 @@
       "id": "bd-67",
       "title": "Port scheduler tools to Elixir",
       "description": "Source: tools/scheduler_tools.py (14KB).\n\nPart of Phase 3 \u2014 Python tools retirement.",
-      "status": "open",
+      "status": "closed",
       "priority": 2,
       "type": "task",
       "labels": [
@@ -1268,8 +1268,10 @@
         ]
       },
       "created_at": "2026-04-16T17:51:48.527466",
-      "updated_at": "2026-04-16T17:51:48.527476",
-      "comments": []
+      "updated_at": "2026-04-17T04:23:32.765079",
+      "comments": [
+        "Shepherd: APPROVE. QA: 25/25 tests pass. Merged to main (5f04769c)."
+      ]
     },
     "bd-68": {
       "id": "bd-68",
