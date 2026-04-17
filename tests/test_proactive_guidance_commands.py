@@ -223,28 +223,15 @@ class TestCallbackRegistration:
         assert "detail level" in desc.lower()
 
     def test_callback_registration_at_module_level(self, plugin_module):
-        """Test that callbacks are registered when module is loaded."""
-        import importlib
+        """Verify that the plugin registered callbacks at import time."""
         from code_puppy.callbacks import get_callbacks
 
-        # Reload the module to trigger registration
-        importlib.reload(plugin_module)
+        # Get the actual callback functions from the module
+        on_post_tool = plugin_module._on_post_tool_call
+        on_custom_cmd = plugin_module._handle_custom_command
+        on_help = plugin_module._on_custom_help
 
-        # Verify callbacks are in the registry
-        post_tool_callbacks = get_callbacks("post_tool_call")
-        custom_cmd_callbacks = get_callbacks("custom_command")
-        custom_help_callbacks = get_callbacks("custom_command_help")
-
-        # Check that callbacks from proactive_guidance module are registered
-        assert any(
-            "proactive_guidance" in getattr(cb, "__module__", str(cb))
-            for cb in post_tool_callbacks
-        )
-        assert any(
-            "proactive_guidance" in getattr(cb, "__module__", str(cb))
-            for cb in custom_cmd_callbacks
-        )
-        assert any(
-            "proactive_guidance" in getattr(cb, "__module__", str(cb))
-            for cb in custom_help_callbacks
-        )
+        # Verify they're registered in the callback registry
+        assert on_post_tool in get_callbacks("post_tool_call")
+        assert on_custom_cmd in get_callbacks("custom_command")
+        assert on_help in get_callbacks("custom_command_help")
