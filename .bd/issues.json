@@ -3607,7 +3607,7 @@
       "id": "bd-183",
       "title": "Implement StdioService handlers for Messages.Pruner",
       "description": "Add JSON-RPC handlers in StdioService for message.pruner.* methods.\n\n**Depends on:** bd-182\n\n## Tasks\n- Define RPC method names (message.pruner.prune, message.pruner.filter, etc.)\n- Implement request/response schema for pruner operations\n- Add handler in StdioService that calls Messages.Pruner functions\n- Handle binary message data efficiently\n- Add error handling for invalid message formats\n\n## Acceptance Criteria\n- message.pruner.* methods callable via RPC\n- Unit tests for handler logic\n- Error responses follow JSON-RPC spec",
-      "status": "open",
+      "status": "closed",
       "priority": 1,
       "type": "task",
       "labels": [
@@ -3615,7 +3615,7 @@
       ],
       "dependencies": {},
       "created_at": "2026-04-18T00:22:08.601675",
-      "updated_at": "2026-04-18T00:24:41.301524",
+      "updated_at": "2026-04-18T00:40:15.486788",
       "comments": [
         "Methods: message.prune_and_filter, message.truncation_indices, message.split_for_summarization. Follow stdio_service.ex pattern. File: lib/code_puppy_control/transport/stdio_service.ex",
         "Claiming this task - starting work (claimed by code-puppy-019d9d)"
@@ -3720,7 +3720,7 @@
       "id": "bd-190",
       "title": "Implement StdioService handlers for Messages.Hasher",
       "description": "Add JSON-RPC handlers in StdioService for message.hasher.* methods.\n\n**Depends on:** bd-182\n\n## Tasks\n- Define RPC methods: message.hasher.hash_content, message.hasher.hash_batch\n- Implement content-aware hashing via RPC\n- Support different hash algorithms (if configurable)\n- Efficient binary data transfer\n\n## Acceptance Criteria\n- Content hashing callable via RPC\n- Batch hashing supported for performance\n- Hash output matches expected format",
-      "status": "open",
+      "status": "closed",
       "priority": 1,
       "type": "task",
       "labels": [
@@ -3728,9 +3728,14 @@
       ],
       "dependencies": {},
       "created_at": "2026-04-18T00:22:10.973694",
-      "updated_at": "2026-04-18T00:24:41.363751",
+      "updated_at": "2026-04-18T00:40:15.523637",
       "comments": [
-        "Claiming this task - starting work (claimed by code-puppy-019d9d)"
+        "Claiming this task - starting work (claimed by code-puppy-019d9d)",
+        "Implemented in commit 1db4453a. Added hash, hash_batch, stringify_part handlers with tests."
+      ]
+    }
+  }
+}-019d9d)"
       ]
     }
   }
