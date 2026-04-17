@@ -85,9 +85,10 @@ defmodule Mix.Tasks.CodePuppy.StdioService do
 
   @impl true
   def run(_args) do
-    # Ensure the FileOps module is available
+    # Ensure the required modules are available
     Code.ensure_loaded(CodePuppyControl.FileOps)
     Code.ensure_loaded(CodePuppyControl.Protocol)
+    Code.ensure_loaded(CodePuppyControl.RuntimeState)
 
     # Start required applications without the full Phoenix stack
     Application.ensure_all_started(:logger)
@@ -99,6 +100,9 @@ defmodule Mix.Tasks.CodePuppy.StdioService do
     :logger.add_handler_filter(:default, :stderr_only, fn log_event, _ ->
       {:log, Map.put(log_event, :io_device, :stderr)}
     end)
+
+    # Start RuntimeState GenServer for runtime state management (bd-75)
+    {:ok, _} = CodePuppyControl.RuntimeState.start_link([])
 
     # Give the service a moment to suppress any startup output
     Process.sleep(100)

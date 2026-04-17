@@ -6,16 +6,17 @@ defmodule CodePuppyControl.Application do
   1. CodePuppyControl.Repo - SQLite database for state persistence
   2. Phoenix.PubSub - Event distribution
   3. CodePuppyControl.EventStore - ETS-based event history for replay
-  4. CodePuppyControl.Run.Registry - Process registry for run tracking
-  4. CodePuppyControl.Run.Supervisor - DynamicSupervisor for run processes
-  5. CodePuppyControl.PythonWorker.Supervisor - DynamicSupervisor for Python workers
-  6. CodePuppyControl.MCP.Registry - Process registry for MCP servers
-  7. CodePuppyControl.MCP.Supervisor - DynamicSupervisor for MCP servers
-  8. CodePuppyControl.Concurrency.Supervisor - Concurrency limiter (ETS-backed)
-  9. CodePuppyControl.RequestTracker - Tracks JSON-RPC request/response correlation
-  10. Oban - Job processing engine with SQLite Lite engine
-  11. CodePuppyControl.Scheduler.CronScheduler - Periodic scheduler for cron tasks
-  12. CodePuppyControlWeb.Endpoint - HTTP API endpoint
+  4. CodePuppyControl.RuntimeState - Global runtime state (autosave ID, session model)
+  5. CodePuppyControl.Run.Registry - Process registry for run tracking
+  6. CodePuppyControl.Run.Supervisor - DynamicSupervisor for run processes
+  7. CodePuppyControl.PythonWorker.Supervisor - DynamicSupervisor for Python workers
+  8. CodePuppyControl.MCP.Registry - Process registry for MCP servers
+  9. CodePuppyControl.MCP.Supervisor - DynamicSupervisor for MCP servers
+  10. CodePuppyControl.Concurrency.Supervisor - Concurrency limiter (ETS-backed)
+  11. CodePuppyControl.RequestTracker - Tracks JSON-RPC request/response correlation
+  12. Oban - Job processing engine with SQLite Lite engine
+  13. CodePuppyControl.Scheduler.CronScheduler - Periodic scheduler for cron tasks
+  14. CodePuppyControlWeb.Endpoint - HTTP API endpoint
   """
 
   use Application
@@ -26,6 +27,7 @@ defmodule CodePuppyControl.Application do
       CodePuppyControl.Repo,
       {Phoenix.PubSub, name: CodePuppyControl.PubSub},
       CodePuppyControl.EventStore,
+      CodePuppyControl.RuntimeState,
       CodePuppyControl.Run.Registry,
       {CodePuppyControl.Run.Supervisor, []},
       CodePuppyControl.PythonWorker.Supervisor,
