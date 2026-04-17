@@ -173,9 +173,9 @@ defmodule CodePuppyControl.Parsing.Parsers.RustParser do
     ]
   end
 
-  # Impl block: {impl, line, target_type, trait_type, _}
-  defp node_to_symbol({:impl, line, target_type, trait_type, _}) when trait_type != nil do
-    name = if trait_type, do: "impl #{trait_type} for #{target_type}", else: "impl #{target_type}"
+  # Impl block with trait: {impl, line, target_type, trait_type, _}
+  defp node_to_symbol({:impl, line, target_type, trait_type, _}) when is_atom(trait_type) and trait_type != nil do
+    name = "impl #{trait_type} for #{target_type}"
 
     [
       %{
@@ -189,11 +189,11 @@ defmodule CodePuppyControl.Parsing.Parsers.RustParser do
     ]
   end
 
-  # Impl block without trait: {impl, line, type, _}
-  defp node_to_symbol({:impl, line, type, _}) do
+  # Impl block without trait: {impl, line, target_type, nil, _}
+  defp node_to_symbol({:impl, line, target_type, nil, _}) do
     [
       %{
-        name: "impl #{type}",
+        name: "impl #{target_type}",
         kind: :module,
         line: line,
         end_line: nil,

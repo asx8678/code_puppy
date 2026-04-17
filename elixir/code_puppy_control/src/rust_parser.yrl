@@ -29,12 +29,13 @@ Nonterminals
   parameters parameter
   type_params type_param_list
   where_clause
+  newlines
   .
 
 Terminals
   fn pub struct enum impl trait mod use const static type where
   identifier
-  '(' ')' '{' '}' '[' ']' ',' ';' ':' '=' '<' '>' path_sep
+  '(' ')' '{' '}' '[' ']' ',' ';' ':' assign '<' '>' path_sep
   '->' '=>' '::' '+' '-' '*' '/' '&' '|' '!' '#' '$' '?' '.'
   plus_assign minus_assign mult_assign div_assign
   eq ne le ge and_op or_op
@@ -55,10 +56,15 @@ Rootsymbol program.
 
 program -> '$empty' : [].
 program -> items : '$1'.
+program -> newlines items : '$2'.
+program -> newlines : [].
 
 items -> item : ['$1'].
-items -> item items : ['$1' | '$2'].
-items -> newline items : '$2'.
+items -> item newlines : ['$1'].
+items -> item newlines items : ['$1' | '$3'].
+
+newlines -> newline : skip.
+newlines -> newline newlines : skip.
 
 %%---------------------------------------------------------------------------
 %% Items (Top-level Declarations)
@@ -159,29 +165,29 @@ use_stmt -> use identifier path_sep identifier ';' :
 %% Type Declarations
 %%---------------------------------------------------------------------------
 
-type_decl -> type identifier '=' identifier ';' :
+type_decl -> type identifier assign identifier ';' :
     {type_alias, line('$1'), unwrap('$2'), unwrap('$4'), []}.
-type_decl -> visibility type identifier '=' identifier ';' :
+type_decl -> visibility type identifier assign identifier ';' :
     {type_alias, line('$2'), unwrap('$3'), unwrap('$5'), '$1'}.
 
 %%---------------------------------------------------------------------------
 %% Constant Declarations
 %%---------------------------------------------------------------------------
 
-const_decl -> const identifier '=' integer ';' :
+const_decl -> const identifier assign integer ';' :
     {const, line('$1'), unwrap('$2'), unwrap('$4'), []}.
-const_decl -> visibility const identifier '=' integer ';' :
+const_decl -> visibility const identifier assign integer ';' :
     {const, line('$2'), unwrap('$3'), unwrap('$5'), '$1'}.
 
 %%---------------------------------------------------------------------------
 %% Static Declarations
 %%---------------------------------------------------------------------------
 
-static_decl -> static identifier '=' integer ';' :
+static_decl -> static identifier assign integer ';' :
     {static, line('$1'), unwrap('$2'), unwrap('$4'), []}.
-static_decl -> static mut identifier '=' integer ';' :
+static_decl -> static mut identifier assign integer ';' :
     {static, line('$1'), unwrap('$3'), unwrap('$5'), [mut]}.
-static_decl -> visibility static identifier '=' integer ';' :
+static_decl -> visibility static identifier assign integer ';' :
     {static, line('$2'), unwrap('$3'), unwrap('$5'), '$1'}.
 
 %%---------------------------------------------------------------------------
