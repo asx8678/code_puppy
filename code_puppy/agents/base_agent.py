@@ -40,13 +40,9 @@ try:
 except ImportError:
     DBOSAgent = None  # type: ignore[assignment,misc]
 
-# Rust acceleration bridge (optional - falls back to Python)
-# bd-67: Route all native acceleration through NativeBackend (single import site)
-from code_puppy.native_backend import (
-    MessageBatchHandle,
-    NativeBackend,
-    create_message_batch,
-)
+# bd-86: Native acceleration layer removed - using pure Python only
+# Message batch handle is now just a type alias for the raw messages
+MessageBatchHandle = list[dict] | None
 
 from pydantic_ai.messages import (
     ModelMessage,
@@ -107,13 +103,20 @@ from code_puppy.utils.binary_token_estimation import (
 
 
 def _rust_enabled() -> bool:
-    """Check current Rust acceleration state (respects /fast_puppy toggle).
+    """Check current Rust acceleration state.
 
-    bd-67: Routes through NativeBackend.is_message_core_active() which checks
-    both Rust availability and user enable/disable preferences via the unified
-    capability system.
+    bd-86: Native acceleration layer removed, always returns False.
     """
-    return NativeBackend.is_message_core_active()
+    return False
+
+
+def create_message_batch(messages: list[Any]) -> MessageBatchHandle:
+    """Stub for create_message_batch - native acceleration removed.
+
+    bd-86: Native acceleration layer removed. Returns None since
+    Python implementation doesn't use message batching.
+    """
+    return None
 
 
 _reload_count = 0
@@ -171,30 +174,16 @@ class BaseAgent(ABC, AgentPromptMixin):
     def _get_or_create_batch(self, messages: list[ModelMessage]) -> MessageBatchHandle:
         """Return cached batch if messages unchanged, else create new.
 
-        Uses object identity and length as a fast heuristic for detecting
-        changes. This catches the common case where the same list object
-        is passed repeatedly, or where messages have been added.
+        bd-86: Native acceleration removed. Returns None since Python
+        implementation doesn't use message batching.
 
         Args:
             messages: The message list to create a batch for
 
         Returns:
-            MessageBatchHandle wrapping the messages (cached or new)
+            None - batching is not used in Python implementation
         """
-        msg_id = id(messages)
-        msg_len = len(messages)
-
-        # Cache hit: same list object with same length
-        if (self._cached_batch is not None and
-            self._cached_batch_messages_id == msg_id and
-            self._cached_batch_messages_len == msg_len):
-            return self._cached_batch
-
-        # Cache miss: create new batch
-        self._cached_batch = create_message_batch(messages)
-        self._cached_batch_messages_id = msg_id
-        self._cached_batch_messages_len = msg_len
-        return self._cached_batch
+        return None
 
     def _invalidate_batch_cache(self) -> None:
         """Invalidate the cached message batch.

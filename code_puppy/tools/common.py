@@ -1208,16 +1208,10 @@ def _find_best_window(
     1. Accepts pre-split needle lines as cache to avoid repeated splitlines()
     2. Uses prefix-sum cumulative lengths for O(1) window size estimation
     3. Skips expensive joins for windows that fail length pre-filter (10-40x speedup)
-    4. Routes through _edit_bridge which handles Elixir → Python fallback (bd-41)
+
+    bd-86: Now always uses pure Python implementation (acceleration layer removed).
     """
-    # bd-41: Route through _edit_bridge for Elixir-first routing
-    # (only if no Python-only caches are provided)
-    if _needle_lines_cache is None and _needle_len_cache is None:
-        from code_puppy._edit_bridge import fuzzy_match_window as _bridge_fuzzy
-
-        return _bridge_fuzzy(haystack_lines, needle)
-
-    # When called with caches (internal use), run pure Python implementation
+    # bd-86: Always use Python implementation (_edit_bridge removed)
     return _do_fuzzy_match_python(haystack_lines, needle, _needle_lines_cache, _needle_len_cache)
 
 

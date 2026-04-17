@@ -1,45 +1,21 @@
-"""Bridge to native backend indexer with Python fallback.
+"""Repository indexer (Python-only implementation).
 
-This module provides a unified API for directory indexing that:
-1. Uses the native backend (Elixir) when available (5-10x faster)
-2. Falls back to the pure Python implementation when native backend is unavailable
+bd-86: Native acceleration layer removed. This module now provides
+only the pure Python implementation from indexer.py.
 
-bd-61: Migrated to use NativeBackend for unified acceleration access.
-bd-83: Updated references from "turbo_ops" to "native backend" / "elixir".
+Provides a unified API for directory indexing using the Python implementation.
 """
 
-from dataclasses import dataclass
 from pathlib import Path
 
-from code_puppy.native_backend import NativeBackend
-
-# Import Python fallback
+# Import the Python implementation directly
 from code_puppy.plugins.repo_compass.indexer import (
-    FileSummary as PythonFileSummary,
+    FileSummary,
+    build_structure_map as _python_build_structure_map,
 )
 
-# Legacy compatibility: check NativeBackend status
-TURBO_INDEXER_AVAILABLE = NativeBackend.is_available(
-    NativeBackend.Capabilities.REPO_INDEX
-)
-
-
-@dataclass(frozen=True, slots=True)
-class FileSummary:
-    """Unified FileSummary that works with both Rust and Python backends."""
-
-    path: str
-    kind: str
-    symbols: tuple[str, ...] = ()
-
-    @classmethod
-    def from_python(cls, py_summary: PythonFileSummary) -> "FileSummary":
-        """Convert Python FileSummary (already the same structure)."""
-        return cls(
-            path=py_summary.path,
-            kind=py_summary.kind,
-            symbols=py_summary.symbols,
-        )
+# bd-86: Native acceleration removed, always False
+TURBO_INDEXER_AVAILABLE = False
 
 
 def build_structure_map(
@@ -47,55 +23,33 @@ def build_structure_map(
     max_files: int = 40,
     max_symbols_per_file: int = 8,
     *,
-    force_python: bool = False,
+    force_python: bool = False,  # Ignored, Python is always used
 ) -> list[FileSummary]:
     """Build a structure map of the repository.
 
-    Uses Rust acceleration via NativeBackend when available for 5-10x speedup.
+    bd-86: Native acceleration removed. Uses pure Python implementation.
 
     Args:
         root: Root directory to scan
         max_files: Maximum number of files to include
         max_symbols_per_file: Maximum symbols to extract per file
-        force_python: Force use of Python implementation (for testing)
+        force_python: Ignored (kept for API compatibility)
 
     Returns:
         List of FileSummary objects describing the repo structure
     """
-    prefer_native = not force_python
-    results = NativeBackend.index_directory(
-        str(root), max_files, max_symbols_per_file, _prefer_native=prefer_native
-    )
-
-    # Convert result dicts to FileSummary objects
-    return [
-        FileSummary(
-            path=r["path"],
-            kind=r["kind"],
-            symbols=tuple(r.get("symbols", [])),
-        )
-        for r in results
-    ]
+    return _python_build_structure_map(root, max_files, max_symbols_per_file)
 
 
 def get_indexer_status() -> dict:
-    """Return diagnostic info about the indexer backend."""
-    status = NativeBackend.get_status()
-    repo_index_status = status.get(NativeBackend.Capabilities.REPO_INDEX)
+    """Return diagnostic info about the indexer backend.
 
-    # bd-111: Report actual repo_index backend source, not file_ops source.
-    # Use _last_source[REPO_INDEX] which tracks which backend actually served.
-    backend_source = NativeBackend._last_source.get(
-        NativeBackend.Capabilities.REPO_INDEX,
-        "elixir" if NativeBackend._is_elixir_available() else "python",
-    )
-
+    bd-86: Native acceleration removed, always returns Python backend status.
+    """
     return {
-        "elixir_available": NativeBackend._is_elixir_available(),
-        "backend": backend_source,
-        "native_backend_status": repo_index_status.status
-        if repo_index_status
-        else "unknown",
+        "elixir_available": False,
+        "backend": "python",
+        "native_backend_status": "unavailable",
     }
 
 

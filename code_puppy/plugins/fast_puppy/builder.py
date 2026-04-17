@@ -28,7 +28,7 @@ CRATES = [
         "name": "code_puppy_core",
         "dir": "code_puppy_core",
         "probe": "_code_puppy_core",
-        "bridges": ["code_puppy._core_bridge"],
+        "bridges": [],
         # No patch_targets - NativeBackend handles routing
     },
     {
@@ -186,16 +186,16 @@ def get_all_crate_status() -> list[dict]:
 
 
 # bd-91: Runtime backend detection without building
+# bd-86: Native acceleration layer removed
 def get_available_backends() -> dict[str, bool]:
-    """Detect available backends without triggering any builds.
+    """Detect available backends.
 
-    Returns a dict with:
-        - elixir_available: True if Elixir bridge is connected
-        - rust_installed: True if Rust crates are installed (not built, just checked)
-        - python_fallback: Always True (Python is always available as fallback)
+    bd-86: Native acceleration layer removed. Returns:
+        - elixir_available: Always False
+        - rust_installed: True if Rust crates are installed (for info only)
+        - python_fallback: Always True (Python is always used)
 
-    This function is used during startup to show backend status without
-    the performance penalty of auto-building Rust crates.
+    This function is used during startup to show backend status.
     """
     status: dict[str, bool] = {
         "elixir_available": False,
@@ -203,17 +203,10 @@ def get_available_backends() -> dict[str, bool]:
         "python_fallback": True,
     }
 
-    # Check if Elixir bridge is connected
-    try:
-        from code_puppy.native_backend import NativeBackend
+    # bd-86: Elixir bridge removed
+    status["elixir_available"] = False
 
-        cap_status = NativeBackend.get_status()
-        # Elixir is available if any capability is active (meaning bridge is connected)
-        status["elixir_available"] = any(info.active for info in cap_status.values())
-    except Exception:
-        status["elixir_available"] = False
-
-    # Check if Rust crates are installed (without building)
+    # Check if Rust crates are installed (for informational purposes only)
     rust_count = 0
     for crate_spec in CRATES:
         probe = crate_spec["probe"]
@@ -222,7 +215,7 @@ def get_available_backends() -> dict[str, bool]:
     # Consider Rust "installed" if at least one crate is available
     status["rust_installed"] = rust_count > 0
 
-    # Python fallback is always available
+    # Python fallback is always used now
     status["python_fallback"] = True
 
     return status
