@@ -62,7 +62,7 @@ while [[ $# -gt 0 ]]; do
             echo ""
             echo "Environment:"
             echo "  NO_COLOR=1       Disable colors"
-            echo "  PUPPY_TASK_ID    Override task ID detection"
+            echo "  PUP_TASK_ID      Override task ID detection"
             exit 0
             ;;
         -j|--json)
@@ -94,7 +94,7 @@ get_env_info() {
     "shell": "${SHELL:-unknown}",
     "term": "${TERM:-unknown}",
     "user": "${USER:-unknown}",
-    "puppy_task_id": "${PUPPY_TASK_ID:-auto-detected}"
+    "pup_task_id": "${PUP_TASK_ID:-${PUPPY_TASK_ID:-auto-detected}}"
 }
 EOF
 }
@@ -152,7 +152,7 @@ get_project_info() {
 EOF
 }
 
-# Build agent hierarchy tree (mock/example structure)
+# Build agent hierarchy tree
 # In real implementation, this would read from Code Puppy's state
 build_agent_tree() {
     local depth="${1:-0}"
@@ -174,24 +174,41 @@ build_agent_tree() {
     fi
 }
 
-# Get active tasks info
+# Get active tasks info from real context sources
 get_active_tasks() {
-    # This would integrate with Code Puppy's actual task tracking
-    # For now, providing a structure that shows what's expected
+    # Detect task ID from env or git branch heuristic
+    local task_id="${PUP_TASK_ID:-${PUPPY_TASK_ID:-}}"
+    if [[ -z "$task_id" ]]; then
+        local branch=""
+        branch=$(git branch --show-current 2>/dev/null || true)
+        if [[ -n "$branch" ]]; then
+            task_id=$(echo "$branch" | grep -oE 'bd-[0-9]+' | head -1 || true)
+        fi
+    fi
+
+    local task_name="unknown"
+    local task_status="unknown"
+    if [[ -n "$task_id" ]]; then
+        # Try to get task info from bd tool
+        local bd_output=""
+        bd_output=$(bd show "$task_id" 2>/dev/null || true)
+        if [[ -n "$bd_output" ]]; then
+            task_name=$(echo "$bd_output" | grep '^Title:' | sed 's/Title: *//' || echo "Task $task_id")
+            task_status=$(echo "$bd_output" | grep '^Status:' | sed 's/Status: *//' || echo "unknown")
+        else
+            task_name="Task $task_id"
+            task_status="active"
+        fi
+    fi
+
     cat <<EOF
 {
     "current_task": {
-        "id": "${PUPPY_TASK_ID:-bd-136}",
-        "name": "Proactive Guidance System",
-        "description": "Implement post-tool guidance and task context display",
-        "status": "in_progress",
-        "progress": 75
+        "id": "${task_id:-none}",
+        "name": "$task_name",
+        "status": "$task_status"
     },
-    "pending_tasks": [],
-    "completed_tasks": [
-        {"id": "bd-136.1", "name": "Create plugin structure", "completed_at": "2025-04-17"},
-        {"id": "bd-136.2", "name": "Implement guidance-injector.sh", "completed_at": "2025-04-17"}
-    ]
+    "source": "${task_id:+bd}${task_id:-env/git}"
 }
 EOF
 }
@@ -207,8 +224,8 @@ output_json() {
     "tasks": $(get_active_tasks),
     "plugin": {
         "name": "proactive_guidance",
-        "guidance_count": ${PUPPY_GUIDANCE_COUNT:-0},
-        "enabled": ${PUPPY_GUIDANCE_ENABLED:-true}
+        "guidance_count": ${PUP_GUIDANCE_COUNT:-${PUPPY_GUIDANCE_COUNT:-0}},
+        "enabled": ${PUP_GUIDANCE_ENABLED:-${PUPPY_GUIDANCE_ENABLED:-true}}
     }
 }
 EOF
@@ -223,9 +240,18 @@ output_text() {
     
     # Current Task
     echo -e "${BOLD}${CYAN}📋 Current Task:${RESET}"
-    echo -e "   ID: ${PUPPY_TASK_ID:-bd-136}"
-    echo -e "   Name: Proactive Guidance System"
-    echo -e "   Status: ${GREEN}in_progress${RESET} (75% complete)"
+    # Detect task ID from env or git branch
+    _task_id="${PUP_TASK_ID:-${PUPPY_TASK_ID:-}}"
+    if [[ -z "$_task_id" ]]; then
+        _branch=$(git branch --show-current 2>/dev/null || true)
+        _task_id=$(echo "$_branch" | grep -oE 'bd-[0-9]+' | head -1 || true)
+    fi
+    echo -e "   ID: ${_task_id:-none detected}"
+    if [[ -n "$_task_id" ]]; then
+        _task_name=$(bd show "$_task_id" 2>/dev/null | grep '^Title:' | sed 's/Title: *//' || echo "Task $_task_id")
+        echo -e "   Name: $_task_name"
+    fi
+    echo -e "   Branch: ${GREEN}$(git branch --show-current 2>/dev/null || echo 'unknown')${RESET}"
     echo ""
     
     # Environment
@@ -262,15 +288,15 @@ output_text() {
     
     # Guidance stats
     echo -e "${BOLD}${GREEN}📊 Guidance Stats:${RESET}"
-    echo -e "   Enabled: ${PUPPY_GUIDANCE_ENABLED:-true}"
-    echo -e "   Guidance shown: ${PUPPY_GUIDANCE_COUNT:-0}"
+    echo -e "   Enabled: ${PUP_GUIDANCE_ENABLED:-${PUPPY_GUIDANCE_ENABLED:-true}}"
+    echo -e "   Guidance shown: ${PUP_GUIDANCE_COUNT:-${PUPPY_GUIDANCE_COUNT:-0}}"
     echo ""
     
     # Suggested next actions
     echo -e "${BOLD}${BLUE}🎯 Suggested Actions:${RESET}"
     echo -e "   • Continue with current implementation"
     echo -e "   • Run tests: ${GRAY}pytest code_puppy/plugins/proactive_guidance/${RESET}"
-    echo -e "   • Check progress: ${GRAY}bd show bd-136${RESET}"
+    echo -e "   • Check progress: ${GRAY}bd list${RESET}"
     echo -e "   • View files: ${GRAY}ls -la code_puppy/plugins/proactive_guidance/${RESET}"
     echo ""
     
