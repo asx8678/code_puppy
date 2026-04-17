@@ -39,6 +39,8 @@ defmodule CodePuppyControl.Application do
       CodePuppyControl.HttpClient.child_spec(),
       # Parser registry (must start before any parsing operations)
       CodePuppyControl.Parsing.ParserRegistry,
+      # Register built-in parsers (must come after ParserRegistry)
+      CodePuppyControl.Parsing.Parsers,
       CodePuppyControl.Repo,
       {Phoenix.PubSub, name: CodePuppyControl.PubSub},
       CodePuppyControl.EventStore,
