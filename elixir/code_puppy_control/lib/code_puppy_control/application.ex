@@ -12,7 +12,8 @@ defmodule CodePuppyControl.Application do
   6. CodePuppyControl.AgentModelPinning - Agent-to-model pin configuration (ETS-backed)
   6a. CodePuppyControl.ModelRegistry - Model configuration registry (ETS-backed) (bd-96)
   6b. CodePuppyControl.ModelAvailability - Model health circuit breaker (ETS-backed)
-  6c. CodePuppyControl.Tools.AgentCatalogue - Agent catalogue with descriptions
+  6c. CodePuppyControl.ModelPacks - Role-based model packs (bd-100)
+  6d. CodePuppyControl.Tools.AgentCatalogue - Agent catalogue with descriptions
   7. CodePuppyControl.RoundRobinModel - Round-robin model rotation (ETS-backed)
   7a. CodePuppyControl.ModelsDevParser.Registry - Models.dev API registry (bd-74)
   8. CodePuppyControl.Run.Registry - Process registry for run tracking
@@ -43,6 +44,7 @@ defmodule CodePuppyControl.Application do
       CodePuppyControl.AgentModelPinning,
       CodePuppyControl.ModelRegistry,
       CodePuppyControl.ModelAvailability,
+      CodePuppyControl.ModelPacks,
       CodePuppyControl.Tools.AgentCatalogue,
       CodePuppyControl.RoundRobinModel,
       CodePuppyControl.ModelsDevParser.Registry,
