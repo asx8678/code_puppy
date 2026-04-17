@@ -6,6 +6,7 @@ defmodule CodePuppyControl.Application do
   1. CodePuppyControl.Repo - SQLite database for state persistence
   2. Phoenix.PubSub - Event distribution
   3. CodePuppyControl.EventStore - ETS-based event history for replay
+  4. CodePuppyControl.AgentModelPinning - Agent-to-model pin configuration (ETS-backed)
   4. CodePuppyControl.Run.Registry - Process registry for run tracking
   4. CodePuppyControl.Run.Supervisor - DynamicSupervisor for run processes
   5. CodePuppyControl.PythonWorker.Supervisor - DynamicSupervisor for Python workers
@@ -26,6 +27,7 @@ defmodule CodePuppyControl.Application do
       CodePuppyControl.Repo,
       {Phoenix.PubSub, name: CodePuppyControl.PubSub},
       CodePuppyControl.EventStore,
+      CodePuppyControl.AgentModelPinning,
       CodePuppyControl.Run.Registry,
       {CodePuppyControl.Run.Supervisor, []},
       CodePuppyControl.PythonWorker.Supervisor,

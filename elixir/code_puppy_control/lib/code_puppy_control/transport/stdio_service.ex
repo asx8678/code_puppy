@@ -45,6 +45,12 @@ defmodule CodePuppyControl.Transport.StdioService do
   - `file_read_batch` - Read multiple files
   - `grep_search` - Search for patterns in files
 
+  ### Agent Model Pinning
+  - `agent_pinning.get` - Get pinned model for an agent
+  - `agent_pinning.set` - Set pinned model for an agent
+  - `agent_pinning.clear` - Clear pin for an agent
+  - `agent_pinning.list` - List all agent-to-model pins
+
   ### Text Operations
   - `text_fuzzy_match` - Find best matching window using fuzzy matching
   - `text_unified_diff` - Generate unified diff between two strings
@@ -74,6 +80,7 @@ defmodule CodePuppyControl.Transport.StdioService do
 
   require Logger
 
+  alias CodePuppyControl.AgentModelPinning
   alias CodePuppyControl.FileOps
   alias CodePuppyControl.Protocol
 
@@ -570,6 +577,55 @@ defmodule CodePuppyControl.Transport.StdioService do
         valid = CodePuppyControl.HashlineNif.validate_hashline_anchor(idx, line, expected_hash)
         Protocol.encode_response(%{"valid" => valid}, id)
     end
+  end
+
+  # agent_pinning.get - Get pinned model for an agent (bd-72)
+  defp handle_request("agent_pinning.get", params, id) do
+    agent_name = params["agent_name"]
+
+    if is_nil(agent_name) or not is_binary(agent_name) do
+      Protocol.encode_error(-32602, "Missing or invalid param: agent_name", nil, id)
+    else
+      model = AgentModelPinning.get_pinned_model(agent_name)
+      Protocol.encode_response(%{"agent_name" => agent_name, "model" => model}, id)
+    end
+  end
+
+  # agent_pinning.set - Set pinned model for an agent (bd-72)
+  defp handle_request("agent_pinning.set", params, id) do
+    agent_name = params["agent_name"]
+    model = params["model"]
+
+    cond do
+      is_nil(agent_name) or not is_binary(agent_name) ->
+        Protocol.encode_error(-32602, "Missing or invalid param: agent_name", nil, id)
+
+      is_nil(model) or not is_binary(model) ->
+        Protocol.encode_error(-32602, "Missing or invalid param: model", nil, id)
+
+      true ->
+        :ok = AgentModelPinning.set_pinned_model(agent_name, model)
+        Protocol.encode_response(%{"agent_name" => agent_name, "model" => model}, id)
+    end
+  end
+
+  # agent_pinning.clear - Clear pin for an agent (bd-72)
+  defp handle_request("agent_pinning.clear", params, id) do
+    agent_name = params["agent_name"]
+
+    if is_nil(agent_name) or not is_binary(agent_name) do
+      Protocol.encode_error(-32602, "Missing or invalid param: agent_name", nil, id)
+    else
+      :ok = AgentModelPinning.clear_pinned_model(agent_name)
+      Protocol.encode_response(%{"agent_name" => agent_name, "cleared" => true}, id)
+    end
+  end
+
+  # agent_pinning.list - List all agent-to-model pins (bd-72)
+  defp handle_request("agent_pinning.list", _params, id) do
+    pins = AgentModelPinning.list_pins()
+    pin_list = Enum.map(pins, fn {agent, model} -> %{"agent_name" => agent, "model" => model} end)
+    Protocol.encode_response(%{"pins" => pin_list, "count" => length(pin_list)}, id)
   end
 
   # Method not found handler
