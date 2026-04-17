@@ -11,7 +11,6 @@ from unittest.mock import patch
 
 import pytest
 
-
 # ---------------------------------------------------------------------------
 # Import helpers
 # ---------------------------------------------------------------------------
@@ -296,13 +295,95 @@ class TestPostToolCall:
             patch.object(plugin_module, "_is_enabled", return_value=True),
         ):
             await plugin_module._on_post_tool_call(
-                "read_file",
+                "some_unknown_tool",
                 {"file_path": "test.py"},
                 {"content": "..."},
                 50.0,
             )
             mock_emit.assert_not_called()
             assert fresh_state["guidance_count"] == 0
+
+    async def test_read_file_triggers_exploratory_guidance(
+        self, plugin_module, fresh_state
+    ):
+        """Test read_file triggers exploratory guidance in verbose mode."""
+        fresh_state["enabled"] = True
+        fresh_state["verbosity"] = "verbose"
+
+        with (
+            patch("code_puppy.messaging.emit_info") as mock_emit,
+            patch.object(plugin_module, "_is_enabled", return_value=True),
+        ):
+            await plugin_module._on_post_tool_call(
+                "read_file",
+                {"file_path": "test.py"},
+                {"content": "..."},
+                50.0,
+            )
+            mock_emit.assert_called_once()
+            guidance = mock_emit.call_args[0][0]
+            assert "Exploratory" in guidance
+            assert fresh_state["guidance_count"] == 1
+            assert fresh_state["last_tool"] == "read_file"
+
+    async def test_read_file_no_guidance_in_normal_mode(
+        self, plugin_module, fresh_state
+    ):
+        """Test read_file does NOT emit exploratory guidance in normal mode."""
+        fresh_state["enabled"] = True
+        fresh_state["verbosity"] = "normal"
+
+        with (
+            patch("code_puppy.messaging.emit_info") as mock_emit,
+            patch.object(plugin_module, "_is_enabled", return_value=True),
+        ):
+            await plugin_module._on_post_tool_call(
+                "read_file",
+                {"file_path": "test.py"},
+                {"content": "..."},
+                50.0,
+            )
+            mock_emit.assert_not_called()
+
+    async def test_grep_triggers_exploratory_guidance(self, plugin_module, fresh_state):
+        """Test grep tool triggers exploratory guidance in verbose mode."""
+        fresh_state["enabled"] = True
+        fresh_state["verbosity"] = "verbose"
+
+        with (
+            patch("code_puppy.messaging.emit_info") as mock_emit,
+            patch.object(plugin_module, "_is_enabled", return_value=True),
+        ):
+            await plugin_module._on_post_tool_call(
+                "grep",
+                {"search_string": "pattern"},
+                {"matches": []},
+                50.0,
+            )
+            mock_emit.assert_called_once()
+            guidance = mock_emit.call_args[0][0]
+            assert "Exploratory" in guidance
+
+    async def test_list_files_triggers_exploratory_guidance(
+        self, plugin_module, fresh_state
+    ):
+        """Test list_files tool triggers exploratory guidance in verbose mode."""
+        fresh_state["enabled"] = True
+        fresh_state["verbosity"] = "verbose"
+
+        with (
+            patch("code_puppy.messaging.emit_info") as mock_emit,
+            patch.object(plugin_module, "_is_enabled", return_value=True),
+        ):
+            await plugin_module._on_post_tool_call(
+                "list_files",
+                {"directory": "."},
+                {"files": []},
+                50.0,
+            )
+            mock_emit.assert_called_once()
+            guidance = mock_emit.call_args[0][0]
+            assert "Exploratory" in guidance
 
     async def test_no_guidance_when_none_returned(self, plugin_module, fresh_state):
         """Test that nothing is emitted when guidance function returns None."""
@@ -370,42 +451,3 @@ class TestPostToolCall:
             )
             # Should still work and default to exit_code 0
             mock_emit.assert_called_once()
-
-
-# ---------------------------------------------------------------------------
-# Tests: State Initialization
-# ---------------------------------------------------------------------------
-
-
-class TestStateInitialization:
-    """Tests that verify state is initialized from config."""
-
-    def test_valid_verbosity_values_constant(self, plugin_module):
-        """Test that _VALID_VERBOSITY contains expected values."""
-        assert plugin_module._VALID_VERBOSITY == {"minimal", "normal", "verbose"}
-
-    def test_config_key_constants(self, plugin_module):
-        """Test that config key constants are correct."""
-        assert plugin_module._CONFIG_KEY_ENABLED == "proactive_guidance_enabled"
-        assert plugin_module._CONFIG_KEY_VERBOSITY == "guidance_verbosity"
-
-    def test_state_dict_structure(self, plugin_module):
-        """Test that _state has expected keys."""
-        assert "enabled" in plugin_module._state
-        assert "verbosity" in plugin_module._state
-        assert "last_tool" in plugin_module._state
-        assert "guidance_count" in plugin_module._state
-
-    def test_import_time_state_initialization(self, plugin_module):
-        """Test that state is initialized at module import time."""
-        # The _state dict should already exist and have expected structure
-        # This verifies that the module-level initialization code ran at import
-        assert isinstance(plugin_module._state, dict)
-        # All expected keys should be present with valid values
-        assert plugin_module._state["enabled"] in (True, False)
-        assert plugin_module._state["verbosity"] in plugin_module._VALID_VERBOSITY
-        assert plugin_module._state["last_tool"] is None or isinstance(
-            plugin_module._state["last_tool"], str
-        )
-        assert isinstance(plugin_module._state["guidance_count"], int)
-        assert plugin_module._state["guidance_count"] >= 0

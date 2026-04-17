@@ -19,6 +19,54 @@
 
 set -euo pipefail
 
+# Escape a string for safe embedding in a JSON double-quoted value.
+# Handles backslash, double-quote, and common control characters.
+json_escape() {
+    local s="$1"
+    s="${s//\\/\\\\}"   # backslash  → \\
+    s="${s//\"/\\\"}"   # double-quote → \"
+    s="${s//$'\t'/\\t}"  # tab → \t
+    s="${s//$'\n'/\\n}"  # newline → \n
+    s="${s//$'\r'/\\r}"  # carriage-return → \r
+    printf '%s' "$s"
+}
+
+
+# Normalize an env value to a strict JSON boolean (true / false).
+# Accepts: true/false, 1/0, yes/no, on/off (case-insensitive).
+# Anything else defaults to the given fallback (default: true).
+normalize_bool() {
+    local raw="${1:-}"
+    local fallback="${2:-true}"
+    local lower
+    lower=$(printf '%s' "$raw" | tr '[:upper:]' '[:lower:]')
+    case "$lower" in
+        true|1|yes|on)  echo "true"  ;;
+        false|0|no|off) echo "false" ;;
+        "")             echo "$fallback" ;;
+        *)              echo "$fallback" ;;
+    esac
+}
+
+# Normalize an env value to a safe integer.
+# Accepts ONLY strings composed entirely of digits (0-9), optionally with
+# leading zeros.  Anything else (including negatives, ranges, or mixed
+# alphanumeric) falls back to the given default (default: 0).
+normalize_int() {
+    local raw="${1:-}"
+    local fallback="${2:-0}"
+    # Reject anything that is not purely digits
+    if [[ ! "$raw" =~ ^[0-9]+$ ]]; then
+        echo "$fallback"
+        return
+    fi
+    # Strip leading zeros so we don't emit octal-looking values
+    local cleaned
+    cleaned="${raw#"${raw%%[!0]*}"}"
+    [[ -z "$cleaned" ]] && cleaned=0
+    echo "$cleaned"
+}
+
 # Configuration
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 OUTPUT_FORMAT="text"
@@ -62,7 +110,7 @@ while [[ $# -gt 0 ]]; do
             echo ""
             echo "Environment:"
             echo "  NO_COLOR=1       Disable colors"
-            echo "  PUPPY_TASK_ID    Override task ID detection"
+            echo "  PUP_TASK_ID      Override task ID detection"
             exit 0
             ;;
         -j|--json)
@@ -89,12 +137,12 @@ done
 get_env_info() {
     cat <<EOF
 {
-    "cwd": "$(pwd)",
-    "home": "${HOME:-unknown}",
-    "shell": "${SHELL:-unknown}",
-    "term": "${TERM:-unknown}",
-    "user": "${USER:-unknown}",
-    "puppy_task_id": "${PUPPY_TASK_ID:-auto-detected}"
+    "cwd": "$(json_escape "$(pwd)")",
+    "home": "$(json_escape "${HOME:-unknown}")",
+    "shell": "$(json_escape "${SHELL:-unknown}")",
+    "term": "$(json_escape "${TERM:-unknown}")",
+    "user": "$(json_escape "${USER:-unknown}")",
+    "pup_task_id": "$(json_escape "${PUP_TASK_ID:-${PUPPY_TASK_ID:-auto-detected}}")"
 }
 EOF
 }
@@ -106,10 +154,10 @@ get_git_info() {
     if git rev-parse --git-dir > /dev/null 2>&1; then
         git_info=$(cat <<EOF
 {
-    "branch": "$(git branch --show-current 2>/dev/null || echo 'unknown')",
-    "commit": "$(git rev-parse --short HEAD 2>/dev/null || echo 'unknown')",
+    "branch": "$(json_escape "$(git branch --show-current 2>/dev/null || echo 'unknown')")",
+    "commit": "$(json_escape "$(git rev-parse --short HEAD 2>/dev/null || echo 'unknown')")",
     "dirty": $(git diff --quiet 2>/dev/null && echo "false" || echo "true"),
-    "remote_url": "$(git remote get-url origin 2>/dev/null || echo 'none')"
+    "remote_url": "$(json_escape "$(git remote get-url origin 2>/dev/null || echo 'none')")"
 }
 EOF
 )
@@ -118,41 +166,54 @@ EOF
     echo "$git_info"
 }
 
-# Get project info
-get_project_info() {
-    local project_type="unknown"
-    local project_files="[]"
-    
-    # Detect project type
+# Shared project-type detector (single source of truth for JSON and text).
+# Returns two variables: _proj_type (machine key) and _proj_display (human label).
+detect_project_type() {
     if [[ -f "pyproject.toml" ]]; then
-        project_type="python"
-        project_files='["pyproject.toml", "requirements.txt"]'
+        _proj_type="python"
+        _proj_display="Python"
     elif [[ -f "package.json" ]]; then
-        project_type="nodejs"
-        project_files='["package.json", "package-lock.json", "node_modules/"]'
+        _proj_type="nodejs"
+        _proj_display="Node.js"
     elif [[ -f "Cargo.toml" ]]; then
-        project_type="rust"
-        project_files='["Cargo.toml", "Cargo.lock", "target/"]'
+        _proj_type="rust"
+        _proj_display="Rust"
     elif [[ -f "go.mod" ]]; then
-        project_type="go"
-        project_files='["go.mod", "go.sum"]'
+        _proj_type="go"
+        _proj_display="Go"
     elif [[ -f "pom.xml" ]] || [[ -f "build.gradle" ]]; then
-        project_type="java"
-        project_files='["pom.xml", "build.gradle"]'
+        _proj_type="java"
+        _proj_display="Java"
     elif [[ -f "Makefile" ]] || [[ -f "CMakeLists.txt" ]]; then
-        project_type="c/c++"
-        project_files='["Makefile", "CMakeLists.txt"]'
+        _proj_type="c/c++"
+        _proj_display="C/C++"
+    else
+        _proj_type="unknown"
+        _proj_display="unknown"
     fi
-    
+}
+
+# Get project info (JSON)
+get_project_info() {
+    detect_project_type
+    local project_files="[]"
+    case "$_proj_type" in
+        python)   project_files='["pyproject.toml", "requirements.txt"]' ;;
+        nodejs)   project_files='["package.json", "package-lock.json", "node_modules/"]' ;;
+        rust)     project_files='["Cargo.toml", "Cargo.lock", "target/"]' ;;
+        go)       project_files='["go.mod", "go.sum"]' ;;
+        java)     project_files='["pom.xml", "build.gradle"]' ;;
+        c/c++)    project_files='["Makefile", "CMakeLists.txt"]' ;;
+    esac
     cat <<EOF
 {
-    "type": "$project_type",
+    "type": "$_proj_type",
     "key_files": $project_files
 }
 EOF
 }
 
-# Build agent hierarchy tree (mock/example structure)
+# Build agent hierarchy tree
 # In real implementation, this would read from Code Puppy's state
 build_agent_tree() {
     local depth="${1:-0}"
@@ -174,24 +235,46 @@ build_agent_tree() {
     fi
 }
 
-# Get active tasks info
+# Get active tasks info from real context sources
 get_active_tasks() {
-    # This would integrate with Code Puppy's actual task tracking
-    # For now, providing a structure that shows what's expected
+    # Detect task ID from env or git branch heuristic
+    local task_id="${PUP_TASK_ID:-${PUPPY_TASK_ID:-}}"
+    if [[ -z "$task_id" ]]; then
+        local branch=""
+        branch=$(git branch --show-current 2>/dev/null || true)
+        if [[ -n "$branch" ]]; then
+            task_id=$(echo "$branch" | grep -oE 'bd-[0-9]+' | head -1 || true)
+        fi
+    fi
+
+    local task_name="unknown"
+    local task_status="unknown"
+    if [[ -n "$task_id" ]]; then
+        # Try to get task info from bd tool
+        local bd_output=""
+        bd_output=$(bd show "$task_id" 2>/dev/null || true)
+        if [[ -n "$bd_output" ]]; then
+            task_name=$(echo "$bd_output" | grep '^Title:' | sed 's/Title: *//' || echo "Task $task_id")
+            task_status=$(echo "$bd_output" | grep '^Status:' | sed 's/Status: *//' || echo "unknown")
+        else
+            task_name="Task $task_id"
+            task_status="active"
+        fi
+    fi
+
+    local task_source="env/git"
+    if [[ -n "$task_id" ]] && [[ -n "$bd_output" ]]; then
+        task_source="bd"
+    fi
+
     cat <<EOF
 {
     "current_task": {
-        "id": "${PUPPY_TASK_ID:-bd-136}",
-        "name": "Proactive Guidance System",
-        "description": "Implement post-tool guidance and task context display",
-        "status": "in_progress",
-        "progress": 75
+        "id": "$(json_escape "${task_id:-none}")",
+        "name": "$(json_escape "$task_name")",
+        "status": "$(json_escape "$task_status")"
     },
-    "pending_tasks": [],
-    "completed_tasks": [
-        {"id": "bd-136.1", "name": "Create plugin structure", "completed_at": "2025-04-17"},
-        {"id": "bd-136.2", "name": "Implement guidance-injector.sh", "completed_at": "2025-04-17"}
-    ]
+    "source": "$(json_escape "$task_source")"
 }
 EOF
 }
@@ -207,8 +290,8 @@ output_json() {
     "tasks": $(get_active_tasks),
     "plugin": {
         "name": "proactive_guidance",
-        "guidance_count": ${PUPPY_GUIDANCE_COUNT:-0},
-        "enabled": ${PUPPY_GUIDANCE_ENABLED:-true}
+        "guidance_count": $(normalize_int "${PUP_GUIDANCE_COUNT:-${PUPPY_GUIDANCE_COUNT:-0}}" 0),
+        "enabled": $(normalize_bool "${PUP_GUIDANCE_ENABLED:-${PUPPY_GUIDANCE_ENABLED:-true}}" true)
     }
 }
 EOF
@@ -223,9 +306,18 @@ output_text() {
     
     # Current Task
     echo -e "${BOLD}${CYAN}📋 Current Task:${RESET}"
-    echo -e "   ID: ${PUPPY_TASK_ID:-bd-136}"
-    echo -e "   Name: Proactive Guidance System"
-    echo -e "   Status: ${GREEN}in_progress${RESET} (75% complete)"
+    # Detect task ID from env or git branch
+    _task_id="${PUP_TASK_ID:-${PUPPY_TASK_ID:-}}"
+    if [[ -z "$_task_id" ]]; then
+        _branch=$(git branch --show-current 2>/dev/null || true)
+        _task_id=$(echo "$_branch" | grep -oE 'bd-[0-9]+' | head -1 || true)
+    fi
+    echo -e "   ID: ${_task_id:-none detected}"
+    if [[ -n "$_task_id" ]]; then
+        _task_name=$(bd show "$_task_id" 2>/dev/null | grep '^Title:' | sed 's/Title: *//' || echo "Task $_task_id")
+        echo -e "   Name: $_task_name"
+    fi
+    echo -e "   Branch: ${GREEN}$(git branch --show-current 2>/dev/null || echo 'unknown')${RESET}"
     echo ""
     
     # Environment
@@ -242,12 +334,8 @@ output_text() {
     
     # Project
     echo -e "${BOLD}${MAGENTA}📁 Project:${RESET}"
-    local proj_type="unknown"
-    [[ -f "pyproject.toml" ]] && proj_type="Python"
-    [[ -f "package.json" ]] && proj_type="Node.js"
-    [[ -f "Cargo.toml" ]] && proj_type="Rust"
-    [[ -f "go.mod" ]] && proj_type="Go"
-    echo -e "   Type: $proj_type"
+    detect_project_type
+    echo -e "   Type: $_proj_display"
     
     # Detect Code Puppy project specifically
     if [[ -d "code_puppy" ]] && [[ -f "pyproject.toml" ]]; then
@@ -262,15 +350,15 @@ output_text() {
     
     # Guidance stats
     echo -e "${BOLD}${GREEN}📊 Guidance Stats:${RESET}"
-    echo -e "   Enabled: ${PUPPY_GUIDANCE_ENABLED:-true}"
-    echo -e "   Guidance shown: ${PUPPY_GUIDANCE_COUNT:-0}"
+    echo -e "   Enabled: ${PUP_GUIDANCE_ENABLED:-${PUPPY_GUIDANCE_ENABLED:-true}}"
+    echo -e "   Guidance shown: ${PUP_GUIDANCE_COUNT:-${PUPPY_GUIDANCE_COUNT:-0}}"
     echo ""
     
     # Suggested next actions
     echo -e "${BOLD}${BLUE}🎯 Suggested Actions:${RESET}"
     echo -e "   • Continue with current implementation"
     echo -e "   • Run tests: ${GRAY}pytest code_puppy/plugins/proactive_guidance/${RESET}"
-    echo -e "   • Check progress: ${GRAY}bd show bd-136${RESET}"
+    echo -e "   • Check progress: ${GRAY}bd list${RESET}"
     echo -e "   • View files: ${GRAY}ls -la code_puppy/plugins/proactive_guidance/${RESET}"
     echo ""
     

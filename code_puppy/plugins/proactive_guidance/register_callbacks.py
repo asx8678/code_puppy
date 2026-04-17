@@ -11,18 +11,30 @@ Configuration (puppy.cfg):
 Hooks:
     - post_tool_call: Injects next-step guidance after tool execution
     - custom_command: Provides /guidance command for status/toggle
+    - agent_run_start: Surfaces task context when agents begin
 """
 
 from __future__ import annotations
 
-from pathlib import Path
+import asyncio
+import logging
+import os
+import subprocess
 from typing import Any
 
 from code_puppy.callbacks import register_callback
+from code_puppy.plugins.proactive_guidance._guidance import (  # noqa: F401
+    _get_agent_guidance,
+    _get_exploratory_guidance,
+    _get_shell_guidance,
+    _get_write_guidance,
+)
 
-# ---------------------------------------------------------------------------
+logger = logging.getLogger(__name__)
+
+# --------------------------------------------------------------------------
 # Config helpers (lazy-imported to avoid cycles at plugin load time)
-# ---------------------------------------------------------------------------
+# --------------------------------------------------------------------------
 
 _CONFIG_KEY_ENABLED = "proactive_guidance_enabled"
 _CONFIG_KEY_VERBOSITY = "guidance_verbosity"
@@ -34,6 +46,8 @@ _state: dict[str, Any] = {
     "verbosity": "normal",
     "last_tool": None,
     "guidance_count": 0,
+    "last_agent": None,
+    "last_agent_model": None,
 }
 
 
@@ -45,8 +59,8 @@ def _get_config_enabled() -> bool:
         raw = get_value(_CONFIG_KEY_ENABLED)
         if raw is not None:
             return raw.strip().lower() in ("true", "1", "yes", "on")
-    except Exception:
-        pass
+    except Exception as exc:
+        logger.debug("proactive_guidance: config read error: %s", exc)
     return True
 
 
@@ -58,8 +72,8 @@ def _get_config_verbosity() -> str:
         raw = get_value(_CONFIG_KEY_VERBOSITY)
         if raw and raw.strip().lower() in _VALID_VERBOSITY:
             return raw.strip().lower()
-    except Exception:
-        pass
+    except Exception as exc:
+        logger.debug("proactive_guidance: config read error: %s", exc)
     return "normal"
 
 
@@ -68,175 +82,111 @@ def _is_enabled() -> bool:
     return _state["enabled"] and _get_config_enabled()
 
 
-# ---------------------------------------------------------------------------
-# Guidance generators
-# ---------------------------------------------------------------------------
+# --------------------------------------------------------------------------
+# Task-context helpers (fail gracefully, never crash)
+# --------------------------------------------------------------------------
 
 
-def _get_write_guidance(
-    file_path: str, content_preview: str | None = None
-) -> str | None:
-    """Generate guidance after write_file tool usage.
+def _get_git_branch() -> str | None:
+    """Best-effort git branch detection."""
+    try:
+        result = subprocess.run(
+            ["git", "branch", "--show-current"],
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+        if result.returncode == 0:
+            return result.stdout.strip() or None
+    except Exception as exc:
+        logger.debug("proactive_guidance: git branch detection failed: %s", exc)
+    return None
 
-    Args:
-        file_path: Path to the file that was written
-        content_preview: Optional preview of content for context
 
-    Returns:
-        Guidance string or None if no guidance applicable
+def _get_git_head_short() -> str | None:
+    """Best-effort short HEAD hash."""
+    try:
+        result = subprocess.run(
+            ["git", "rev-parse", "--short", "HEAD"],
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+        if result.returncode == 0:
+            return result.stdout.strip() or None
+    except Exception as exc:
+        logger.debug("proactive_guidance: git rev-parse failed: %s", exc)
+    return None
+
+
+def _detect_task_context() -> dict[str, Any]:
+    """Gather real context from env/session/git/bd — fail gracefully.
+
+    Returns a dict with whatever context was obtainable.
     """
-    verbosity = _state.get("verbosity", "normal")
-    path = Path(file_path)
-    extension = path.suffix.lower()
+    ctx: dict[str, Any] = {}
 
-    suggestions = []
+    # Git context
+    branch = _get_git_branch()
+    if branch:
+        ctx["git_branch"] = branch
+    head = _get_git_head_short()
+    if head:
+        ctx["git_head"] = head
 
-    # Check file type and offer relevant next steps
-    if extension in (".py", ".js", ".ts", ".jsx", ".tsx", ".rs", ".go", ".java"):
-        suggestions.append(
-            f"💡 Run tests: `/shell pytest {file_path}` or `/shell npm test`"
+    # Environment context
+    ctx["cwd"] = os.getcwd()
+    ctx["user"] = os.environ.get("USER", "unknown")
+
+    # Task ID from env (e.g. PUP_TASK_ID or from branch name heuristic)
+    task_id = os.environ.get("PUP_TASK_ID") or os.environ.get("PUPPY_TASK_ID")
+    if not task_id and branch:
+        # Heuristic: extract bd-NNN from branch name
+        import re
+
+        match = re.search(r"(bd-\d+)", branch)
+        if match:
+            task_id = match.group(1)
+    if task_id:
+        ctx["task_id"] = task_id
+
+    # bd tool — best-effort, not critical
+    try:
+        result = subprocess.run(
+            ["bd", "list", "--format=json"],
+            capture_output=True,
+            text=True,
+            timeout=5,
         )
-        suggestions.append(
-            f"🔍 Check syntax: `/shell python -m py_compile {file_path}`"
-        )
+        if result.returncode == 0 and result.stdout.strip():
+            ctx["bd_available"] = True
+    except Exception:
+        pass  # bd not installed — that's fine
 
-    elif extension in (".md", ".rst", ".txt"):
-        suggestions.append("📝 Preview: `/shell cat {} | head -20`".format(file_path))
-
-    elif extension in (".json", ".yaml", ".yml", ".toml"):
-        suggestions.append(
-            f"✅ Validate: `/shell python -c 'import json; json.load(open(\"{file_path}\"))'`"
-        )
-
-    elif extension in (".sh", ".bash", ".zsh"):
-        suggestions.append(
-            f"🔐 Check script: `/shell shellcheck {file_path}` (if installed)"
-        )
-        suggestions.append(f"▶️ Make executable: `/shell chmod +x {file_path}`")
-
-    # General suggestions for all files
-    if verbosity != "minimal":
-        suggestions.append(f"📂 View file: `/file {file_path}`")
-        suggestions.append("🔎 Search for usages: `/grep pattern directory`")
-
-    if verbosity == "verbose":
-        suggestions.append("🧪 Create a test file for this implementation")
-        suggestions.append("📊 Check git diff: `/shell git diff --stat`")
-
-    if not suggestions:
-        return None
-
-    return "\n".join(["✨ Next steps for your new file:"] + suggestions[:4])
+    return ctx
 
 
-def _get_shell_guidance(command: str, exit_code: int = 0) -> str | None:
-    """Generate guidance after run_shell_command tool usage.
+def _format_task_context(ctx: dict[str, Any]) -> str:
+    """Format task context dict into a human-readable summary."""
+    parts: list[str] = ["📋 Task Context"]
 
-    Args:
-        command: The shell command that was executed
-        exit_code: Exit code from the command (0 = success)
+    if "task_id" in ctx:
+        parts.append(f"   Task: {ctx['task_id']}")
+    if "git_branch" in ctx:
+        parts.append(f"   Branch: {ctx['git_branch']}")
+    if "git_head" in ctx:
+        parts.append(f"   Commit: {ctx['git_head']}")
+    if "cwd" in ctx:
+        parts.append(f"   CWD: {ctx['cwd']}")
 
-    Returns:
-        Guidance string or None if no guidance applicable
-    """
-    verbosity = _state.get("verbosity", "normal")
-    suggestions = []
-
-    # Parse command to understand context
-    cmd_lower = command.lower().strip()
-
-    # Success case
-    if exit_code == 0:
-        if any(x in cmd_lower for x in ("pytest", "test", "npm test", "cargo test")):
-            suggestions.append(
-                "✅ Tests passed! Ready to commit? `/git commit -m '...'`"
-            )
-            if verbosity != "minimal":
-                suggestions.append(
-                    "📊 Coverage report: `/shell pytest --cov` (if pytest-cov installed)"
-                )
-
-        elif any(x in cmd_lower for x in ("git add", "git commit")):
-            suggestions.append(
-                "🚀 Push changes: `/shell git push origin $(git branch --show-current)`"
-            )
-            if verbosity == "verbose":
-                suggestions.append(
-                    "🔄 Or create PR: `/shell gh pr create` (if gh CLI installed)"
-                )
-
-        elif any(
-            x in cmd_lower for x in ("build", "make", "cargo build", "npm run build")
-        ):
-            suggestions.append("🎯 Build succeeded! Run it: `/shell ./your_binary`")
-            if verbosity != "minimal":
-                suggestions.append("📦 Or package: Check your build artifacts")
-
-        elif (
-            "pip install" in cmd_lower
-            or "npm install" in cmd_lower
-            or "cargo add" in cmd_lower
-        ):
-            suggestions.append(
-                "📦 Dependencies updated! Consider locking: `/shell pip freeze > requirements.txt`"
-            )
-
-        elif "grep" in cmd_lower or "find" in cmd_lower:
-            suggestions.append("🔍 Found matches! Open a file: `/file path/to/file.py`")
-
-        elif "ls" in cmd_lower or "tree" in cmd_lower:
-            suggestions.append(
-                "📂 Explore further: `/files directory` for detailed listing"
-            )
-
-        else:
-            suggestions.append("✅ Command completed successfully!")
-
-    # Error case
-    else:
-        suggestions.append(f"⚠️ Command failed with exit code {exit_code}")
-        suggestions.append("🔧 Debug options:")
-        suggestions.append("   - Check error output above")
-        suggestions.append("   - Run with verbose: Add `-v` or `--verbose` flags")
-        suggestions.append("   - Check environment: `/shell env | grep -i <key>`")
-
-    if verbosity != "minimal" and exit_code == 0:
-        suggestions.append("📜 Run similar command: Use ↑ or `/shell your_command`")
-
-    return "\n".join(suggestions)
+    if len(parts) == 1:
+        return ""  # No useful context gathered
+    return "\n".join(parts)
 
 
-def _get_agent_guidance(
-    agent_name: str, result_preview: str | None = None
-) -> str | None:
-    """Generate guidance after invoke_agent tool usage.
-
-    Args:
-        agent_name: Name of the agent that was invoked
-        result_preview: Optional preview of agent result
-
-    Returns:
-        Guidance string or None if no guidance applicable
-    """
-    verbosity = _state.get("verbosity", "normal")
-    suggestions = []
-
-    suggestions.append(f"🤖 Agent '{agent_name}' completed!")
-
-    if verbosity != "minimal":
-        suggestions.append("📋 Review the agent's output above")
-        suggestions.append("🔄 Iterate: Make adjustments and re-invoke if needed")
-
-    if verbosity == "verbose":
-        suggestions.append("🔍 Compare with parent task context")
-        suggestions.append("📝 Document learnings in code comments")
-
-    return "\n".join(suggestions)
-
-
-# ---------------------------------------------------------------------------
+# --------------------------------------------------------------------------
 # Post-tool call hook
-# ---------------------------------------------------------------------------
+# --------------------------------------------------------------------------
 
 
 async def _on_post_tool_call(
@@ -269,11 +219,9 @@ async def _on_post_tool_call(
             guidance = _get_write_guidance(
                 file_path, content[:200] if content else None
             )
-
         elif tool_name == "replace_in_file":
             file_path = tool_args.get("file_path", "")
             guidance = _get_write_guidance(file_path, "replacement")
-
         elif tool_name == "agent_run_shell_command":
             command = tool_args.get("command", "")
             # Try to extract exit code from result
@@ -281,24 +229,56 @@ async def _on_post_tool_call(
             if isinstance(result, dict):
                 exit_code = result.get("exit_code", 0)
             guidance = _get_shell_guidance(command, exit_code)
-
         elif tool_name == "invoke_agent":
             agent_name = tool_args.get("agent_name", "unknown")
             guidance = _get_agent_guidance(agent_name)
+        elif tool_name in ("read_file", "grep", "list_files"):
+            guidance = _get_exploratory_guidance(tool_name, tool_args)
 
         if guidance:
             emit_info(f"\n{guidance}")
             _state["guidance_count"] += 1
             _state["last_tool"] = tool_name
 
-    except Exception:
+    except Exception as exc:
         # Never crash the app because of guidance
-        pass
+        logger.debug("proactive_guidance: error in post_tool_call: %s", exc)
 
 
-# ---------------------------------------------------------------------------
+# --------------------------------------------------------------------------
+# Agent run start hook — surface task context
+# --------------------------------------------------------------------------
+
+
+async def _on_agent_run_start(
+    agent_name: str,
+    model_name: str,
+    session_id: str | None = None,
+    **kwargs: Any,
+) -> None:
+    """Surface task context when an agent starts a run."""
+    if not _is_enabled():
+        return
+
+    _state["last_agent"] = agent_name
+    _state["last_agent_model"] = model_name
+
+    try:
+        ctx = await asyncio.to_thread(_detect_task_context)
+        summary = _format_task_context(ctx)
+        if not summary:
+            return
+
+        from code_puppy.messaging import emit_info
+
+        emit_info(f"\n{summary}")
+    except Exception as exc:
+        logger.debug("proactive_guidance: error in agent_run_start: %s", exc)
+
+
+# --------------------------------------------------------------------------
 # Slash command UX: /guidance status | on | off | test
-# ---------------------------------------------------------------------------
+# --------------------------------------------------------------------------
 
 
 def _on_custom_help() -> list[tuple[str, str]]:
@@ -314,8 +294,9 @@ def _handle_custom_command(command: str, name: str) -> bool | str | None:
 
     try:
         from code_puppy.messaging import emit_info
-    except Exception:
-        return True  # Can't emit — silently bail.
+    except Exception as exc:
+        logger.debug("proactive_guidance: emit_info unavailable: %s", exc)
+        return True  # Can't emit — bail.
 
     parts = command.strip().split(maxsplit=2)
     sub = parts[1].strip().lower() if len(parts) >= 2 else "status"
@@ -376,14 +357,20 @@ def _handle_custom_command(command: str, name: str) -> bool | str | None:
     return True
 
 
-# ---------------------------------------------------------------------------
+# --------------------------------------------------------------------------
 # Registration — module scope, as required by plugin loader
-# ---------------------------------------------------------------------------
+# --------------------------------------------------------------------------
 
 # Initialize state from config
 _state["enabled"] = _get_config_enabled()
 _state["verbosity"] = _get_config_verbosity()
 
+# Share state with the guidance submodule so generators can read verbosity
+import code_puppy.plugins.proactive_guidance._guidance as _g  # noqa: E402
+
+_g._state = _state
+
 register_callback("post_tool_call", _on_post_tool_call)
+register_callback("agent_run_start", _on_agent_run_start)
 register_callback("custom_command_help", _on_custom_help)
 register_callback("custom_command", _handle_custom_command)
