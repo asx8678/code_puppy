@@ -34,6 +34,7 @@ defmodule CodePuppyControl.ModelRegistry do
   - `"round_robin"` - Round-robin model rotation
   - `"gemini"` - Google Gemini models
   - `"gemini_oauth"` - Gemini with OAuth authentication
+  - `"custom_gemini"` - Custom Gemini-compatible endpoint
 
   ## API
 
@@ -44,7 +45,7 @@ defmodule CodePuppyControl.ModelRegistry do
   - `get_model_type/1` - Resolve model type from config
   - `list_model_names/0` - List all available model names
   - `list_model_types/0` - List all unique model types from current configs
-  - `is_type_supported/1` - Check if a model type is known
+  - `type_supported?/1` - Check if a model type is known
 
   ## Examples
 
@@ -59,10 +60,10 @@ defmodule CodePuppyControl.ModelRegistry do
       iex> ModelRegistry.list_model_names()
       ["firepass-kimi-k2p5-turbo", "zai-glm-5-turbo-coding", ...]
 
-      iex> ModelRegistry.is_type_supported("openai")
+      iex> ModelRegistry.type_supported?("openai")
       true
 
-      iex> ModelRegistry.is_type_supported("unknown_type")
+      iex> ModelRegistry.type_supported?("unknown_type")
       false
   """
 
@@ -122,6 +123,8 @@ defmodule CodePuppyControl.ModelRegistry do
     end
   end
 
+  def get_config(_), do: nil
+
   @doc """
   Gets all model configurations as a map.
 
@@ -153,7 +156,7 @@ defmodule CodePuppyControl.ModelRegistry do
       iex> ModelRegistry.reload()
       :ok
   """
-  @spec reload() :: :ok
+  @spec reload() :: :ok | {:error, term()}
   def reload do
     GenServer.call(__MODULE__, :reload)
   end
@@ -223,21 +226,21 @@ defmodule CodePuppyControl.ModelRegistry do
 
   ## Examples
 
-      iex> ModelRegistry.is_type_supported("openai")
+      iex> ModelRegistry.type_supported?("openai")
       true
 
-      iex> ModelRegistry.is_type_supported("anthropic")
+      iex> ModelRegistry.type_supported?("anthropic")
       true
 
-      iex> ModelRegistry.is_type_supported("unknown")
+      iex> ModelRegistry.type_supported?("unknown")
       false
   """
-  @spec is_type_supported(String.t()) :: boolean()
-  def is_type_supported(model_type) when is_binary(model_type) do
+  @spec type_supported?(String.t()) :: boolean()
+  def type_supported?(model_type) when is_binary(model_type) do
     model_type in @known_model_types
   end
 
-  def is_type_supported(_), do: false
+  def type_supported?(_), do: false
 
   @doc """
   Gets all known model types (static list).
@@ -351,7 +354,8 @@ defmodule CodePuppyControl.ModelRegistry do
       {"claude_models.json", "Claude Code OAuth models"}
     ]
 
-    Enum.reduce(overlay_files, [], fn {filename, label}, acc ->
+    overlay_files
+    |> Enum.reduce([], fn {filename, label}, acc ->
       path = Path.join(base_path, filename)
 
       case File.read(path) do
@@ -382,6 +386,7 @@ defmodule CodePuppyControl.ModelRegistry do
           acc
       end
     end)
+    |> Enum.reverse()
   end
 
   defp merge_configs(base_config, overlay_configs) do
