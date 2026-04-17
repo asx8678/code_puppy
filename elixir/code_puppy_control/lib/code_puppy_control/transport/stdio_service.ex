@@ -993,6 +993,8 @@ defmodule CodePuppyControl.Transport.StdioService do
   defp handle_request("round_robin.list_models", _params, id) do
     models = RoundRobinModel.list_models()
     Protocol.encode_response(%{"models" => models, "count" => length(models)}, id)
+  end
+
   # Method not found handler
   defp handle_request(method, _params, id) do
     Protocol.encode_error(
