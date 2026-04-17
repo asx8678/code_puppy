@@ -1490,7 +1490,7 @@
       "id": "bd-80",
       "title": "Update MIGRATION_STATUS.md for 'no Rust, thin Python' end state",
       "description": "Supersede Phase N 'keep in Rust' rows.\n\nPart of Phase 6 \u2014 Documentation & build cleanup.",
-      "status": "open",
+      "status": "closed",
       "priority": 1,
       "type": "task",
       "labels": [
@@ -1498,14 +1498,16 @@
       ],
       "dependencies": {},
       "created_at": "2026-04-16T17:52:14.793998",
-      "updated_at": "2026-04-16T17:52:14.794006",
-      "comments": []
+      "updated_at": "2026-04-17T01:37:21.149426",
+      "comments": [
+        "Shepherd: APPROVE. Pack Leader QA: APPROVE (watchdog down). Merged to main as bf4c7559."
+      ]
     },
     "bd-81": {
       "id": "bd-81",
       "title": "Clean CI",
       "description": "Update lefthook.yml and CI config \u2014 drop Rust build/test steps.\n\nPart of Phase 6 \u2014 Documentation & build cleanup.",
-      "status": "open",
+      "status": "closed",
       "priority": 1,
       "type": "task",
       "labels": [
@@ -1513,8 +1515,10 @@
       ],
       "dependencies": {},
       "created_at": "2026-04-16T17:52:14.799410",
-      "updated_at": "2026-04-16T17:52:14.799423",
-      "comments": []
+      "updated_at": "2026-04-17T01:34:20.922303",
+      "comments": [
+        "Shepherd: APPROVE. Watchdog: APPROVE. Merged to main as commit 7e5884d8."
+      ]
     },
     "bd-82": {
       "id": "bd-82",
@@ -1537,7 +1541,7 @@
       "id": "bd-83",
       "title": "Clean pyproject.toml",
       "description": "Drop maturin/pyo3 build deps and Rust extension config.\n\nPart of Phase 6 \u2014 Documentation & build cleanup.",
-      "status": "open",
+      "status": "closed",
       "priority": 1,
       "type": "task",
       "labels": [
@@ -1545,8 +1549,10 @@
       ],
       "dependencies": {},
       "created_at": "2026-04-16T17:52:14.814564",
-      "updated_at": "2026-04-16T17:52:14.814575",
-      "comments": []
+      "updated_at": "2026-04-17T01:36:35.445234",
+      "comments": [
+        "Shepherd: APPROVE. Pack Leader QA: APPROVE (watchdog down). Merged to main as 7a36b6a9."
+      ]
     },
     "bd-84": {
       "id": "bd-84",
@@ -1598,8 +1604,10 @@
       ],
       "dependencies": {},
       "created_at": "2026-04-16T17:52:29.814509",
-      "updated_at": "2026-04-16T17:52:29.814517",
-      "comments": []
+      "updated_at": "2026-04-17T01:35:09.342701",
+      "comments": [
+        "Shepherd: APPROVE. Watchdog: APPROVE. Merged to main as commit addbaaa0. Conflict on acceleration/__init__.py resolved (accepted deletion)."
+      ]
     },
     "bd-87": {
       "id": "bd-87",
