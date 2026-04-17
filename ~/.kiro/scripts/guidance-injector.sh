@@ -29,7 +29,7 @@ VERBOSITY="${GUIDANCE_VERBOSITY:-normal}"
 # Skip if minimal verbosity and not a significant tool
 if [[ "$VERBOSITY" == "minimal" ]]; then
     case "${KIRO_TOOL_NAME:-unknown}" in
-        write_file|create_file|replace_in_file|run_shell_command|invoke_agent) ;;
+        write_file|create_file|replace_in_file|run_shell_command|agent_run_shell_command|invoke_agent|subagent|use_subagent) ;;
         *) exit 0 ;;
     esac
 fi
@@ -247,7 +247,7 @@ case "$TOOL_NAME" in
         fi
         ;;
         
-    invoke_agent|subagent)
+    invoke_agent|subagent|use_subagent)
         AGENT_NAME="${TOOL_ARGS:-agent}"
         # Extract just the agent name (first word)
         AGENT_NAME=$(echo "$AGENT_NAME" | awk '{print $1}')

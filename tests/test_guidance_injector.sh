@@ -103,6 +103,26 @@ test_invoke_agent() {
     [[ "$output" =~ "completed" ]]
 }
 
+test_subagent_alias() {
+    local output
+    output=$(NO_COLOR=1 KIRO_TOOL_NAME="subagent" KIRO_TOOL_ARGS="turbo-executor do work" bash "$GUIDANCE_SCRIPT")
+    [[ "$output" =~ "turbo-executor" ]]
+    [[ "$output" =~ "completed" ]]
+}
+
+test_use_subagent_alias() {
+    local output
+    output=$(NO_COLOR=1 KIRO_TOOL_NAME="use_subagent" KIRO_TOOL_ARGS="turbo-executor do work" bash "$GUIDANCE_SCRIPT")
+    [[ "$output" =~ "turbo-executor" ]]
+    [[ "$output" =~ "completed" ]]
+}
+
+test_agent_run_shell_command_alias() {
+    local output
+    output=$(NO_COLOR=1 KIRO_TOOL_NAME="agent_run_shell_command" KIRO_TOOL_ARGS="pytest" KIRO_TOOL_EXIT_CODE="0" bash "$GUIDANCE_SCRIPT")
+    [[ "$output" =~ "pytest" ]] || [[ "$output" =~ "Command completed" ]] || [[ "$output" =~ "Tests passed" ]]
+}
+
 test_replace_in_file() {
     local output
     output=$(NO_COLOR=1 KIRO_TOOL_NAME="replace_in_file" bash "$GUIDANCE_SCRIPT")
@@ -163,7 +183,10 @@ run_test "write_file Python suggestions" test_write_file_python
 run_test "create_file Shell suggestions" test_write_file_shell
 run_test "run_shell_command success" test_run_shell_command_success
 run_test "run_shell_command failure" test_run_shell_command_failure
+run_test "agent_run_shell_command alias" test_agent_run_shell_command_alias
 run_test "invoke_agent shows agent name" test_invoke_agent
+run_test "subagent alias" test_subagent_alias
+run_test "use_subagent alias" test_use_subagent_alias
 run_test "replace_in_file guidance" test_replace_in_file
 run_test "Exploratory tools (grep)" test_exploratory_tools
 run_test "Unknown tool with verbose" test_unknown_tool_verbose
