@@ -18,7 +18,7 @@ defmodule CodePuppyControl.Routing.Router do
         strategies: [
           %FallbackChain{models: primary_models},
           %FallbackChain{models: secondary_models},
-          %LastResort{}
+          LastResort.new()
         ]
       )
 
@@ -106,7 +106,7 @@ defmodule CodePuppyControl.Routing.Router do
         strategies: [
           %FallbackChain{models: primary},
           %FallbackChain{models: secondary},
-          %LastResort{}
+          LastResort.new()
         ],
         context: %{availability_service: MyAvailability}
       )
@@ -154,7 +154,7 @@ defmodule CodePuppyControl.Routing.Router do
     # Build default strategy chain
     strategies = [
       %FallbackChain{models: models},
-      %LastResort{}
+      LastResort.new()
     ]
 
     # Build full context with role and optional availability service
@@ -192,7 +192,7 @@ defmodule CodePuppyControl.Routing.Router do
   @spec round_robin([String.t()], keyword()) :: {:ok, String.t()} | {:error, term()}
   def round_robin(models, opts \\ []) when is_list(models) do
     rotate_every = Keyword.get(opts, :rotate_every, 1)
-    use_global = Keyword.get(opts, :use_global, true)
+    use_global = Keyword.get(opts, :use_global, false)
 
     strategy = %RoundRobin{
       models: models,

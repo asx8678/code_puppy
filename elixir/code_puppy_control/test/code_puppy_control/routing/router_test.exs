@@ -198,4 +198,44 @@ defmodule CodePuppyControl.Routing.RouterTest do
       assert Router.route(strategies: strategies, context: context) == {:ok, "c"}
     end
   end
+
+  describe "regression tests for bd-60" do
+    test "route_default uses LastResort.new() with actual default models" do
+      # Test that LastResort.new() returns proper default fallback models
+      # instead of empty struct (which was the bug: using %LastResort{})
+      last_resort = LastResort.new()
+      assert last_resort.models == ["gpt-4o-mini", "gemini-2.5-flash"]
+      # Test via Router.route() with empty primary to ensure LastResort is reached
+      result =
+        Router.route(
+          strategies: [
+            # Empty primary to force fallback
+            %FallbackChain{models: []},
+            # Should have default models, not empty
+            LastResort.new()
+          ]
+        )
+
+      assert {:ok, model} = result
+      assert model in ["gpt-4o-mini", "gemini-2.5-flash"]
+    end
+
+    test "round_robin/1 uses caller's models, not global configuration" do
+      # Call with first list
+      assert {:ok, "a"} = Router.round_robin(["a", "b"])
+
+      # Call with different list - should use the new list, not cache from first call
+      # This proves it's not using the global RoundRobinModel
+      assert {:ok, "x"} = Router.round_robin(["x", "y"])
+
+      # Third call with original pattern - should return first again
+      # (since use_global: false doesn't maintain state between calls)
+      assert {:ok, "a"} = Router.round_robin(["a", "b"])
+    end
+
+    test "round_robin/1 with explicit use_global: false uses caller's models" do
+      # Explicit use_global: false should behave the same as default now
+      assert {:ok, "custom-1"} = Router.round_robin(["custom-1", "custom-2"], use_global: false)
+    end
+  end
 end

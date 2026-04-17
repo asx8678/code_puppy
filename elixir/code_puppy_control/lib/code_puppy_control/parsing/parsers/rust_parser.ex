@@ -76,7 +76,9 @@ defmodule CodePuppyControl.Parsing.Parsers.RustParser do
   # Helper to handle parsing with graceful whitespace handling
   defp do_parse(tokens) do
     case :rust_parser.parse(tokens) do
-      {:ok, ast} -> {:ok, ast}
+      {:ok, ast} ->
+        {:ok, ast}
+
       # If parsing fails due to only newlines/whitespace, return empty AST
       {:error, {_, _, _}} = error ->
         # Check if tokens are only newlines
@@ -403,10 +405,12 @@ defmodule CodePuppyControl.Parsing.Parsers.RustParser do
 
   # Format type for type alias doc string
   defp format_type_doc(nil), do: nil
+
   defp format_type_doc({:generic, name, params}) when is_list(params) do
     params_str = Enum.map_join(params, ", ", &format_type_doc/1)
     "= #{name}<#{params_str}>"
   end
+
   defp format_type_doc({:generic, name, param}), do: "= #{name}<#{format_type_doc(param)}>"
   defp format_type_doc({:ref, type}), do: "= &#{format_type_doc(type)}"
   defp format_type_doc({:ref_mut, type}), do: "= &mut #{format_type_doc(type)}"
