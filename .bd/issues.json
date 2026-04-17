@@ -1490,7 +1490,7 @@
       "id": "bd-80",
       "title": "Update MIGRATION_STATUS.md for 'no Rust, thin Python' end state",
       "description": "Supersede Phase N 'keep in Rust' rows.\n\nPart of Phase 6 \u2014 Documentation & build cleanup.",
-      "status": "open",
+      "status": "closed",
       "priority": 1,
       "type": "task",
       "labels": [
@@ -1498,7 +1498,7 @@
       ],
       "dependencies": {},
       "created_at": "2026-04-16T17:52:14.793998",
-      "updated_at": "2026-04-16T17:52:14.794006",
+      "updated_at": "2026-04-17T01:45:19.717108",
       "comments": []
     },
     "bd-81": {
