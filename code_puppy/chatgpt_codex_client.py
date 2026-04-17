@@ -1,17 +1,23 @@
-"""HTTP client interceptor for ChatGPT Codex API.
+"""HTTP client interceptor for the ChatGPT Codex backend.
 
 ChatGPTCodexAsyncClient: httpx client that injects required fields into
-request bodies for the ChatGPT Codex API and handles stream-to-non-stream
-conversion.
+request bodies for the **ChatGPT Codex OAuth backend** (hosted at
+chatgpt.com/backend-api/codex) and handles stream-to-non-stream conversion.
 
-The Codex API requires:
-- "store": false - Disables conversation storage
-- "stream": true - Streaming is mandatory
+This is *not* the public OpenAI Responses API (api.openai.com).  The Codex
+backend is a thin internal façade that shares the Responses-style wire format
+but has stricter constraints.
 
-Removes unsupported parameters:
-- "max_output_tokens" - Not supported by Codex API
-- "max_tokens" - Not supported by Codex API
-- "verbosity" - Not supported by Codex API
+The Codex backend requires:
+- ``"store": false`` – disables conversation storage
+- ``"stream": true`` – streaming is mandatory
+
+Removes unsupported top-level parameters:
+- ``max_output_tokens`` / ``max_tokens`` – the backend does not honour token
+  limits; use ``reasoning.effort`` to control output length.
+- ``verbosity`` – top-level verbosity is ignored.  Responses-style verbosity
+  belongs under the ``text`` object as ``text.verbosity`` (handled by
+  pydantic-ai's ``OpenAIResponsesModelSettings.openai_text_verbosity``).
 """
 
 import json
@@ -250,15 +256,15 @@ class ChatGPTCodexAsyncClient(RequestCacheMixin, httpx.AsyncClient):
                     item["id"] = f"rs_{item_id}"
                     modified = True
 
-        # Remove unsupported parameters
-        # Note: verbosity should be under "text" object, not top-level
         unsupported_params = ["max_output_tokens", "max_tokens", "verbosity"]
         for param in unsupported_params:
             if param in data:
                 logger.warning(
-                    "Removing unsupported parameter '%s' for Codex API. "
-                    "Token limits are not respected by the Responses API."
-                    " Use reasoning.effort to control output length.",
+                    "Removing unsupported top-level parameter '%s' for the "
+                    "ChatGPT Codex backend (not the public OpenAI Responses API). "
+                    "Token limits are not supported here; use reasoning.effort "
+                    "to control output length.  Responses-style verbosity belongs "
+                    "under text.verbosity, not as a top-level key.",
                     param,
                 )
                 del data[param]

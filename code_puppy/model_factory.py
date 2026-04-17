@@ -40,6 +40,28 @@ _MAX_OUTPUT_TOKENS = 65536
 logger = logging.getLogger(__name__)
 
 
+def _is_chatgpt_oauth(model_config: dict[str, Any]) -> bool:
+    """Return True if the model uses the ChatGPT Codex OAuth backend."""
+    return model_config.get("type") == "chatgpt_oauth"
+
+
+def _uses_responses_api(model_name: str, model_config: dict[str, Any]) -> bool:
+    """Return True if the model targets the OpenAI Responses API.
+
+    This covers:
+    - chatgpt_oauth models (ChatGPT Codex backend)
+    - OpenAI models with 'codex' in their name
+    - Custom OpenAI models with 'codex' in their name
+    """
+    model_type = model_config.get("type")
+    model_name_lower = model_name.lower()
+    return (
+        model_type == "chatgpt_oauth"
+        or (model_type == "openai" and "codex" in model_name_lower)
+        or (model_type == "custom_openai" and "codex" in model_name_lower)
+    )
+
+
 def resolve_max_output_tokens(
     model_name: str,
     model_config: dict[str, Any],
@@ -158,10 +180,23 @@ def make_model_settings(
 ) -> ModelSettings:
     """Create appropriate ModelSettings for a given model.
 
-    This handles model-specific settings:
-    - GPT-5 models: reasoning_effort and verbosity (non-codex only)
-    - Claude/Anthropic models: extended_thinking and budget_tokens
-    - Automatic max_tokens calculation based on model context length
+    Uses pydantic-ai normalized settings classes throughout:
+    - ``OpenAIResponsesModelSettings`` for models targeting the OpenAI Responses
+      API (including the ChatGPT Codex OAuth backend).
+    - ``OpenAIChatModelSettings`` for models using the Chat Completions API.
+    - ``AnthropicModelSettings`` for Anthropic/Claude models.
+    - ``ModelSettings`` as the generic fallback.
+
+    GPT-5 specific handling:
+    - ``openai_reasoning_effort`` is always set.
+    - ``openai_reasoning_summary`` and ``openai_text_verbosity`` are gated via
+      ``model_supports_setting()`` so only models that actually support them
+      receive the fields.
+    - For Chat Completions GPT-5 models, verbosity is injected through
+      ``extra_body`` (preserving any existing entries) and also gated via
+      ``model_supports_setting()``.
+    - ``max_tokens`` is resolved locally for budgeting but **not** sent for
+      ``chatgpt_oauth`` models (the Codex backend ignores it anyway).
 
     Args:
         model_name: The name of the model to create settings for.
@@ -205,28 +240,32 @@ def make_model_settings(
             _config_module.get_openai_reasoning_effort()
         )
 
-        model_type = model_config.get("type")
-        uses_responses_api = (
-            model_type == "chatgpt_oauth"
-            or (model_type == "openai" and "codex" in model_name)
-            or (model_type == "custom_openai" and "codex" in model_name)
-        )
+        is_codex_oauth = _is_chatgpt_oauth(model_config)
+        uses_responses = _uses_responses_api(model_name, model_config)
 
-        if uses_responses_api:
-            model_settings_dict["openai_reasoning_summary"] = (
-                _config_module.get_openai_reasoning_summary()
-            )
-            if "codex" not in model_name:
+        if is_codex_oauth:
+            # chatgpt_oauth (Codex backend) ignores max_tokens in the API,
+            # but we keep the resolved value for internal budgeting.
+            model_settings_dict.pop("max_tokens", None)
+
+        if uses_responses:
+            if _config_module.model_supports_setting(model_name, "summary"):
+                model_settings_dict["openai_reasoning_summary"] = (
+                    _config_module.get_openai_reasoning_summary()
+                )
+            if _config_module.model_supports_setting(model_name, "verbosity"):
                 model_settings_dict["openai_text_verbosity"] = (
                     _config_module.get_openai_verbosity()
                 )
             model_settings = OpenAIResponsesModelSettings(**model_settings_dict)
         else:
-            # Chat Completions models don't support configurable reasoning summaries.
-            # Keep the old verbosity injection path for non-Responses GPT-5 models.
-            if "codex" not in model_name:
+            # Chat Completions path: inject verbosity through extra_body.
+            # Gate via model_supports_setting and preserve existing entries.
+            if _config_module.model_supports_setting(model_name, "verbosity"):
                 verbosity = _config_module.get_openai_verbosity()
-                model_settings_dict["extra_body"] = {"verbosity": verbosity}
+                extra_body = model_settings_dict.get("extra_body") or {}
+                extra_body["verbosity"] = verbosity
+                model_settings_dict["extra_body"] = extra_body
             model_settings = OpenAIChatModelSettings(**model_settings_dict)
     elif model_name.startswith("claude-") or model_name.startswith("anthropic-"):
         # Handle Anthropic extended thinking settings
