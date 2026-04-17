@@ -1,5 +1,5 @@
 {
-  "counter": 90,
+  "counter": 95,
   "issues": {
     "bd-1": {
       "id": "bd-1",
@@ -950,11 +950,14 @@
       ],
       "dependencies": {
         "blocks": [
-          "bd-43"
+          "bd-43",
+          "bd-60",
+          "bd-57",
+          "bd-94"
         ]
       },
       "created_at": "2026-04-16T17:51:38.465554",
-      "updated_at": "2026-04-16T17:51:38.465578",
+      "updated_at": "2026-04-16T21:20:00.344591",
       "comments": []
     },
     "bd-53": {
@@ -969,11 +972,12 @@
       ],
       "dependencies": {
         "blocks": [
-          "bd-43"
+          "bd-43",
+          "bd-94"
         ]
       },
       "created_at": "2026-04-16T17:51:38.475568",
-      "updated_at": "2026-04-16T17:51:38.475576",
+      "updated_at": "2026-04-16T21:20:00.251591",
       "comments": []
     },
     "bd-54": {
@@ -988,11 +992,14 @@
       ],
       "dependencies": {
         "blocks": [
-          "bd-43"
+          "bd-43",
+          "bd-55",
+          "bd-57",
+          "bd-94"
         ]
       },
       "created_at": "2026-04-16T17:51:38.476196",
-      "updated_at": "2026-04-16T17:51:38.476202",
+      "updated_at": "2026-04-16T21:20:00.374524",
       "comments": []
     },
     "bd-55": {
@@ -1007,11 +1014,12 @@
       ],
       "dependencies": {
         "blocks": [
-          "bd-43"
+          "bd-43",
+          "bd-94"
         ]
       },
       "created_at": "2026-04-16T17:51:38.485776",
-      "updated_at": "2026-04-16T17:51:38.485785",
+      "updated_at": "2026-04-16T21:20:00.403989",
       "comments": []
     },
     "bd-56": {
@@ -1026,11 +1034,13 @@
       ],
       "dependencies": {
         "blocks": [
-          "bd-43"
+          "bd-43",
+          "bd-55",
+          "bd-94"
         ]
       },
       "created_at": "2026-04-16T17:51:38.492744",
-      "updated_at": "2026-04-16T17:51:38.492753",
+      "updated_at": "2026-04-16T21:20:00.433221",
       "comments": []
     },
     "bd-57": {
@@ -1045,11 +1055,12 @@
       ],
       "dependencies": {
         "blocks": [
-          "bd-43"
+          "bd-43",
+          "bd-94"
         ]
       },
       "created_at": "2026-04-16T17:51:42.482714",
-      "updated_at": "2026-04-16T17:51:42.482723",
+      "updated_at": "2026-04-16T21:20:00.461964",
       "comments": []
     },
     "bd-58": {
@@ -1064,11 +1075,12 @@
       ],
       "dependencies": {
         "blocks": [
-          "bd-43"
+          "bd-43",
+          "bd-94"
         ]
       },
       "created_at": "2026-04-16T17:51:42.484375",
-      "updated_at": "2026-04-16T17:51:42.484383",
+      "updated_at": "2026-04-16T21:20:00.285906",
       "comments": []
     },
     "bd-59": {
@@ -1083,11 +1095,12 @@
       ],
       "dependencies": {
         "blocks": [
-          "bd-43"
+          "bd-43",
+          "bd-94"
         ]
       },
       "created_at": "2026-04-16T17:51:42.485751",
-      "updated_at": "2026-04-16T17:51:42.485758",
+      "updated_at": "2026-04-16T21:20:00.315664",
       "comments": []
     },
     "bd-60": {
@@ -1121,11 +1134,13 @@
       ],
       "dependencies": {
         "blocks": [
-          "bd-43"
+          "bd-43",
+          "bd-63",
+          "bd-94"
         ]
       },
       "created_at": "2026-04-16T17:51:42.500064",
-      "updated_at": "2026-04-16T17:51:42.500073",
+      "updated_at": "2026-04-16T21:20:00.491421",
       "comments": []
     },
     "bd-62": {
@@ -1481,11 +1496,7 @@
       "labels": [
         "migration,phase-6,docs"
       ],
-      "dependencies": {
-        "blocks": [
-          "bd-43"
-        ]
-      },
+      "dependencies": {},
       "created_at": "2026-04-16T17:52:14.793998",
       "updated_at": "2026-04-16T17:52:14.794006",
       "comments": []
@@ -1500,11 +1511,7 @@
       "labels": [
         "migration,phase-6"
       ],
-      "dependencies": {
-        "blocks": [
-          "bd-43"
-        ]
-      },
+      "dependencies": {},
       "created_at": "2026-04-16T17:52:14.799410",
       "updated_at": "2026-04-16T17:52:14.799423",
       "comments": []
@@ -1519,11 +1526,7 @@
       "labels": [
         "migration,phase-6,docs"
       ],
-      "dependencies": {
-        "blocks": [
-          "bd-43"
-        ]
-      },
+      "dependencies": {},
       "created_at": "2026-04-16T17:52:14.805923",
       "updated_at": "2026-04-16T17:52:14.805930",
       "comments": []
@@ -1538,11 +1541,7 @@
       "labels": [
         "migration,phase-6"
       ],
-      "dependencies": {
-        "blocks": [
-          "bd-43"
-        ]
-      },
+      "dependencies": {},
       "created_at": "2026-04-16T17:52:14.814564",
       "updated_at": "2026-04-16T17:52:14.814575",
       "comments": []
@@ -1557,11 +1556,7 @@
       "labels": [
         "migration,phase-6,docs"
       ],
-      "dependencies": {
-        "blocks": [
-          "bd-43"
-        ]
-      },
+      "dependencies": {},
       "created_at": "2026-04-16T17:52:14.824804",
       "updated_at": "2026-04-16T17:52:14.824813",
       "comments": []
@@ -1599,11 +1594,7 @@
       "labels": [
         "migration,phase-6"
       ],
-      "dependencies": {
-        "blocks": [
-          "bd-43"
-        ]
-      },
+      "dependencies": {},
       "created_at": "2026-04-16T17:52:29.814509",
       "updated_at": "2026-04-16T17:52:29.814517",
       "comments": []
@@ -1690,6 +1681,122 @@
       },
       "created_at": "2026-04-16T17:56:37.211666",
       "updated_at": "2026-04-16T18:23:35.031267",
+      "comments": []
+    },
+    "bd-91": {
+      "id": "bd-91",
+      "title": "Phase 2 orchestration: core services \u2192 Elixir (wave plan)",
+      "description": "Sequenced execution plan for porting Python core services to Elixir (bd-52 through bd-63).\n\nTHREE WAVES:\n\nWave 1 \u2014 Quick wins + foundations (no cross-deps, can parallelize):\n  - bd-62: Retire Python scheduler (deletion only, Elixir scheduler production-ready)\n  - bd-53: Extend Elixir concurrency limiter (limiter.ex partial impl exists)\n  - bd-58: Port request cache to ETS/Cachex (standalone)\n  - bd-59: Port workflow state to GenServer (standalone, 12KB)\n\nWave 2 \u2014 Core stateful services (need Ecto/persistence foundations):\n  - bd-52: Port persistence + session storage to Ecto (foundational \u2014 36KB combined)\n  - bd-54: Port token ledger to ETS-backed GenServer\n  - bd-56: Port resilience + circuit breakers (:fuse library)\n  - bd-55: Port adaptive rate limiter (41KB \u2014 depends on bd-54 token counts + bd-56 circuits)\n\nWave 3 \u2014 Complex subsystems (cross-cutting, integration-heavy):\n  - bd-61: Port hook engine to Elixir dispatcher (46KB, 6 submodules \u2014 biggest piece)\n  - bd-57: Port compaction orchestration (depends on file_ops_tracker + token tracking)\n  - bd-60: Port routing strategies (depends on model config \u2014 may defer to Phase 4)\n  - bd-63: Port reflection + policy engine (depends on config + hooks)\n\nBRIDGE PROTOCOL: Each new Elixir service needs RPC method additions to port.ex and stdio_service.ex.\n\nCUTOVER STRATEGY: Feature-flag each service. Python remains active until Elixir passes parity tests.\n\nSUCCESS CRITERIA:\n- All Wave 1+2 services running in Elixir with Python fallback disabled\n- Wave 3 services at minimum have Elixir implementations with feature-flag toggle\n- ~6,700 Python lines retired or behind feature flags\n- No regression in agent run latency (p95 < 200ms overhead vs baseline)",
+      "status": "open",
+      "priority": 1,
+      "type": "task",
+      "labels": [
+        "migration,phase-2,orchestration"
+      ],
+      "dependencies": {
+        "blocks": [
+          "bd-43"
+        ]
+      },
+      "created_at": "2026-04-16T21:18:24.702375",
+      "updated_at": "2026-04-16T21:21:36.767739",
+      "comments": [
+        "DEPENDENCY GRAPH CORRECTION \u2014 2026-04-16\n\nThe bd dep add commands created backward dependencies. Here's the CORRECT graph:\n\nTIER 0 (no blockers \u2014 can start NOW):\n  bd-92 (protocol extensions)\n  bd-93 (feature flags)\n\nTIER 1 / Wave 1 (blocked by bd-92 + bd-93):\n  bd-62 \u2192 needs bd-93 only (retire Python scheduler)\n  bd-53 \u2192 needs bd-92, bd-93 (concurrency)\n  bd-58 \u2192 needs bd-92, bd-93 (request cache)\n  bd-59 \u2192 needs bd-92, bd-93 (workflow state)\n\nTIER 2 / Wave 2 (blocked by Wave 1 items + infrastructure):\n  bd-52 \u2192 needs bd-92, bd-93 (persistence)\n  bd-54 \u2192 needs bd-92, bd-93 (token ledger)\n  bd-56 \u2192 needs bd-92, bd-93 (resilience)\n  bd-55 \u2192 needs bd-54, bd-56 (rate limiter)\n\nTIER 3 / Wave 3 (blocked by Wave 2 items):\n  bd-61 \u2192 needs bd-92, bd-93 (hook engine)\n  bd-57 \u2192 needs bd-54, bd-52 (compaction)\n  bd-60 \u2192 needs bd-52 (routing)\n  bd-63 \u2192 needs bd-61 (reflection)\n\nFINAL GATE:\n  bd-94 \u2192 needs ALL service ports done (parity tests)\n  bd-91 \u2192 needs bd-92, bd-93, bd-94 (orchestration)\n\nCURRENT STATE: Dependencies are backward (services block infrastructure). bd-43 was incorrectly added as a blocker to all Phase 2 issues. Manual tracking recommended until bd tool supports dep removal."
+      ]
+    },
+    "bd-92": {
+      "id": "bd-92",
+      "title": "Extend bridge protocol with Phase 2 service RPC methods",
+      "description": "The current bridge protocol (port.ex + stdio_service.ex) handles file_ops, parse, and repo_compass. Phase 2 services need new RPC methods added.\n\nNEW METHODS NEEDED (grouped by wave):\n\nWave 1:\n  concurrency/get_limits \u2192 CodePuppyControl.Concurrency.Limiter\n  concurrency/set_limits \u2192 same\n  cache/get, cache/put, cache/invalidate \u2192 CodePuppyControl.RequestCache (new)\n  workflow/get_state, workflow/set_state \u2192 CodePuppyControl.Workflow.State (new)\n\nWave 2:\n  session/save, session/load, session/list \u2192 CodePuppyControl.Persistence (new Ecto)\n  tokens/get_balance, tokens/record_usage \u2192 CodePuppyControl.Tokens.Ledger (new)\n  resilience/circuit_status, resilience/reset \u2192 CodePuppyControl.Resilience (new)\n  rate_limit/check, rate_limit/record \u2192 CodePuppyControl.RateLimiter (new)\n\nWave 3:\n  hooks/register, hooks/fire, hooks/list \u2192 CodePuppyControl.Hooks (new)\n  compaction/status, compaction/trigger \u2192 CodePuppyControl.Compaction (new)\n\nIMPLEMENTATION:\n1. Add method clauses to handle_file_request/handle_method in port.ex\n2. Add corresponding methods to stdio_service.ex for standalone mode\n3. Add Python-side callers in native_backend.py (or successor)\n4. Protocol documentation in PROTOCOL_COMPARISON_TABLE.md\n\nBLOCKED BY: nothing (protocol scaffolding can proceed before service implementations)\nBLOCKS: all Phase 2 service ports",
+      "status": "open",
+      "priority": 2,
+      "type": "task",
+      "labels": [
+        "migration,phase-2,protocol"
+      ],
+      "dependencies": {
+        "blocks": [
+          "bd-91",
+          "bd-52",
+          "bd-53",
+          "bd-54",
+          "bd-55",
+          "bd-56",
+          "bd-57",
+          "bd-58",
+          "bd-59",
+          "bd-60",
+          "bd-61",
+          "bd-62",
+          "bd-63"
+        ]
+      },
+      "created_at": "2026-04-16T21:18:47.633763",
+      "updated_at": "2026-04-16T21:20:00.173595",
+      "comments": []
+    },
+    "bd-93": {
+      "id": "bd-93",
+      "title": "Feature-flag framework for Python\u2192Elixir service cutover",
+      "description": "Safe migration requires per-service feature flags so each Python\u2192Elixir cutover can be toggled independently, tested in production, and rolled back instantly.\n\nDESIGN:\n  Config key: PUP_ELIXIR_{SERVICE}=true|false (env var override)\n  Runtime: puppy.cfg [elixir_services] section\n  API: NativeBackend.is_service_active(service_name) \u2192 bool\n\nSERVICES TO FLAG:\n  scheduler         \u2192 already Elixir (flag=always_on)\n  file_ops          \u2192 already Elixir (flag=always_on)\n  concurrency       \u2192 bd-53\n  request_cache     \u2192 bd-58\n  workflow_state    \u2192 bd-59\n  persistence       \u2192 bd-52\n  token_ledger      \u2192 bd-54\n  resilience        \u2192 bd-56\n  rate_limiter      \u2192 bd-55\n  hook_engine       \u2192 bd-61\n  compaction        \u2192 bd-57\n  routing           \u2192 bd-60\n\nIMPLEMENTATION:\n  1. Add [elixir_services] to puppy.cfg schema\n  2. Add PUP_ELIXIR_* env var overrides in config.py\n  3. NativeBackend.is_service_active() checks flag before routing\n  4. Python service wrapper: if flag off \u2192 use Python impl, if on \u2192 use Elixir bridge\n  5. /fast_puppy status shows per-service routing table\n\nEFFORT: ~1 day\nBLOCKS: safe cutover of all Phase 2 services",
+      "status": "open",
+      "priority": 2,
+      "type": "task",
+      "labels": [
+        "migration,phase-2,infrastructure"
+      ],
+      "dependencies": {
+        "blocks": [
+          "bd-91",
+          "bd-92",
+          "bd-62",
+          "bd-58",
+          "bd-56",
+          "bd-59",
+          "bd-53",
+          "bd-54",
+          "bd-52",
+          "bd-61"
+        ]
+      },
+      "created_at": "2026-04-16T21:19:21.886996",
+      "updated_at": "2026-04-16T21:21:47.910133",
+      "comments": [
+        "NOTE \u2014 2026-04-16: This issue has NO ACTUAL BLOCKERS despite what bd blocked shows.\n\nThe bd dep system shows bd-93 blocked by bd-91, bd-92, and service issues, but this is BACKWARDS. bd-93 (feature flags) should be done BEFORE the services, not after.\n\nACTUAL DEPENDENCY: None (or bd-92 for protocol alignment) \u2014 can start immediately once Phase 2 is approved.\nBLOCKS: All Phase 2 service cutovers (safe migration requires feature flags)\n\nThis is Tier 0 infrastructure \u2014 feature-flag framework must exist before any service migration can proceed."
+      ]
+    },
+    "bd-94": {
+      "id": "bd-94",
+      "title": "Phase 2 parity test suite: Python vs Elixir service equivalence",
+      "description": "Each Phase 2 service migration needs automated parity tests proving the Elixir implementation matches Python behavior.\n\nSTRATEGY:\n  For each service (bd-52 through bd-63):\n  1. Capture Python behavior as golden-file test fixtures\n  2. Run same inputs against Elixir implementation via bridge\n  3. Assert identical outputs (or document accepted divergences)\n  4. Performance benchmark: Elixir must be within 2x of Python (except token estimation)\n\nTEST CATEGORIES:\n  - Unit: Pure function parity (same input \u2192 same output)\n  - Integration: Python\u2194Elixir bridge round-trip\n  - Stress: Concurrent access patterns (GenServer contention)\n  - Regression: Existing test suite passes with Elixir backend enabled\n\nLOCATION: tests/phase2_parity/ (new directory)\n\nFIXTURES NEEDED PER SERVICE:\n  - concurrency: parallel limit scenarios, deadlock cases\n  - cache: hit/miss/eviction/TTL behavior\n  - persistence: session round-trip (save\u2192load\u2192verify)\n  - token_ledger: balance tracking across concurrent agents\n  - resilience: circuit open/close/half-open transitions\n  - rate_limiter: burst/sustained/backoff patterns\n  - hook_engine: registration, firing order, async hooks\n\nEFFORT: ~0.5 day per service (rolling, alongside each port)\nBLOCKS: declaring any service migration 'done'",
+      "status": "open",
+      "priority": 2,
+      "type": "task",
+      "labels": [
+        "migration,phase-2,testing"
+      ],
+      "dependencies": {
+        "blocks": [
+          "bd-91",
+          "bd-92",
+          "bd-93"
+        ]
+      },
+      "created_at": "2026-04-16T21:19:21.890247",
+      "updated_at": "2026-04-16T21:20:00.147917",
+      "comments": []
+    },
+    "bd-95": {
+      "id": "bd-95",
+      "title": "Dead code removal: rewrite/ dir, deprecated compat, archived docs",
+      "description": "Remove dead code identified by planning audit:\n- Deleted rewrite/ directory (~1400 stale snapshot files)\n- Removed deprecated TURBO_OPS_AVAILABLE alias from turbo_executor orchestrator\n- Cleaned stale turbo_ops references from elixir_transport.py docstring\n- Removed stale PUP_ACCEL_TURBO_OPS env var from acceleration/__init__.py\n- Moved 4 archived docs to docs/archived/\n- Updated MIGRATION_STATUS.md reading guide for new paths",
+      "status": "open",
+      "priority": 2,
+      "type": "task",
+      "labels": [],
+      "dependencies": {},
+      "created_at": "2026-04-17T01:06:36.560666",
+      "updated_at": "2026-04-17T01:06:36.560673",
       "comments": []
     }
   }

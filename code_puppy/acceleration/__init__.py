@@ -10,7 +10,6 @@ Configuration:
     Use environment variables to override backends:
     - PUP_ACCEL_PUPPY_CORE=rust|python
     - PUP_ACCEL_TURBO_PARSE=rust|python
-    - PUP_ACCEL_TURBO_OPS=elixir|rust|python  # Now routes via Elixir
 
     Or use the Python API:
     - NativeBackend.set_backend_preference("elixir_first")  # Default

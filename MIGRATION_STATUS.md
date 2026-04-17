@@ -224,10 +224,10 @@ The repository had **four competing migration documents** with:
 
 | Document | Status | Read If You Need |
 |----------|--------|------------------|
-| `ELIXIR_MIGRATION_ROADMAP.md` | 📁 Archived | Tiered migration candidate analysis (which components should migrate) |
-| `fast_puppy_elixir_rewrite_plan.md` | 📁 Archived (historical) | 5-phase rewrite plan from pre-Zig-cleanup era |
-| `rewrite/ELIXIR_FIRST_REWRITE_ANALYSIS.md` | 📁 Archived | Why Repo Compass was picked as first migration slice |
-| `rewrite/code_puppy_elixir_rewrite_bundle/PLAN/...` | 📁 Archived | Detailed PR sequence for practical migration |
+| `docs/archived/ELIXIR_MIGRATION_ROADMAP.md` | 📁 Archived | Tiered migration candidate analysis (which components should migrate) |
+| `docs/archived/fast_puppy_elixir_rewrite_plan.md` | 📁 Archived (historical) | 5-phase rewrite plan from pre-Zig-cleanup era |
+| `docs/archived/PROTOCOL_COMPARISON_TABLE.md` | 📁 Archived | Protocol comparison reference |
+| `docs/archived/PROTOCOL_DRIFT_ANALYSIS.md` | 📁 Archived | Historical protocol drift analysis |
 
 ---
 

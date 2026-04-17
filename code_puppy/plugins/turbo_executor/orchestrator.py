@@ -30,17 +30,13 @@ except ImportError:
 # Import NativeBackend for unified acceleration interface
 from code_puppy.native_backend import NativeBackend
 
-# bd-84: Backward compatibility flags for tests
+# bd-84: Check native file ops availability
 try:
     NATIVE_FILE_OPS_AVAILABLE = NativeBackend.is_available(
         NativeBackend.Capabilities.FILE_OPS
     )
-    TURBO_OPS_AVAILABLE = (
-        NATIVE_FILE_OPS_AVAILABLE  # Deprecated: use NATIVE_FILE_OPS_AVAILABLE
-    )
 except Exception:
     NATIVE_FILE_OPS_AVAILABLE = False
-    TURBO_OPS_AVAILABLE = False
 
 # Fallback: Import Python-native file operations when native unavailable
 from code_puppy.tools.file_operations import validate_file_path
