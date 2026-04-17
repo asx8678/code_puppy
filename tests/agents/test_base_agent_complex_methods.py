@@ -317,7 +317,6 @@ class TestBaseAgentComplexMethods:
             ws_history_ttl_seconds=3600,
             # Feature flags
             session_logger_enabled=False,
-            rust_autobuild_disabled=False,
             enable_dbos=True,
             enable_streaming=True,
             enable_agent_memory=False,
@@ -384,9 +383,7 @@ class TestBaseAgentComplexMethods:
                 "estimate_tokens_for_message was called despite valid cache!"
             )
 
-        with patch(
-            "code_puppy.agents.base_agent._rust_enabled", return_value=False
-        ), patch.object(
+        with patch.object(
             agent, "estimate_tokens_for_message", _boom
         ):
             result = agent.truncation(
@@ -420,9 +417,7 @@ class TestBaseAgentComplexMethods:
             call_count += 1
             return 10  # small enough to fit
 
-        with patch(
-            "code_puppy.agents.base_agent._rust_enabled", return_value=False
-        ), patch.object(
+        with patch.object(
             agent, "estimate_tokens_for_message", _count_estimate
         ):
             result = agent.truncation(

@@ -44,7 +44,6 @@ class AgentRuntimeState:
         model_name_cache: Per-instance cache for get_model_name()
         resolved_model_components_cache: Cache for model components
         mcp_servers: List of active MCP server connections
-        rust_per_message_tokens: Per-message token counts from Rust
     """
 
     # Message history and tracking
@@ -72,7 +71,6 @@ class AgentRuntimeState:
 
     # MCP server connections
     mcp_servers: list[Any] = field(default_factory=list)
-    rust_per_message_tokens: list[int] | None = None
 
     # Token accounting (lazy-initialized, provider-reported actuals)
     # Lazily created via get_token_ledger() to avoid import cost at instantiation
@@ -122,7 +120,6 @@ class AgentRuntimeState:
         self.cached_system_prompt = None
         self.cached_tool_defs = None
         self.tool_ids_cache = None
-        self.rust_per_message_tokens = None
         self.puppy_rules = None
 
     def invalidate_system_prompt_cache(self) -> None:

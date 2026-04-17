@@ -1,9 +1,13 @@
 """Tests for code_puppy.plugins.fast_puppy.register_callbacks.
 
-bd-50: Plugin is now a minimal stub that only reports acceleration removed.
+bd-50: Rust integration removed - tests simplified.
 """
 
 from code_puppy.plugins.fast_puppy.register_callbacks import _on_custom_command
+
+# ---------------------------------------------------------------------------
+# _on_custom_command()
+# ---------------------------------------------------------------------------
 
 
 class TestOnCustomCommand:

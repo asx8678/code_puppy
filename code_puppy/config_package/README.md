@@ -59,7 +59,6 @@ config_dict = cfg.to_dict()
 | `run_wait_timeout` | `float \| None` | `None` | `PUPPY_RUN_WAIT_TIMEOUT` |
 | `ws_history_maxlen` | `int` | `200` | `PUPPY_WS_HISTORY_MAXLEN` |
 | `session_logger_enabled` | `bool` | `False` | `PUPPY_SESSION_LOGGER` |
-| `rust_autobuild_disabled` | `bool` | `False` | `PUPPY_DISABLE_RUST_AUTOBUILD` |
 | `enable_dbos` | `bool` | `True` | `PUPPY_ENABLE_DBOS` |
 | `temperature` | `float` | `0.0` | `PUPPY_TEMPERATURE` |
 | `debug` | `bool` | `False` | `PUPPY_DEBUG`, `CODE_PUPPY_DEBUG` |

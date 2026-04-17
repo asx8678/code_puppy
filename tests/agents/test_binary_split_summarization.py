@@ -326,9 +326,8 @@ class TestSummarizeMessages:
     @patch(
         "code_puppy.compaction.thresholds.get_model_context_window", return_value=None
     )
-    @patch("code_puppy.agents.base_agent._rust_enabled", return_value=False)
     def test_successful_summarization(
-        self, mock_rust, mock_get_ctx, mock_get_config, mock_info, mock_sync, agent
+        self, mock_get_ctx, mock_get_config, mock_info, mock_sync, agent
     ):
         mock_cfg = mock_get_config.return_value
         mock_cfg.summarization_history_offload_enabled = False
@@ -363,10 +362,8 @@ class TestSummarizeMessages:
     @patch(
         "code_puppy.compaction.thresholds.get_model_context_window", return_value=None
     )
-    @patch("code_puppy.agents.base_agent._rust_enabled", return_value=False)
     def test_summarization_error_returns_original(
         self,
-        mock_rust,
         mock_get_ctx,
         mock_get_config,
         mock_error,
@@ -409,10 +406,8 @@ class TestSummarizeMessages:
     @patch(
         "code_puppy.compaction.thresholds.get_model_context_window", return_value=None
     )
-    @patch("code_puppy.agents.base_agent._rust_enabled", return_value=False)
     def test_unexpected_error_returns_original(
         self,
-        mock_rust,
         mock_get_ctx,
         mock_get_config,
         mock_error,
@@ -449,9 +444,8 @@ class TestSummarizeMessages:
     @patch(
         "code_puppy.compaction.thresholds.get_model_context_window", return_value=None
     )
-    @patch("code_puppy.agents.base_agent._rust_enabled", return_value=False)
     def test_without_protection(
-        self, mock_rust, mock_get_ctx, mock_get_config, mock_info, mock_sync, agent
+        self, mock_get_ctx, mock_get_config, mock_info, mock_sync, agent
     ):
         mock_cfg = mock_get_config.return_value
         mock_cfg.summarization_history_offload_enabled = False
@@ -480,9 +474,8 @@ class TestSummarizeMessages:
     @patch(
         "code_puppy.compaction.thresholds.get_model_context_window", return_value=None
     )
-    @patch("code_puppy.agents.base_agent._rust_enabled", return_value=False)
     def test_empty_summarization_result_returns_original(
-        self, mock_rust, mock_get_ctx, mock_get_config, mock_info, mock_sync, agent
+        self, mock_get_ctx, mock_get_config, mock_info, mock_sync, agent
     ):
         mock_cfg = mock_get_config.return_value
         mock_cfg.summarization_history_offload_enabled = False
@@ -513,9 +506,8 @@ class TestSummarizeMessages:
     @patch(
         "code_puppy.compaction.thresholds.get_model_context_window", return_value=None
     )
-    @patch("code_puppy.agents.base_agent._rust_enabled", return_value=False)
     def test_binary_split_called_for_large_history(
-        self, mock_rust, mock_get_ctx, mock_get_config, mock_info, mock_sync, agent
+        self, mock_get_ctx, mock_get_config, mock_info, mock_sync, agent
     ):
         mock_cfg = mock_get_config.return_value
         mock_cfg.summarization_history_offload_enabled = False

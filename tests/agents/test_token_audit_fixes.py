@@ -183,7 +183,6 @@ class TestCacheInvalidationConsistency:
         state.cached_system_prompt = "test prompt"
         state.cached_tool_defs = [{"name": "test"}]
         state.tool_ids_cache = {"id": 1}
-        state.rust_per_message_tokens = [10, 20, 30]
 
         state.invalidate_all_token_caches()
 
@@ -191,7 +190,6 @@ class TestCacheInvalidationConsistency:
         assert state.cached_system_prompt is None
         assert state.cached_tool_defs is None
         assert state.tool_ids_cache is None
-        assert state.rust_per_message_tokens is None
 
     def test_invalidate_system_prompt_also_clears_overhead(self):
         """System prompt cache invalidation should also clear overhead."""

@@ -302,14 +302,12 @@ def test_mcp_cache_invalidation():
     state.cached_tool_defs = [{"name": "test_tool", "description": "Test"}]
     state.cached_system_prompt = "test system prompt with rules"
     state.tool_ids_cache = {"tool_123": "cached_id"}
-    state.rust_per_message_tokens = [100, 200, 300]
 
     # Verify values are set
     assert state.cached_context_overhead is not None
     assert state.cached_tool_defs is not None
     assert state.cached_system_prompt is not None
     assert state.tool_ids_cache is not None
-    assert state.rust_per_message_tokens is not None
 
     # Invalidate all token caches
     state.invalidate_all_token_caches()
@@ -319,7 +317,6 @@ def test_mcp_cache_invalidation():
     assert state.cached_tool_defs is None, "cached_tool_defs should be None"
     assert state.cached_system_prompt is None, "cached_system_prompt should be None"
     assert state.tool_ids_cache is None, "tool_ids_cache should be None"
-    assert state.rust_per_message_tokens is None, "rust_per_message_tokens should be None"
 
 
 def test_mcp_cache_invalidation_idempotent():
