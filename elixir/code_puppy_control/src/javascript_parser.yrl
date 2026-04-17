@@ -121,7 +121,13 @@ import_stmt -> import identifier from string :
 
 %% Export default
 export_stmt -> export default :
-    {export_default, line('$1')}.
+    {export_default, line('$1'), 'none'}.
+
+%% Export default with value (identifier or string)
+export_stmt -> export default identifier :
+    {export_default, line('$1'), unwrap('$3')}.
+export_stmt -> export default string :
+    {export_default, line('$1'), unwrap_string('$3')}.
 
 %% Named exports
 export_stmt -> export function_decl :

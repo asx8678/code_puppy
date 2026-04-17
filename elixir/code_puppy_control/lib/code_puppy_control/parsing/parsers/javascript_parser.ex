@@ -323,8 +323,36 @@ defmodule CodePuppyControl.Parsing.Parsers.JavaScriptParser do
     ]
   end
 
-  # Export default
+  # Export default (bare)
   defp declaration_to_symbol({:export_default, line}) do
+    [
+      %{
+        name: "export default",
+        kind: :import,
+        line: line,
+        end_line: nil,
+        doc: nil,
+        children: []
+      }
+    ]
+  end
+
+  # Export default with identifier value
+  defp declaration_to_symbol({:export_default, line, value}) when is_list(value) do
+    [
+      %{
+        name: "export default #{value}",
+        kind: :import,
+        line: line,
+        end_line: nil,
+        doc: nil,
+        children: []
+      }
+    ]
+  end
+
+  # Export default with no value (:none)
+  defp declaration_to_symbol({:export_default, line, :none}) do
     [
       %{
         name: "export default",
