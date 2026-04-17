@@ -37,7 +37,7 @@ defmodule CodePuppyControl.Parsing.Parsers do
   @doc """
   Child spec for supervision tree.
 
-  Registers all parsers on startup and returns :ignore so it doesn't
+  Registers all parsers on startup and returns :ignore so it does not
   remain in the supervision tree.
   """
   def child_spec(_opts) do
@@ -51,7 +51,7 @@ defmodule CodePuppyControl.Parsing.Parsers do
   @doc false
   def start_link do
     register_all()
-    # Return :ignore so this doesn't stay in the supervision tree
+    # Return :ignore so this does not stay in the supervision tree
     :ignore
   end
 end
