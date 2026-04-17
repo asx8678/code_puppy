@@ -207,6 +207,6 @@ add_decorators(Decorators, {function, Line, Name, Params, Anno}) ->
     {function, Line, Name, Params, Anno, Decorators};
 add_decorators(Decorators, {class, Line, Name, Params, nil}) ->
     {class, Line, Name, Params, nil, Decorators};
-add_decorators(Decorators, Node) ->
+add_decorators(_Decorators, Node) ->
     % Fallback: if node doesn't match expected format, return as-is
     Node.

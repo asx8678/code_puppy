@@ -110,23 +110,6 @@ defmodule CodePuppyControl.Parsing.Parsers.PythonParser do
     ]
   end
 
-  # Function with return annotation but no decorators
-  defp node_to_symbol({:function, line, name, _params, annotation}) when is_list(annotation) or is_tuple(annotation) do
-    type_info = format_annotation(annotation)
-
-    [
-      %{
-        name: to_string(name),
-        kind: :function,
-        line: line,
-        end_line: nil,
-        doc: type_info,
-        children: [],
-        modifiers: []
-      }
-    ]
-  end
-
   # Async function with return annotation: {function, line, name, params, {async, annotation}}
   defp node_to_symbol({:function, line, name, _params, {:async, annotation}}) do
     type_info = format_annotation(annotation)
@@ -144,7 +127,24 @@ defmodule CodePuppyControl.Parsing.Parsers.PythonParser do
     ]
   end
 
-  # Function with decorators (6-tuple format with decorators at end)
+  # Function with return annotation but no decorators
+  defp node_to_symbol({:function, line, name, _params, annotation})
+       when is_list(annotation) or is_tuple(annotation) do
+    type_info = format_annotation(annotation)
+
+    [
+      %{
+        name: to_string(name),
+        kind: :function,
+        line: line,
+        end_line: nil,
+        doc: type_info,
+        children: [],
+        modifiers: []
+      }
+    ]
+  end
+
   defp node_to_symbol({:function, line, name, _params, nil, decorators}) do
     decorator_info = format_decorators(decorators)
 
@@ -190,7 +190,8 @@ defmodule CodePuppyControl.Parsing.Parsers.PythonParser do
         end_line: nil,
         doc: doc,
         children: [],
-        modifiers: if(is_tuple(annotation) and elem(annotation, 0) == :async, do: [:async], else: [])
+        modifiers:
+          if(is_tuple(annotation) and elem(annotation, 0) == :async, do: [:async], else: [])
       }
     ]
   end
@@ -211,7 +212,8 @@ defmodule CodePuppyControl.Parsing.Parsers.PythonParser do
   end
 
   # Class without decorators but with parents: {class, line, name, params, nil}
-  defp node_to_symbol({:class, line, name, params, nil}) when is_list(params) and length(params) > 0 do
+  defp node_to_symbol({:class, line, name, params, nil})
+       when is_list(params) and length(params) > 0 do
     inheritance = format_params(params)
 
     [
@@ -329,12 +331,15 @@ defmodule CodePuppyControl.Parsing.Parsers.PythonParser do
 
   defp format_annotation(nil), do: nil
   defp format_annotation(:async), do: nil
+
   defp format_annotation(annotation) when is_list(annotation) or is_binary(annotation) do
     to_string(annotation)
   end
+
   defp format_annotation(annotation) when is_tuple(annotation) do
     inspect(annotation)
   end
+
   defp format_annotation(annotation), do: inspect(annotation)
 
   defp format_params(params) when is_list(params) do
@@ -342,6 +347,7 @@ defmodule CodePuppyControl.Parsing.Parsers.PythonParser do
     |> Enum.map(&to_string/1)
     |> Enum.join(", ")
   end
+
   defp format_params(_), do: nil
 
   defp format_error({line, _module, message}) when is_integer(line) do
