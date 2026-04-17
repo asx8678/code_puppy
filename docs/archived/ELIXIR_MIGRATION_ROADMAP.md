@@ -1,11 +1,12 @@
 # 🚀 Rust → Elixir Migration Roadmap — ARCHIVED
 
-> **⚠️ HISTORICAL DOCUMENT — ARCHIVED 2026-04-16 (bd-12)**
-> 
+> ⚠️ **ARCHIVED** — This document is historical. The migration has progressed beyond this roadmap. See [`MIGRATION_STATUS.md`](/MIGRATION_STATUS.md) for current status.
+>
+> **Archived:** 2026-04-17 (bd-84)
+> **Original archive:** 2026-04-16 (bd-12)
+>
 > This document is preserved for historical reference. It contains the tiered migration candidate analysis.
-> 
-> **Current status:** See **`MIGRATION_STATUS.md`** for the single source of truth.
-> 
+>
 > **What's in this doc:** Analysis of which components should/shouldn't migrate to Elixir, with tiered recommendations.
 
 ---
