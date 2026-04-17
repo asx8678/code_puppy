@@ -44,7 +44,7 @@ defmodule CodePuppyControl.Routing.Strategies.LastResort do
           models: [String.t()]
         }
 
-  defstruct [:models]
+  defstruct models: []
 
   # ============================================================================
   # Configuration
@@ -86,11 +86,15 @@ defmodule CodePuppyControl.Routing.Strategies.LastResort do
     unless `check_availability: true` is set in context. Last resort models
     are meant to be emergency fallbacks that are always tried.
     """
+    def select(%LastResort{models: nil}, _context) do
+      {:error, :no_last_resort_models}
+    end
+
     def select(%LastResort{models: []}, _context) do
       {:error, :no_last_resort_models}
     end
 
-    def select(%LastResort{models: models}, context) do
+    def select(%LastResort{models: models}, context) when is_list(models) do
       excluded = Map.get(context, :excluded_models, [])
       check_availability = Map.get(context, :check_last_resort_availability, false)
       available_models = Enum.reject(models, &(&1 in excluded))

@@ -68,35 +68,45 @@ defmodule CodePuppyControl.Routing.StrategyTest do
 
   describe "RoundRobin protocol implementation" do
     test "returns error for empty models without global" do
-      strategy = %RoundRobin{models: []}
+      strategy = %RoundRobin{models: [], use_global: false}
 
       assert Strategy.select(strategy, %{}) == {:error, :no_models_available}
     end
 
     test "returns error when models is nil without global" do
-      strategy = %RoundRobin{models: nil}
+      strategy = %RoundRobin{models: nil, use_global: false}
 
       assert Strategy.select(strategy, %{}) == {:error, :no_models_configured}
     end
 
     test "selects first model when not using global" do
-      strategy = %RoundRobin{models: ["a", "b", "c"]}
+      strategy = %RoundRobin{models: ["a", "b", "c"], use_global: false}
 
       assert Strategy.select(strategy, %{}) == {:ok, "a"}
     end
 
-    test "respects excluded_models" do
-      strategy = %RoundRobin{models: ["a", "b", "c"]}
+    test "respects excluded_models with local mode" do
+      strategy = %RoundRobin{models: ["a", "b", "c"], use_global: false}
       context = %{excluded_models: ["a"]}
 
       assert Strategy.select(strategy, context) == {:ok, "b"}
     end
 
-    test "returns error when all models excluded" do
-      strategy = %RoundRobin{models: ["a", "b"]}
+    test "returns error when all models excluded in local mode" do
+      strategy = %RoundRobin{models: ["a", "b"], use_global: false}
       context = %{excluded_models: ["a", "b"]}
 
       assert Strategy.select(strategy, context) == {:error, :all_models_excluded}
+    end
+
+    test "uses global mode by default" do
+      # When use_global is not explicitly set (defaults to true),
+      # it should delegate to RoundRobinModel
+      strategy = %RoundRobin{}
+
+      # With default use_global: true and nil models, should hit the global path
+      # which returns :no_models_configured since no models are registered
+      assert Strategy.select(strategy, %{}) == {:error, :no_models_configured}
     end
   end
 

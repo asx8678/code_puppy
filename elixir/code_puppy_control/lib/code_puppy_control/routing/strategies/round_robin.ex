@@ -45,7 +45,7 @@ defmodule CodePuppyControl.Routing.Strategies.RoundRobin do
 
   defstruct models: nil,
             rotate_every: 1,
-            use_global: false
+            use_global: true
 
   defimpl Strategy do
     alias CodePuppyControl.Routing.Strategies.RoundRobin
@@ -79,11 +79,11 @@ defmodule CodePuppyControl.Routing.Strategies.RoundRobin do
         [] ->
           {:error, :all_models_excluded}
 
-        _available ->
-          # For non-global mode, we use the current model without advancing
-          # (advancing requires state, which the protocol doesn't support)
-          # Callers should use RoundRobinModel directly for stateful rotation
-          {:ok, hd(available_models)}
+        [first | _rest] ->
+          # NOTE: Non-global mode doesn't maintain state between calls.
+          # For true round-robin rotation, use use_global: true (the default)
+          # which delegates to RoundRobinModel for stateful tracking.
+          {:ok, first}
       end
     end
   end

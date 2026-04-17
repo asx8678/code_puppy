@@ -59,26 +59,22 @@ defmodule CodePuppyControl.Routing.Strategies.FallbackChain do
       excluded = Map.get(context, :excluded_models, [])
       available_models = Enum.reject(models, &(&1 in excluded))
 
-      case context[:availability_service] do
-        nil ->
-          # No availability service, select first non-excluded model
-          case available_models do
-            [] -> {:error, :no_models_available}
-            [first | _rest] -> {:ok, first}
-          end
+      case available_models do
+        [] ->
+          {:error, :no_models_available}
 
-        :global ->
-          # Use global ModelAvailability (default GenServer)
-          result = ModelAvailability.select_first_available(available_models)
+        _ ->
+          # Get availability service from context, handling special :global atom
+          # :global means "use the global ModelAvailability GenServer"
+          availability_service =
+            case Map.get(context, :availability_service) do
+              nil -> ModelAvailability
+              :global -> ModelAvailability
+              service -> service
+            end
 
-          case result.selected_model do
-            nil -> {:error, {:all_models_unavailable, result.skipped}}
-            model -> {:ok, model}
-          end
-
-        _service ->
-          # Check availability for each model using global API
-          result = ModelAvailability.select_first_available(available_models)
+          # Use the injected availability service to select first available model
+          result = availability_service.select_first_available(available_models)
 
           case result.selected_model do
             nil -> {:error, {:all_models_unavailable, result.skipped}}
