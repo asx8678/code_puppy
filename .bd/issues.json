@@ -2192,7 +2192,7 @@
       "id": "bd-113",
       "title": "Rust parser with Yecc",
       "description": "Create Yecc parser for Rust declarations (fn, struct, impl, mod). Parse functions, structs, enums, traits, implementations, and modules. Generate Erlang parser from .yrl grammar file.",
-      "status": "open",
+      "status": "closed",
       "priority": 2,
       "type": "task",
       "labels": [
@@ -2206,8 +2206,14 @@
         ]
       },
       "created_at": "2026-04-17T10:57:46.267892",
-      "updated_at": "2026-04-17T11:03:48.133706",
-      "comments": []
+      "updated_at": "2026-04-17T19:04:45.936382",
+      "comments": [
+        "pack-leader-019d9c starting fresh implementation/fix pass from base main. Current validation found a failing targeted Elixir test in rust_parser_test.exs for complex real-world Rust parsing. Focus: make the Rust parser with Yecc pass its targeted test suite.",
+        "\ud83d\udc15\u200d\ud83e\uddba APPROVAL SUMMARY \u2014 Code Review Complete\n\n**Shepherd \u2014 APPROVE \u2705**\n- Approved the Rust lexer/parser fix implementation\n- Code quality and approach verified\n\n**Watchdog \u2014 APPROVE \u2705**\n- Passing targeted Elixir tests:\n  -  \u2705\n  -  \u2705\n- Broader parsing validation confirmed working\n\n**Final Fix Location:**\n- Branch: \n- Path: \n\nBoth approval gates cleared. Ready for merge consideration.",
+        "\ud83d\udc15\u200d\ud83e\uddba APPROVAL SUMMARY \u2014 Code Review Complete\n\n**Shepherd \u2014 APPROVE \u2705**\n- Approved the Rust lexer/parser fix implementation\n- Code quality and approach verified\n\n**Watchdog \u2014 APPROVE \u2705**\n- Passing targeted Elixir tests:\n  - rust_lexer_test.exs \u2705\n  - rust_parser_test.exs \u2705\n- Broader parsing validation confirmed working\n\n**Final Fix Location:**\n- Branch: feature/bd-113-dev-work\n- Path: /Users/adam2/projects/bd-113\n\nBoth approval gates cleared. Ready for merge consideration.",
+        "\ud83d\udc15\u200d\ud83e\uddba APPROVAL SUMMARY \u2014 Code Review Complete\n\n**Shepherd \u2014 APPROVE \u2705**\n- Approved the Rust lexer/parser fix implementation\n- Code quality and approach verified\n\n**Watchdog \u2014 APPROVE \u2705**\n- Passing targeted Elixir tests:\n  - rust_lexer_test.exs \u2705\n  - rust_parser_test.exs \u2705\n- Broader parsing validation confirmed working\n\n**Final Fix Location:**\n- Branch: feature/bd-113-dev-work\n- Path: /Users/adam2/projects/bd-113\n\nBoth approval gates cleared. Ready for merge consideration.",
+        "Merged locally into main after Shepherd + Watchdog approval. Fixed Rust lexer/parser token mismatch in rust_lexer.erl."
+      ]
     },
     "bd-114": {
       "id": "bd-114",
@@ -2635,7 +2641,7 @@
       "id": "bd-136",
       "title": "Phase 5: Proactive Guidance System",
       "description": "Create PostToolUse hooks that inject next-step guidance after tool execution. Includes guidance-injector.sh for suggesting follow-up actions after write/shell/subagent tools, and show-active-task.sh for AgentSpawn context display.",
-      "status": "open",
+      "status": "closed",
       "priority": 1,
       "type": "task",
       "labels": [],
@@ -2646,11 +2652,17 @@
         ]
       },
       "created_at": "2026-04-17T12:16:39.260174",
-      "updated_at": "2026-04-17T18:31:12.816141",
+      "updated_at": "2026-04-17T19:46:18.284749",
       "comments": [
         "pack-leader-019d9c starting implementation on local worktree from base branch: main.\n\nFocus areas:\n1. Fix language-specific proactive guidance\n2. Add exploratory guidance coverage  \n3. Wire active-task display to real context instead of mock data",
         "\ud83d\udd04 **Shepherd Feedback Summary - REQUEST_CHANGES**\n\nThe following issues were identified during code review:\n\n1. **Async agent_run_start hook performs blocking subprocess I/O** - Violates audit-driven development rules for async callbacks (must use non-blocking I/O only)\n\n2. **show-active-task.sh emits incorrect tasks.source JSON** - Currently outputs 'bdbd-136' instead of 'bd-136' (double prefix)\n\n3. **Text mode reports wrong project type** - In this repo (code_puppy), it should report 'standalone' not a different project type\n\n4. **Changed files fail ruff/lint formatting** - Code formatting issues need to be addressed\n\nAll fixes are being applied in the existing bd-136 worktree.",
-        "Implementation complete in local worktree /Users/adam2/projects/bd-136 on branch feature/bd-136-dev-work. Quality checks pass: ruff check, ruff format --check, and pytest --no-cov (115 passing tests including new show-active-task.sh tests). Standard critic agents (shepherd/watchdog) currently failing to invoke due to missing model configuration 'chatgpt-gpt-5.4'. Task is ready for final critic approval but not yet merged."
+        "Implementation complete in local worktree /Users/adam2/projects/bd-136 on branch feature/bd-136-dev-work. Quality checks pass: ruff check, ruff format --check, and pytest --no-cov (115 passing tests including new show-active-task.sh tests). Standard critic agents (shepherd/watchdog) currently failing to invoke due to missing model configuration 'chatgpt-gpt-5.4'. Task is ready for final critic approval but not yet merged.",
+        "Shepherd + Watchdog feedback: REQUEST_CHANGES\n\nIssues identified:\n1. tests/test_proactive_guidance.py exceeds the 600-line cap (file size limit violation)\n2. tests/test_show_active_task.py is not hermetic - git commit depends on global user.name/user.email configuration\n3. show-active-task.sh --json does not properly escape dynamic values (task titles/status), which can produce invalid JSON output\n\nFixes are being applied in /Users/adam2/projects/bd-136 on branch feature/bd-136-dev-work.",
+        "\ud83d\udeab **Shepherd Blocker - Remaining Issue (Show-Active-Task Script)**\n\nThe following issue still blocks approval:\n\n**Problem:**  still interpolates raw environment variable values directly into JSON output for  and  fields.\n\n**Impact:** Non-JSON env values like  or  can produce invalid JSON output, breaking any downstream JSON parsers that consume this output.\n\n**Current Status:**\n- \u2705 Watchdog approved the current test suite\n- \u274c Shepherd still requests:\n  1. Input sanitization before JSON interpolation\n  2. Regression tests covering edge cases (non-numeric counts, non-boolean enabled values, empty strings, special characters)\n\n**Root Cause:** Direct  interpolation into JSON without type validation or proper escaping for JSON string context.\n\n**Action Required:** Implement input validation/type coercion (convert count to integer with default, validate enabled as boolean/yes/no) and add regression tests for malformed env values.",
+        "\ud83d\udeab **Shepherd Blocker - Remaining Issue (normalize_int() in show-active-task.sh)**\n\n**Problem:** The  function in  still mishandles malformed guidance count inputs:\n-  (interprets as numeric range instead of invalid)\n-  (fails to enforce non-negative-integer contract)\n-  (negative value bypasses validation)\n\n**Impact:** These inputs can either:\n1. Emit invalid JSON in the guidance output\n2. Violate the intended non-negative-integer fallback contract\n\n**Approval Status:**\n- \u2705 Watchdog: Approves the current test suite\n- \ud83d\udeab Shepherd: REQUEST_CHANGES\n\n**Required Fixes:**\n1. Harden  function to properly validate and sanitize guidance count inputs\n2. Add regression tests covering mixed-dash edge cases (, , )\n3. Ensure consistent non-negative-integer fallback behavior for all malformed inputs",
+        "\u2705 **FINAL APPROVALS RECEIVED**\\n\\nAll review feedback has been addressed. Final status:\\n\\n| Reviewer | Status | Key Fixes Applied |\\n|----------|--------|-------------------|\\n| \ud83d\udc11 Shepherd | **APPROVE** | proactive-guidance JSON hardening, test splitting (<600-line cap), hermetic shell-script tests (isolated git config), env-var normalization fixes |\\n| \ud83d\udc15 Watchdog | **APPROVE** | security scan clean, dependency audit passed |\\n\\n**Implementation Location:**\\n- Branch: \\n- Worktree: \\n\\n**Summary of Changes:**\\n1. **Proactive Guidance JSON Hardening**: Safe variable interpolation with  to prevent injection attacks\\n2. **Test Splitting**: Broke monolithic  into focused modules (extractor, injector, integration)\\n3. **Hermetic Tests**:  now uses isolated git config instead of global user.name/user.email\\n4. **Env-Var Normalization**: Fixed  to handle malformed inputs (e.g., , ) with proper error handling\\n\\nPhase 5: Proactive Guidance System is ready for merge! \ud83c\udf89",
+        "Merged locally into main after Shepherd + Watchdog approval. Completed proactive guidance system fixes and JSON hardening.",
+        "Merged locally into main after Shepherd + Watchdog approval."
       ]
     },
     "bd-137": {
@@ -2667,8 +2679,10 @@
         ]
       },
       "created_at": "2026-04-17T12:16:45.478123",
-      "updated_at": "2026-04-17T12:16:47.870970",
-      "comments": []
+      "updated_at": "2026-04-17T19:47:52.139823",
+      "comments": [
+        "pack-leader-019d9c starting implementation from base main. Focus: create ~/.kiro/scripts/guidance-injector.sh based on desired PostToolUse guidance behavior, aligned with proactive-guidance work already merged in main."
+      ]
     },
     "bd-138": {
       "id": "bd-138",
@@ -2684,8 +2698,10 @@
         ]
       },
       "created_at": "2026-04-17T12:16:51.407577",
-      "updated_at": "2026-04-17T12:16:54.814299",
-      "comments": []
+      "updated_at": "2026-04-17T19:47:51.234043",
+      "comments": [
+        "pack-leader-019d9c starting implementation from base main. Creating ~/.kiro/scripts/show-active-task.sh for AgentSpawn context display (proactive-guidance aligned)."
+      ]
     },
     "bd-139": {
       "id": "bd-139",
