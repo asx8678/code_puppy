@@ -7,16 +7,12 @@ bd-91: _try_auto_build() removed - auto-build eliminated, explicit build only.
 """
 
 import sys
-from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 # We only import the helper functions we need to test.
 # Importing the full module is safe — it only registers callbacks at module
 # scope and doesn't trigger builds unless startup fires.
-from code_puppy.plugins.fast_puppy.register_callbacks import (
-    _handle_fast_puppy_command,
-    _on_startup,
-)
+from code_puppy.plugins.fast_puppy.register_callbacks import _on_custom_command
 # bd-91: _has_maturin moved to rust_builder.py
 from code_puppy.plugins.fast_puppy.rust_builder import _has_maturin
 
@@ -83,16 +79,22 @@ class TestHasMaturin:
 # Build functionality now only available via /fast_puppy build command.
 
 # ---------------------------------------------------------------------------
-# _handle_fast_puppy()
+# _on_custom_command()
 # ---------------------------------------------------------------------------
 
 
-class TestHandleFastPuppy:
-    """_handle_fast_puppy_command routes commands correctly."""
+class TestOnCustomCommand:
+    """_on_custom_command routes /fast_puppy commands correctly."""
 
     def test_returns_none_for_unrelated_command(self) -> None:
-        result = _handle_fast_puppy_command("/something_else", "something_else")
+        result = _on_custom_command("/something_else", "something_else")
         assert result is None
+
+    def test_returns_status_for_fast_puppy_command(self) -> None:
+        result = _on_custom_command("/fast_puppy", "fast_puppy")
+        assert result is not None
+        assert "Fast Puppy Status:" in result
+        assert "Native acceleration layer removed" in result
 
     # bd-86: Tests removed - _core_bridge and native_backend modules deleted.
     # These tests depended on deleted modules. Fast puppy plugin simplified.
