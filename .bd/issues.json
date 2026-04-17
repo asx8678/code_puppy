@@ -1,5 +1,5 @@
 {
-  "counter": 146,
+  "counter": 167,
   "issues": {
     "bd-1": {
       "id": "bd-1",
@@ -888,7 +888,7 @@
       "id": "bd-49",
       "title": "Delete Rust workspace",
       "description": "Remove Cargo.toml, Cargo.lock, code_puppy_core/, turbo_parse/, turbo_parse_core/, turbo_parse_bridge/, target/. \n\nBLOCKED by 1.1\u20131.6 (bd-44, bd-45, bd-46, bd-47, bd-48, bd-49).\n\nPart of Phase 1 \u2014 Rust workspace retirement.",
-      "status": "open",
+      "status": "closed",
       "priority": 3,
       "type": "task",
       "labels": [
@@ -906,8 +906,10 @@
         ]
       },
       "created_at": "2026-04-16T17:51:24.208709",
-      "updated_at": "2026-04-16T17:51:38.451870",
-      "comments": []
+      "updated_at": "2026-04-17T20:51:36.126506",
+      "comments": [
+        "Bulk closed: clearing tracker for new plan."
+      ]
     },
     "bd-50": {
       "id": "bd-50",
@@ -933,7 +935,7 @@
       "id": "bd-51",
       "title": "Port turbo_parse_core + turbo_parse to Elixir \u2014 DECISION REQUIRED",
       "description": "BLOCKER DECISION: does 'pure Elixir' permit a minimal C-linked NIF shim for tree-sitter? Tree-sitter grammars are C libraries; there is no pure-Elixir tree-sitter.\n\nOptions:\n(a) Use tree_sitter hex pkg (still C via NIF, but Elixir-owned)\n(b) Accept and retain C NIF shim under elixir/native/turbo_parse_nif/ but rewritten to NOT depend on Rust (C-only)\n(c) Drop tree-sitter entirely; use regex-based symbol extraction (massive feature regression)\n\nRecommend (a). Must retire turbo_parse_core and turbo_parse Rust crates regardless.\n\nPart of Phase 1 \u2014 Rust workspace retirement.",
-      "status": "open",
+      "status": "closed",
       "priority": 3,
       "type": "task",
       "labels": [
@@ -945,14 +947,16 @@
         ]
       },
       "created_at": "2026-04-16T17:51:32.712084",
-      "updated_at": "2026-04-16T17:51:32.712094",
-      "comments": []
+      "updated_at": "2026-04-17T20:51:36.156990",
+      "comments": [
+        "Bulk closed: clearing tracker for new plan."
+      ]
     },
     "bd-52": {
       "id": "bd-52",
       "title": "Port persistence & session storage to Elixir (Ecto)",
       "description": "Sources: code_puppy/persistence.py (9KB), code_puppy/session_storage.py (27KB). Target: Ecto schemas + SQLite/Postgres. Must preserve session format compat during cutover.\n\nPart of Phase 2 \u2014 Python runtime services retirement.",
-      "status": "open",
+      "status": "closed",
       "priority": 2,
       "type": "task",
       "labels": [
@@ -967,14 +971,16 @@
         ]
       },
       "created_at": "2026-04-16T17:51:38.465554",
-      "updated_at": "2026-04-16T21:20:00.344591",
-      "comments": []
+      "updated_at": "2026-04-17T20:51:36.186397",
+      "comments": [
+        "Bulk closed: clearing tracker for new plan."
+      ]
     },
     "bd-53": {
       "id": "bd-53",
       "title": "Consolidate concurrency limits into Elixir",
       "description": "Source: code_puppy/concurrency_limits.py (14KB). Extend existing elixir/.../concurrency/limiter.ex.\n\nPart of Phase 2 \u2014 Python runtime services retirement.",
-      "status": "open",
+      "status": "closed",
       "priority": 2,
       "type": "task",
       "labels": [
@@ -987,14 +993,16 @@
         ]
       },
       "created_at": "2026-04-16T17:51:38.475568",
-      "updated_at": "2026-04-16T21:20:00.251591",
-      "comments": []
+      "updated_at": "2026-04-17T20:51:36.215739",
+      "comments": [
+        "Bulk closed: clearing tracker for new plan."
+      ]
     },
     "bd-54": {
       "id": "bd-54",
       "title": "Port token ledger to Elixir",
       "description": "Sources: code_puppy/token_ledger.py, token_counting.py, token_utils.py. Target: Tokens.Ledger GenServer with ETS backing.\n\nPart of Phase 2 \u2014 Python runtime services retirement.",
-      "status": "open",
+      "status": "closed",
       "priority": 2,
       "type": "task",
       "labels": [
@@ -1009,14 +1017,16 @@
         ]
       },
       "created_at": "2026-04-16T17:51:38.476196",
-      "updated_at": "2026-04-16T21:20:00.374524",
-      "comments": []
+      "updated_at": "2026-04-17T20:51:36.245595",
+      "comments": [
+        "Bulk closed: clearing tracker for new plan."
+      ]
     },
     "bd-55": {
       "id": "bd-55",
       "title": "Port adaptive rate limiter to Elixir",
       "description": "Source: code_puppy/adaptive_rate_limiter.py (41KB). Target: GenServer + :telemetry metrics.\n\nPart of Phase 2 \u2014 Python runtime services retirement.",
-      "status": "open",
+      "status": "closed",
       "priority": 2,
       "type": "task",
       "labels": [
@@ -1029,14 +1039,16 @@
         ]
       },
       "created_at": "2026-04-16T17:51:38.485776",
-      "updated_at": "2026-04-16T21:20:00.403989",
-      "comments": []
+      "updated_at": "2026-04-17T20:51:36.274673",
+      "comments": [
+        "Bulk closed: clearing tracker for new plan."
+      ]
     },
     "bd-56": {
       "id": "bd-56",
       "title": "Port resilience & circuit breakers to Elixir",
       "description": "Sources: code_puppy/resilience.py (23KB), code_puppy/circuit_state.py. Target: :fuse library or custom supervisor-backed breaker.\n\nPart of Phase 2 \u2014 Python runtime services retirement.",
-      "status": "open",
+      "status": "closed",
       "priority": 2,
       "type": "task",
       "labels": [
@@ -1050,14 +1062,16 @@
         ]
       },
       "created_at": "2026-04-16T17:51:38.492744",
-      "updated_at": "2026-04-16T21:20:00.433221",
-      "comments": []
+      "updated_at": "2026-04-17T20:51:36.304430",
+      "comments": [
+        "Bulk closed: clearing tracker for new plan."
+      ]
     },
     "bd-57": {
       "id": "bd-57",
       "title": "Port compaction orchestration to Elixir",
       "description": "Source: code_puppy/compaction/ (30KB \u2014 file_ops_tracker, history_offload, thresholds, tool_arg_truncation). Target: CodePuppyControl.Compaction.\n\nPart of Phase 2 \u2014 Python runtime services retirement.",
-      "status": "open",
+      "status": "closed",
       "priority": 2,
       "type": "task",
       "labels": [
@@ -1070,14 +1084,16 @@
         ]
       },
       "created_at": "2026-04-16T17:51:42.482714",
-      "updated_at": "2026-04-16T21:20:00.461964",
-      "comments": []
+      "updated_at": "2026-04-17T20:51:36.334188",
+      "comments": [
+        "Bulk closed: clearing tracker for new plan."
+      ]
     },
     "bd-58": {
       "id": "bd-58",
       "title": "Port request cache to Elixir",
       "description": "Source: code_puppy/request_cache.py (18KB). Target: ETS / Cachex.\n\nPart of Phase 2 \u2014 Python runtime services retirement.",
-      "status": "open",
+      "status": "closed",
       "priority": 2,
       "type": "task",
       "labels": [
@@ -1090,14 +1106,16 @@
         ]
       },
       "created_at": "2026-04-16T17:51:42.484375",
-      "updated_at": "2026-04-16T21:20:00.285906",
-      "comments": []
+      "updated_at": "2026-04-17T20:51:55.582697",
+      "comments": [
+        "Bulk closed: clearing tracker for new plan."
+      ]
     },
     "bd-59": {
       "id": "bd-59",
       "title": "Port workflow state to Elixir",
       "description": "Source: code_puppy/workflow_state.py (12KB). Target: Workflow.State GenServer.\n\nPart of Phase 2 \u2014 Python runtime services retirement.",
-      "status": "open",
+      "status": "closed",
       "priority": 2,
       "type": "task",
       "labels": [
@@ -1110,8 +1128,10 @@
         ]
       },
       "created_at": "2026-04-16T17:51:42.485751",
-      "updated_at": "2026-04-16T21:20:00.315664",
-      "comments": []
+      "updated_at": "2026-04-17T20:51:55.613554",
+      "comments": [
+        "Bulk closed: clearing tracker for new plan."
+      ]
     },
     "bd-60": {
       "id": "bd-60",
@@ -1136,7 +1156,7 @@
       "id": "bd-61",
       "title": "Port hook engine to Elixir",
       "description": "Source: code_puppy/hook_engine/ (46KB \u2014 engine, executor, matcher, models, registry, validator, aliases). Target: CodePuppyControl.Hooks dispatcher. Keep Python callbacks.py as thin client.\n\nPart of Phase 2 \u2014 Python runtime services retirement.",
-      "status": "open",
+      "status": "closed",
       "priority": 2,
       "type": "task",
       "labels": [
@@ -1150,8 +1170,10 @@
         ]
       },
       "created_at": "2026-04-16T17:51:42.500064",
-      "updated_at": "2026-04-16T21:20:00.491421",
-      "comments": []
+      "updated_at": "2026-04-17T20:51:55.643617",
+      "comments": [
+        "Bulk closed: clearing tracker for new plan."
+      ]
     },
     "bd-62": {
       "id": "bd-62",
@@ -1319,7 +1341,7 @@
       "id": "bd-70",
       "title": "Port model factory + packs to Elixir",
       "description": "Sources: model_factory.py (38KB), model_packs.py (13KB), model_availability.py, model_utils.py, model_config.py. Target: Elixir model registry.\n\nPart of Phase 4 \u2014 Config & model management.",
-      "status": "open",
+      "status": "closed",
       "priority": 2,
       "type": "task",
       "labels": [
@@ -1331,9 +1353,10 @@
         ]
       },
       "created_at": "2026-04-16T17:51:59.563814",
-      "updated_at": "2026-04-17T10:16:36.809610",
+      "updated_at": "2026-04-17T20:51:55.674131",
       "comments": [
-        "Pack Leader progress update (pack-leader-019d9a):\n\nCompleted 4 of 5 subtasks for bd-70:\n- ModelRegistry GenServer (config loading + type registry) - MERGED to main\n- ModelAvailability GenServer (circuit breaker service) - MERGED to main\n- ModelUtils module (prompt preparation functions) - MERGED to main\n- ModelPacks GenServer (role-based routing + fallback chains) - MERGED to main\n\nRemaining:\n- RPC handlers + Python bridge integration (new issue created)\n\nAll 4 Elixir modules live at:\n- lib/code_puppy_control/model_registry.ex (406 lines, 36 tests)\n- lib/code_puppy_control/model_availability.ex (348 lines, 35 tests)\n- lib/code_puppy_control/model_utils.ex (181 lines, 35 tests)\n- lib/code_puppy_control/model_packs.ex (591 lines, 46 tests)\n- lib/code_puppy_control/model_packs/role_config.ex (33 lines)\n- lib/code_puppy_control/model_packs/model_pack.ex (124 lines)\n\nTotal: ~1,683 lines Elixir impl + 152 tests all passing."
+        "Pack Leader progress update (pack-leader-019d9a):\n\nCompleted 4 of 5 subtasks for bd-70:\n- ModelRegistry GenServer (config loading + type registry) - MERGED to main\n- ModelAvailability GenServer (circuit breaker service) - MERGED to main\n- ModelUtils module (prompt preparation functions) - MERGED to main\n- ModelPacks GenServer (role-based routing + fallback chains) - MERGED to main\n\nRemaining:\n- RPC handlers + Python bridge integration (new issue created)\n\nAll 4 Elixir modules live at:\n- lib/code_puppy_control/model_registry.ex (406 lines, 36 tests)\n- lib/code_puppy_control/model_availability.ex (348 lines, 35 tests)\n- lib/code_puppy_control/model_utils.ex (181 lines, 35 tests)\n- lib/code_puppy_control/model_packs.ex (591 lines, 46 tests)\n- lib/code_puppy_control/model_packs/role_config.ex (33 lines)\n- lib/code_puppy_control/model_packs/model_pack.ex (124 lines)\n\nTotal: ~1,683 lines Elixir impl + 152 tests all passing.",
+        "Bulk closed: clearing tracker for new plan."
       ]
     },
     "bd-71": {
@@ -1383,7 +1406,7 @@
       "id": "bd-73",
       "title": "Port config system to Elixir",
       "description": "Source: config.py (87KB), config_package/, config_presets.py (8KB). Target: CodePuppyControl.Config (partial exists). HIGH RISK \u2014 heavy coupling; parallel operation + feature flags.\n\nPart of Phase 4 \u2014 Config & model management.",
-      "status": "open",
+      "status": "closed",
       "priority": 2,
       "type": "task",
       "labels": [
@@ -1395,14 +1418,16 @@
         ]
       },
       "created_at": "2026-04-16T17:51:59.607797",
-      "updated_at": "2026-04-16T17:51:59.607805",
-      "comments": []
+      "updated_at": "2026-04-17T20:51:55.712724",
+      "comments": [
+        "Bulk closed: clearing tracker for new plan."
+      ]
     },
     "bd-74": {
       "id": "bd-74",
       "title": "Port models.dev parser to Elixir",
       "description": "Source: models_dev_parser.py (24KB).\n\nPart of Phase 4 \u2014 Config & model management.",
-      "status": "open",
+      "status": "closed",
       "priority": 2,
       "type": "task",
       "labels": [
@@ -1414,8 +1439,10 @@
         ]
       },
       "created_at": "2026-04-16T17:51:59.622744",
-      "updated_at": "2026-04-16T17:51:59.622752",
-      "comments": []
+      "updated_at": "2026-04-17T20:51:55.744147",
+      "comments": [
+        "Bulk closed: clearing tracker for new plan."
+      ]
     },
     "bd-75": {
       "id": "bd-75",
@@ -1463,7 +1490,7 @@
       "id": "bd-77",
       "title": "Route ALL tool calls through Elixir transport",
       "description": "No Python-side tool implementations. Audit tools/__init__.py registration.\n\nPart of Phase 5 \u2014 Thin Python shell.",
-      "status": "open",
+      "status": "closed",
       "priority": 2,
       "type": "task",
       "labels": [
@@ -1475,14 +1502,16 @@
         ]
       },
       "created_at": "2026-04-16T17:52:10.735702",
-      "updated_at": "2026-04-16T17:52:10.735714",
-      "comments": []
+      "updated_at": "2026-04-17T20:51:55.773974",
+      "comments": [
+        "Bulk closed: clearing tracker for new plan."
+      ]
     },
     "bd-78": {
       "id": "bd-78",
       "title": "Plugin system reshape",
       "description": "code_puppy/plugins/ hooks call into Elixir Hook dispatcher (2.9 / bd-61) via bridge.\n\nPart of Phase 5 \u2014 Thin Python shell.",
-      "status": "open",
+      "status": "closed",
       "priority": 2,
       "type": "task",
       "labels": [
@@ -1495,14 +1524,16 @@
         ]
       },
       "created_at": "2026-04-16T17:52:10.740191",
-      "updated_at": "2026-04-16T17:52:10.740197",
-      "comments": []
+      "updated_at": "2026-04-17T20:51:55.804195",
+      "comments": [
+        "Bulk closed: clearing tracker for new plan."
+      ]
     },
     "bd-79": {
       "id": "bd-79",
       "title": "Delete now-redundant Python modules",
       "description": "Targets for deletion: _backlog.py, _edit_bridge.py, staged_changes.py (if moved), _core_bridge.py, etc.\n\nPart of Phase 5 \u2014 Thin Python shell.",
-      "status": "open",
+      "status": "closed",
       "priority": 2,
       "type": "task",
       "labels": [
@@ -1514,8 +1545,10 @@
         ]
       },
       "created_at": "2026-04-16T17:52:10.753390",
-      "updated_at": "2026-04-16T17:52:10.753401",
-      "comments": []
+      "updated_at": "2026-04-17T20:51:44.441955",
+      "comments": [
+        "Bulk closed: clearing tracker for new plan."
+      ]
     },
     "bd-80": {
       "id": "bd-80",
@@ -1604,7 +1637,7 @@
       "id": "bd-85",
       "title": "Route ALL state reads through Elixir",
       "description": "No Python-side persistence or state. Depends on 2.1, 2.7, 2.8, 4.3 (bd-52, bd-59, bd-58, bd-75).\n\nPart of Phase 5 \u2014 Thin Python shell.",
-      "status": "open",
+      "status": "closed",
       "priority": 2,
       "type": "task",
       "labels": [
@@ -1620,8 +1653,10 @@
         ]
       },
       "created_at": "2026-04-16T17:52:29.811005",
-      "updated_at": "2026-04-16T17:52:29.811011",
-      "comments": []
+      "updated_at": "2026-04-17T20:51:44.474044",
+      "comments": [
+        "Bulk closed: clearing tracker for new plan."
+      ]
     },
     "bd-86": {
       "id": "bd-86",
@@ -1751,7 +1786,7 @@
       "id": "bd-92",
       "title": "Extend bridge protocol with Phase 2 service RPC methods",
       "description": "The current bridge protocol (port.ex + stdio_service.ex) handles file_ops, parse, and repo_compass. Phase 2 services need new RPC methods added.\n\nNEW METHODS NEEDED (grouped by wave):\n\nWave 1:\n  concurrency/get_limits \u2192 CodePuppyControl.Concurrency.Limiter\n  concurrency/set_limits \u2192 same\n  cache/get, cache/put, cache/invalidate \u2192 CodePuppyControl.RequestCache (new)\n  workflow/get_state, workflow/set_state \u2192 CodePuppyControl.Workflow.State (new)\n\nWave 2:\n  session/save, session/load, session/list \u2192 CodePuppyControl.Persistence (new Ecto)\n  tokens/get_balance, tokens/record_usage \u2192 CodePuppyControl.Tokens.Ledger (new)\n  resilience/circuit_status, resilience/reset \u2192 CodePuppyControl.Resilience (new)\n  rate_limit/check, rate_limit/record \u2192 CodePuppyControl.RateLimiter (new)\n\nWave 3:\n  hooks/register, hooks/fire, hooks/list \u2192 CodePuppyControl.Hooks (new)\n  compaction/status, compaction/trigger \u2192 CodePuppyControl.Compaction (new)\n\nIMPLEMENTATION:\n1. Add method clauses to handle_file_request/handle_method in port.ex\n2. Add corresponding methods to stdio_service.ex for standalone mode\n3. Add Python-side callers in native_backend.py (or successor)\n4. Protocol documentation in PROTOCOL_COMPARISON_TABLE.md\n\nBLOCKED BY: nothing (protocol scaffolding can proceed before service implementations)\nBLOCKS: all Phase 2 service ports",
-      "status": "open",
+      "status": "closed",
       "priority": 2,
       "type": "task",
       "labels": [
@@ -1775,14 +1810,16 @@
         ]
       },
       "created_at": "2026-04-16T21:18:47.633763",
-      "updated_at": "2026-04-16T21:20:00.173595",
-      "comments": []
+      "updated_at": "2026-04-17T20:51:44.503639",
+      "comments": [
+        "Bulk closed: clearing tracker for new plan."
+      ]
     },
     "bd-93": {
       "id": "bd-93",
       "title": "Feature-flag framework for Python\u2192Elixir service cutover",
       "description": "Safe migration requires per-service feature flags so each Python\u2192Elixir cutover can be toggled independently, tested in production, and rolled back instantly.\n\nDESIGN:\n  Config key: PUP_ELIXIR_{SERVICE}=true|false (env var override)\n  Runtime: puppy.cfg [elixir_services] section\n  API: NativeBackend.is_service_active(service_name) \u2192 bool\n\nSERVICES TO FLAG:\n  scheduler         \u2192 already Elixir (flag=always_on)\n  file_ops          \u2192 already Elixir (flag=always_on)\n  concurrency       \u2192 bd-53\n  request_cache     \u2192 bd-58\n  workflow_state    \u2192 bd-59\n  persistence       \u2192 bd-52\n  token_ledger      \u2192 bd-54\n  resilience        \u2192 bd-56\n  rate_limiter      \u2192 bd-55\n  hook_engine       \u2192 bd-61\n  compaction        \u2192 bd-57\n  routing           \u2192 bd-60\n\nIMPLEMENTATION:\n  1. Add [elixir_services] to puppy.cfg schema\n  2. Add PUP_ELIXIR_* env var overrides in config.py\n  3. NativeBackend.is_service_active() checks flag before routing\n  4. Python service wrapper: if flag off \u2192 use Python impl, if on \u2192 use Elixir bridge\n  5. /fast_puppy status shows per-service routing table\n\nEFFORT: ~1 day\nBLOCKS: safe cutover of all Phase 2 services",
-      "status": "open",
+      "status": "closed",
       "priority": 2,
       "type": "task",
       "labels": [
@@ -1803,16 +1840,17 @@
         ]
       },
       "created_at": "2026-04-16T21:19:21.886996",
-      "updated_at": "2026-04-16T21:21:47.910133",
+      "updated_at": "2026-04-17T20:51:44.533597",
       "comments": [
-        "NOTE \u2014 2026-04-16: This issue has NO ACTUAL BLOCKERS despite what bd blocked shows.\n\nThe bd dep system shows bd-93 blocked by bd-91, bd-92, and service issues, but this is BACKWARDS. bd-93 (feature flags) should be done BEFORE the services, not after.\n\nACTUAL DEPENDENCY: None (or bd-92 for protocol alignment) \u2014 can start immediately once Phase 2 is approved.\nBLOCKS: All Phase 2 service cutovers (safe migration requires feature flags)\n\nThis is Tier 0 infrastructure \u2014 feature-flag framework must exist before any service migration can proceed."
+        "NOTE \u2014 2026-04-16: This issue has NO ACTUAL BLOCKERS despite what bd blocked shows.\n\nThe bd dep system shows bd-93 blocked by bd-91, bd-92, and service issues, but this is BACKWARDS. bd-93 (feature flags) should be done BEFORE the services, not after.\n\nACTUAL DEPENDENCY: None (or bd-92 for protocol alignment) \u2014 can start immediately once Phase 2 is approved.\nBLOCKS: All Phase 2 service cutovers (safe migration requires feature flags)\n\nThis is Tier 0 infrastructure \u2014 feature-flag framework must exist before any service migration can proceed.",
+        "Bulk closed: clearing tracker for new plan."
       ]
     },
     "bd-94": {
       "id": "bd-94",
       "title": "Phase 2 parity test suite: Python vs Elixir service equivalence",
       "description": "Each Phase 2 service migration needs automated parity tests proving the Elixir implementation matches Python behavior.\n\nSTRATEGY:\n  For each service (bd-52 through bd-63):\n  1. Capture Python behavior as golden-file test fixtures\n  2. Run same inputs against Elixir implementation via bridge\n  3. Assert identical outputs (or document accepted divergences)\n  4. Performance benchmark: Elixir must be within 2x of Python (except token estimation)\n\nTEST CATEGORIES:\n  - Unit: Pure function parity (same input \u2192 same output)\n  - Integration: Python\u2194Elixir bridge round-trip\n  - Stress: Concurrent access patterns (GenServer contention)\n  - Regression: Existing test suite passes with Elixir backend enabled\n\nLOCATION: tests/phase2_parity/ (new directory)\n\nFIXTURES NEEDED PER SERVICE:\n  - concurrency: parallel limit scenarios, deadlock cases\n  - cache: hit/miss/eviction/TTL behavior\n  - persistence: session round-trip (save\u2192load\u2192verify)\n  - token_ledger: balance tracking across concurrent agents\n  - resilience: circuit open/close/half-open transitions\n  - rate_limiter: burst/sustained/backoff patterns\n  - hook_engine: registration, firing order, async hooks\n\nEFFORT: ~0.5 day per service (rolling, alongside each port)\nBLOCKS: declaring any service migration 'done'",
-      "status": "open",
+      "status": "closed",
       "priority": 2,
       "type": "task",
       "labels": [
@@ -1826,8 +1864,10 @@
         ]
       },
       "created_at": "2026-04-16T21:19:21.890247",
-      "updated_at": "2026-04-16T21:20:00.147917",
-      "comments": []
+      "updated_at": "2026-04-17T20:51:44.563716",
+      "comments": [
+        "Bulk closed: clearing tracker for new plan."
+      ]
     },
     "bd-95": {
       "id": "bd-95",
@@ -1861,7 +1901,7 @@
       "id": "bd-97",
       "title": "Pure Elixir Parsing with Leex/Yecc",
       "description": "Replace tree-sitter Rust crates with pure Elixir/Erlang parsers using Leex (lexer generator) and Yecc (parser generator). Zero native dependencies.\n\nGoal: Delete turbo_parse_core (~10,100 lines) and turbo_parse (~3,000 lines) Rust code.\n\nApproach: \n- Elixir: Use Code.string_to_quoted (built-in)\n- Erlang: Use :erl_scan + :erl_parse (built-in OTP)\n- Python/JS/TS/Rust: Write Leex/Yecc grammars (declaration-only)\n\nTrade-offs accepted:\n- No syntax highlighting (can derive separately)\n- No incremental parsing\n- Basic error recovery\n\nEstimated effort: 10-11 weeks\n\nSupersedes bd-51 decision.",
-      "status": "open",
+      "status": "closed",
       "priority": 2,
       "type": "epic",
       "labels": [
@@ -1873,14 +1913,16 @@
         ]
       },
       "created_at": "2026-04-17T10:49:31.649564",
-      "updated_at": "2026-04-17T10:59:15.439581",
-      "comments": []
+      "updated_at": "2026-04-17T20:51:44.593780",
+      "comments": [
+        "Bulk closed: clearing tracker for new plan."
+      ]
     },
     "bd-98": {
       "id": "bd-98",
       "title": "Foundation - Parser infrastructure setup",
       "description": "Set up src/ directory for Erlang .xrl/.yrl files\nCreate Elixir parser using Code.string_to_quoted + Sourceror\nCreate Erlang parser using :erl_scan + :erl_parse  \nBuild registry module for language dispatch\n\nEpic: bd-97\nEst: 1 week",
-      "status": "open",
+      "status": "closed",
       "priority": 2,
       "type": "task",
       "labels": [
@@ -1900,14 +1942,16 @@
         ]
       },
       "created_at": "2026-04-17T10:49:56.174339",
-      "updated_at": "2026-04-17T10:57:46.417918",
-      "comments": []
+      "updated_at": "2026-04-17T20:51:44.623270",
+      "comments": [
+        "Bulk closed: clearing tracker for new plan."
+      ]
     },
     "bd-99": {
       "id": "bd-99",
       "title": "Python Leex/Yecc parser",
       "description": "Write python_lexer.xrl (tokens)\nWrite python_parser.yrl (declarations only)\nCreate Elixir wrapper with symbol extraction\nTest against real Python files\n\nEpic: bd-97\nEst: 2 weeks",
-      "status": "open",
+      "status": "closed",
       "priority": 2,
       "type": "task",
       "labels": [
@@ -1925,14 +1969,16 @@
         ]
       },
       "created_at": "2026-04-17T10:49:59.349512",
-      "updated_at": "2026-04-17T10:58:09.033990",
-      "comments": []
+      "updated_at": "2026-04-17T20:51:44.653045",
+      "comments": [
+        "Bulk closed: clearing tracker for new plan."
+      ]
     },
     "bd-100": {
       "id": "bd-100",
       "title": "JavaScript Leex/Yecc parser",
       "description": "Write javascript_lexer.xrl\nWrite javascript_parser.yrl\nHandle JSX syntax (optional)\nTest against real JS files\n\nEpic: bd-97\nEst: 2 weeks",
-      "status": "open",
+      "status": "closed",
       "priority": 2,
       "type": "task",
       "labels": [
@@ -1949,14 +1995,16 @@
         ]
       },
       "created_at": "2026-04-17T10:50:01.815992",
-      "updated_at": "2026-04-17T10:58:09.062604",
-      "comments": []
+      "updated_at": "2026-04-17T20:51:49.412829",
+      "comments": [
+        "Bulk closed: clearing tracker for new plan."
+      ]
     },
     "bd-101": {
       "id": "bd-101",
       "title": "TypeScript/TSX Leex/Yecc parser",
       "description": "Extend JS lexer with type tokens\nWrite typescript_parser.yrl\nHandle TSX (types + JSX)\nTest against real TS files\n\nEpic: bd-97\nEst: 2 weeks",
-      "status": "open",
+      "status": "closed",
       "priority": 2,
       "type": "task",
       "labels": [
@@ -1974,14 +2022,16 @@
         ]
       },
       "created_at": "2026-04-17T10:50:04.522553",
-      "updated_at": "2026-04-17T10:57:46.271041",
-      "comments": []
+      "updated_at": "2026-04-17T20:51:49.443209",
+      "comments": [
+        "Bulk closed: clearing tracker for new plan."
+      ]
     },
     "bd-102": {
       "id": "bd-102",
       "title": "Rust Leex/Yecc parser",
       "description": "Write rust_lexer.xrl\nWrite rust_parser.yrl\nHandle macros (simplified)\nTest against real Rust files\n\nEpic: bd-97\nEst: 2 weeks",
-      "status": "open",
+      "status": "closed",
       "priority": 2,
       "type": "task",
       "labels": [
@@ -2000,14 +2050,16 @@
         ]
       },
       "created_at": "2026-04-17T10:50:07.471321",
-      "updated_at": "2026-04-17T10:58:09.091392",
-      "comments": []
+      "updated_at": "2026-04-17T20:51:49.473050",
+      "comments": [
+        "Bulk closed: clearing tracker for new plan."
+      ]
     },
     "bd-103": {
       "id": "bd-103",
       "title": "Integration and Rust deletion",
       "description": "Replace tree-sitter calls with new parsers\nDelete turbo_parse_core/ and turbo_parse/ directories\nUpdate NativeBackend routing\nUpdate documentation (ARCHITECTURE.md, MIGRATION_STATUS.md)\nClose bd-51\n\nEpic: bd-97\nEst: 1 week",
-      "status": "open",
+      "status": "closed",
       "priority": 2,
       "type": "task",
       "labels": [
@@ -2029,14 +2081,16 @@
         ]
       },
       "created_at": "2026-04-17T10:50:11.489860",
-      "updated_at": "2026-04-17T10:57:46.273468",
-      "comments": []
+      "updated_at": "2026-04-17T20:51:49.503231",
+      "comments": [
+        "Bulk closed: clearing tracker for new plan."
+      ]
     },
     "bd-104": {
       "id": "bd-104",
       "title": "Parser behaviour and abstraction layer",
       "description": "Create Elixir behaviour that all language parsers implement. This is the foundation defining the contract (init/1, parse/2, declarations/1) that every language-specific parser must follow. Includes base types and shared utilities.",
-      "status": "open",
+      "status": "closed",
       "priority": 1,
       "type": "task",
       "labels": [
@@ -2045,8 +2099,10 @@
       ],
       "dependencies": {},
       "created_at": "2026-04-17T10:57:46.018152",
-      "updated_at": "2026-04-17T11:00:12.375000",
-      "comments": []
+      "updated_at": "2026-04-17T20:51:49.532663",
+      "comments": [
+        "Bulk closed: clearing tracker for new plan."
+      ]
     },
     "bd-105": {
       "id": "bd-105",
@@ -2154,7 +2210,7 @@
       "id": "bd-111",
       "title": "TSX parser extensions",
       "description": "Extend TypeScript parser for TSX/JSX support. Add JSX element parsing, fragment syntax, spread attributes, and component type integration.",
-      "status": "open",
+      "status": "closed",
       "priority": 3,
       "type": "task",
       "labels": [
@@ -2168,8 +2224,10 @@
         ]
       },
       "created_at": "2026-04-17T10:57:46.249254",
-      "updated_at": "2026-04-17T11:02:29.213499",
-      "comments": []
+      "updated_at": "2026-04-17T20:51:49.562367",
+      "comments": [
+        "Bulk closed: clearing tracker for new plan."
+      ]
     },
     "bd-112": {
       "id": "bd-112",
@@ -2219,7 +2277,7 @@
       "id": "bd-114",
       "title": "Wire pure Elixir parsers to Parser module",
       "description": "Replace TurboParseNif calls with pure Elixir parser implementations. Integrate all language parsers into the main Parser module. Update configuration and routing. This is the critical integration point.",
-      "status": "open",
+      "status": "closed",
       "priority": 1,
       "type": "task",
       "labels": [
@@ -2234,14 +2292,16 @@
         ]
       },
       "created_at": "2026-04-17T10:57:46.355642",
-      "updated_at": "2026-04-17T11:02:33.183222",
-      "comments": []
+      "updated_at": "2026-04-17T20:51:49.592444",
+      "comments": [
+        "Bulk closed: clearing tracker for new plan."
+      ]
     },
     "bd-115": {
       "id": "bd-115",
       "title": "Delete Rust parsing code",
       "description": "Remove turbo_parse_core (~10,100 lines) and turbo_parse (~3,000 lines) Rust crates. Clean up Cargo.toml references, build scripts, and CI pipeline. The final step in the Rust retirement for parsing!",
-      "status": "open",
+      "status": "closed",
       "priority": 1,
       "type": "task",
       "labels": [
@@ -2254,8 +2314,10 @@
         ]
       },
       "created_at": "2026-04-17T10:57:46.363655",
-      "updated_at": "2026-04-17T11:02:33.195913",
-      "comments": []
+      "updated_at": "2026-04-17T20:51:49.622291",
+      "comments": [
+        "Bulk closed: clearing tracker for new plan."
+      ]
     },
     "bd-116": {
       "id": "bd-116",
@@ -2870,6 +2932,365 @@
         "Watchdog APPROVE: show-active-task shell suite passes 46/46 and targeted pytest tests pass 56/56.",
         "Merged locally into main after Shepherd + Watchdog approval. Added repo-local ~/.kiro/scripts/show-active-task.sh with comprehensive shell-test coverage."
       ]
+    },
+    "bd-147": {
+      "id": "bd-147",
+      "title": "Add xxhash Elixir dependency",
+      "description": "Add {:xxhash, \"~> 0.3\"} to mix.exs deps. This provides xxhash functionality needed for the pure Elixir HashLine implementation.",
+      "status": "closed",
+      "priority": 2,
+      "type": "task",
+      "labels": [],
+      "dependencies": {},
+      "created_at": "2026-04-17T20:59:02.845943",
+      "updated_at": "2026-04-17T21:14:38.770910",
+      "comments": [
+        "pack-leader-019d9c starting implementation from base main in local worktree. Focus: add xxhash Elixir dependency for pure Elixir HashLine implementation.",
+        "Shepherd APPROVE: xxhash dependency addition is minimal and correct, with mix.lock appropriately updated.",
+        "Watchdog APPROVE: mix deps.get, mix compile, and xxhash smoke checks passed in elixir/code_puppy_control.",
+        "Merged locally into main following Shepherd + Watchdog approval. Added xxhash ~> 0.3 dependency to mix.exs with lockfile entry in code_puppy_control."
+      ]
+    },
+    "bd-148": {
+      "id": "bd-148",
+      "title": "Eliminate Rust: Pure Elixir Runtime",
+      "description": "Remove all Rust dependencies (code_puppy_core PyO3 crate, hashline_nif Rustler crate) by rewriting functionality in pure Elixir. End state: zero Rust, simplified build, Python\u2194Elixir only.",
+      "status": "open",
+      "priority": 1,
+      "type": "epic",
+      "labels": [],
+      "dependencies": {
+        "blocks": [
+          "bd-152",
+          "bd-164",
+          "bd-165"
+        ]
+      },
+      "created_at": "2026-04-17T20:59:02.850335",
+      "updated_at": "2026-04-17T20:59:17.791997",
+      "comments": []
+    },
+    "bd-149": {
+      "id": "bd-149",
+      "title": "Create pure Elixir HashLine module",
+      "description": "Implement compute_line_hash/2, format_hashlines/2, strip_hashline_prefixes/1, validate_hashline_anchor/3 in pure Elixir. Must match exact interface of hashline_nif Rust NIF for drop-in replacement.",
+      "status": "open",
+      "priority": 2,
+      "type": "task",
+      "labels": [],
+      "dependencies": {
+        "blocks": [
+          "bd-147"
+        ]
+      },
+      "created_at": "2026-04-17T20:59:02.867969",
+      "updated_at": "2026-04-17T20:59:17.426829",
+      "comments": []
+    },
+    "bd-150": {
+      "id": "bd-150",
+      "title": "Parity tests for HashLine",
+      "description": "Create comprehensive test suite verifying Elixir HashLine implementation produces identical output to Rust NIF implementation. Test all functions: compute_line_hash, format_hashlines, strip_hashline_prefixes, validate_hashline_anchor.",
+      "status": "open",
+      "priority": 2,
+      "type": "task",
+      "labels": [],
+      "dependencies": {},
+      "created_at": "2026-04-17T20:59:02.885454",
+      "updated_at": "2026-04-17T20:59:02.885464",
+      "comments": []
+    },
+    "bd-151": {
+      "id": "bd-151",
+      "title": "Port message hashing to Elixir",
+      "description": "Port message hashing from Rust to Elixir. Use :erlang.phash2 or xxhash for stable hashes. Must match FxHash output format exactly for compatibility.",
+      "status": "open",
+      "priority": 2,
+      "type": "task",
+      "labels": [],
+      "dependencies": {
+        "blocks": [
+          "bd-154"
+        ]
+      },
+      "created_at": "2026-04-17T20:59:02.899717",
+      "updated_at": "2026-04-17T20:59:17.554006",
+      "comments": []
+    },
+    "bd-152": {
+      "id": "bd-152",
+      "title": "Switch to pure Elixir HashLine + delete Rust",
+      "description": "Update all callers to use new pure Elixir HashLine module. Remove native/hashline_nif/ directory entirely. Remove Rustler dependency from mix.exs. Verify all tests pass after removal.",
+      "status": "open",
+      "priority": 2,
+      "type": "task",
+      "labels": [],
+      "dependencies": {
+        "blocks": [
+          "bd-150"
+        ]
+      },
+      "created_at": "2026-04-17T20:59:02.913496",
+      "updated_at": "2026-04-17T20:59:17.576472",
+      "comments": []
+    },
+    "bd-153": {
+      "id": "bd-153",
+      "title": "Port token estimation to Elixir",
+      "description": "Port token estimation logic from Rust to Elixir. Implement heuristic char-ratio estimator with code detection. Add line sampling for large texts. Must match Rust token counts within acceptable tolerance.",
+      "status": "open",
+      "priority": 1,
+      "type": "task",
+      "labels": [],
+      "dependencies": {
+        "blocks": [
+          "bd-154"
+        ]
+      },
+      "created_at": "2026-04-17T20:59:02.928471",
+      "updated_at": "2026-04-17T20:59:17.504023",
+      "comments": []
+    },
+    "bd-154": {
+      "id": "bd-154",
+      "title": "Create Elixir MessageCore module structure",
+      "description": "Create new module CodePuppyControl.MessageCore with proper submodules for organizing message processing functionality. Set up module hierarchy matching Python structure for eventual port.",
+      "status": "open",
+      "priority": 1,
+      "type": "task",
+      "labels": [],
+      "dependencies": {},
+      "created_at": "2026-04-17T20:59:02.933629",
+      "updated_at": "2026-04-17T20:59:02.933638",
+      "comments": []
+    },
+    "bd-155": {
+      "id": "bd-155",
+      "title": "Port MessagePack serialization to Elixir",
+      "description": "Port MessagePack serialization/deserialization from Rust to Elixir. Use msgpax library. Implement serialize_session/deserialize_session functions matching Python interface.",
+      "status": "open",
+      "priority": 2,
+      "type": "task",
+      "labels": [],
+      "dependencies": {
+        "blocks": [
+          "bd-154"
+        ]
+      },
+      "created_at": "2026-04-17T20:59:02.958705",
+      "updated_at": "2026-04-17T20:59:17.601029",
+      "comments": []
+    },
+    "bd-156": {
+      "id": "bd-156",
+      "title": "Port truncation indices logic to Elixir",
+      "description": "Port truncation indices logic from Rust to Elixir. Implement determination of which messages to keep vs summarize. Handle protected messages and thinking blocks correctly.",
+      "status": "open",
+      "priority": 1,
+      "type": "task",
+      "labels": [],
+      "dependencies": {
+        "blocks": [
+          "bd-155"
+        ]
+      },
+      "created_at": "2026-04-17T20:59:02.970623",
+      "updated_at": "2026-04-17T20:59:17.617107",
+      "comments": []
+    },
+    "bd-157": {
+      "id": "bd-157",
+      "title": "Port message pruning logic to Elixir",
+      "description": "Port message pruning logic from Rust to Elixir. Implement filtering of mismatched tool call pairs, oversized messages, and empty thinking blocks. Must match Rust behavior exactly.",
+      "status": "open",
+      "priority": 1,
+      "type": "task",
+      "labels": [],
+      "dependencies": {
+        "blocks": [
+          "bd-153",
+          "bd-155"
+        ]
+      },
+      "created_at": "2026-04-17T20:59:02.981438",
+      "updated_at": "2026-04-17T20:59:17.556627",
+      "comments": []
+    },
+    "bd-158": {
+      "id": "bd-158",
+      "title": "Port split_for_summarization logic to Elixir",
+      "description": "Port split_for_summarization logic from Rust to Elixir. Split messages into summarize vs protected groups. Must handle edge cases same as Rust implementation.",
+      "status": "open",
+      "priority": 2,
+      "type": "task",
+      "labels": [],
+      "dependencies": {
+        "blocks": [
+          "bd-151",
+          "bd-155"
+        ]
+      },
+      "created_at": "2026-04-17T20:59:03.045577",
+      "updated_at": "2026-04-17T20:59:17.655836",
+      "comments": []
+    },
+    "bd-159": {
+      "id": "bd-159",
+      "title": "Create MessageBatch Elixir struct",
+      "description": "Create MessageBatch Elixir struct with frozen batch semantics. Cache token counts and hashes. Must match Python MessageBatch interface for seamless integration.",
+      "status": "open",
+      "priority": 2,
+      "type": "task",
+      "labels": [],
+      "dependencies": {
+        "blocks": [
+          "bd-153",
+          "bd-151",
+          "bd-155"
+        ]
+      },
+      "created_at": "2026-04-17T20:59:03.079828",
+      "updated_at": "2026-04-17T20:59:17.596121",
+      "comments": []
+    },
+    "bd-160": {
+      "id": "bd-160",
+      "title": "Add JSON-RPC endpoints for message operations",
+      "description": "Add JSON-RPC Protocol endpoints exposing all MessageCore functions. Include process_messages_batch, prune_and_filter, compute_token_estimate, etc. Follow existing Protocol patterns.",
+      "status": "open",
+      "priority": 1,
+      "type": "task",
+      "labels": [],
+      "dependencies": {
+        "blocks": [
+          "bd-157",
+          "bd-156",
+          "bd-158",
+          "bd-159"
+        ]
+      },
+      "created_at": "2026-04-17T20:59:03.094872",
+      "updated_at": "2026-04-17T20:59:17.667570",
+      "comments": []
+    },
+    "bd-161": {
+      "id": "bd-161",
+      "title": "Update Python elixir_bridge for message ops",
+      "description": "Update Python elixir_bridge.py to route process_messages_batch, prune_and_filter, compute_token_estimate to Elixir instead of Rust. Update native backend selector to prefer Elixir.",
+      "status": "open",
+      "priority": 1,
+      "type": "task",
+      "labels": [],
+      "dependencies": {
+        "blocks": [
+          "bd-160"
+        ]
+      },
+      "created_at": "2026-04-17T20:59:03.107027",
+      "updated_at": "2026-04-17T20:59:17.510119",
+      "comments": []
+    },
+    "bd-162": {
+      "id": "bd-162",
+      "title": "Feature flag for Elixir vs Rust message processing",
+      "description": "Add feature flag allowing runtime switching between Elixir and Rust message processing implementations. Useful for A/B testing and gradual rollout. Default to Elixir once stable.",
+      "status": "open",
+      "priority": 2,
+      "type": "task",
+      "labels": [],
+      "dependencies": {
+        "blocks": [
+          "bd-161"
+        ]
+      },
+      "created_at": "2026-04-17T20:59:03.134174",
+      "updated_at": "2026-04-17T20:59:17.590993",
+      "comments": []
+    },
+    "bd-163": {
+      "id": "bd-163",
+      "title": "Parity test suite: Python/Rust vs Elixir",
+      "description": "Create comprehensive parity test suite ensuring Python/Rust and Elixir implementations produce identical results for all message operations. Include edge cases, large messages, tool calls, thinking blocks.",
+      "status": "open",
+      "priority": 1,
+      "type": "task",
+      "labels": [],
+      "dependencies": {
+        "blocks": [
+          "bd-161"
+        ]
+      },
+      "created_at": "2026-04-17T20:59:03.147548",
+      "updated_at": "2026-04-17T20:59:17.646674",
+      "comments": []
+    },
+    "bd-164": {
+      "id": "bd-164",
+      "title": "Remove code_puppy_core crate",
+      "description": "Delete code_puppy_core/ directory entirely. Remove from Cargo.toml workspace. Update any remaining references. Verify build succeeds without the crate.",
+      "status": "open",
+      "priority": 2,
+      "type": "task",
+      "labels": [],
+      "dependencies": {
+        "blocks": [
+          "bd-163"
+        ]
+      },
+      "created_at": "2026-04-17T20:59:03.159391",
+      "updated_at": "2026-04-17T20:59:17.650087",
+      "comments": []
+    },
+    "bd-165": {
+      "id": "bd-165",
+      "title": "Delete Cargo.toml and Rust workspace entirely",
+      "description": "Remove Cargo.toml and entire Rust workspace from project. No more Rust in the project! Update any documentation or scripts referencing Rust build.",
+      "status": "open",
+      "priority": 2,
+      "type": "task",
+      "labels": [],
+      "dependencies": {
+        "blocks": [
+          "bd-163"
+        ]
+      },
+      "created_at": "2026-04-17T20:59:03.179754",
+      "updated_at": "2026-04-17T20:59:17.693702",
+      "comments": []
+    },
+    "bd-166": {
+      "id": "bd-166",
+      "title": "Update CI to remove Rust toolchain",
+      "description": "Update CI configuration to remove Rust toolchain setup. Simplify build pipeline - no more cargo build needed. Update GitHub Actions workflows.",
+      "status": "open",
+      "priority": 3,
+      "type": "task",
+      "labels": [],
+      "dependencies": {
+        "blocks": [
+          "bd-163"
+        ]
+      },
+      "created_at": "2026-04-17T20:59:03.197832",
+      "updated_at": "2026-04-17T20:59:17.730421",
+      "comments": []
+    },
+    "bd-167": {
+      "id": "bd-167",
+      "title": "Update documentation for Rust removal",
+      "description": "Update ARCHITECTURE.md, README.md, and other documentation to reflect pure Elixir architecture. Remove Rust references, update build instructions, document new Elixir-only architecture.",
+      "status": "open",
+      "priority": 3,
+      "type": "task",
+      "labels": [],
+      "dependencies": {
+        "blocks": [
+          "bd-163"
+        ]
+      },
+      "created_at": "2026-04-17T20:59:09.443263",
+      "updated_at": "2026-04-17T20:59:17.767455",
+      "comments": []
     }
   }
 }
