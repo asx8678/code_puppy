@@ -26,10 +26,10 @@ class TestModelFactoryBridgeIntegration:
     def test_call_elixir_model_registry_connected(self):
         """Test bridge call when connected."""
         with patch(
-            "code_puppy.model_factory.is_connected", return_value=True
+            "code_puppy.plugins.elixir_bridge.is_connected", return_value=True
         ) as mock_connected:
             with patch(
-                "code_puppy.model_factory.call_method",
+                "code_puppy.plugins.elixir_bridge.call_method",
                 return_value={"configs": {"model1": {"type": "test"}}},
             ) as mock_call:
                 result = _call_elixir_model_registry("get_all_configs")
@@ -43,7 +43,7 @@ class TestModelFactoryBridgeIntegration:
     def test_call_elixir_model_registry_not_connected(self):
         """Test bridge call when not connected."""
         with patch(
-            "code_puppy.model_factory.is_connected", return_value=False
+            "code_puppy.plugins.elixir_bridge.is_connected", return_value=False
         ) as mock_connected:
             result = _call_elixir_model_registry("get_all_configs")
 
@@ -53,10 +53,10 @@ class TestModelFactoryBridgeIntegration:
     def test_call_elixir_model_registry_call_fails(self):
         """Test bridge call when call_method raises an exception."""
         with patch(
-            "code_puppy.model_factory.is_connected", return_value=True
+            "code_puppy.plugins.elixir_bridge.is_connected", return_value=True
         ):
             with patch(
-                "code_puppy.model_factory.call_method",
+                "code_puppy.plugins.elixir_bridge.call_method",
                 side_effect=ConnectionError("Test error"),
             ):
                 result = _call_elixir_model_registry("get_all_configs")
@@ -66,10 +66,10 @@ class TestModelFactoryBridgeIntegration:
     def test_call_elixir_model_registry_with_params(self):
         """Test bridge call with parameters."""
         with patch(
-            "code_puppy.model_factory.is_connected", return_value=True
+            "code_puppy.plugins.elixir_bridge.is_connected", return_value=True
         ):
             with patch(
-                "code_puppy.model_factory.call_method",
+                "code_puppy.plugins.elixir_bridge.call_method",
                 return_value={"model_name": "test", "config": {"type": "test"}},
             ) as mock_call:
                 result = _call_elixir_model_registry(

@@ -104,6 +104,11 @@ defmodule Mix.Tasks.CodePuppy.StdioService do
     # Start RuntimeState GenServer for runtime state management (bd-75)
     {:ok, _} = CodePuppyControl.RuntimeState.start_link([])
 
+    # Start model services for RPC handlers (bd-96)
+    {:ok, _} = CodePuppyControl.ModelRegistry.start_link([])
+    {:ok, _} = CodePuppyControl.ModelAvailability.start_link([])
+    {:ok, _} = CodePuppyControl.ModelPacks.start_link([])
+
     # Give the service a moment to suppress any startup output
     Process.sleep(100)
 

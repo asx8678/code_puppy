@@ -1646,7 +1646,6 @@ defmodule CodePuppyControl.Transport.StdioService do
   alias CodePuppyControl.ModelRegistry
   alias CodePuppyControl.ModelAvailability
   alias CodePuppyControl.ModelPacks
-  alias CodePuppyControl.ModelUtils
 
   # model_registry.get_config - Get model configuration by name
   defp handle_request("model_registry.get_config", params, id) do
@@ -1673,7 +1672,7 @@ defmodule CodePuppyControl.Transport.StdioService do
         %{
           "name" => name,
           "type" => ModelRegistry.get_model_type(config),
-          "enabled" => config["enabled"] || true
+          "enabled" => Map.get(config, "enabled", true)
         }
       end)
       |> Enum.sort_by(& &1["name"])
@@ -1723,11 +1722,26 @@ defmodule CodePuppyControl.Transport.StdioService do
     end
   end
 
-  # model_packs.get_pack - Get model pack by name
+  # model_packs.get_pack - Get model pack by name (returns current pack if name is nil)
   defp handle_request("model_packs.get_pack", params, id) do
     pack_name = params["pack_name"]
 
-    pack = ModelPacks.get_pack(pack_name)
+    # If pack_name is nil, return current pack; if invalid type, return error
+    pack =
+      cond do
+        is_nil(pack_name) ->
+          ModelPacks.get_current_pack()
+
+        is_binary(pack_name) ->
+          ModelPacks.get_pack(pack_name)
+
+        true ->
+          nil
+      end
+
+    if is_nil(pack) do
+      Protocol.encode_error(-32602, "Missing or invalid param: pack_name", nil, id)
+    else
 
     serialized = %{
       "name" => pack.name,
@@ -1746,6 +1760,7 @@ defmodule CodePuppyControl.Transport.StdioService do
     }
 
     Protocol.encode_response(%{"pack" => serialized}, id)
+    end
   end
 
   # model_packs.get_current - Get current model pack
@@ -1791,9 +1806,13 @@ defmodule CodePuppyControl.Transport.StdioService do
   # model_packs.get_model_for_role - Get primary model for role
   defp handle_request("model_packs.get_model_for_role", params, id) do
     role = params["role"] || "coder"
-    model = ModelPacks.get_model_for_role(role)
 
-    Protocol.encode_response(%{"role" => role, "model" => model}, id)
+    if not is_binary(role) do
+      Protocol.encode_error(-32602, "Invalid param: role must be a string", nil, id)
+    else
+      model = ModelPacks.get_model_for_role(role)
+      Protocol.encode_response(%{"role" => role, "model" => model}, id)
+    end
   end
 
   # model_utils.resolve_model - Resolve model name to config
@@ -1832,6 +1851,7 @@ defmodule CodePuppyControl.Transport.StdioService do
         Protocol.encode_response(%{
           "model_name" => model_name,
           "config" => nil,
+          "type" => nil,
           "error" => "not_found"
         }, id)
       end
