@@ -201,6 +201,9 @@ get_active_tasks() {
         fi
     fi
 
+    local task_source="env/git"
+    [[ -n "$task_id" ]] && task_source="bd"
+
     cat <<EOF
 {
     "current_task": {
@@ -208,7 +211,7 @@ get_active_tasks() {
         "name": "$task_name",
         "status": "$task_status"
     },
-    "source": "${task_id:+bd}${task_id:-env/git}"
+    "source": "$task_source"
 }
 EOF
 }
@@ -269,10 +272,11 @@ output_text() {
     # Project
     echo -e "${BOLD}${MAGENTA}📁 Project:${RESET}"
     local proj_type="unknown"
-    [[ -f "pyproject.toml" ]] && proj_type="Python"
-    [[ -f "package.json" ]] && proj_type="Node.js"
-    [[ -f "Cargo.toml" ]] && proj_type="Rust"
-    [[ -f "go.mod" ]] && proj_type="Go"
+    if [[ -f "pyproject.toml" ]]; then proj_type="Python"
+    elif [[ -f "package.json" ]]; then proj_type="Node.js"
+    elif [[ -f "Cargo.toml" ]]; then proj_type="Rust"
+    elif [[ -f "go.mod" ]]; then proj_type="Go"
+    fi
     echo -e "   Type: $proj_type"
     
     # Detect Code Puppy project specifically

@@ -140,8 +140,6 @@ class TestWriteGuidance:
             guidance.count("\n") >= 4
         )  # Should have header + 4 suggestions in verbose mode
 
-
-
     def test_toml_file_guidance(self, plugin_module, fresh_state):
         """Test guidance for TOML files uses tomllib, not json.load."""
         guidance = plugin_module._get_write_guidance("pyproject.toml", "[project]")
@@ -152,7 +150,9 @@ class TestWriteGuidance:
 
     def test_java_file_guidance(self, plugin_module, fresh_state):
         """Test guidance for Java files uses javac/mvn, not pytest."""
-        guidance = plugin_module._get_write_guidance("Main.java", "public class Main {}")
+        guidance = plugin_module._get_write_guidance(
+            "Main.java", "public class Main {}"
+        )
         assert guidance is not None
         assert "javac" in guidance
         assert "mvn test" in guidance
