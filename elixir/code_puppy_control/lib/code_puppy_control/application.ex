@@ -8,6 +8,7 @@ defmodule CodePuppyControl.Application do
   3. CodePuppyControl.EventStore - ETS-based event history for replay
   4. CodePuppyControl.RuntimeState - Global runtime state (autosave ID, session model)
   5. CodePuppyControl.AgentModelPinning - Agent-to-model pin configuration (ETS-backed)
+  5.5 CodePuppyControl.RoundRobinModel - Round-robin model rotation (ETS-backed)
   6. CodePuppyControl.Run.Registry - Process registry for run tracking
   7. CodePuppyControl.Run.Supervisor - DynamicSupervisor for run processes
   8. CodePuppyControl.PythonWorker.Supervisor - DynamicSupervisor for Python workers
@@ -30,6 +31,7 @@ defmodule CodePuppyControl.Application do
       CodePuppyControl.EventStore,
       CodePuppyControl.RuntimeState,
       CodePuppyControl.AgentModelPinning,
+      CodePuppyControl.RoundRobinModel,
       CodePuppyControl.Run.Registry,
       {CodePuppyControl.Run.Supervisor, []},
       CodePuppyControl.PythonWorker.Supervisor,
