@@ -59,167 +59,13 @@ defmodule CodePuppyControl.ModelPacks do
 
   require Logger
 
-  alias __MODULE__.RoleConfig
-  alias __MODULE__.ModelPack
+  alias CodePuppyControl.ModelPacks.ModelPack
+  alias CodePuppyControl.ModelPacks.RoleConfig
 
   @table :model_packs
   @meta_table :model_packs_meta
   @packs_filename "model_packs.json"
   @default_pack "single"
-
-  # ============================================================================
-  # Structs
-  # ============================================================================
-
-  defmodule RoleConfig do
-    @moduledoc """
-    Configuration for a specific role within a model pack.
-
-    Fields:
-    - `primary` - The primary model for this role
-    - `fallbacks` - Ordered list of fallback models
-    - `trigger` - What triggers fallback ("context_overflow", "provider_failure", "always")
-    """
-
-    defstruct [:primary, fallbacks: [], trigger: "provider_failure"]
-
-    @type t :: %__MODULE__{
-            primary: String.t() | nil,
-            fallbacks: [String.t()],
-            trigger: String.t()
-          }
-
-    @doc """
-    Returns the full model chain: primary + fallbacks.
-
-    ## Examples
-
-        iex> role = %RoleConfig{primary: "model-a", fallbacks: ["model-b", "model-c"]}
-        iex> RoleConfig.get_model_chain(role)
-        ["model-a", "model-b", "model-c"]
-    """
-    @spec get_model_chain(t()) :: [String.t()]
-    def get_model_chain(%__MODULE__{primary: primary, fallbacks: fallbacks}) do
-      [primary | fallbacks]
-    end
-  end
-
-  defmodule ModelPack do
-    @moduledoc """
-    A model pack defining models for different roles.
-
-    Fields:
-    - `name` - Pack identifier
-    - `description` - Human-readable description
-    - `roles` - Mapping of role names to RoleConfig structs
-    - `default_role` - Role to use when no specific role requested
-    """
-
-    defstruct [:name, :description, roles: %{}, default_role: "coder"]
-
-    @type t :: %__MODULE__{
-            name: String.t(),
-            description: String.t(),
-            roles: %{String.t() => RoleConfig.t()},
-            default_role: String.t()
-          }
-
-    @doc """
-    Get the primary model for a role.
-
-    Returns the primary model name, or "auto" if role not found.
-
-    ## Examples
-
-        iex> pack = %ModelPack{
-        ...>   roles: %{"coder" => %RoleConfig{primary: "claude-4"}},
-        ...>   default_role: "coder"
-        ...> }
-        iex> ModelPack.get_model_for_role(pack, "coder")
-        "claude-4"
-
-        iex> ModelPack.get_model_for_role(pack, nil)
-        "claude-4"
-    """
-    @spec get_model_for_role(t(), String.t() | nil) :: String.t()
-    def get_model_for_role(%__MODULE__{} = pack, role) when is_binary(role) do
-      case Map.get(pack.roles, role) do
-        nil ->
-          Logger.warning("Role '#{role}' not found in pack '#{pack.name}', using default")
-          get_model_for_role(pack, pack.default_role)
-
-        %RoleConfig{primary: primary} ->
-          primary
-      end
-    end
-
-    def get_model_for_role(%__MODULE__{} = pack, nil) do
-      get_model_for_role(pack, pack.default_role)
-    end
-
-    @doc """
-    Get the full fallback chain for a role.
-
-    Returns list of models: [primary, fallback1, fallback2, ...]
-
-    ## Examples
-
-        iex> pack = %ModelPack{
-        ...>   roles: %{"coder" => %RoleConfig{primary: "a", fallbacks: ["b", "c"]}},
-        ...>   default_role: "coder"
-        ...> }
-        iex> ModelPack.get_fallback_chain(pack, "coder")
-        ["a", "b", "c"]
-    """
-    @spec get_fallback_chain(t(), String.t() | nil) :: [String.t()]
-    def get_fallback_chain(%__MODULE__{} = pack, role) when is_binary(role) do
-      case Map.get(pack.roles, role) do
-        nil ->
-          get_fallback_chain(pack, pack.default_role)
-
-        role_config ->
-          RoleConfig.get_model_chain(role_config)
-      end
-    end
-
-    def get_fallback_chain(%__MODULE__{} = pack, nil) do
-      get_fallback_chain(pack, pack.default_role)
-    end
-
-    @doc """
-    Convert the ModelPack to a plain map for JSON serialization.
-
-    ## Examples
-
-        iex> pack = %ModelPack{
-        ...>   name: "test",
-        ...>   description: "Test pack",
-        ...>   roles: %{"coder" => %RoleConfig{primary: "gpt-4", fallbacks: ["gpt-3"]}},
-        ...>   default_role: "coder"
-        ...> }
-        iex> ModelPack.to_map(pack)
-        %{name: "test", description: "Test pack", default_role: "coder", roles: %{...}}
-    """
-    @spec to_map(t()) :: map()
-    def to_map(%__MODULE__{} = pack) do
-      roles_map =
-        Map.new(pack.roles, fn {role_name, config} ->
-          {role_name,
-           %{
-             primary: config.primary,
-             fallbacks: config.fallbacks,
-             trigger: config.trigger
-           }}
-        end)
-
-      %{
-        name: pack.name,
-        description: pack.description,
-        default_role: pack.default_role,
-        roles: roles_map
-      }
-    end
-  end
 
   # ============================================================================
   # Client API
@@ -234,21 +80,8 @@ defmodule CodePuppyControl.ModelPacks do
   end
 
   @doc """
-  Gets a model pack by name.
-
-  Returns the pack if found. If name is nil, returns the current pack.
+  Gets a model pack by name. Returns current pack if nil.
   Falls back to "single" pack if named pack doesn't exist.
-
-  ## Examples
-
-      iex> ModelPacks.get_pack("coding")
-      %ModelPack{name: "coding", ...}
-
-      iex> ModelPacks.get_pack(nil)  # Returns current pack
-      %ModelPack{name: "single", ...}
-
-      iex> ModelPacks.get_pack("nonexistent")
-      %ModelPack{name: "single", ...}  # Falls back to single
   """
   @spec get_pack(String.t() | nil) :: ModelPack.t()
   def get_pack(name \\ nil) when is_binary(name) or is_nil(name) do
@@ -267,13 +100,6 @@ defmodule CodePuppyControl.ModelPacks do
 
   @doc """
   Lists all available model packs.
-
-  Returns a list of all built-in and user-defined packs.
-
-  ## Examples
-
-      iex> ModelPacks.list_packs()
-      [%ModelPack{name: "single", ...}, %ModelPack{name: "coding", ...}, ...]
   """
   @spec list_packs() :: [ModelPack.t()]
   def list_packs do
@@ -284,17 +110,7 @@ defmodule CodePuppyControl.ModelPacks do
   end
 
   @doc """
-  Sets the current model pack.
-
-  Returns `:ok` if successful, `{:error, :not_found}` if pack doesn't exist.
-
-  ## Examples
-
-      iex> ModelPacks.set_current_pack("coding")
-      :ok
-
-      iex> ModelPacks.set_current_pack("nonexistent")
-      {:error, :not_found}
+  Sets the current model pack. Returns `:ok` or `{:error, :not_found}`.
   """
   @spec set_current_pack(String.t()) :: :ok | {:error, :not_found}
   def set_current_pack(name) when is_binary(name) do
@@ -303,11 +119,6 @@ defmodule CodePuppyControl.ModelPacks do
 
   @doc """
   Gets the currently active model pack.
-
-  ## Examples
-
-      iex> ModelPacks.get_current_pack()
-      %ModelPack{name: "coding", ...}
   """
   @spec get_current_pack() :: ModelPack.t()
   def get_current_pack do
@@ -316,33 +127,15 @@ defmodule CodePuppyControl.ModelPacks do
 
   @doc """
   Gets the primary model for a role using the current pack.
-
-  If role is nil, uses the pack's default_role.
-
-  ## Examples
-
-      iex> ModelPacks.get_model_for_role("coder")
-      "zai-glm-5.1-coding"
-
-      iex> ModelPacks.get_model_for_role(nil)  # Uses default_role
-      "zai-glm-5.1-coding"
   """
   @spec get_model_for_role(String.t() | nil) :: String.t()
   def get_model_for_role(role \\ nil) do
     pack = get_current_pack()
-    model = ModelPack.get_model_for_role(pack, role)
-
-    # "auto" means use global default (handled by caller)
-    model
+    ModelPack.get_model_for_role(pack, role)
   end
 
   @doc """
   Gets the full fallback chain for a role using the current pack.
-
-  ## Examples
-
-      iex> ModelPacks.get_fallback_chain("coder")
-      ["zai-glm-5.1-coding", "synthetic-GLM-5", "firepass-kimi-k2p5-turbo"]
   """
   @spec get_fallback_chain(String.t() | nil) :: [String.t()]
   def get_fallback_chain(role \\ nil) do
@@ -351,21 +144,7 @@ defmodule CodePuppyControl.ModelPacks do
   end
 
   @doc """
-  Creates a new user-defined model pack.
-
-  User packs are persisted to `~/.code_puppy/model_packs.json`.
-  Cannot override built-in packs.
-
-  ## Examples
-
-      iex> roles = %{
-      ...>   "coder" => %{primary: "gpt-4", fallbacks: ["gpt-3.5"], trigger: "provider_failure"}
-      ...> }
-      iex> ModelPacks.create_pack("my-pack", "My custom pack", roles, "coder")
-      {:ok, %ModelPack{name: "my-pack", ...}}
-
-      iex> ModelPacks.create_pack("single", "Cannot override", %{}, "coder")
-      {:error, :builtin_pack}
+  Creates a new user-defined model pack. Cannot override built-in packs.
   """
   @spec create_pack(String.t(), String.t(), map(), String.t()) ::
           {:ok, ModelPack.t()} | {:error, :builtin_pack}
@@ -376,21 +155,7 @@ defmodule CodePuppyControl.ModelPacks do
   end
 
   @doc """
-  Deletes a user-defined model pack.
-
-  Built-in packs cannot be deleted. Returns `true` if deleted,
-  `false` if not found or is built-in.
-
-  ## Examples
-
-      iex> ModelPacks.delete_pack("my-pack")
-      true
-
-      iex> ModelPacks.delete_pack("single")  # Built-in, cannot delete
-      false
-
-      iex> ModelPacks.delete_pack("nonexistent")
-      false
+  Deletes a user-defined model pack. Returns `true` if deleted.
   """
   @spec delete_pack(String.t()) :: boolean()
   def delete_pack(name) when is_binary(name) do
@@ -399,13 +164,6 @@ defmodule CodePuppyControl.ModelPacks do
 
   @doc """
   Reloads user-defined packs from `~/.code_puppy/model_packs.json`.
-
-  This preserves built-in packs but reloads all user packs from disk.
-
-  ## Examples
-
-      iex> ModelPacks.reload()
-      :ok
   """
   @spec reload() :: :ok
   def reload do
@@ -414,14 +172,6 @@ defmodule CodePuppyControl.ModelPacks do
 
   @doc """
   Checks if a pack is a built-in (default) pack.
-
-  ## Examples
-
-      iex> ModelPacks.builtin_pack?("single")
-      true
-
-      iex> ModelPacks.builtin_pack?("my-custom-pack")
-      false
   """
   @spec builtin_pack?(String.t()) :: boolean()
   def builtin_pack?(name) when is_binary(name) do
@@ -450,24 +200,12 @@ defmodule CodePuppyControl.ModelPacks do
 
   @impl true
   def init(_opts) do
-    # Create ETS tables for concurrent reads
+    # Create ETS tables for concurrent reads (write_concurrency not needed - single writer)
     table =
-      :ets.new(@table, [
-        :named_table,
-        :set,
-        :public,
-        read_concurrency: true,
-        write_concurrency: true
-      ])
+      :ets.new(@table, [:named_table, :set, :public, read_concurrency: true])
 
     meta_table =
-      :ets.new(@meta_table, [
-        :named_table,
-        :set,
-        :public,
-        read_concurrency: true,
-        write_concurrency: true
-      ])
+      :ets.new(@meta_table, [:named_table, :set, :public, read_concurrency: true])
 
     # Initialize default (built-in) packs
     default_packs = build_default_packs()
@@ -486,7 +224,7 @@ defmodule CodePuppyControl.ModelPacks do
     # Set current pack (default to "single")
     :ets.insert(meta_table, {:current_pack, @default_pack})
 
-    pack_count = length(Map.keys(default_packs)) + length(Map.keys(user_packs))
+    pack_count = map_size(default_packs) + map_size(user_packs)
     Logger.info("ModelPacks initialized with #{pack_count} packs")
 
     {:ok, %{table: table, meta_table: meta_table}}
@@ -607,7 +345,7 @@ defmodule CodePuppyControl.ModelPacks do
       )
     end
 
-    Logger.info("ModelPacks reloaded with #{length(Map.keys(user_packs))} user packs")
+    Logger.info("ModelPacks reloaded with #{map_size(user_packs)} user packs")
     {:reply, :ok, state}
   end
 
@@ -838,8 +576,13 @@ defmodule CodePuppyControl.ModelPacks do
 
     case File.write(temp_file, Jason.encode!(data, pretty: true)) do
       :ok ->
-        File.rename(temp_file, packs_file)
-        Logger.debug("ModelPacks: persisted user packs to #{packs_file}")
+        case File.rename(temp_file, packs_file) do
+          :ok ->
+            Logger.debug("ModelPacks: persisted user packs to #{packs_file}")
+
+          {:error, reason} ->
+            Logger.error("ModelPacks: rename failed (#{inspect(reason)}), data in #{temp_file}")
+        end
 
       {:error, reason} ->
         Logger.error("ModelPacks: failed to persist user packs: #{inspect(reason)}")
