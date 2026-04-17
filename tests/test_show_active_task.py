@@ -26,8 +26,26 @@ SCRIPT = (
 
 @pytest.fixture()
 def tmp_git_repo(tmp_path: Path):
-    """Create a temporary git repo so the script doesn't fail on git commands."""
+    """Create a temporary git repo so the script doesn't fail on git commands.
+
+    Configures a local user.name/user.email so commits work without any
+    global git identity — keeps the test hermetic on bare CI runners.
+    """
     subprocess.run(["git", "init"], cwd=tmp_path, capture_output=True, check=True)
+    # Hermetic: set identity locally (not global) so commits never depend
+    # on the runner's ~/.gitconfig.
+    subprocess.run(
+        ["git", "config", "user.name", "Test User"],
+        cwd=tmp_path,
+        capture_output=True,
+        check=True,
+    )
+    subprocess.run(
+        ["git", "config", "user.email", "test@example.com"],
+        cwd=tmp_path,
+        capture_output=True,
+        check=True,
+    )
     subprocess.run(
         ["git", "commit", "--allow-empty", "-m", "init"],
         cwd=tmp_path,
@@ -204,3 +222,97 @@ class TestProjectTypeConsistency:
         ]
         assert type_lines, "No 'Type:' line found in text output"
         assert expected_text_label in type_lines[0]
+
+
+# ---------------------------------------------------------------------------
+# JSON escaping for dynamic values (regression tests)
+# ---------------------------------------------------------------------------
+
+
+def _make_bd_script(tmp_path: Path, title: str) -> Path:
+    """Create a fake ``bd`` wrapper that returns a crafted Title line.
+
+    This lets us test special-character titles without needing a real bd issue.
+    The title is persisted to a sidecar file so the script can output it
+    faithfully without bash quoting pitfalls.
+    """
+    title_file = tmp_path / "_bd_title.txt"
+    title_file.write_text(f"Title: {title}")
+    bd_fake = tmp_path / "bd"
+    bd_fake.write_text(
+        "#!/usr/bin/env bash\n"
+        'echo "Issue: $1"\n'
+        f'cat "{title_file}"\n'
+        'echo ""\n'
+        'echo "Status: open"\n'
+    )
+    bd_fake.chmod(0o755)
+    return bd_fake
+
+
+class TestJsonEscaping:
+    """Regression tests — dynamic values must produce valid, decodable JSON.
+
+    Covers the critic item: quoted / special-character task titles in --json.
+    """
+
+    @pytest.mark.parametrize(
+        "title",
+        [
+            "Simple task",
+            'Fix "the" bug',
+            "It's a test",
+            "Task with a slash /",
+            "Task with backslash \\",
+        ],
+        ids=[
+            "plain",
+            "double-quotes",
+            "single-quote",
+            "slash",
+            "backslash",
+        ],
+    )
+    def test_special_title_produces_valid_json(self, tmp_git_repo: Path, title: str):
+        """show-active-task.sh --json must emit valid JSON even with tricky titles."""
+        bd_fake = _make_bd_script(tmp_git_repo, title)
+        env = dict(
+            os.environ,
+            PUP_TASK_ID="bd-1",
+            PATH=f"{bd_fake.parent}:{os.environ['PATH']}",
+        )
+        result = subprocess.run(
+            ["bash", str(SCRIPT), "--json"],
+            capture_output=True,
+            text=True,
+            cwd=str(tmp_git_repo),
+            env=env,
+            timeout=15,
+        )
+        assert result.returncode == 0, f"Script failed: {result.stderr}"
+        data = json.loads(result.stdout)  # must not raise
+        assert data["tasks"]["current_task"]["id"] == "bd-1"
+        # The title in the JSON must round-trip cleanly
+        assert data["tasks"]["current_task"]["name"] == title
+        assert data["tasks"]["source"] == "bd"
+
+    def test_special_title_backslash_in_json(self, tmp_git_repo: Path):
+        """Regression: backslash in title must not corrupt JSON structure."""
+        title = "C:\\Users\\test"
+        bd_fake = _make_bd_script(tmp_git_repo, title)
+        env = dict(
+            os.environ,
+            PUP_TASK_ID="bd-2",
+            PATH=f"{bd_fake.parent}:{os.environ['PATH']}",
+        )
+        result = subprocess.run(
+            ["bash", str(SCRIPT), "--json"],
+            capture_output=True,
+            text=True,
+            cwd=str(tmp_git_repo),
+            env=env,
+            timeout=15,
+        )
+        assert result.returncode == 0
+        data = json.loads(result.stdout)
+        assert data["tasks"]["current_task"]["name"] == title
