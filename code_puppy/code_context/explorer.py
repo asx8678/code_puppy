@@ -7,9 +7,6 @@ from typing import Any
 from code_puppy.code_context.models import CodeContext, FileOutline, SymbolInfo
 from code_puppy.tools.file_operations import _read_file_sync
 
-# bd-86: Native acceleration layer removed - always use Python fallback
-TURBO_PARSE_AVAILABLE = False
-
 logger = logging.getLogger(__name__)
 
 
@@ -32,6 +29,141 @@ class CodeExplorer:
         self._parse_count = 0
         self._cache_hits = 0
         self._cache_misses = 0
+
+    # Elixir bridge helpers -------------------------------------------------
+
+    def _try_elixir_explore_file(
+        self, file_path: str, include_content: bool = True
+    ) -> CodeContext | None:
+        """Try to explore file via Elixir transport."""
+        try:
+            from code_puppy.plugins.elixir_bridge import is_connected, call_method
+
+            if not is_connected():
+                return None
+            result = call_method(
+                "code_context.explore_file",
+                {"file_path": file_path, "include_content": include_content},
+            )
+            if result is None:
+                return None
+            return self._elixir_result_to_context(result)
+        except Exception:
+            return None  # Fall back to Python
+
+    def _try_elixir_get_outline(self, file_path: str) -> FileOutline | None:
+        """Try to get file outline via Elixir transport."""
+        try:
+            from code_puppy.plugins.elixir_bridge import is_connected, call_method
+
+            if not is_connected():
+                return None
+            result = call_method("code_context.get_outline", {"file_path": file_path})
+            if result is None:
+                return None
+            return self._elixir_result_to_outline(result)
+        except Exception:
+            return None  # Fall back to Python
+
+    def _try_elixir_explore_directory(
+        self, directory: str, pattern: str = "*", recursive: bool = True, max_files: int = 50
+    ) -> list[CodeContext] | None:
+        """Try to explore directory via Elixir transport."""
+        try:
+            from code_puppy.plugins.elixir_bridge import is_connected, call_method
+
+            if not is_connected():
+                return None
+            result = call_method(
+                "code_context.explore_directory",
+                {
+                    "directory": directory,
+                    "pattern": pattern,
+                    "recursive": recursive,
+                    "max_files": max_files,
+                },
+            )
+            if result is None or not isinstance(result, list):
+                return None
+            return [self._elixir_result_to_context(r) for r in result]
+        except Exception:
+            return None  # Fall back to Python
+
+    def _try_elixir_find_symbol_definitions(
+        self, directory: str, symbol_name: str
+    ) -> list[tuple[str, SymbolInfo]] | None:
+        """Try to find symbol definitions via Elixir transport."""
+        try:
+            from code_puppy.plugins.elixir_bridge import is_connected, call_method
+
+            if not is_connected():
+                return None
+            result = call_method(
+                "code_context.find_symbol_definitions",
+                {"directory": directory, "symbol_name": symbol_name},
+            )
+            if result is None or not isinstance(result, list):
+                return None
+            results: list[tuple[str, SymbolInfo]] = []
+            for item in result:
+                file_path = item.get("file_path", "")
+                symbol_data = item.get("symbol", {})
+                symbol = self._elixir_dict_to_symbol(symbol_data)
+                results.append((file_path, symbol))
+            return results
+        except Exception:
+            return None  # Fall back to Python
+
+    def _elixir_dict_to_symbol(self, data: dict[str, Any]) -> SymbolInfo:
+        """Convert Elixir symbol dict to SymbolInfo."""
+        symbol = SymbolInfo(
+            name=data.get("name", ""),
+            kind=data.get("kind", "unknown"),
+            start_line=data.get("start_line", 0),
+            end_line=data.get("end_line", 0),
+            start_col=data.get("start_col", 0),
+            end_col=data.get("end_col", 0),
+            parent=data.get("parent"),
+            docstring=data.get("docstring"),
+            children=[],
+        )
+        # Recursively convert children
+        children_data = data.get("children", [])
+        if children_data:
+            symbol.children = [self._elixir_dict_to_symbol(c) for c in children_data]
+        return symbol
+
+    def _elixir_result_to_outline(self, result: dict[str, Any]) -> FileOutline:
+        """Convert Elixir JSON response to FileOutline."""
+        symbols_data = result.get("symbols", [])
+        symbols = [self._elixir_dict_to_symbol(s) for s in symbols_data]
+        return FileOutline(
+            language=result.get("language", "unknown"),
+            symbols=symbols,
+            extraction_time_ms=result.get("extraction_time_ms", 0.0),
+            success=result.get("success", True),
+            errors=result.get("errors", []),
+        )
+
+    def _elixir_result_to_context(self, result: dict[str, Any]) -> CodeContext:
+        """Convert Elixir JSON response to CodeContext."""
+        context = CodeContext(
+            file_path=result.get("file_path", ""),
+            content=result.get("content"),
+            language=result.get("language"),
+            file_size=result.get("file_size", 0),
+            num_lines=result.get("num_lines", 0),
+            num_tokens=result.get("num_tokens", 0),
+            parse_time_ms=result.get("parse_time_ms", 0.0),
+            has_errors=result.get("has_errors", False),
+            error_message=result.get("error_message"),
+        )
+        outline_data = result.get("outline")
+        if outline_data:
+            context.outline = self._elixir_result_to_outline(outline_data)
+        return context
+
+    # Core methods -----------------------------------------------------------
 
     def _detect_language(self, file_path: str) -> str | None:
         """Detect programming language from file extension."""
@@ -76,6 +208,14 @@ class CodeExplorer:
         """
         abs_path = str(Path(file_path).resolve())
 
+        # Try Elixir first
+        elixir_result = self._try_elixir_explore_file(abs_path, include_content)
+        if elixir_result is not None:
+            # Update Python cache from Elixir result
+            if self.enable_cache:
+                self._cache[abs_path] = elixir_result
+            return elixir_result
+
         # Check cache first
         if self.enable_cache and not force_refresh and abs_path in self._cache:
             cached = self._cache[abs_path]
@@ -112,14 +252,12 @@ class CodeExplorer:
         except OSError:
             pass
 
-        # Extract symbols if language is supported
-        # bd-86: Native acceleration layer removed, symbol extraction disabled
-        # TURBO_PARSE_AVAILABLE is always False now
+        # Python fallback: create outline without symbol extraction
         context.outline = FileOutline(
             language=language or "unknown",
             symbols=[],
             success=False,
-            errors=["Symbol extraction not available for this language"],
+            errors=["Symbol extraction not available (Python fallback)"],
         )
 
         # Cache the result
@@ -146,6 +284,18 @@ class CodeExplorer:
         Returns:
             List of CodeContext objects
         """
+        # Try Elixir first
+        elixir_result = self._try_elixir_explore_directory(
+            directory, pattern, recursive, max_files
+        )
+        if elixir_result is not None:
+            # Update Python cache from Elixir results
+            if self.enable_cache:
+                for ctx in elixir_result:
+                    self._cache[ctx.file_path] = ctx
+            return elixir_result
+
+        # Python fallback
         dir_path = Path(directory).resolve()
         contexts: list[CodeContext] = []
 
@@ -195,6 +345,16 @@ class CodeExplorer:
         Returns:
             FileOutline with hierarchical symbol structure
         """
+        # Try Elixir first
+        elixir_outline = self._try_elixir_get_outline(file_path)
+        if elixir_outline is not None:
+            if max_depth is not None and elixir_outline.symbols:
+                elixir_outline.symbols = self._limit_depth(
+                    elixir_outline.symbols, max_depth
+                )
+            return elixir_outline
+
+        # Python fallback
         context = self.explore_file(file_path, include_content=False)
 
         if not context.outline:
@@ -270,6 +430,12 @@ class CodeExplorer:
         Returns:
             List of (file_path, symbol_info) tuples
         """
+        # Try Elixir first
+        elixir_result = self._try_elixir_find_symbol_definitions(directory, symbol_name)
+        if elixir_result is not None:
+            return elixir_result
+
+        # Python fallback
         results: list[tuple[str, SymbolInfo]] = []
 
         contexts = self.explore_directory(
