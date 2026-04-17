@@ -31,7 +31,7 @@ parking_lot = "0.12"
 rayon = "1.10"
 streaming-iterator = "0.1"
 # Cache dependencies
-lru = "0.12"
+lru = "0.16"
 sha2 = "0.10"
 # Dynamic grammar loading (optional)
 libloading = { version = "0.8", optional = true }
