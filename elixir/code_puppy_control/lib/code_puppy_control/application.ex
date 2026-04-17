@@ -4,29 +4,30 @@ defmodule CodePuppyControl.Application do
 
   Supervision tree:
   1. CodePuppyControl.HttpClient - Finch HTTP connection pool (bd-69)
-  2. CodePuppyControl.Repo - SQLite database for state persistence
-  2. Phoenix.PubSub - Event distribution
-  3. CodePuppyControl.EventStore - ETS-based event history for replay
-  4. CodePuppyControl.RuntimeState - Global runtime state (autosave ID, session model)
-  5. CodePuppyControl.PolicyEngine - Priority-based policy rule engine
-  6. CodePuppyControl.AgentModelPinning - Agent-to-model pin configuration (ETS-backed)
-  6a. CodePuppyControl.ModelRegistry - Model configuration registry (ETS-backed) (bd-96)
-  6b. CodePuppyControl.ModelAvailability - Model health circuit breaker (ETS-backed)
-  6c. CodePuppyControl.ModelPacks - Role-based model packs (bd-100)
-  6d. CodePuppyControl.Tools.AgentCatalogue - Agent catalogue with descriptions
-  7. CodePuppyControl.RoundRobinModel - Round-robin model rotation (ETS-backed)
-  7a. CodePuppyControl.ModelsDevParser.Registry - Models.dev API registry (bd-74)
-  8. CodePuppyControl.Run.Registry - Process registry for run tracking
-  9. CodePuppyControl.Run.Supervisor - DynamicSupervisor for run processes
-  10. CodePuppyControl.PythonWorker.Supervisor - DynamicSupervisor for Python workers
-  11. CodePuppyControl.MCP.Registry - Process registry for MCP servers
-  12. CodePuppyControl.MCP.Supervisor - DynamicSupervisor for MCP servers
-  13. CodePuppyControl.Concurrency.Supervisor - Concurrency limiter (ETS-backed)
-  14. CodePuppyControl.RequestTracker - Tracks JSON-RPC request/response correlation
-  15. CodePuppyControl.Tools.CommandRunner.ProcessManager - Shell process tracking (bd-64)
-  16. Oban - Job processing engine with SQLite Lite engine
-  17. CodePuppyControl.Scheduler.CronScheduler - Periodic scheduler for cron tasks
-  18. CodePuppyControlWeb.Endpoint - HTTP API endpoint
+  2. CodePuppyControl.Parsing.ParserRegistry - Language parser registry (Agent-backed)
+  3. CodePuppyControl.Repo - SQLite database for state persistence
+  4. Phoenix.PubSub - Event distribution
+  5. CodePuppyControl.EventStore - ETS-based event history for replay
+  6. CodePuppyControl.RuntimeState - Global runtime state (autosave ID, session model)
+  7. CodePuppyControl.PolicyEngine - Priority-based policy rule engine
+  8. CodePuppyControl.AgentModelPinning - Agent-to-model pin configuration (ETS-backed)
+  9a. CodePuppyControl.ModelRegistry - Model configuration registry (ETS-backed) (bd-96)
+  9b. CodePuppyControl.ModelAvailability - Model health circuit breaker (ETS-backed)
+  9c. CodePuppyControl.ModelPacks - Role-based model packs (bd-100)
+  9d. CodePuppyControl.Tools.AgentCatalogue - Agent catalogue with descriptions
+  10. CodePuppyControl.RoundRobinModel - Round-robin model rotation (ETS-backed)
+  11a. CodePuppyControl.ModelsDevParser.Registry - Models.dev API registry (bd-74)
+  12. CodePuppyControl.Run.Registry - Process registry for run tracking
+  13. CodePuppyControl.Run.Supervisor - DynamicSupervisor for run processes
+  14. CodePuppyControl.PythonWorker.Supervisor - DynamicSupervisor for Python workers
+  15. CodePuppyControl.MCP.Registry - Process registry for MCP servers
+  16. CodePuppyControl.MCP.Supervisor - DynamicSupervisor for MCP servers
+  17. CodePuppyControl.Concurrency.Supervisor - Concurrency limiter (ETS-backed)
+  18. CodePuppyControl.RequestTracker - Tracks JSON-RPC request/response correlation
+  19. CodePuppyControl.Tools.CommandRunner.ProcessManager - Shell process tracking (bd-64)
+  20. Oban - Job processing engine with SQLite Lite engine
+  21. CodePuppyControl.Scheduler.CronScheduler - Periodic scheduler for cron tasks
+  22. CodePuppyControlWeb.Endpoint - HTTP API endpoint
   """
 
   use Application
@@ -36,6 +37,8 @@ defmodule CodePuppyControl.Application do
     children = [
       # HTTP client connection pool (Finch)
       CodePuppyControl.HttpClient.child_spec(),
+      # Parser registry (must start before any parsing operations)
+      CodePuppyControl.Parsing.ParserRegistry,
       CodePuppyControl.Repo,
       {Phoenix.PubSub, name: CodePuppyControl.PubSub},
       CodePuppyControl.EventStore,
