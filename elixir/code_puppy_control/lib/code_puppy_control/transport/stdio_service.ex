@@ -78,6 +78,11 @@ defmodule CodePuppyControl.Transport.StdioService do
   - `scheduler.view_log` - View task execution history
   - `scheduler.force_check` - Force immediate schedule evaluation
 
+  ### HTTP Client
+  - `http.request` - Make HTTP request with retry logic
+  - `http.get` - Simple GET request
+  - `http.post` - POST request with body
+
   ### Utility
   - `health_check` - Service health status
   - `ping` - Simple ping/pong
@@ -739,6 +744,88 @@ defmodule CodePuppyControl.Transport.StdioService do
     Protocol.encode_response(%{"result" => result, "type" => "markdown"}, id)
   end
 
+  # ============================================================================
+  # HTTP Client Operations (bd-69)
+  # ============================================================================
+
+  # http.get - Simple GET request
+  defp handle_request("http.get", params, id) do
+    url = params["url"]
+
+    if is_nil(url) or not is_binary(url) do
+      Protocol.encode_error(-32602, "Missing or invalid param: url", nil, id)
+    else
+      opts = params_to_http_opts(params)
+
+      case CodePuppyControl.HttpClient.get(url, opts) do
+        {:ok, response} ->
+          Protocol.encode_response(serialize_http_response(response), id)
+
+        {:error, reason} ->
+          Protocol.encode_error(
+            -32000,
+            "HTTP request failed: #{format_error(reason)}",
+            nil,
+            id
+          )
+      end
+    end
+  end
+
+  # http.post - POST request
+  defp handle_request("http.post", params, id) do
+    url = params["url"]
+    body = params["body"]
+
+    if is_nil(url) or not is_binary(url) do
+      Protocol.encode_error(-32602, "Missing or invalid param: url", nil, id)
+    else
+      opts = params_to_http_opts(params)
+      opts = if body, do: Keyword.put(opts, :body, body), else: opts
+
+      case CodePuppyControl.HttpClient.post(url, opts) do
+        {:ok, response} ->
+          Protocol.encode_response(serialize_http_response(response), id)
+
+        {:error, reason} ->
+          Protocol.encode_error(
+            -32000,
+            "HTTP request failed: #{format_error(reason)}",
+            nil,
+            id
+          )
+      end
+    end
+  end
+
+  # http.request - Full request with method selection
+  defp handle_request("http.request", params, id) do
+    method_str = params["method"] || "GET"
+    url = params["url"]
+    body = params["body"]
+
+    if is_nil(url) or not is_binary(url) do
+      Protocol.encode_error(-32602, "Missing or invalid param: url", nil, id)
+    else
+      method = parse_http_method(method_str)
+      opts = params_to_http_opts(params)
+      opts = if body, do: Keyword.put(opts, :body, body), else: opts
+
+      case CodePuppyControl.HttpClient.request(method, url, opts) do
+        {:ok, response} ->
+          Protocol.encode_response(serialize_http_response(response), id)
+
+        {:error, reason} ->
+          Protocol.encode_error(
+            -32000,
+            "HTTP request failed: #{format_error(reason)}",
+            nil,
+            id
+          )
+      end
+    end
+  end
+
   # scheduler.create_task - Create a new scheduled task
   defp handle_request("scheduler.create_task", params, id) do
     attrs =
@@ -914,6 +1001,63 @@ defmodule CodePuppyControl.Transport.StdioService do
       nil,
       id
     )
+  end
+
+  # ============================================================================
+  # HTTP Helpers
+  # ============================================================================
+
+  # Map of known HTTP methods - prevents atom exhaustion from user input (bd-69)
+  @http_methods %{
+    "get" => :get,
+    "post" => :post,
+    "put" => :put,
+    "patch" => :patch,
+    "delete" => :delete,
+    "head" => :head,
+    "options" => :options
+  }
+
+  defp parse_http_method(method) when is_binary(method) do
+    # Use safe mapping instead of String.to_atom to prevent atom exhaustion
+    Map.get(@http_methods, String.downcase(method), :get)
+  end
+
+  defp parse_http_method(method) when is_atom(method), do: method
+
+  defp params_to_http_opts(params) do
+    opts = []
+
+    opts =
+      if params["headers"],
+        do: [{:headers, normalize_headers(params["headers"])} | opts],
+        else: opts
+
+    opts = if params["timeout"], do: [{:timeout, params["timeout"]} | opts], else: opts
+    opts = if params["retries"], do: [{:retries, params["retries"]} | opts], else: opts
+    opts = if params["model_name"], do: [{:model_name, params["model_name"]} | opts], else: opts
+    opts
+  end
+
+  defp normalize_headers(headers) when is_map(headers) do
+    Enum.map(headers, fn {k, v} -> {to_string(k), to_string(v)} end)
+  end
+
+  defp normalize_headers(headers) when is_list(headers) do
+    Enum.map(headers, fn
+      {k, v} -> {to_string(k), to_string(v)}
+      [k, v] -> {to_string(k), to_string(v)}
+    end)
+  end
+
+  defp normalize_headers(_), do: []
+
+  defp serialize_http_response(%{status: status, body: body, headers: headers}) do
+    %{
+      "status" => status,
+      "body" => body,
+      "headers" => Enum.map(headers, fn {k, v} -> [k, v] end)
+    }
   end
 
   # ============================================================================

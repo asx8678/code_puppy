@@ -38,7 +38,9 @@ defmodule CodePuppyControl.MixProject do
       {:benchee, "~> 1.1", only: :dev, runtime: false},
       {:benchee_markdown, "~> 0.3", only: :dev, runtime: false},
       # MessagePack for session serialization (bd-47)
-      {:msgpax, "~> 2.4"}
+      {:msgpax, "~> 2.4"},
+      # HTTP client with connection pooling (bd-69)
+      {:finch, "~> 0.18"}
     ]
   end
 
