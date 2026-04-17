@@ -26,7 +26,7 @@
 | **Replace Engine** | ✅ DONE | Elixir | bd-39 | Migrated from Rust, 2026-04-16 |
 | **Hashline** | ✅ DONE | Elixir (Rustler NIF) | bd-88 | Migrated from Rust, 2026-04-16 |
 | **Message Core** | 📋 PLANNED | Elixir | bd-43 | Retire Rust entirely - Elixir-bound |
-| **Elixir Transport** | 📋 TODO | Elixir | bd-10 | Standalone outside bridge mode |
+| **Elixir Transport** | ✅ DONE | Elixir | bd-10 | Standalone outside bridge mode |
 | **Token Estimation** | 📋 PLANNED | Elixir | bd-44 | Elixir-bound (perf risk mitigated by ETS memoization) |
 | **Message Pruning** | 📋 PLANNED | Elixir | bd-45 | Elixir-bound |
 | **Message Serialization** | 📋 PLANNED | Elixir | bd-47 | msgpack → Elixir (Elixir-bound) |
@@ -126,7 +126,8 @@
 | Folds / Highlights | 📋 Pending | — | Tier 2 priority |
 | Incremental parsing | 📋 Pending | — | Future optimization |
 
-**Completed:** 2026-Q2 (core), 2026-Q3 (advanced features)
+**Core completed:** 2026-Q2
+**Advanced features target:** 2026-Q3
 
 ---
 
@@ -135,7 +136,7 @@
 
 | Item | Status | Issue | Notes |
 |------|--------|-------|-------|
-| Standalone Elixir transport | 📋 TODO | **bd-10** | Non-bridge mode operation |
+| Standalone Elixir transport | ✅ Done | **bd-10** | Non-bridge mode operation |
 | TCP/Unix socket transport | 📋 TODO | — | Alternative to stdio Port |
 | Hot reload support | 📋 TODO | — | Development workflow |
 
@@ -232,6 +233,10 @@ requires native C core. Currently exposed to Elixir via `turbo_parse_nif` (Rustl
 | Tree-sitter migration | High | Decision pending; NIF routing works meanwhile |
 | Build complexity reduction | Low | Simpler builds = faster CI, easier onboarding |
 
+---
+
+## Phase 5: Hashline Migration (Complete ✅)
+
 **Issues**: bd-88, bd-89
 
 Migrated the last portable Rust module from `code_puppy_core`:
@@ -286,7 +291,7 @@ Migrated the last portable Rust module from `code_puppy_core`:
 | bd-7 | EOL normalization | Phase 2 | ✅ Closed |
 | bd-8 | Gitignore filtering | Phase 2 | ✅ Closed |
 | bd-9 | Repo Compass indexer | Phase 2 | ✅ Closed |
-| bd-10 | Standalone Elixir transport | Phase 4 | 📋 Open |
+| bd-10 | Standalone Elixir transport | Phase 4 | ✅ Closed |
 | bd-11 | Parse contract verification | Phase 3 | ✅ Closed |
 | bd-13 | NativeBackend routing fix | Phase 1 | ✅ Closed |
 | bd-12 | Doc consolidation | — | ✅ Closed |
