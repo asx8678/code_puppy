@@ -45,11 +45,20 @@ defmodule CodePuppyControl.Transport.StdioService do
   - `file_read_batch` - Read multiple files
   - `grep_search` - Search for patterns in files
 
-  ### Agent Model Pinning
+  ### Agent Model Pinning (bd-72)
   - `agent_pinning.get` - Get pinned model for an agent
   - `agent_pinning.set` - Set pinned model for an agent
   - `agent_pinning.clear` - Clear pin for an agent
   - `agent_pinning.list` - List all agent-to-model pins
+
+  ### Agent Session Operations (bd-65)
+  - `agent.session.save` - Save session history with metadata
+  - `agent.session.load` - Load session history from storage
+  - `agent.session.validate_id` - Validate session ID format (kebab-case)
+  - `agent.session.sanitize_id` - Sanitize arbitrary string to valid session ID
+  - `agent.list` - List all available agents
+  - `agent.get_info` - Get info about a specific agent
+  - `agent.context.filter` - Filter context for sub-agent (remove parent-specific keys)
 
   ### Text Operations
   - `text_fuzzy_match` - Find best matching window using fuzzy matching
@@ -757,6 +766,139 @@ defmodule CodePuppyControl.Transport.StdioService do
     pins = AgentModelPinning.list_pins()
     pin_list = Enum.map(pins, fn {agent, model} -> %{"agent_name" => agent, "model" => model} end)
     Protocol.encode_response(%{"pins" => pin_list, "count" => length(pin_list)}, id)
+  end
+
+  # ============================================================================
+  # Agent Session Operations (bd-65)
+  # ============================================================================
+
+  alias CodePuppyControl.Tools.AgentSession
+  alias CodePuppyControl.Tools.AgentCatalogue
+  alias CodePuppyControl.Tools.ContextFilter
+
+  # agent.session.save - Save session history
+  defp handle_request("agent.session.save", params, id) do
+    session_id = params["session_id"]
+    messages = params["messages"] || []
+    agent_name = params["agent_name"]
+    initial_prompt = params["initial_prompt"]
+
+    cond do
+      is_nil(session_id) or not is_binary(session_id) ->
+        Protocol.encode_error(-32602, "Missing or invalid param: session_id", nil, id)
+
+      is_nil(agent_name) or not is_binary(agent_name) ->
+        Protocol.encode_error(-32602, "Missing or invalid param: agent_name", nil, id)
+
+      true ->
+        case AgentSession.save_session_history(session_id, messages, agent_name, initial_prompt) do
+          :ok ->
+            Protocol.encode_response(%{"saved" => true, "session_id" => session_id}, id)
+
+          {:error, reason} ->
+            Protocol.encode_error(-32000, "Failed to save session: #{reason}", nil, id)
+        end
+    end
+  end
+
+  # agent.session.load - Load session history
+  defp handle_request("agent.session.load", params, id) do
+    session_id = params["session_id"]
+
+    if is_nil(session_id) or not is_binary(session_id) do
+      Protocol.encode_error(-32602, "Missing or invalid param: session_id", nil, id)
+    else
+      case AgentSession.load_session_history(session_id) do
+        {:ok, result} ->
+          Protocol.encode_response(
+            %{
+              "messages" => result.messages,
+              "metadata" => result.metadata
+            },
+            id
+          )
+
+        {:error, reason} ->
+          Protocol.encode_error(-32000, "Failed to load session: #{reason}", nil, id)
+      end
+    end
+  end
+
+  # agent.session.validate_id - Validate session ID format
+  defp handle_request("agent.session.validate_id", params, id) do
+    session_id = params["session_id"]
+
+    if is_nil(session_id) or not is_binary(session_id) do
+      Protocol.encode_response(%{"valid" => false, "error" => "session_id must be a string"}, id)
+    else
+      case AgentSession.validate_session_id(session_id) do
+        :ok -> Protocol.encode_response(%{"valid" => true}, id)
+        {:error, reason} -> Protocol.encode_response(%{"valid" => false, "error" => reason}, id)
+      end
+    end
+  end
+
+  # agent.session.sanitize_id - Sanitize arbitrary string to valid session ID
+  defp handle_request("agent.session.sanitize_id", params, id) do
+    raw = params["raw"]
+
+    if is_nil(raw) do
+      Protocol.encode_error(-32602, "Missing param: raw", nil, id)
+    else
+      sanitized = AgentSession.sanitize_session_id(raw)
+      Protocol.encode_response(%{"sanitized" => sanitized}, id)
+    end
+  end
+
+  # agent.list - List all available agents
+  defp handle_request("agent.list", _params, id) do
+    agents =
+      AgentCatalogue.list_agents()
+      |> Enum.map(fn info ->
+        %{
+          "name" => info.name,
+          "display_name" => info.display_name,
+          "description" => info.description
+        }
+      end)
+
+    Protocol.encode_response(%{"agents" => agents, "count" => length(agents)}, id)
+  end
+
+  # agent.get_info - Get info about a specific agent
+  defp handle_request("agent.get_info", params, id) do
+    agent_name = params["agent_name"] || params["name"]
+
+    if is_nil(agent_name) or not is_binary(agent_name) do
+      Protocol.encode_error(-32602, "Missing or invalid param: agent_name", nil, id)
+    else
+      case AgentCatalogue.get_agent_info(agent_name) do
+        {:ok, info} ->
+          Protocol.encode_response(
+            %{
+              "name" => info.name,
+              "display_name" => info.display_name,
+              "description" => info.description
+            },
+            id
+          )
+
+        :not_found ->
+          Protocol.encode_response(%{"error" => "Agent not found", "name" => agent_name}, id)
+      end
+    end
+  end
+
+  # agent.context.filter - Filter context for sub-agent
+  defp handle_request("agent.context.filter", params, id) do
+    context = params["context"]
+
+    if is_nil(context) do
+      Protocol.encode_response(%{"filtered" => %{}}, id)
+    else
+      filtered = ContextFilter.filter_context(context)
+      Protocol.encode_response(%{"filtered" => filtered}, id)
+    end
   end
 
   # ============================================================================
