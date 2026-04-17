@@ -17,7 +17,8 @@ defmodule CodePuppyControl.Parsing.Parsers do
   def register_all do
     parsers = [
       CodePuppyControl.Parsing.Parsers.ElixirParser,
-      CodePuppyControl.Parsing.Parsers.PythonParser
+      CodePuppyControl.Parsing.Parsers.PythonParser,
+      CodePuppyControl.Parsing.Parsers.JavaScriptParser
     ]
 
     Enum.each(parsers, fn parser ->
