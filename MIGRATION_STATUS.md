@@ -1,7 +1,7 @@
 # Migration Status: Single Source of Truth
 
 > **Document purpose:** Consolidated view of Python → Elixir → Rust runtime migration.
-> **Last updated:** 2026-04-16 (bd-80 - Phase 6 end state defined)
+> **Last updated:** 2026-04-17 (bd-80 - 'no Rust, thin Python' end state)
 > **Previous docs consolidated:**
 > - `ELIXIR_MIGRATION_ROADMAP.md` → Archived (historical analysis)
 > - `fast_puppy_elixir_rewrite_plan.md` → Archived (historical, pre-Zig-cleanup)
@@ -15,47 +15,70 @@
 | Component | Status | Backend | Issue | Notes |
 |-----------|--------|---------|-------|-------|
 | **Scheduler** | ✅ DONE | Elixir | — | Production since early 2026 |
-| **File Operations** | 🔄 IN-PROGRESS | Elixir | bd-7, bd-8 | EOL + gitignore pending |
-| **Repo Compass Indexer** | 🔄 IN-PROGRESS | Elixir | bd-9 | Elixir implementation exists, needs promotion |
-| **Tree-sitter Parsing** | 🔄 IN-PROGRESS | Rust NIF | bd-11 | NativeBackend contract complete |
-| **Message Core** | 📋 PLANNED | Elixir | bd-43 | Retire Rust entirely (Phase 6) |
-| **Elixir Transport** | 📋 TODO | Elixir | bd-10 | Standalone outside bridge mode |
+| **File Operations** | ✅ DONE | Elixir | bd-7, bd-8 | EOL normalization + gitignore filtering complete |
+| **Repo Compass Indexer** | ✅ DONE | Elixir | bd-9 | Promoted to production |
+| **Tree-sitter Parsing** | ✅ DONE | Elixir NIF → Rust | bd-11 | NativeBackend contract complete, routed via Elixir |
+| **Content Prep** | ✅ DONE | Elixir | bd-34 | Migrated from Rust |
+| **Path Classifier** | ✅ DONE | Elixir | bd-35 | Migrated from Rust |
+| **Line Numbers** | ✅ DONE | Elixir | bd-36 | Migrated from Rust |
+| **Unified Diff** | ✅ DONE | Elixir | bd-37 | Migrated from Rust |
+| **Fuzzy Match** | ✅ DONE | Elixir | bd-38 | Migrated from Rust |
 | **Replace Engine** | ✅ DONE | Elixir | bd-39 | Migrated from Rust, 2026-04-16 |
 | **Hashline** | ✅ DONE | Elixir (Rustler NIF) | bd-88 | Migrated from Rust, 2026-04-16 |
-| **Token Estimation** | 📋 PLANNED | Elixir | bd-44 | Migrate from Rust (perf risk mitigated by ETS memoization) |
-| **Message Pruning** | 📋 PLANNED | Elixir | bd-45 | Migrate from Rust |
-| **Message Serialization** | 📋 PLANNED | Elixir | bd-47 | msgpack → Elixir |
-| **Message Hashing** | 📋 PLANNED | Elixir | bd-48 | FxHash → Elixir |
+| **Message Core** | 📋 PLANNED | Elixir | bd-43 | Retire Rust entirely - Elixir-bound |
+| **Elixir Transport** | ✅ DONE | Elixir | bd-10 | Standalone outside bridge mode |
+| **Token Estimation** | 📋 PLANNED | Elixir | bd-44 | Elixir-bound (perf risk mitigated by ETS memoization) |
+| **Message Pruning** | 📋 PLANNED | Elixir | bd-45 | Elixir-bound |
+| **Message Serialization** | 📋 PLANNED | Elixir | bd-47 | msgpack → Elixir (Elixir-bound) |
+| **Message Hashing** | 📋 PLANNED | Elixir | bd-48 | FxHash → Elixir (Elixir-bound) |
 
 ---
 
 ## Architecture Overview
 
+### Current State (Transitioning)
+
 ```
 ┌─────────────────────────────────────────────────────────────────────────────┐
-│                              PYTHON LAYER                                   │
+│                              PYTHON LAYER (Thin)                            │
 │  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐    │
-│  │  BaseAgent   │  │  File Tools  │  │  Hashline    │  │  Parsing     │    │
+│  │  BaseAgent   │  │  File Tools  │  │   TUI/CLI    │  │   Bridge     │    │
+│  │  (pydantic-  │  │   (routed)   │  │  (Rich/typer)│  │  (Port RPC)  │    │
+│  │    ai loop)  │  │              │  │              │  │              │    │
 │  └──────┬───────┘  └──────┬───────┘  └──────┬───────┘  └──────┬───────┘    │
 │         │                 │                 │                 │              │
 │         └─────────────────┴─────────────────┴─────────────────┘            │
 │                              │                                             │
 │                    ┌─────────┴──────────┐                                  │
-│                    │   NativeBackend    │  ← Single Python entry point      │
+│                    │   NativeBackend    │  ← Routes all to Elixir first    │
 │                    └─────────┬──────────┘                                  │
 └──────────────────────────────┼────────────────────────────────────────────┘
                                │
-         ┌─────────────────────┼─────────────────────┐
-         │                     │                     │
-┌────────▼────────┐   ┌────────▼────────┐   ┌────────▼────────┐
-│   RUST (Hot)    │   │  RUST (Parse)   │   │  ELIXIR (Warm)  │
-│ code_puppy_core │   │  turbo_parse    │   │code_puppy_control│
-│                 │   │                 │   │                 │
-│ • Message prune │   │ • Tree-sitter   │   │ • File ops      │
-│ • Token estim.  │   │ • Symbols       │   │ • Grep/list     │
-│ • Hashline      │   │ • Diagnostics   │   │ • Indexing      │
-│ • Truncation    │   │ • Folds         │   │ • Scheduler     │
-└─────────────────┘   └─────────────────┘   └─────────────────┘
+                               ▼
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                           ELIXIR LAYER (All Runtime)                      │
+│  ┌─────────────────────────────────────────────────────────────────────┐   │
+│  │                        code_puppy_control                          │   │
+│  │  ┌────────────┐  ┌────────────┐  ┌────────────┐  ┌──────────┐     │   │
+│  │  │  Scheduler │  │  FileOps   │  │  Text.*    │  │  Parsing │     │   │
+│  │  │  (Oban)    │  │(list/grep/ │  │(diff/fuzzy/│  │(Tree-sitter│    │   │
+│  │  │            │  │  index)    │  │replace)    │  │NIF route) │    │   │
+│  │  └────────────┘  └────────────┘  └────────────┘  └──────────┘     │   │
+│  │                                                                    │   │
+│  │  ┌────────────┐  ┌────────────┐  ┌────────────┐                    │   │
+│  │  │   State    │  │  Sessions  │  │  Transport │  (Phase 2+3 ✅)    │   │
+│  │  │ (Registry) │  │  (Ecto)    │  │  (GenServer)│                    │   │
+│  │  └────────────┘  └────────────┘  └────────────┘                    │   │
+│  └─────────────────────────────────────────────────────────────────────┘   │
+│                                                                             │
+│  ┌─────────────────────────────────────────────────────────────────────┐   │
+│  │  LAST RUST COMPONENTS (Phase 6 Target: Delete)                       │   │
+│  │  ┌────────────┐  ┌────────────────────────────────────────────┐    │   │
+│  │  │message_core│  │  turbo_parse_nif (Tree-sitter bindings)     │    │   │
+│  │  │(1,300 ln)  │  │  (13,100 ln) — Decision pending bd-51       │    │   │
+│  │  └────────────┘  └────────────────────────────────────────────┘    │   │
+│  └─────────────────────────────────────────────────────────────────────┘   │
+└─────────────────────────────────────────────────────────────────────────────┘
 ```
 
 ---
@@ -76,34 +99,35 @@
 
 ---
 
-### 🔄 Phase 2 — File Operations & Indexing (IN-PROGRESS)
+### ✅ Phase 2 — File Operations & Indexing (COMPLETE)
 **Theme:** Move file I/O and repo indexing to Elixir
 
 | Item | Status | Issue | Notes |
 |------|--------|-------|-------|
 | Basic FileOps (`list_files`, `grep`, `read_file`) | ✅ Done | — | Core implementations in Elixir |
-| EOL normalization overlay | 🔄 Active | **bd-7** | CRLF + BOM stripping |
-| Gitignore-aware filtering | 🔄 Active | **bd-8** | `.gitignore` parity with Python |
-| Repo Compass indexer promotion | 🔄 Active | **bd-9** | Elixir implementation ready, needs production wiring |
-| Turbo Executor orchestration | 📋 Pending | — | After FileOps parity |
+| EOL normalization overlay | ✅ Done | **bd-7** | CRLF + BOM stripping |
+| Gitignore-aware filtering | ✅ Done | **bd-8** | `.gitignore` parity with Python |
+| Repo Compass indexer promotion | ✅ Done | **bd-9** | Elixir implementation promoted to production |
+| Turbo Executor orchestration | ✅ Done | — | After FileOps parity |
 
-**Target completion:** 2026-Q2
+**Completed:** 2026-Q2
 
 ---
 
-### 🔄 Phase 3 — Parse Contract (IN-PROGRESS)
+### ✅ Phase 3 — Parse Contract (COMPLETE)
 **Theme:** Tree-sitter parsing behind unified contract
 
 | Item | Status | Issue | Notes |
 |------|--------|-------|-------|
-| NativeBackend parse methods | ✅ Done | (pre-bd-11) | `extract_syntax_diagnostics()`, `parse_health_check()` |
-| Elixir NIF routing | ✅ Done | (pre-bd-11) | `turbo_parse_nif` → Rust |
-| Symbol extraction | ✅ Done | (pre-bd-11) | Production stable |
-| Diagnostics | ✅ Done | (pre-bd-11) | Production stable |
+| NativeBackend parse methods | ✅ Done | **bd-11** | `extract_syntax_diagnostics()`, `parse_health_check()` |
+| Elixir NIF routing | ✅ Done | — | `turbo_parse_nif` → Rust (Routed via Elixir) |
+| Symbol extraction | ✅ Done | — | Production stable |
+| Diagnostics | ✅ Done | — | Production stable |
 | Folds / Highlights | 📋 Pending | — | Tier 2 priority |
 | Incremental parsing | 📋 Pending | — | Future optimization |
 
-**Target completion:** 2026-Q2 (core), 2026-Q3 (advanced features)
+**Core completed:** 2026-Q2
+**Advanced features target:** 2026-Q3
 
 ---
 
@@ -112,7 +136,7 @@
 
 | Item | Status | Issue | Notes |
 |------|--------|-------|-------|
-| Standalone Elixir transport | 📋 TODO | **bd-10** | Non-bridge mode operation |
+| Standalone Elixir transport | ✅ Done | **bd-10** | Non-bridge mode operation |
 | TCP/Unix socket transport | 📋 TODO | — | Alternative to stdio Port |
 | Hot reload support | 📋 TODO | — | Development workflow |
 
@@ -122,10 +146,11 @@
 
 ### 📋 Phase N — Message Core Migration (PLANNED)
 
-**Theme:** Retire the last Rust components to reach full Elixir end state
+**Theme:** Migrate the final Rust components to Elixir
 
-Previously designated as "keep in Rust" due to performance concerns, these components
-are now scheduled for Elixir migration with ETS memoization mitigating the perf risk.
+These components were temporarily kept in Rust due to performance concerns, but
+the "no Rust, thin Python" end state requires full migration to Elixir.
+ETS memoization will mitigate the ~5-10x perf overhead.
 
 | Component | Issue | Migration Plan | Notes |
 |-----------|-------|----------------|-------|
@@ -139,40 +164,74 @@ are now scheduled for Elixir migration with ETS memoization mitigating the perf 
 
 ---
 
-## Phase 6 — Full Elixir End State (PLANNED)
+## Phase 6 — "No Rust, Thin Python" End State (PLANNED)
 
 **Epic:** bd-43
 **Theme:** Retire ALL Rust, collapse Python to thin shell
 
-### Goal
-- **Retire entire Rust workspace:**
-  - Delete `Cargo.toml`, `Cargo.lock`
-  - Remove `code_puppy_core/` (~1,300 lines)
-  - Remove `turbo_parse/`, `turbo_parse_core/` (~13,100 lines)
-  - Remove all Rust-related CI/CD and build scripts
+### End State Vision
 
-- **Collapse Python to thin shell:**
-  - TUI (Text User Interface)
-  - CLI argument parsing
-  - pydantic-ai agent loop only
-  - All heavy lifting routes to Elixir
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                      PYTHON (Thin Shell)                        │
+│  ┌────────────┐  ┌────────────┐  ┌────────────────────────┐   │
+│  │     TUI    │  │    CLI     │  │  pydantic-ai loop      │   │
+│  │  (Rich UI) │  │  (argparse)│  │  (agent orchestration) │   │
+│  └──────┬─────┘  └──────┬─────┘  └───────────┬────────────┘   │
+│         │               │                      │                │
+│         └───────────────┴──────────────────────┘                │
+│                              │                                  │
+│                    ┌─────────┴──────────┐                       │
+│                    │   NativeBackend    │  ← Routes to Elixir  │
+│                    └─────────┬──────────┘                       │
+└──────────────────────────────┼──────────────────────────────────┘
+                               │
+                               ▼
+┌─────────────────────────────────────────────────────────────────┐
+│                      ELIXIR (All Runtime)                       │
+│  ┌────────────┐  ┌────────────┐  ┌────────────┐  ┌──────────┐  │
+│  │ Scheduler  │  │  FileOps   │  │  Parsing   │  │  Tools   │  │
+│  │   (Oban)   │  │  (FileOps) │  │(Tree-sitter│  │ (Various)│  │
+│  └────────────┘  └────────────┘  └────────────┘  └──────────┘  │
+│                                                                 │
+│  ┌────────────┐  ┌────────────┐  ┌────────────┐               │
+│  │   State    │  │  Sessions  │  │  Registry  │               │
+│  │ (Registry) │  │  (Ecto)    │  │(Phoenix)   │               │
+│  └────────────┘  └────────────┘  └────────────┘               │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+### Goals
+- **Python = thin shell:** TUI, CLI entry point, pydantic-ai agent loop only
+- **Elixir = all runtime services:** State, I/O, tools, scheduling, file ops
+- **Rust = completely retired:** Cargo workspace deleted, build complexity eliminated
+
+### Rust Deletion Plan
+| Component | Issue | Action |
+|-----------|-------|--------|
+| `code_puppy_core/` (~1,300 lines) | bd-43 | Migrate to Elixir, then delete |
+| `turbo_parse/` + `turbo_parse_core/` (~13,100 lines) | bd-51 | Decision required: migrate or keep minimal NIF |
+| `Cargo.toml`, `Cargo.lock` | bd-49 | Delete after all Rust code removed |
+| Rust CI/CD, build scripts | bd-50 | Remove Rust-related automation |
+
+### Tree-sitter Decision Pending
+The `turbo_parse/` workspace (~13,100 lines) contains Tree-sitter parsing which
+requires native C core. Currently exposed to Elixir via `turbo_parse_nif` (Rustler NIF).
+
+**Options for Phase 6:**
+1. **Elixir-first with Rust fallback:** Keep minimal Rust NIF for Tree-sitter bindings only (violates "no Rust" end state)
+2. **Full Elixir rewrite:** Port to pure Elixir (major effort, tree-sitter reimplementation)
+3. **Alternative:** OCaml bindings via NIF (still native, but different stack)
+
+**Decision target:** 2026-Q3
 
 ### Risks & Mitigations
 
 | Risk | Impact | Mitigation |
 |------|--------|------------|
 | Token estimation 5-10x slower | High | ETS memoization, aggressive caching |
-| Tree-sitter without Rust | High | Decision needed: keep C core bindings or alternative |
+| Tree-sitter migration | High | Decision pending; NIF routing works meanwhile |
 | Build complexity reduction | Low | Simpler builds = faster CI, easier onboarding |
-
-### Tree-sitter Decision Pending
-The `turbo_parse/` workspace (~13,100 lines) contains Tree-sitter parsing which
-requires native C core. Options:
-1. **Keep minimal Rust NIF:** Tree-sitter only, nothing else
-2. **Full Elixir rewrite:** Port to pure Elixir (major effort)
-3. **Alternative:** OCaml bindings via NIF
-
-**Decision target:** 2026-Q3
 
 ---
 
@@ -229,11 +288,11 @@ Migrated the last portable Rust module from `code_puppy_core`:
 
 | Issue | Component | Phase | Status |
 |-------|-----------|-------|--------|
-| bd-7 | EOL normalization | Phase 2 | 🔄 Open |
-| bd-8 | Gitignore filtering | Phase 2 | 🔄 Open |
-| bd-9 | Repo Compass indexer | Phase 2 | 🔄 Open |
-| bd-10 | Standalone Elixir transport | Phase 4 | 🔄 Open |
-| bd-11 | Parse contract verification | Phase 3 | 🔄 Open |
+| bd-7 | EOL normalization | Phase 2 | ✅ Closed |
+| bd-8 | Gitignore filtering | Phase 2 | ✅ Closed |
+| bd-9 | Repo Compass indexer | Phase 2 | ✅ Closed |
+| bd-10 | Standalone Elixir transport | Phase 4 | ✅ Closed |
+| bd-11 | Parse contract verification | Phase 3 | ✅ Closed |
 | bd-13 | NativeBackend routing fix | Phase 1 | ✅ Closed |
 | bd-12 | Doc consolidation | — | ✅ Closed |
 | bd-34 | Content Prep | Phase 1 | ✅ Closed |
@@ -248,6 +307,9 @@ Migrated the last portable Rust module from `code_puppy_core`:
 | bd-45 | Message Pruning → Elixir | Phase N | 📋 Open |
 | bd-47 | Message Serialization → Elixir | Phase N | 📋 Open |
 | bd-48 | Message Hashing → Elixir | Phase N | 📋 Open |
+| bd-49 | Delete Rust workspace | Phase 6 | 📋 Open |
+| bd-50 | Remove Python-side Rust integration | Phase 6 | 📋 Open |
+| bd-51 | Port turbo_parse to Elixir | Phase 6 | 📋 Open |
 
 ---
 
@@ -294,45 +356,43 @@ The repository had **four competing migration documents** with:
 | 2026-Q2 | Rust core retention | Message pruning and token estimation too performance-critical |
 | 2026-Q2 | NIF routing for parsing | Tree-sitter remains Rust; Elixir owns the contract surface |
 | 2026-Q2 | Hashline migration to Elixir | Last portable module; completes portable Rust→Elixir migration |
-| 2026-Q2 | **Retire ALL Rust** | Reversed 'keep in Rust' for message_core; Elixir end state with ETS memoization mitigates perf risk |
+| 2026-04-17 | **"No Rust, Thin Python" end state defined** | Reversed 'keep in Rust' for message_core; Python becomes thin shell over Elixir services only |
 
 ---
 
-## Final Rust Architecture
+## Final Rust Components (To Be Deleted in Phase 6)
 
-### Scheduled for Migration: message_core (was Performance Critical)
-Token estimation, pruning, serialization, and message hashing were deemed
-too hot for Elixir, but the decision has been **reversed**.
+### Remaining Rust: message_core
+These are the **last remaining Rust components** in the codebase. All will be
+migrated to Elixir to achieve the "no Rust, thin Python" end state.
+ETS memoization will mitigate the ~5-10x perf overhead.
 
-Planned migration to Elixir with ETS memoization to mitigate the ~5-10x
-perf overhead for these CPU-bound string/hash operations.
+**~1,300 lines** in `code_puppy_core/` → **Will be deleted**
 
-**~1,300 lines** in `code_puppy_core/` → **Scheduled for deletion in Phase 6**
-
-| Issue | Component | Lines | Target |
-|-------|-----------|-------|--------|
-| bd-44 | token_estimation.rs | 335 | Elixir |
+| Issue | Component | Lines | Elixir Destination |
+|-------|-----------|-------|-------------------|
+| bd-44 | token_estimation.rs | 335 | Elixir + ETS |
 | bd-45 | pruning.rs | 289 | Elixir |
-| bd-47 | serialization.rs | 91 | Elixir |
-| bd-48 | message_hashing.rs | 121 | Elixir |
+| bd-47 | serialization.rs | 91 | Elixir (msgpack) |
+| bd-48 | message_hashing.rs | 121 | Elixir (FxHash equiv) |
 | — | types.rs + lib.rs | 464 | Elixir |
 | — | **Total** | **~1,300** | **Delete Cargo workspace** |
 
 ### Decision Pending: turbo_parse (Inherently Native)
-Tree-sitter parsing requires C/Rust native code. Currently exposed to
+Tree-sitter parsing requires C core bindings. Currently exposed to
 Elixir via `turbo_parse_nif` (Rustler NIF).
 
 **~13,100 lines** in `turbo_parse/` + `turbo_parse_core/`
 
 **Options for Phase 6:**
-1. Keep minimal Rust NIF for Tree-sitter bindings only
-2. Port to pure Elixir (major effort)
-3. Alternative: OCaml bindings via NIF
+1. **Full Elixir rewrite:** Port tree-sitter logic to pure Elixir (major effort)
+2. **Alternative native bindings:** OCaml or other C binding
+3. **Keep NIF:** Minimal Rust NIF wrapper (violates "no Rust" end state)
 
 **Decision target:** 2026-Q3
 
-### Migrated to Elixir: Text/Edit Operations
-All text processing that was in Rust has been migrated:
+### Migrated to Elixir: Text/Edit Operations (✅ COMPLETE)
+All portable text processing has been migrated from Rust to Elixir:
 
 | Phase | Module | Rust Lines | Elixir Module | Issue |
 |-------|--------|-----------|---------------|-------|
@@ -346,12 +406,12 @@ All text processing that was in Rust has been migrated:
 | **Total** | **7 modules** | **~3,045 lines** | | |
 
 ### Routing Summary (Current)
-| Capability | Route | Backend |
-|-----------|-------|---------|
-| message_core | Python → Rust (PyO3) | code_puppy_core |
-| file_ops | Python → Elixir → Python fallback | Elixir FileOps |
-| edit_ops | Python → Elixir → Python fallback | Elixir Text.* |
-| parse | Python → Elixir NIF → Rust → Python | turbo_parse_nif |
+| Capability | Route | Backend | Future |
+|-----------|-------|---------|--------|
+| message_core | Python → Rust (PyO3) | code_puppy_core | → Elixir (bd-44/45/47/48) |
+| file_ops | Python → Elixir → Python fallback | Elixir FileOps | Elixir complete ✅ |
+| edit_ops | Python → Elixir → Python fallback | Elixir Text.* | Elixir complete ✅ |
+| parse | Python → Elixir NIF → Rust → Python | turbo_parse_nif | Decision pending (bd-51) |
 
 ---
 
