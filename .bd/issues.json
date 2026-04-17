@@ -1,5 +1,5 @@
 {
-  "counter": 145,
+  "counter": 146,
   "issues": {
     "bd-1": {
       "id": "bd-1",
@@ -2669,7 +2669,7 @@
       "id": "bd-137",
       "title": "Task 5.1: Create Guidance Injector Script",
       "description": "Create ~/.kiro/scripts/guidance-injector.sh - PostToolUse hook that suggests next steps based on tool executed. After write: suggest tests, todo complete, or review. After shell: suggest task completion if tests pass. After use_subagent: suggest reviewing results.",
-      "status": "open",
+      "status": "closed",
       "priority": 2,
       "type": "task",
       "labels": [],
@@ -2679,9 +2679,16 @@
         ]
       },
       "created_at": "2026-04-17T12:16:45.478123",
-      "updated_at": "2026-04-17T19:47:52.139823",
+      "updated_at": "2026-04-17T20:20:49.646480",
       "comments": [
-        "pack-leader-019d9c starting implementation from base main. Focus: create ~/.kiro/scripts/guidance-injector.sh based on desired PostToolUse guidance behavior, aligned with proactive-guidance work already merged in main."
+        "pack-leader-019d9c starting implementation from base main. Focus: create ~/.kiro/scripts/guidance-injector.sh based on desired PostToolUse guidance behavior, aligned with proactive-guidance work already merged in main.",
+        "bloodhound-019d9c: Created ~/.kiro/scripts/guidance-injector.sh based on code_puppy proactive-guidance work from main. Script aligns with PostToolUse hook behavior:\n\n- write_file: Language-specific guidance (Python, JS/TS, Rust, Go, Java) + structured data validation (JSON, YAML, TOML) + shell scripts + docs\n- replace_in_file: Git diff suggestions, file review guidance  \n- run_shell_command: Context-aware suggestions based on command type (tests, git, builds, installs, search) with success/failure paths\n- invoke_agent: Review and iteration guidance\n- read_file/grep/list_files: Exploratory guidance (verbose only to reduce noise)\n\nFeatures:\n- GUIDANCE_VERBOSITY=minimal|normal|verbose (default: normal)\n- NO_COLOR=1 support for colorless output\n- PUP_LAST_EXIT_CODE env var for shell command status\n- Fully compatible with macOS bash 3.2\n\nTested and working for all tool types.",
+        "pack-leader-019d9c starting implementation from base main. Creating repo-local ~/.kiro/scripts/guidance-injector.sh aligned with the proactive-guidance behavior already merged in main.",
+        "Shepherd REQUEST_CHANGES: unify minimal-mode significant-tool aliases with main dispatcher and add explicit support/tests for use_subagent, subagent, and agent_run_shell_command.",
+        "Remaining Shepherd blocker: minimal-mode prefilter still misses shell_command|shell aliases even though the dispatcher handles them. Need to add those aliases to the significant-tool whitelist and cover with a regression test.",
+        "Shepherd APPROVE: alias handling now aligns with the dispatcher, including shell_command/shell in minimal mode, with regression coverage.",
+        "Watchdog APPROVE: guidance-injector shell suite passes 23/23 with bash syntax checks clean.",
+        "Merged locally into main after Shepherd + Watchdog approval. Added repo-local ~/.kiro/scripts/guidance-injector.sh with shell test coverage."
       ]
     },
     "bd-138": {
@@ -2698,9 +2705,10 @@
         ]
       },
       "created_at": "2026-04-17T12:16:51.407577",
-      "updated_at": "2026-04-17T19:48:23.164977",
+      "updated_at": "2026-04-17T19:51:43.739139",
       "comments": [
-        "pack-leader-019d9c starting implementation from base main. Creating ~/.kiro/scripts/show-active-task.sh for AgentSpawn context display (proactive-guidance aligned)."
+        "pack-leader-019d9c starting implementation from base main. Creating ~/.kiro/scripts/show-active-task.sh for AgentSpawn context display (proactive-guidance aligned).",
+        "pack-leader-019d9c note: bd-138 was closed prematurely before any implementation was merged. Actual script implementation is being tracked in a follow-up issue created after closure because this bd version has no reopen command."
       ]
     },
     "bd-139": {
@@ -2827,6 +2835,28 @@
         "3. Fallback QA Approval: QA verification completed by fallback agent code-puppy-clone-4 (shepherd/watchdog unavailable).",
         "Review/QA Status Update:\n\n1. Model Configuration Issue: shepherd and watchdog agents could not be invoked because their configured local model 'chatgpt-gpt-5.4' is missing from the environment.",
         "4. Test Results: 81 passed\n   Command: uv run --active pytest tests/test_make_model_settings_gpt5.py tests/test_chatgpt_codex_client.py -n0 --no-cov -q"
+      ]
+    },
+    "bd-146": {
+      "id": "bd-146",
+      "title": "Task 5.2 follow-up: Implement ~/.kiro/scripts/show-active-task.sh",
+      "description": "Replacement follow-up for bd-138 after premature closure. Add the actual repo-local ~/.kiro/scripts/show-active-task.sh AgentSpawn hook script that reads ~/.kiro/state/active_task.json and displays task ID, category, priority, description, and warning states. Align style with existing Kiro scripts and proactive-guidance work.",
+      "status": "closed",
+      "priority": 2,
+      "type": "task",
+      "labels": [],
+      "dependencies": {},
+      "created_at": "2026-04-17T19:51:43.708934",
+      "updated_at": "2026-04-17T20:40:08.807637",
+      "comments": [
+        "pack-leader-019d9c starting implementation from base main. Creating repo-local ~/.kiro/scripts/show-active-task.sh aligned with the Kiro state-file contract and proactive-guidance context display.",
+        "Shepherd/Watchdog REQUEST_CHANGES: tighten active_task.json validation to require a non-empty string id, make --json robust via proper JSON construction/escaping, and fix text-mode failure messaging/tests for missing/invalid task files.",
+        "Remaining Shepherd blocker: active_task.json id validation must reject whitespace-only strings, and the shell test suite should explicitly require that behavior instead of allowing either outcome.",
+        "Remaining Shepherd blocker: the script behavior is correct, but the new JSON-edge tests must use real special-character payloads (quotes, backslashes, escaped newlines, real unicode, HTML-like text) and should parse JSON via printf rather than echo so the harness itself cannot corrupt escapes.",
+        "Remaining Shepherd blocker: the special-character JSON tests must use fixtures/assertions that prove decoded newline/tab/control-char behavior, not just literal backslash sequences or validity-only checks. Need real JSON escapes plus explicit round-trip assertions.",
+        "Shepherd APPROVE: active_task.json validation is strict, JSON mode is jq-built and robust, and the shell suite now enforces the special-character/object-id edge cases.",
+        "Watchdog APPROVE: show-active-task shell suite passes 46/46 and targeted pytest tests pass 56/56.",
+        "Merged locally into main after Shepherd + Watchdog approval. Added repo-local ~/.kiro/scripts/show-active-task.sh with comprehensive shell-test coverage."
       ]
     }
   }
