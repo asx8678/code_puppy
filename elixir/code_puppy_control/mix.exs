@@ -41,7 +41,9 @@ defmodule CodePuppyControl.MixProject do
       # MessagePack for session serialization (bd-47)
       {:msgpax, "~> 2.4"},
       # HTTP client with connection pooling (bd-69)
-      {:finch, "~> 0.18"}
+      {:finch, "~> 0.18"},
+      # xxhash for pure Elixir HashLine implementation (bd-147)
+      {:xxhash, "~> 0.3"}
     ]
   end
 
