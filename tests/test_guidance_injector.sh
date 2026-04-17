@@ -123,6 +123,21 @@ test_agent_run_shell_command_alias() {
     [[ "$output" =~ "pytest" ]] || [[ "$output" =~ "Command completed" ]] || [[ "$output" =~ "Tests passed" ]]
 }
 
+# Regression tests for bd-137: shell_command|shell aliases in minimal mode
+test_shell_command_alias_minimal() {
+    local output
+    output=$(GUIDANCE_VERBOSITY=minimal NO_COLOR=1 KIRO_TOOL_NAME="shell_command" KIRO_TOOL_ARGS="pytest" KIRO_TOOL_EXIT_CODE="0" bash "$GUIDANCE_SCRIPT")
+    [[ -n "$output" ]]
+    [[ "$output" =~ "pytest" ]] || [[ "$output" =~ "Command completed" ]] || [[ "$output" =~ "Tests passed" ]]
+}
+
+test_shell_alias_minimal() {
+    local output
+    output=$(GUIDANCE_VERBOSITY=minimal NO_COLOR=1 KIRO_TOOL_NAME="shell" KIRO_TOOL_ARGS="pytest" KIRO_TOOL_EXIT_CODE="0" bash "$GUIDANCE_SCRIPT")
+    [[ -n "$output" ]]
+    [[ "$output" =~ "pytest" ]] || [[ "$output" =~ "Command completed" ]] || [[ "$output" =~ "Tests passed" ]]
+}
+
 test_replace_in_file() {
     local output
     output=$(NO_COLOR=1 KIRO_TOOL_NAME="replace_in_file" bash "$GUIDANCE_SCRIPT")
@@ -184,6 +199,8 @@ run_test "create_file Shell suggestions" test_write_file_shell
 run_test "run_shell_command success" test_run_shell_command_success
 run_test "run_shell_command failure" test_run_shell_command_failure
 run_test "agent_run_shell_command alias" test_agent_run_shell_command_alias
+run_test "shell_command alias in minimal mode (bd-137)" test_shell_command_alias_minimal
+run_test "shell alias in minimal mode (bd-137)" test_shell_alias_minimal
 run_test "invoke_agent shows agent name" test_invoke_agent
 run_test "subagent alias" test_subagent_alias
 run_test "use_subagent alias" test_use_subagent_alias
