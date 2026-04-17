@@ -70,21 +70,21 @@ fi
 # Test 4: No task file JSON has active:false
 rm -f "$TASK_FILE"
 output=$(KIRO_TASK_FILE="$TASK_FILE" "$SCRIPT" --json)
-if [[ $(echo "$output" | jq -r '.active') == "false" ]]; then
+if [[ $(printf '%s\n' "$output" | jq -r '.active') == "false" ]]; then
     pass "No task JSON has active:false"
 else
     fail "No task JSON has active:false"
 fi
 
 # Test 5: No task JSON has warning
-if [[ $(echo "$output" | jq -r '.warning') == "No active task found" ]]; then
+if [[ $(printf '%s\n' "$output" | jq -r '.warning') == "No active task found" ]]; then
     pass "No task JSON has warning"
 else
     fail "No task JSON has warning"
 fi
 
 # Test 6: No task JSON file.exists is false
-if [[ $(echo "$output" | jq -r '.file.exists') == "false" ]]; then
+if [[ $(printf '%s\n' "$output" | jq -r '.file.exists') == "false" ]]; then
     pass "No task JSON file.exists is false"
 else
     fail "No task JSON file.exists is false"
@@ -104,35 +104,35 @@ fi
 
 # Test 8: Valid task JSON has active:true
 json_output=$(KIRO_TASK_FILE="$TASK_FILE" "$SCRIPT" --json)
-if [[ $(echo "$json_output" | jq -r '.active') == "true" ]]; then
+if [[ $(printf '%s\n' "$json_output" | jq -r '.active') == "true" ]]; then
     pass "Valid task JSON has active:true"
 else
     fail "Valid task JSON has active:true"
 fi
 
 # Test 9: Valid task JSON has correct ID
-if [[ $(echo "$json_output" | jq -r '.task.id') == "bd-test" ]]; then
+if [[ $(printf '%s\n' "$json_output" | jq -r '.task.id') == "bd-test" ]]; then
     pass "Valid task JSON has correct ID"
 else
     fail "Valid task JSON has correct ID"
 fi
 
 # Test 10: Valid task JSON has correct category
-if [[ $(echo "$json_output" | jq -r '.task.category') == "test" ]]; then
+if [[ $(printf '%s\n' "$json_output" | jq -r '.task.category') == "test" ]]; then
     pass "Valid task JSON has correct category"
 else
     fail "Valid task JSON has correct category"
 fi
 
 # Test 11: Valid task JSON has correct priority
-if [[ $(echo "$json_output" | jq -r '.task.priority') == "1" ]]; then
+if [[ $(printf '%s\n' "$json_output" | jq -r '.task.priority') == "1" ]]; then
     pass "Valid task JSON has correct priority"
 else
     fail "Valid task JSON has correct priority"
 fi
 
 # Test 12: Valid task JSON has correct status
-if [[ $(echo "$json_output" | jq -r '.task.status') == "active" ]]; then
+if [[ $(printf '%s\n' "$json_output" | jq -r '.task.status') == "active" ]]; then
     pass "Valid task JSON has correct status"
 else
     fail "Valid task JSON has correct status"
@@ -155,21 +155,21 @@ cat > "$TASK_FILE" << 'EOF'
 {"id": "bd-minimal"}
 EOF
 json_output=$(KIRO_TASK_FILE="$TASK_FILE" "$SCRIPT" --json)
-if [[ $(echo "$json_output" | jq -r '.task.category') == "uncategorized" ]]; then
+if [[ $(printf '%s\n' "$json_output" | jq -r '.task.category') == "uncategorized" ]]; then
     pass "Minimal task has default category"
 else
     fail "Minimal task has default category"
 fi
 
 # Test 15: Minimal task has default priority
-if [[ $(echo "$json_output" | jq -r '.task.priority') == "normal" ]]; then
+if [[ $(printf '%s\n' "$json_output" | jq -r '.task.priority') == "normal" ]]; then
     pass "Minimal task has default priority"
 else
     fail "Minimal task has default priority"
 fi
 
 # Test 16: Minimal task has default status
-if [[ $(echo "$json_output" | jq -r '.task.status') == "active" ]]; then
+if [[ $(printf '%s\n' "$json_output" | jq -r '.task.status') == "active" ]]; then
     pass "Minimal task has default status"
 else
     fail "Minimal task has default status"
@@ -199,7 +199,7 @@ fi
 
 # Test 20: Text output shows task ID
 cat > "$TASK_FILE" << 'EOF'
-{"id": "bd-text-test", "category": "feature", "priority": "2", "description": "Text output test", "status": "active"}
+{"id": "bd-text-test", "category": "feature", "priority": "2", "description": "Text output test"}
 EOF
 output=$(NO_COLOR=1 KIRO_TASK_FILE="$TASK_FILE" "$SCRIPT")
 if [[ "$output" == *"bd-text-test"* ]]; then
@@ -244,7 +244,7 @@ fi
 # Test 25: Priority 1 handled
 echo '{"id": "p1", "priority": "1"}' > "$TASK_FILE"
 json_output=$(KIRO_TASK_FILE="$TASK_FILE" "$SCRIPT" --json)
-if [[ $(echo "$json_output" | jq -r '.task.priority') == "1" ]]; then
+if [[ $(printf '%s\n' "$json_output" | jq -r '.task.priority') == "1" ]]; then
     pass "Priority 1 handled correctly"
 else
     fail "Priority 1 handled correctly"
@@ -253,7 +253,7 @@ fi
 # Test 26: Priority 2 handled
 echo '{"id": "p2", "priority": "2"}' > "$TASK_FILE"
 json_output=$(KIRO_TASK_FILE="$TASK_FILE" "$SCRIPT" --json)
-if [[ $(echo "$json_output" | jq -r '.task.priority') == "2" ]]; then
+if [[ $(printf '%s\n' "$json_output" | jq -r '.task.priority') == "2" ]]; then
     pass "Priority 2 handled correctly"
 else
     fail "Priority 2 handled correctly"
@@ -269,7 +269,7 @@ else
 fi
 
 # -----------------------------------------------------------------------------
-# Critic feedback items - New tests for bd-146
+# Critic Feedback Tests (bd-146) - JSON Edge Cases with REAL payloads
 # -----------------------------------------------------------------------------
 
 echo ""
@@ -288,7 +288,7 @@ fi
 
 # Test 29: Empty string ID produces active:false JSON
 json_output=$(KIRO_TASK_FILE="$TASK_FILE" "$SCRIPT" --json)
-if [[ $(echo "$json_output" | jq -r '.active') == "false" ]]; then
+if [[ $(printf '%s\n' "$json_output" | jq -r '.active') == "false" ]]; then
     pass "Empty string ID JSON has active:false"
 else
     fail "Empty string ID JSON has active:false"
@@ -334,27 +334,24 @@ else
     fail "Object ID rejected - got $exit_code"
 fi
 
-# Test 34: JSON output handles special characters with jq
-cat > "$TASK_FILE" << 'EOF'
-{"id": "bd-special", "description": "Task with quotes and backslash and newline chars"}
-EOF
+# Test 34: JSON with REAL special characters - double quotes, backslashes, newlines
+# Using printf to safely create the JSON file with actual escape sequences
+printf '%s\n' '{"id": "bd-special", "description": "Task with \"quoted\" text and \"nested quotes\" and C:\\Users\\test\\file.txt path\\nLine1\\nLine2\\nLine3"}' > "$TASK_FILE"
 json_output=$(KIRO_TASK_FILE="$TASK_FILE" "$SCRIPT" --json)
-if echo "$json_output" | jq . > /dev/null 2>&1; then
-    pass "JSON with special characters is valid"
+if printf '%s\n' "$json_output" | jq . > /dev/null 2>&1; then
+    pass "JSON with real quotes/backslashes/newlines is valid"
 else
-    fail "JSON with special characters is valid"
+    fail "JSON with real quotes/backslashes/newlines is valid"
 fi
 
-# Test 35: Description with unicode is properly handled
-cat > "$TASK_FILE" << 'EOF'
-{"id": "bd-unicode", "description": "Unicode test: hello world"}
-EOF
+# Test 35: Description with REAL unicode (emoji, CJK, accents)
+printf '%s\n' '{"id": "bd-unicode", "description": "Unicode: 你好世界 🎉 émojis ñoño Café résumé naïve 🚀🐶🔥"}' > "$TASK_FILE"
 json_output=$(KIRO_TASK_FILE="$TASK_FILE" "$SCRIPT" --json)
-desc=$(echo "$json_output" | jq -r '.task.description')
-if [[ "$desc" == *"hello"* ]]; then
-    pass "Unicode characters properly handled in JSON"
+desc=$(printf '%s\n' "$json_output" | jq -r '.task.description')
+if [[ "$desc" == *"你好世界"* ]] && [[ "$desc" == *"🎉"* ]] && [[ "$desc" == *"émojis"* ]]; then
+    pass "Real unicode (CJK, emoji, accents) properly handled in JSON"
 else
-    fail "Unicode characters properly handled in JSON"
+    fail "Real unicode (CJK, emoji, accents) properly handled in JSON - got: $desc"
 fi
 
 # Test 36: Text mode shows file not found message for missing task file
@@ -375,29 +372,31 @@ else
     fail "Text mode shows no valid task ID for empty id"
 fi
 
-# Test 38: jq-built JSON is valid for content with HTML-like chars
-cat > "$TASK_FILE" << 'EOF'
-{"id": "bd-html", "description": "Special chars: test"}
-EOF
+# Test 38: REAL HTML-like and XML content with entities and tags
+# Note: JSON cannot contain raw comment markers like <!-- which look like HTML comments
+printf '%s\n' '{"id": "bd-html", "description": "<div class=\"test\">HTML content</div> &amp; entities &lt;tag&gt; <br/> <script>alert(1)</script> &quot;quoted attrs&quot;"}' > "$TASK_FILE"
 json_output=$(KIRO_TASK_FILE="$TASK_FILE" "$SCRIPT" --json)
-if echo "$json_output" | jq -e '.task.id' > /dev/null 2>&1; then
-    pass "jq-built JSON valid for HTML-like chars"
+if printf '%s\n' "$json_output" | jq -e '.task.id' > /dev/null 2>&1; then
+    desc_extracted=$(printf '%s\n' "$json_output" | jq -r '.task.description')
+    if [[ "$desc_extracted" == *"<div class=\"test\">"* ]] && [[ "$desc_extracted" == *"&amp;"* ]] && [[ "$desc_extracted" == *"<script>"* ]]; then
+        pass "jq-built JSON valid for real HTML-like chars with proper round-trip"
+    else
+        fail "jq-built JSON valid for HTML-like chars - description not preserved: $desc_extracted"
+    fi
 else
     fail "jq-built JSON valid for HTML-like chars"
 fi
 
-# Test 39: JSON output round-trips correctly through jq
-cat > "$TASK_FILE" << 'EOF'
-{"id": "bd-roundtrip", "category": "test", "description": "Roundtrip test"}
-EOF
+# Test 39: JSON round-trip with COMPLEX nested structure
+printf '%s\n' '{"id": "bd-roundtrip", "category": "test", "description": "Roundtrip: \\\"quoted\\\" and \\nnewline and \\t tab and 中文 🎉 and <html> &amp; more", "metadata": {"nested": "value with \"quotes\"", "array": [1, 2, 3]}}' > "$TASK_FILE"
 json_output=$(KIRO_TASK_FILE="$TASK_FILE" "$SCRIPT" --json)
-rt_id=$(echo "$json_output" | jq -r '.task.id')
-rt_cat=$(echo "$json_output" | jq -r '.task.category')
-rt_desc=$(echo "$json_output" | jq -r '.task.description')
-if [[ "$rt_id" == "bd-roundtrip" ]] && [[ "$rt_cat" == "test" ]] && [[ "$rt_desc" == "Roundtrip test" ]]; then
-    pass "JSON output round-trips correctly"
+rt_id=$(printf '%s\n' "$json_output" | jq -r '.task.id')
+rt_cat=$(printf '%s\n' "$json_output" | jq -r '.task.category')
+rt_desc=$(printf '%s\n' "$json_output" | jq -r '.task.description')
+if [[ "$rt_id" == "bd-roundtrip" ]] && [[ "$rt_cat" == "test" ]] && [[ "$rt_desc" == *"quoted"* ]] && [[ "$rt_desc" == *"中文"* ]] && [[ "$rt_desc" == *"🎉"* ]]; then
+    pass "Complex JSON round-trips correctly through jq"
 else
-    fail "JSON output round-trips correctly - got id=$rt_id cat=$rt_cat desc=$rt_desc"
+    fail "Complex JSON round-trips correctly - got id=$rt_id cat=$rt_cat desc=$rt_desc"
 fi
 
 # Test 40: Non-existent file shows correct error message in text mode
@@ -422,7 +421,7 @@ fi
 
 # Test 42: Whitespace-only ID produces active:false JSON
 json_output=$(KIRO_TASK_FILE="$TASK_FILE" "$SCRIPT" --json)
-if [[ $(echo "$json_output" | jq -r '.active') == "false" ]]; then
+if [[ $(printf '%s\n' "$json_output" | jq -r '.active') == "false" ]]; then
     pass "Whitespace-only ID JSON has active:false"
 else
     fail "Whitespace-only ID JSON has active:false"
@@ -446,6 +445,26 @@ if [[ $exit_code -eq 1 ]]; then
     pass "Mixed whitespace ID rejected (exit code 1)"
 else
     fail "Mixed whitespace ID rejected - got $exit_code"
+fi
+
+# Test 45: JSON with null bytes in description (edge case)
+printf '%s\n' '{"id": "bd-null", "description": "Text with \\u0000 null char and \\u0001 control"}' > "$TASK_FILE"
+json_output=$(KIRO_TASK_FILE="$TASK_FILE" "$SCRIPT" --json)
+if printf '%s\n' "$json_output" | jq . > /dev/null 2>&1; then
+    pass "JSON with escaped null/control characters is valid"
+else
+    fail "JSON with escaped null/control characters is valid"
+fi
+
+# Test 46: Very long description with many special chars
+long_desc="Very long text with \\\"many\\\" quotes and \\n newlines and \\t tabs and paths like C:\\\\Program Files\\\\Test\\\\file.txt and unicode: 日本語 🎉 émojis galore!"
+printf '%s\n' "{\"id\": \"bd-long\", \"description\": \"$long_desc\"}" > "$TASK_FILE"
+json_output=$(KIRO_TASK_FILE="$TASK_FILE" "$SCRIPT" --json)
+rt_desc=$(printf '%s\n' "$json_output" | jq -r '.task.description')
+if [[ "$rt_desc" == *"日本語"* ]] && [[ "$rt_desc" == *"🎉"* ]] && [[ "$rt_desc" == *"many"* ]]; then
+    pass "Very long description with mixed special chars round-trips correctly"
+else
+    fail "Very long description with mixed special chars round-trips correctly - got: ${rt_desc:0:100}..."
 fi
 
 # Cleanup
