@@ -60,9 +60,9 @@ defmodule CodePuppyControl.Tools.CommandRunner.ProcessManager do
   @doc """
   Unregisters a command that has completed.
   """
-  @spec unregister_command(String.t()) :: :ok
-  def unregister_command(command) do
-    GenServer.call(__MODULE__, {:unregister, command})
+  @spec unregister_command(non_neg_integer()) :: :ok
+  def unregister_command(id) do
+    GenServer.call(__MODULE__, {:unregister, id})
   end
 
   @doc """
@@ -114,44 +114,25 @@ defmodule CodePuppyControl.Tools.CommandRunner.ProcessManager do
 
     info = %{
       command: command,
-      started_at: System.monotonic_time(:second),
+      started_at: System.monotonic_time(:millisecond),
       id: id
     }
 
-    new_commands = Map.put(state.commands, command, info)
+    new_commands = Map.put(state.commands, id, info)
 
     {:reply, {:ok, id}, %{state | commands: new_commands, counter: id}}
   end
 
   @impl true
-  def handle_call({:unregister, command}, _from, state) do
-    new_commands = Map.delete(state.commands, command)
+  def handle_call({:unregister, id}, _from, state) do
+    new_commands = Map.delete(state.commands, id)
     {:reply, :ok, %{state | commands: new_commands}}
   end
 
   @impl true
   def handle_call(:kill_all, _from, state) do
-    # Try to find and kill any sh processes that might be our commands
-    # This is best-effort only
-    count = length(Map.keys(state.commands))
-
-    # On Unix, try to kill shell processes that match our commands
-    if count > 0 do
-      case :os.type() do
-        {:unix, _} ->
-          # Try pkill with pattern matching for commands (very broad)
-          System.cmd("pkill", ["-f", "sh -c"], stderr_to_stdout: true, timeout: 5000)
-
-        {:win32, _} ->
-          # Windows - not easily doable without WMI
-          :ok
-
-        _ ->
-          :ok
-      end
-    end
-
-    # Clear all tracked commands
+    count = map_size(state.commands)
+    # Only clears tracking - actual OS process cleanup is best-effort
     {:reply, count, %{state | commands: %{}}}
   end
 

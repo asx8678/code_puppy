@@ -199,24 +199,23 @@ defmodule CodePuppyControl.Tools.CommandRunner.Validator do
   end
 
   # Check for balanced single and double quotes
+  # Handles backslash-escaped quotes properly
   defp check_balanced_quotes(command) do
-    state =
-      command
-      |> String.to_charlist()
-      |> Enum.reduce({:normal, 0, 0}, fn char, {mode, single, double} ->
-        case {mode, char} do
-          {:normal, ?'} -> {:single, single + 1, double}
-          {:normal, ?"} -> {:double, single, double + 1}
-          {:single, ?'} -> {:normal, single, double}
-          {:double, ?"} -> {:normal, single, double}
-          {m, _} -> {m, single, double}
-        end
-      end)
-
-    case state do
-      {:normal, _, _} -> :ok
-      {:single, _, _} -> {:error, "unbalanced single quotes"}
-      {:double, _, _} -> {:error, "unbalanced double quotes"}
+    command
+    |> String.graphemes()
+    |> Enum.reduce({:normal, false}, fn
+      "\\", {mode, false} -> {mode, true}
+      _, {mode, true} -> {mode, false}
+      "'", {:normal, false} -> {:single, false}
+      "'", {:single, false} -> {:normal, false}
+      "\"", {:normal, false} -> {:double, false}
+      "\"", {:double, false} -> {:normal, false}
+      _, {mode, _} -> {mode, false}
+    end)
+    |> case do
+      {:normal, _} -> :ok
+      {:single, _} -> {:error, "unbalanced single quotes"}
+      {:double, _} -> {:error, "unbalanced double quotes"}
     end
   end
 

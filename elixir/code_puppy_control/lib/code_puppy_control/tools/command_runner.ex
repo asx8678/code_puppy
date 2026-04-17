@@ -150,7 +150,7 @@ defmodule CodePuppyControl.Tools.CommandRunner do
     {shell, shell_flag} = shell_command()
 
     # Register with ProcessManager for tracking
-    {:ok, _pid} = ProcessManager.register_command(command)
+    {:ok, tracking_id} = ProcessManager.register_command(command)
 
     try do
       # Execute command through shell with timeout via Task
@@ -206,11 +206,12 @@ defmodule CodePuppyControl.Tools.CommandRunner do
 
           {:ok, result}
       end
+    rescue
+      e -> {:error, "Command execution failed: #{Exception.message(e)}"}
     catch
-      error ->
-        {:error, "Command execution failed: #{inspect(error)}"}
+      :exit, reason -> {:error, "Command execution failed: #{inspect(reason)}"}
     after
-      ProcessManager.unregister_command(command)
+      ProcessManager.unregister_command(tracking_id)
     end
   end
 

@@ -9,7 +9,7 @@ defmodule CodePuppyControl.Tools.CommandRunnerTest do
   - Output truncation
   """
 
-  use ExUnit.Case, async: true
+  use ExUnit.Case, async: false
 
   alias CodePuppyControl.Tools.CommandRunner
   alias CodePuppyControl.Tools.CommandRunner.Validator
@@ -70,6 +70,13 @@ defmodule CodePuppyControl.Tools.CommandRunnerTest do
       assert {:ok, _} = Validator.validate("echo 'hello world'")
       assert {:ok, _} = Validator.validate("echo \"hello world\"")
       assert {:ok, _} = Validator.validate("echo 'single' and \"double\"")
+    end
+
+    test "accepts command with escaped quotes" do
+      # Backslash-escaped quotes should not be treated as quote boundaries
+      assert {:ok, _} = Validator.validate("echo \"it\\'s working\"")
+      assert {:ok, _} = Validator.validate("echo 'say \\\"hello\\\"'")
+      assert {:ok, _} = Validator.validate("echo \\\"escaped double\\\"")
     end
 
     test "rejects command with no valid tokens" do
