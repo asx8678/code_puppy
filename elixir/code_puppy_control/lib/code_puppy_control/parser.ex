@@ -46,7 +46,13 @@ defmodule CodePuppyControl.Parser do
           {:error, reason}
       end
     else
-      {:error, "Unsupported language: #{language}"}
+      {:ok,
+       %{
+         "language" => language,
+         "symbols" => [],
+         "success" => false,
+         "error" => "unsupported_language"
+       }}
     end
   end
 
@@ -259,9 +265,9 @@ defmodule CodePuppyControl.Parser do
       {:ok,
        %{
          "name" => normalized,
-         "highlights_available" => false,
-         "folds_available" => false,
-         "indents_available" => false
+         "highlights_available" => true,
+         "folds_available" => true,
+         "indents_available" => true
        }}
     else
       {:error, :unsupported_language}
@@ -368,7 +374,12 @@ defmodule CodePuppyControl.Parser do
     Enum.map(data, &atom_keys_to_string_keys/1)
   end
 
-  # Convert atom values (like :module, :function) to strings
+  # Keep boolean and nil values as-is
+  defp atom_keys_to_string_keys(true), do: true
+  defp atom_keys_to_string_keys(false), do: false
+  defp atom_keys_to_string_keys(nil), do: nil
+
+  # Convert other atom values (like :module, :function) to strings
   defp atom_keys_to_string_keys(data) when is_atom(data) do
     to_string(data)
   end

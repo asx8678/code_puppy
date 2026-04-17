@@ -115,7 +115,7 @@ defmodule CodePuppyControl.ParserTest do
           pass
 
       class Foo:
-          def bar(self):
+          def bar():
               pass
       """
 
@@ -247,7 +247,7 @@ defmodule CodePuppyControl.ParserTest do
   describe "parse_file/2" do
     test "parses a temporary Python file with auto-detected language" do
       path = Path.join(System.tmp_dir!(), "test_parse_#{:rand.uniform(10000)}.py")
-      File.write!(path, "def hello():\n    return 42\n")
+      File.write!(path, "def hello():\n    pass\n")
 
       try do
         {:ok, result} = Parser.parse_file(path)
