@@ -3,10 +3,10 @@ defmodule CodePuppyControl.Parsing.Parsers.RustParser do
   Rust parser using Yecc-generated parser.
 
   Extracts symbols from Rust source code including:
-  - Functions (fn declarations)
+  - Functions (fn declarations, including async/const)
   - Structs (struct declarations)
   - Enums (enum declarations)
-  - Impl blocks (impl declarations)
+  - Impl blocks (impl and impl Trait for Type)
   - Traits (trait declarations)
   - Modules (mod declarations)
   - Use statements (imports)
@@ -14,13 +14,16 @@ defmodule CodePuppyControl.Parsing.Parsers.RustParser do
   - Constants (const declarations)
   - Static items (static declarations)
 
-  This parser uses the Rust lexer (from bd-98) for tokenization
+  This parser uses the Rust lexer (from bd-112) for tokenization
   and a Yecc-generated parser for building the AST.
 
   ## Examples
 
       iex> RustParser.parse("fn main() {}")
       {:ok, %{language: "rust", symbols: [%{name: "main", kind: :function, ...}], ...}}
+
+      iex> RustParser.parse("struct Point { x: i32, y: i32 }")
+      {:ok, %{language: "rust", symbols: [%{name: "Point", kind: :class, ...}], ...}}
 
   """
   @behaviour CodePuppyControl.Parsing.ParserBehaviour
@@ -46,7 +49,7 @@ defmodule CodePuppyControl.Parsing.Parsers.RustParser do
     start = System.monotonic_time(:millisecond)
 
     with {:ok, tokens} <- RustLexer.tokenize(source),
-         {:ok, ast} <- :rust_parser.parse(tokens) do
+         {:ok, ast} <- do_parse(tokens) do
       symbols = ast_to_symbols(ast)
 
       {:ok,
@@ -70,6 +73,21 @@ defmodule CodePuppyControl.Parsing.Parsers.RustParser do
     end
   end
 
+  # Helper to handle parsing with graceful whitespace handling
+  defp do_parse(tokens) do
+    case :rust_parser.parse(tokens) do
+      {:ok, ast} -> {:ok, ast}
+      # If parsing fails due to only newlines/whitespace, return empty AST
+      {:error, {_, _, _}} = error ->
+        # Check if tokens are only newlines
+        if Enum.all?(tokens, fn t -> match?({:newline, _}, t) end) do
+          {:ok, []}
+        else
+          error
+        end
+    end
+  end
+
   # ---------------------------------------------------------------------------
   # Symbol Extraction
   # ---------------------------------------------------------------------------
@@ -79,247 +97,170 @@ defmodule CodePuppyControl.Parsing.Parsers.RustParser do
     Enum.flat_map(nodes, &node_to_symbol/1)
   end
 
-  # Skip :newline placeholders
-  defp node_to_symbol(:newline), do: []
-  defp node_to_symbol(nil), do: []
-
-  # Function: {function, line, name, params, visibility}
-  defp node_to_symbol({:function, line, name, _params, visibility}) do
-    doc = format_visibility(visibility)
-
+  # Regular function: {function, line, name, params, attrs, _body}
+  defp node_to_symbol({:function, line, name, _params, attrs, _}) do
     [
       %{
         name: to_string(name),
         kind: :function,
         line: line,
         end_line: nil,
-        doc: doc,
+        doc: format_attrs(attrs),
         children: []
       }
     ]
   end
 
-  # Function without visibility (old format): {function, line, name, params}
-  defp node_to_symbol({:function, line, name, _params}) do
+  # Async function: {async_function, line, name, params, attrs, _body}
+  defp node_to_symbol({:async_function, line, name, _params, attrs, _}) do
     [
       %{
         name: to_string(name),
         kind: :function,
         line: line,
         end_line: nil,
-        doc: nil,
+        doc: format_attrs([:async | attrs]),
         children: []
       }
     ]
   end
 
-  # Struct: {struct, line, name, visibility}
-  defp node_to_symbol({:struct, line, name, visibility}) do
-    doc = format_visibility(visibility)
+  # Const function: {const_function, line, name, params, attrs, _body}
+  defp node_to_symbol({:const_function, line, name, _params, attrs, _}) do
+    [
+      %{
+        name: to_string(name),
+        kind: :function,
+        line: line,
+        end_line: nil,
+        doc: format_attrs([:const | attrs]),
+        children: []
+      }
+    ]
+  end
 
+  # Struct declaration: {struct, line, name, attrs}
+  defp node_to_symbol({:struct, line, name, attrs}) do
     [
       %{
         name: to_string(name),
         kind: :class,
         line: line,
         end_line: nil,
-        doc: doc,
+        doc: format_attrs(attrs),
         children: []
       }
     ]
   end
 
-  # Struct without visibility (old format)
-  defp node_to_symbol({:struct, line, name}) do
-    [
-      %{
-        name: to_string(name),
-        kind: :class,
-        line: line,
-        end_line: nil,
-        doc: nil,
-        children: []
-      }
-    ]
-  end
-
-  # Enum: {enum, line, name, visibility}
-  defp node_to_symbol({:enum, line, name, visibility}) do
-    doc = format_visibility(visibility)
-
-    [
-      %{
-        name: to_string(name),
-        kind: :class,
-        line: line,
-        end_line: nil,
-        doc: doc,
-        children: []
-      }
-    ]
-  end
-
-  # Enum without visibility (old format)
-  defp node_to_symbol({:enum, line, name}) do
-    [
-      %{
-        name: to_string(name),
-        kind: :class,
-        line: line,
-        end_line: nil,
-        doc: nil,
-        children: []
-      }
-    ]
-  end
-
-  # Impl block with trait: {impl, line, target_type, trait_type, _}
-  defp node_to_symbol({:impl, line, target_type, trait_type, _}) when is_atom(trait_type) and trait_type != nil do
-    name = "impl #{trait_type} for #{target_type}"
-
-    [
-      %{
-        name: name,
-        kind: :module,
-        line: line,
-        end_line: nil,
-        doc: nil,
-        children: []
-      }
-    ]
-  end
-
-  # Impl block without trait: {impl, line, target_type, nil, _}
-  defp node_to_symbol({:impl, line, target_type, nil, _}) do
-    [
-      %{
-        name: "impl #{target_type}",
-        kind: :module,
-        line: line,
-        end_line: nil,
-        doc: nil,
-        children: []
-      }
-    ]
-  end
-
-  # Trait: {trait, line, name, visibility}
-  defp node_to_symbol({:trait, line, name, visibility}) do
-    doc = format_visibility(visibility)
-
+  # Enum declaration: {enum, line, name, attrs}
+  defp node_to_symbol({:enum, line, name, attrs}) do
     [
       %{
         name: to_string(name),
         kind: :type,
         line: line,
         end_line: nil,
-        doc: doc,
+        doc: format_attrs(attrs),
         children: []
       }
     ]
   end
 
-  # Trait without visibility (old format)
-  defp node_to_symbol({:trait, line, name}) do
+  # Impl block: {impl, line, type, nil}
+  defp node_to_symbol({:impl, line, type, nil}) do
+    [
+      %{
+        name: "impl #{type}",
+        kind: :class,
+        line: line,
+        end_line: nil,
+        doc: nil,
+        children: []
+      }
+    ]
+  end
+
+  # Impl for trait: {impl, line, trait, type}
+  defp node_to_symbol({:impl, line, trait, type}) when is_atom(type) do
+    [
+      %{
+        name: "impl #{trait} for #{type}",
+        kind: :class,
+        line: line,
+        end_line: nil,
+        doc: nil,
+        children: []
+      }
+    ]
+  end
+
+  # Trait declaration: {trait, line, name, attrs}
+  defp node_to_symbol({:trait, line, name, attrs}) do
     [
       %{
         name: to_string(name),
         kind: :type,
         line: line,
         end_line: nil,
-        doc: nil,
+        doc: format_attrs(attrs),
         children: []
       }
     ]
   end
 
-  # Module block: {mod, line, name, block, visibility}
-  defp node_to_symbol({:mod, line, name, _block, visibility}) do
-    doc = format_visibility(visibility)
-
+  # Module declaration (block): {mod, line, name, attrs}
+  defp node_to_symbol({:mod, line, name, attrs}) do
     [
       %{
         name: to_string(name),
         kind: :module,
         line: line,
         end_line: nil,
-        doc: doc,
+        doc: format_attrs(attrs),
         children: []
       }
     ]
   end
 
-  # Module without visibility (old format)
-  defp node_to_symbol({:mod, line, name}) do
+  # Module declaration (file): {mod_file, line, name, attrs}
+  defp node_to_symbol({:mod_file, line, name, attrs}) do
     [
       %{
         name: to_string(name),
         kind: :module,
         line: line,
-        end_line: nil,
-        doc: nil,
+        end_line: line,
+        doc: format_attrs([:file | attrs]),
         children: []
       }
     ]
   end
 
-  # Module file: {mod_file, line, name, visibility}
-  defp node_to_symbol({:mod_file, line, name, visibility}) do
-    doc = format_visibility(visibility)
+  # Use statement: {use, line, path}
+  defp node_to_symbol({:use, line, path}) do
+    path_str = format_use_path(path)
 
     [
       %{
-        name: "#{name} (file)",
-        kind: :module,
-        line: line,
-        end_line: nil,
-        doc: doc,
-        children: []
-      }
-    ]
-  end
-
-  # Module file without visibility (old format)
-  defp node_to_symbol({:mod_file, line, name}) do
-    [
-      %{
-        name: "#{name} (file)",
-        kind: :module,
-        line: line,
-        end_line: nil,
-        doc: nil,
-        children: []
-      }
-    ]
-  end
-
-  # Use statement: {use, line, module, type}
-  defp node_to_symbol({:use, line, module, _type}) do
-    name =
-      case module do
-        {a, b} -> "#{a}::#{b}"
-        _ -> to_string(module)
-      end
-
-    [
-      %{
-        name: name,
+        name: "use #{path_str}",
         kind: :import,
         line: line,
-        end_line: nil,
+        end_line: line,
         doc: nil,
         children: []
       }
     ]
   end
 
-  # Type alias: {type_alias, line, name, target, visibility}
-  defp node_to_symbol({:type_alias, line, name, target, visibility}) do
-    doc = format_visibility(visibility)
+  # Type alias: {type_alias, line, name, type, attrs}
+  defp node_to_symbol({:type_alias, line, name, type, attrs}) when is_list(attrs) do
+    doc = format_type_doc(type)
+    doc = format_attrs_with_doc(attrs, doc)
 
     [
       %{
-        name: "#{name} = #{target}",
+        name: format_type_name(name),
         kind: :type,
         line: line,
         end_line: nil,
@@ -329,14 +270,14 @@ defmodule CodePuppyControl.Parsing.Parsers.RustParser do
     ]
   end
 
-  # Constant: {const, line, name, value, visibility}
-  defp node_to_symbol({:const, line, name, _value, visibility}) do
-    doc = format_visibility(visibility)
+  # Type alias without attrs: {type_alias, line, name, type}
+  defp node_to_symbol({:type_alias, line, name, type}) do
+    doc = format_type_doc(type)
 
     [
       %{
-        name: to_string(name),
-        kind: :constant,
+        name: format_type_name(name),
+        kind: :type,
         line: line,
         end_line: nil,
         doc: doc,
@@ -345,43 +286,102 @@ defmodule CodePuppyControl.Parsing.Parsers.RustParser do
     ]
   end
 
-  # Static: {static, line, name, value, modifiers}
-  defp node_to_symbol({:static, line, name, _value, modifiers}) do
-    doc = if :mut in modifiers, do: "mut", else: nil
-    doc = if :pub in modifiers, do: if(doc, do: "pub #{doc}", else: "pub"), else: doc
-
+  # Constant: {const, line, name, type, attrs}
+  defp node_to_symbol({:const, line, name, type, attrs}) when is_list(attrs) do
     [
       %{
         name: to_string(name),
         kind: :constant,
         line: line,
         end_line: nil,
-        doc: doc,
+        doc: format_attrs_with_doc(attrs, ": #{type}"),
+        children: []
+      }
+    ]
+  end
+
+  # Constant without attrs: {const, line, name, type}
+  defp node_to_symbol({:const, line, name, type}) do
+    [
+      %{
+        name: to_string(name),
+        kind: :constant,
+        line: line,
+        end_line: nil,
+        doc: ": #{type}",
+        children: []
+      }
+    ]
+  end
+
+  # Static: {static, line, name, type, attrs}
+  defp node_to_symbol({:static, line, name, type, attrs}) when is_list(attrs) do
+    [
+      %{
+        name: to_string(name),
+        kind: :constant,
+        line: line,
+        end_line: nil,
+        doc: format_attrs_with_doc(attrs, ": #{type}"),
+        children: []
+      }
+    ]
+  end
+
+  # Static without attrs: {static, line, name, type}
+  defp node_to_symbol({:static, line, name, type}) do
+    [
+      %{
+        name: to_string(name),
+        kind: :constant,
+        line: line,
+        end_line: nil,
+        doc: ": #{type}",
         children: []
       }
     ]
   end
 
   # Fallback for unrecognized nodes
-  defp node_to_symbol(_node) do
-    []
-  end
+  defp node_to_symbol(_node), do: []
 
   # ---------------------------------------------------------------------------
   # Helper Functions
   # ---------------------------------------------------------------------------
 
-  defp format_visibility(visibility) when is_list(visibility) do
-    visibility
+  defp format_attrs(attrs) when is_list(attrs) do
+    attrs
     |> Enum.map(&to_string/1)
     |> Enum.join(" ")
     |> case do
       "" -> nil
-      str -> str
+      s -> s
     end
   end
 
-  defp format_visibility(_), do: nil
+  defp format_attrs(_), do: nil
+
+  defp format_attrs_with_doc(attrs, doc) do
+    attrs_str = format_attrs(attrs)
+
+    case {attrs_str, doc} do
+      {nil, nil} -> nil
+      {nil, d} -> d
+      {a, nil} -> a
+      {a, d} -> "#{a} #{d}"
+    end
+  end
+
+  defp format_use_path(path) when is_atom(path) do
+    to_string(path)
+  end
+
+  defp format_use_path(path) when is_list(path) do
+    path
+    |> List.flatten()
+    |> Enum.map(&to_string/1)
+    |> Enum.join("::")
+  end
 
   defp format_error({line, _module, message}) when is_integer(line) do
     %{
@@ -400,6 +400,23 @@ defmodule CodePuppyControl.Parsing.Parsers.RustParser do
       severity: :error
     }
   end
+
+  # Format type for type alias doc string
+  defp format_type_doc(nil), do: nil
+  defp format_type_doc({:generic, name, params}) when is_list(params) do
+    params_str = Enum.map_join(params, ", ", &format_type_doc/1)
+    "= #{name}<#{params_str}>"
+  end
+  defp format_type_doc({:generic, name, param}), do: "= #{name}<#{format_type_doc(param)}>"
+  defp format_type_doc({:ref, type}), do: "= &#{format_type_doc(type)}"
+  defp format_type_doc({:ref_mut, type}), do: "= &mut #{format_type_doc(type)}"
+  defp format_type_doc(name) when is_atom(name), do: "= #{name}"
+  defp format_type_doc(other), do: "= #{inspect(other)}"
+
+  # Format type name (handles simple names and generic names)
+  defp format_type_name({:generic, name, _param}), do: to_string(name)
+  defp format_type_name(name) when is_atom(name), do: to_string(name)
+  defp format_type_name(other), do: inspect(other)
 
   # ---------------------------------------------------------------------------
   # Registration
