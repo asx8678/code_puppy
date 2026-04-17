@@ -49,23 +49,20 @@ normalize_bool() {
 }
 
 # Normalize an env value to a safe integer.
-# Strips non-numeric prefixes/suffixes; falls back to the given default
-# (default: 0) when the result is empty or negative.
+# Accepts ONLY strings composed entirely of digits (0-9), optionally with
+# leading zeros.  Anything else (including negatives, ranges, or mixed
+# alphanumeric) falls back to the given default (default: 0).
 normalize_int() {
     local raw="${1:-}"
     local fallback="${2:-0}"
-    # Strip anything that is not a digit or leading minus
-    local cleaned
-    cleaned=$(printf '%s' "$raw" | tr -cd '0-9-')
-    # Remove leading dashes that are NOT a minus sign
-    cleaned=${cleaned#-}
-    cleaned=${cleaned#-}
-    if [[ -z "$cleaned" ]]; then
+    # Reject anything that is not purely digits
+    if [[ ! "$raw" =~ ^[0-9]+$ ]]; then
         echo "$fallback"
         return
     fi
     # Strip leading zeros so we don't emit octal-looking values
-    cleaned=$(echo "$cleaned" | sed 's/^0*//' )
+    local cleaned
+    cleaned="${raw#"${raw%%[!0]*}"}"
     [[ -z "$cleaned" ]] && cleaned=0
     echo "$cleaned"
 }

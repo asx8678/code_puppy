@@ -426,7 +426,11 @@ class TestEnvVarNormalization:
 
     @pytest.mark.parametrize(
         "env_val",
-        ["abc", "twelve", "!@#", "  ", "--"],
+        [
+            "abc", "twelve", "!@#", "  ", "--",
+            # Regression: malformed ranges and negatives (bd-136)
+            "1-2", "0-1", "-5", "1.5",
+        ],
         ids=lambda v: repr(v),
     )
     def test_count_invalid_falls_back_to_zero(self, tmp_git_repo: Path, env_val: str):
@@ -446,12 +450,17 @@ class TestEnvVarNormalization:
         data = json.loads(result.stdout)
         assert data["plugin"]["guidance_count"] == 0
 
-    def test_count_strips_leading_zeros(self, tmp_git_repo: Path):
+    @pytest.mark.parametrize(
+        "env_val,expected",
+        [("007", 7), ("000", 0), ("010", 10)],
+        ids=lambda v: str(v),
+    )
+    def test_count_strips_leading_zeros(self, tmp_git_repo: Path, env_val: str, expected: int):
         """Leading zeros (e.g. '007') must not produce octal-like output."""
-        result = _run_script(tmp_git_repo, {"PUP_GUIDANCE_COUNT": "007"})
+        result = _run_script(tmp_git_repo, {"PUP_GUIDANCE_COUNT": env_val})
         assert result.returncode == 0
         data = json.loads(result.stdout)
-        assert data["plugin"]["guidance_count"] == 7
+        assert data["plugin"]["guidance_count"] == expected
 
     def test_count_puppy_legacy_var(self, tmp_git_repo: Path):
         """PUPPY_GUIDANCE_COUNT (legacy) must also be normalised."""
