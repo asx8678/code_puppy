@@ -2715,7 +2715,7 @@
       "id": "bd-139",
       "title": "Phase 6: Integration and Testing",
       "description": "Complete end-to-end validation of the Swarm SDK implementation. Test agent validation, task enforcement, category discipline, memory capture, and autonomous workflow. Verify all configs parse correctly and hooks function as expected.",
-      "status": "open",
+      "status": "closed",
       "priority": 1,
       "type": "task",
       "labels": [],
@@ -2730,14 +2730,16 @@
         ]
       },
       "created_at": "2026-04-17T12:16:58.448257",
-      "updated_at": "2026-04-17T12:17:02.520880",
-      "comments": []
+      "updated_at": "2026-04-17T20:44:23.016457",
+      "comments": [
+        "Closed per user request to remove Kiro-related work from bd tracking."
+      ]
     },
     "bd-140": {
       "id": "bd-140",
       "title": "Task 6.1: Validate All Agent Configs",
       "description": "Run kiro-cli agent validate --path ~/.kiro/agents/ to verify all JSON configs parse without errors. Check planner.json, coder.json, critic.json, orchestrator.json have valid syntax and required fields.",
-      "status": "open",
+      "status": "closed",
       "priority": 2,
       "type": "task",
       "labels": [],
@@ -2747,14 +2749,16 @@
         ]
       },
       "created_at": "2026-04-17T12:17:07.543546",
-      "updated_at": "2026-04-17T12:17:13.145095",
-      "comments": []
+      "updated_at": "2026-04-17T20:44:22.725818",
+      "comments": [
+        "Closed per user request to remove Kiro-related work from bd tracking."
+      ]
     },
     "bd-141": {
       "id": "bd-141",
       "title": "Task 6.2: Test Task Enforcement",
       "description": "Test case: Attempt to write file without active task. Expected: PreToolUse hook blocks with guidance message. Verify task-gate.sh correctly identifies missing task and provides instructions to create one.",
-      "status": "open",
+      "status": "closed",
       "priority": 2,
       "type": "task",
       "labels": [],
@@ -2764,14 +2768,16 @@
         ]
       },
       "created_at": "2026-04-17T12:17:16.762027",
-      "updated_at": "2026-04-17T12:17:18.685230",
-      "comments": []
+      "updated_at": "2026-04-17T20:44:22.783287",
+      "comments": [
+        "Closed per user request to remove Kiro-related work from bd tracking."
+      ]
     },
     "bd-142": {
       "id": "bd-142",
       "title": "Task 6.3: Test Category Discipline",
       "description": "Test case: Start planning task, attempt to write code. Expected: category-guard.sh blocks with category violation message. Verify planning category cannot use write tools and requires transition to implementation category.",
-      "status": "open",
+      "status": "closed",
       "priority": 2,
       "type": "task",
       "labels": [],
@@ -2781,14 +2787,16 @@
         ]
       },
       "created_at": "2026-04-17T12:17:20.981269",
-      "updated_at": "2026-04-17T12:17:24.005387",
-      "comments": []
+      "updated_at": "2026-04-17T20:44:22.840567",
+      "comments": [
+        "Closed per user request to remove Kiro-related work from bd tracking."
+      ]
     },
     "bd-143": {
       "id": "bd-143",
       "title": "Task 6.4: Test Memory Capture",
       "description": "Test case: Execute several tools, check bronze directory. Expected: Event files created in ~/.kiro/memory/bronze/ with task correlation. Verify bronze-capture.sh correctly logs all PostToolUse events with proper JSON format.",
-      "status": "open",
+      "status": "closed",
       "priority": 2,
       "type": "task",
       "labels": [],
@@ -2798,14 +2806,16 @@
         ]
       },
       "created_at": "2026-04-17T12:17:26.346302",
-      "updated_at": "2026-04-17T12:17:28.344012",
-      "comments": []
+      "updated_at": "2026-04-17T20:44:22.898620",
+      "comments": [
+        "Closed per user request to remove Kiro-related work from bd tracking."
+      ]
     },
     "bd-144": {
       "id": "bd-144",
       "title": "Task 6.5: Test Autonomous Workflow",
       "description": "Test case: Ask orchestrator to implement a simple feature. Expected: Creates tasks via /todo -> delegates to coder via use_subagent -> requests review via critic -> completes workflow. Verify full Pack Leader autonomous coordination.",
-      "status": "open",
+      "status": "closed",
       "priority": 2,
       "type": "task",
       "labels": [],
@@ -2815,8 +2825,10 @@
         ]
       },
       "created_at": "2026-04-17T12:17:32.894769",
-      "updated_at": "2026-04-17T12:17:38.588213",
-      "comments": []
+      "updated_at": "2026-04-17T20:44:22.956294",
+      "comments": [
+        "Closed per user request to remove Kiro-related work from bd tracking."
+      ]
     },
     "bd-145": {
       "id": "bd-145",
