@@ -1,5 +1,5 @@
 {
-  "counter": 96,
+  "counter": 116,
   "issues": {
     "bd-1": {
       "id": "bd-1",
@@ -1854,6 +1854,447 @@
       "dependencies": {},
       "created_at": "2026-04-17T10:16:53.489836",
       "updated_at": "2026-04-17T10:16:53.489843",
+      "comments": []
+    },
+    "bd-97": {
+      "id": "bd-97",
+      "title": "Pure Elixir Parsing with Leex/Yecc",
+      "description": "Replace tree-sitter Rust crates with pure Elixir/Erlang parsers using Leex (lexer generator) and Yecc (parser generator). Zero native dependencies.\n\nGoal: Delete turbo_parse_core (~10,100 lines) and turbo_parse (~3,000 lines) Rust code.\n\nApproach: \n- Elixir: Use Code.string_to_quoted (built-in)\n- Erlang: Use :erl_scan + :erl_parse (built-in OTP)\n- Python/JS/TS/Rust: Write Leex/Yecc grammars (declaration-only)\n\nTrade-offs accepted:\n- No syntax highlighting (can derive separately)\n- No incremental parsing\n- Basic error recovery\n\nEstimated effort: 10-11 weeks\n\nSupersedes bd-51 decision.",
+      "status": "open",
+      "priority": 2,
+      "type": "epic",
+      "labels": [
+        "migration,rust-retirement,pure-elixir"
+      ],
+      "dependencies": {
+        "discovered-from": [
+          "bd-104"
+        ]
+      },
+      "created_at": "2026-04-17T10:49:31.649564",
+      "updated_at": "2026-04-17T10:59:15.439581",
+      "comments": []
+    },
+    "bd-98": {
+      "id": "bd-98",
+      "title": "Foundation - Parser infrastructure setup",
+      "description": "Set up src/ directory for Erlang .xrl/.yrl files\nCreate Elixir parser using Code.string_to_quoted + Sourceror\nCreate Erlang parser using :erl_scan + :erl_parse  \nBuild registry module for language dispatch\n\nEpic: bd-97\nEst: 1 week",
+      "status": "open",
+      "priority": 2,
+      "type": "task",
+      "labels": [
+        "migration,pure-elixir",
+        "infrastructure",
+        "elixir"
+      ],
+      "dependencies": {
+        "discovered-from": [
+          "bd-97"
+        ],
+        "blocks": [
+          "bd-100",
+          "bd-101",
+          "bd-103",
+          "bd-107"
+        ]
+      },
+      "created_at": "2026-04-17T10:49:56.174339",
+      "updated_at": "2026-04-17T10:57:46.417918",
+      "comments": []
+    },
+    "bd-99": {
+      "id": "bd-99",
+      "title": "Python Leex/Yecc parser",
+      "description": "Write python_lexer.xrl (tokens)\nWrite python_parser.yrl (declarations only)\nCreate Elixir wrapper with symbol extraction\nTest against real Python files\n\nEpic: bd-97\nEst: 2 weeks",
+      "status": "open",
+      "priority": 2,
+      "type": "task",
+      "labels": [
+        "migration,pure-elixir,python",
+        "parser",
+        "elixir"
+      ],
+      "dependencies": {
+        "discovered-from": [
+          "bd-97"
+        ],
+        "blocks": [
+          "bd-109",
+          "bd-114"
+        ]
+      },
+      "created_at": "2026-04-17T10:49:59.349512",
+      "updated_at": "2026-04-17T10:58:09.033990",
+      "comments": []
+    },
+    "bd-100": {
+      "id": "bd-100",
+      "title": "JavaScript Leex/Yecc parser",
+      "description": "Write javascript_lexer.xrl\nWrite javascript_parser.yrl\nHandle JSX syntax (optional)\nTest against real JS files\n\nEpic: bd-97\nEst: 2 weeks",
+      "status": "open",
+      "priority": 2,
+      "type": "task",
+      "labels": [
+        "migration,pure-elixir,javascript",
+        "parser"
+      ],
+      "dependencies": {
+        "discovered-from": [
+          "bd-97"
+        ],
+        "blocks": [
+          "bd-109",
+          "bd-114"
+        ]
+      },
+      "created_at": "2026-04-17T10:50:01.815992",
+      "updated_at": "2026-04-17T10:58:09.062604",
+      "comments": []
+    },
+    "bd-101": {
+      "id": "bd-101",
+      "title": "TypeScript/TSX Leex/Yecc parser",
+      "description": "Extend JS lexer with type tokens\nWrite typescript_parser.yrl\nHandle TSX (types + JSX)\nTest against real TS files\n\nEpic: bd-97\nEst: 2 weeks",
+      "status": "open",
+      "priority": 2,
+      "type": "task",
+      "labels": [
+        "migration,pure-elixir,typescript",
+        "parser",
+        "python",
+        "leex"
+      ],
+      "dependencies": {
+        "discovered-from": [
+          "bd-97"
+        ],
+        "blocks": [
+          "bd-102"
+        ]
+      },
+      "created_at": "2026-04-17T10:50:04.522553",
+      "updated_at": "2026-04-17T10:57:46.271041",
+      "comments": []
+    },
+    "bd-102": {
+      "id": "bd-102",
+      "title": "Rust Leex/Yecc parser",
+      "description": "Write rust_lexer.xrl\nWrite rust_parser.yrl\nHandle macros (simplified)\nTest against real Rust files\n\nEpic: bd-97\nEst: 2 weeks",
+      "status": "open",
+      "priority": 2,
+      "type": "task",
+      "labels": [
+        "migration,pure-elixir,rust",
+        "parser",
+        "python",
+        "yecc"
+      ],
+      "dependencies": {
+        "discovered-from": [
+          "bd-97"
+        ],
+        "blocks": [
+          "bd-109",
+          "bd-114"
+        ]
+      },
+      "created_at": "2026-04-17T10:50:07.471321",
+      "updated_at": "2026-04-17T10:58:09.091392",
+      "comments": []
+    },
+    "bd-103": {
+      "id": "bd-103",
+      "title": "Integration and Rust deletion",
+      "description": "Replace tree-sitter calls with new parsers\nDelete turbo_parse_core/ and turbo_parse/ directories\nUpdate NativeBackend routing\nUpdate documentation (ARCHITECTURE.md, MIGRATION_STATUS.md)\nClose bd-51\n\nEpic: bd-97\nEst: 1 week",
+      "status": "open",
+      "priority": 2,
+      "type": "task",
+      "labels": [
+        "migration,pure-elixir,cleanup",
+        "parser",
+        "javascript",
+        "leex"
+      ],
+      "dependencies": {
+        "discovered-from": [
+          "bd-97"
+        ],
+        "blocks": [
+          "bd-98",
+          "bd-99",
+          "bd-100",
+          "bd-101",
+          "bd-102",
+          "bd-104"
+        ]
+      },
+      "created_at": "2026-04-17T10:50:11.489860",
+      "updated_at": "2026-04-17T10:57:46.273468",
+      "comments": []
+    },
+    "bd-104": {
+      "id": "bd-104",
+      "title": "Parser behaviour and abstraction layer",
+      "description": "Create Elixir behaviour that all language parsers implement. This is the foundation defining the contract (init/1, parse/2, declarations/1) that every language-specific parser must follow. Includes base types and shared utilities.",
+      "status": "open",
+      "priority": 1,
+      "type": "task",
+      "labels": [
+        "parser",
+        "javascript"
+      ],
+      "dependencies": {},
+      "created_at": "2026-04-17T10:57:46.018152",
+      "updated_at": "2026-04-17T11:00:12.375000",
+      "comments": []
+    },
+    "bd-105": {
+      "id": "bd-105",
+      "title": "Erlang parser using OTP",
+      "description": "Implement Erlang language parser using built-in OTP modules :erl_scan and :erl_parse. Another easy win for Beam languages. Extract function exports, module attributes, and record definitions.",
+      "status": "open",
+      "priority": 1,
+      "type": "task",
+      "labels": [
+        "parser",
+        "typescript",
+        "yecc"
+      ],
+      "dependencies": {
+        "blocks": [
+          "bd-104"
+        ]
+      },
+      "created_at": "2026-04-17T10:57:46.019841",
+      "updated_at": "2026-04-17T11:02:22.270558",
+      "comments": []
+    },
+    "bd-106": {
+      "id": "bd-106",
+      "title": "Python lexer with Leex",
+      "description": "Create Leex lexer for Python tokenization. Handle Python-specific tokens (indent/dedent, async/await, f-strings, decorators). Leex generates Erlang lexer from .xrl file.",
+      "status": "open",
+      "priority": 2,
+      "type": "task",
+      "labels": [
+        "parser",
+        "tsx",
+        "yecc"
+      ],
+      "dependencies": {
+        "blocks": [
+          "bd-104"
+        ]
+      },
+      "created_at": "2026-04-17T10:57:46.028657",
+      "updated_at": "2026-04-17T11:02:22.274496",
+      "comments": []
+    },
+    "bd-107": {
+      "id": "bd-107",
+      "title": "Python parser with Yecc",
+      "description": "Create Yecc parser for Python declarations (def, class, import). Parse function definitions, class hierarchies, and module imports. Yecc generates Erlang parser from .yrl grammar file.",
+      "status": "open",
+      "priority": 2,
+      "type": "task",
+      "labels": [
+        "parser",
+        "rust",
+        "leex"
+      ],
+      "dependencies": {
+        "blocks": [
+          "bd-106"
+        ]
+      },
+      "created_at": "2026-04-17T10:57:46.043485",
+      "updated_at": "2026-04-17T10:57:46.420494",
+      "comments": []
+    },
+    "bd-108": {
+      "id": "bd-108",
+      "title": "JavaScript lexer with Leex",
+      "description": "Create Leex lexer for JavaScript tokenization. Handle JS tokens (keywords, regex literals, template literals, spread/rest operators). Generate Erlang lexer from .xrl file.",
+      "status": "open",
+      "priority": 2,
+      "type": "task",
+      "labels": [
+        "parser",
+        "rust"
+      ],
+      "dependencies": {
+        "blocks": [
+          "bd-104"
+        ]
+      },
+      "created_at": "2026-04-17T10:57:46.045858",
+      "updated_at": "2026-04-17T11:02:22.281595",
+      "comments": []
+    },
+    "bd-109": {
+      "id": "bd-109",
+      "title": "TypeScript parser extensions",
+      "description": "Extend JavaScript parser for TypeScript-specific features. Add type annotations, interfaces, type aliases, enums, generics, and namespace/module declarations.",
+      "status": "open",
+      "priority": 2,
+      "type": "task",
+      "labels": [
+        "integration"
+      ],
+      "dependencies": {
+        "blocks": [
+          "bd-110"
+        ]
+      },
+      "created_at": "2026-04-17T10:57:46.059285",
+      "updated_at": "2026-04-17T11:02:29.202490",
+      "comments": []
+    },
+    "bd-110": {
+      "id": "bd-110",
+      "title": "JavaScript parser with Yecc",
+      "description": "Create Yecc parser for JavaScript declarations (function, class, import/export). Parse function statements, class definitions, and ES module imports/exports. Generate Erlang parser from .yrl grammar file.",
+      "status": "open",
+      "priority": 2,
+      "type": "task",
+      "labels": [
+        "cleanup",
+        "rust-retirement"
+      ],
+      "dependencies": {
+        "blocks": [
+          "bd-108"
+        ]
+      },
+      "created_at": "2026-04-17T10:57:46.069427",
+      "updated_at": "2026-04-17T11:02:22.280469",
+      "comments": []
+    },
+    "bd-111": {
+      "id": "bd-111",
+      "title": "TSX parser extensions",
+      "description": "Extend TypeScript parser for TSX/JSX support. Add JSX element parsing, fragment syntax, spread attributes, and component type integration.",
+      "status": "open",
+      "priority": 3,
+      "type": "task",
+      "labels": [
+        "parser",
+        "tsx",
+        "yecc"
+      ],
+      "dependencies": {
+        "blocks": [
+          "bd-109"
+        ]
+      },
+      "created_at": "2026-04-17T10:57:46.249254",
+      "updated_at": "2026-04-17T11:02:29.213499",
+      "comments": []
+    },
+    "bd-112": {
+      "id": "bd-112",
+      "title": "Rust lexer with Leex",
+      "description": "Create Leex lexer for Rust tokenization. Handle Rust-specific tokens (raw strings, lifetime parameters, macros with !, attributes with #[]). Generate Erlang lexer from .xrl file.",
+      "status": "open",
+      "priority": 2,
+      "type": "task",
+      "labels": [
+        "parser",
+        "rust",
+        "leex"
+      ],
+      "dependencies": {
+        "blocks": [
+          "bd-104"
+        ]
+      },
+      "created_at": "2026-04-17T10:57:46.261566",
+      "updated_at": "2026-04-17T11:02:29.200948",
+      "comments": []
+    },
+    "bd-113": {
+      "id": "bd-113",
+      "title": "Rust parser with Yecc",
+      "description": "Create Yecc parser for Rust declarations (fn, struct, impl, mod). Parse functions, structs, enums, traits, implementations, and modules. Generate Erlang parser from .yrl grammar file.",
+      "status": "open",
+      "priority": 2,
+      "type": "task",
+      "labels": [
+        "parser",
+        "rust",
+        "yecc"
+      ],
+      "dependencies": {
+        "blocks": [
+          "bd-112"
+        ]
+      },
+      "created_at": "2026-04-17T10:57:46.267892",
+      "updated_at": "2026-04-17T11:03:48.133706",
+      "comments": []
+    },
+    "bd-114": {
+      "id": "bd-114",
+      "title": "Wire pure Elixir parsers to Parser module",
+      "description": "Replace TurboParseNif calls with pure Elixir parser implementations. Integrate all language parsers into the main Parser module. Update configuration and routing. This is the critical integration point.",
+      "status": "open",
+      "priority": 1,
+      "type": "task",
+      "labels": [
+        "integration"
+      ],
+      "dependencies": {
+        "blocks": [
+          "bd-105",
+          "bd-116",
+          "bd-107",
+          "bd-109",
+          "bd-111",
+          "bd-113"
+        ]
+      },
+      "created_at": "2026-04-17T10:57:46.355642",
+      "updated_at": "2026-04-17T11:02:33.183222",
+      "comments": []
+    },
+    "bd-115": {
+      "id": "bd-115",
+      "title": "Delete Rust parsing code",
+      "description": "Remove turbo_parse_core (~10,100 lines) and turbo_parse (~3,000 lines) Rust crates. Clean up Cargo.toml references, build scripts, and CI pipeline. The final step in the Rust retirement for parsing!",
+      "status": "open",
+      "priority": 1,
+      "type": "task",
+      "labels": [
+        "cleanup",
+        "rust-retirement"
+      ],
+      "dependencies": {
+        "blocks": [
+          "bd-114"
+        ]
+      },
+      "created_at": "2026-04-17T10:57:46.363655",
+      "updated_at": "2026-04-17T11:02:33.195913",
+      "comments": []
+    },
+    "bd-116": {
+      "id": "bd-116",
+      "title": "Elixir parser using Code.string_to_quoted",
+      "description": "Implement Elixir language parser using built-in Code.string_to_quoted/2. This is an easy win as Elixir has native parsing capabilities. Extract module definitions, function definitions, and macro calls.",
+      "status": "open",
+      "priority": 1,
+      "type": "task",
+      "labels": [
+        "parser",
+        "elixir"
+      ],
+      "dependencies": {
+        "blocks": [
+          "bd-104"
+        ]
+      },
+      "created_at": "2026-04-17T10:59:43.602905",
+      "updated_at": "2026-04-17T11:02:22.273218",
       "comments": []
     }
   }

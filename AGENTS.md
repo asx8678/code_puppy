@@ -238,6 +238,7 @@ bd close <id>         # Complete work
 - Use `bd` for ALL task tracking — do NOT use TodoWrite, TaskCreate, or markdown TODO lists
 - Run `bd prime` for detailed command reference and session close protocol
 - Use `bd remember` for persistent knowledge — do NOT use MEMORY.md files
+- **NEVER read `.bd/` files directly** — always use `bd show`, `bd list`, etc. Storage is a single `.bd/issues.json` file, NOT per-issue files like `.bd/issues/bd-1.json`
 
 ## Session Completion
 
