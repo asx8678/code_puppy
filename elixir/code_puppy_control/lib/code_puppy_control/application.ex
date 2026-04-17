@@ -3,7 +3,8 @@ defmodule CodePuppyControl.Application do
   OTP Application for CodePuppy Control Plane.
 
   Supervision tree:
-  1. CodePuppyControl.Repo - SQLite database for state persistence
+  1. CodePuppyControl.HttpClient - Finch HTTP connection pool (bd-69)
+  2. CodePuppyControl.Repo - SQLite database for state persistence
   2. Phoenix.PubSub - Event distribution
   3. CodePuppyControl.EventStore - ETS-based event history for replay
   4. CodePuppyControl.RuntimeState - Global runtime state (autosave ID, session model)
@@ -25,6 +26,8 @@ defmodule CodePuppyControl.Application do
   @impl true
   def start(_type, _args) do
     children = [
+      # HTTP client connection pool (Finch)
+      CodePuppyControl.HttpClient.child_spec(),
       CodePuppyControl.Repo,
       {Phoenix.PubSub, name: CodePuppyControl.PubSub},
       CodePuppyControl.EventStore,
