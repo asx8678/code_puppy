@@ -64,7 +64,6 @@ defmodule CodePuppyControl.Transport.StdioService do
   - `http.request` - Make HTTP request with retry logic
   - `http.get` - Simple GET request
   - `http.post` - POST request with body
-  - `http.stream` - Stream response for large downloads
 
   ### Utility
   - `health_check` - Service health status
@@ -811,16 +810,21 @@ defmodule CodePuppyControl.Transport.StdioService do
   # HTTP Helpers
   # ============================================================================
 
-  defp parse_http_method("GET"), do: :get
-  defp parse_http_method("POST"), do: :post
-  defp parse_http_method("PUT"), do: :put
-  defp parse_http_method("PATCH"), do: :patch
-  defp parse_http_method("DELETE"), do: :delete
-  defp parse_http_method("HEAD"), do: :head
-  defp parse_http_method("OPTIONS"), do: :options
+  # Map of known HTTP methods - prevents atom exhaustion from user input (bd-69)
+  @http_methods %{
+    "get" => :get,
+    "post" => :post,
+    "put" => :put,
+    "patch" => :patch,
+    "delete" => :delete,
+    "head" => :head,
+    "options" => :options
+  }
 
-  defp parse_http_method(method) when is_binary(method),
-    do: String.downcase(method) |> String.to_atom()
+  defp parse_http_method(method) when is_binary(method) do
+    # Use safe mapping instead of String.to_atom to prevent atom exhaustion
+    Map.get(@http_methods, String.downcase(method), :get)
+  end
 
   defp parse_http_method(method) when is_atom(method), do: method
 

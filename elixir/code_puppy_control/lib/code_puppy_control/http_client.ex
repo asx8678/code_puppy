@@ -50,13 +50,15 @@ defmodule CodePuppyControl.HttpClient do
   - Pool count: 1 per scheduler
   - Connect timeout: 30s
   - Receive timeout: 180s (configurable per request)
+
+  See `CodePuppyControl.HttpClient.Config` for environment variable configuration.
   """
 
   require Logger
 
+  alias CodePuppyControl.HttpClient.Config
   alias Finch.Response
 
-  @default_pool_name :http_client_pool
   @default_retries 5
   @default_retry_status_codes [429, 502, 503, 504]
   @default_base_backoff_ms 1000
@@ -85,53 +87,18 @@ defmodule CodePuppyControl.HttpClient do
           headers: [{String.t(), String.t()}]
         }
 
-  @typedoc "Client error"
-  @type error ::
-          {:error, :timeout}
-          | {:error, :pool_timeout}
-          | {:error, :connection_closed}
-          | {:error, :nxdomain}
-          | {:error, String.t()}
+  @typedoc "Client error - error tuple with descriptive message"
+  @type error :: {:error, String.t()}
 
   # ============================================================================
-  # Finch Pool Management
+  # Delegate config functions to Config module
   # ============================================================================
 
-  @doc """
-  Child specification for starting the Finch pool in the supervision tree.
-
-  Returns a supervisor child spec that can be added to the application's
-  supervision tree.
-  """
-  @spec child_spec(keyword()) :: Supervisor.child_spec()
-  def child_spec(opts \\ []) do
-    pool_name = Keyword.get(opts, :pool_name, @default_pool_name)
-    pool_size = Keyword.get(opts, :pool_size, 50)
-    pool_count = Keyword.get(opts, :pool_count, System.schedulers_online())
-
-    {Finch,
-     name: pool_name,
-     pools: %{
-       :default => [
-         size: pool_size,
-         count: pool_count,
-         conn_opts: [
-           connect_options: [
-             transport_opts: [
-               # Allow TLS 1.2 and 1.3
-               versions: [~c"tlsv1.2", ~c"tlsv1.3"]
-             ]
-           ]
-         ]
-       ]
-     }}
-  end
-
-  @doc """
-  Returns the default pool name used by this module.
-  """
-  @spec default_pool_name() :: atom()
-  def default_pool_name, do: @default_pool_name
+  defdelegate child_spec(opts \\ []), to: Config
+  defdelegate default_pool_name(), to: Config
+  defdelegate auth_headers(token), to: Config
+  defdelegate json_headers(), to: Config
+  defdelegate resolve_config_from_env(), to: Config
 
   # ============================================================================
   # HTTP Methods
@@ -284,6 +251,7 @@ defmodule CodePuppyControl.HttpClient do
     body = Keyword.get(opts, :body, nil)
     timeout = Keyword.get(opts, :timeout, 180_000)
     pool_timeout = Keyword.get(opts, :pool_timeout, 5_000)
+    pool_name = Config.default_pool_name()
 
     req = build_finch_request(method, url, headers, body)
 
@@ -292,7 +260,7 @@ defmodule CodePuppyControl.HttpClient do
       fn {req, pool_timeout, timeout, acc} ->
         case Finch.stream(
                req,
-               @default_pool_name,
+               pool_name,
                acc,
                fn
                  {:status, status}, acc -> {:cont, Map.put(acc || %{}, :status, status)}
@@ -332,73 +300,6 @@ defmodule CodePuppyControl.HttpClient do
     build_finch_request(method, url, headers, body)
   end
 
-  @doc """
-  Creates authorization headers for Bearer token authentication.
-  """
-  @spec auth_headers(String.t()) :: [{String.t(), String.t()}]
-  def auth_headers(token), do: [{"authorization", "Bearer #{token}"}]
-
-  @doc """
-  Creates JSON content-type headers.
-  """
-  @spec json_headers() :: [{String.t(), String.t()}]
-  def json_headers, do: [{"content-type", "application/json"}]
-
-  @doc """
-  Resolves proxy and SSL configuration from environment variables.
-
-  Returns options suitable for passing to `request/3` or building custom requests.
-  """
-  @spec resolve_config_from_env() :: keyword()
-  def resolve_config_from_env do
-    # SSL cert file handling
-    ssl_cert_file = System.get_env("SSL_CERT_FILE")
-
-    verify_opts =
-      if ssl_cert_file && File.exists?(ssl_cert_file) do
-        [transport_opts: [cacertfile: ssl_cert_file]]
-      else
-        []
-      end
-
-    # Proxy detection (same env var names as Python)
-    proxy_url =
-      System.get_env("HTTPS_PROXY") ||
-        System.get_env("https_proxy") ||
-        System.get_env("HTTP_PROXY") ||
-        System.get_env("http_proxy")
-
-    # HTTP/2 detection (from config, defaults to true)
-    http2_enabled =
-      case System.get_env("CODE_PUPPY_HTTP2", "true") do
-        "false" -> false
-        "0" -> false
-        _ -> true
-      end
-
-    # Retry transport toggle
-    disable_retry = System.get_env("CODE_PUPPY_DISABLE_RETRY_TRANSPORT") in ["1", "true"]
-
-    trust_env? = proxy_url != nil
-
-    base =
-      if verify_opts != [] do
-        [connect_options: verify_opts]
-      else
-        []
-      end
-
-    proxy_opts = if proxy_url, do: [proxy: proxy_url], else: []
-
-    [
-      connect_options: base,
-      proxy_options: proxy_opts,
-      trust_env: trust_env?,
-      http2: http2_enabled,
-      disable_retry: disable_retry
-    ]
-  end
-
   # ============================================================================
   # Private Functions
   # ============================================================================
@@ -417,7 +318,9 @@ defmodule CodePuppyControl.HttpClient do
          ignore_retry_headers,
          attempt
        ) do
-    case Finch.request(req, @default_pool_name,
+    pool_name = Config.default_pool_name()
+
+    case Finch.request(req, pool_name,
            pool_timeout: pool_timeout,
            receive_timeout: receive_timeout
          ) do
@@ -650,16 +553,18 @@ defmodule CodePuppyControl.HttpClient do
     }
   end
 
+  # format_error returns plain strings, not wrapped tuples.
+  # Callers wrap with {:error, format_error(reason)}.
   defp format_error(%{reason: reason}), do: format_error(reason)
-  defp format_error(:timeout), do: {:error, "Request timeout"}
-  defp format_error(:pool_timeout), do: {:error, "Pool checkout timeout"}
-  defp format_error(:nxdomain), do: {:error, "Domain not found"}
-  defp format_error(:econnrefused), do: {:error, "Connection refused"}
-  defp format_error(:enetunreach), do: {:error, "Network unreachable"}
-  defp format_error(:closed), do: {:error, "Connection closed"}
-  defp format_error(reason) when is_atom(reason), do: {:error, Atom.to_string(reason)}
-  defp format_error(reason) when is_binary(reason), do: {:error, reason}
-  defp format_error(reason), do: {:error, inspect(reason)}
+  defp format_error(:timeout), do: "Request timeout"
+  defp format_error(:pool_timeout), do: "Pool checkout timeout"
+  defp format_error(:nxdomain), do: "Domain not found"
+  defp format_error(:econnrefused), do: "Connection refused"
+  defp format_error(:enetunreach), do: "Network unreachable"
+  defp format_error(:closed), do: "Connection closed"
+  defp format_error(reason) when is_atom(reason), do: Atom.to_string(reason)
+  defp format_error(reason) when is_binary(reason), do: reason
+  defp format_error(reason), do: inspect(reason)
 
   defp cerebras?(model_name) do
     model_name |> String.downcase() |> String.contains?("cerebras")
