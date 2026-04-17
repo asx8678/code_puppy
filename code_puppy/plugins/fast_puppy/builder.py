@@ -28,7 +28,7 @@ CRATES = [
         "name": "code_puppy_core",
         "dir": "code_puppy_core",
         "probe": "_code_puppy_core",
-        "bridges": ["code_puppy._core_bridge"],
+        "bridges": [],
         # No patch_targets - NativeBackend handles routing
     },
     {

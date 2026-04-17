@@ -365,7 +365,6 @@ def _replace_in_file(
         # bd-86: Pure Python implementation (acceleration layer removed)
         modified = original
         modified_lines: list[str] | None = None
-        last_jw_score: float | None = None
 
         for rep in replacements:
             old_str = rep.get("old_str", "")
@@ -397,8 +396,6 @@ def _replace_in_file(
                 _needle_lines_cache=needle_lines,
                 _needle_len_cache=needle_len,
             )
-
-            last_jw_score = score
 
             if score < _FUZZY_THRESHOLD or loc is None:
                 return {

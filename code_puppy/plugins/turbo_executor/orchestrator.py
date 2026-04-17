@@ -4,8 +4,10 @@ Provides sequential (and future parallel) execution of file operations
 with structured result collection.
 """
 
+import os
 import time
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Any
 from collections.abc import Callable
 
@@ -27,10 +29,10 @@ try:
 except ImportError:
     _NOTIFICATIONS_AVAILABLE = False
 
-# bd-86: Native acceleration layer removed, always use Python file operations
-NATIVE_FILE_OPS_AVAILABLE = False
-
-from code_puppy.tools.file_operations import validate_file_path
+from code_puppy.tools.file_operations import (
+    _read_file_sync,
+    validate_file_path,
+)
 
 
 class TurboOrchestrator:
@@ -53,18 +55,14 @@ class TurboOrchestrator:
         result = await orchestrator.execute(plan)
     """
 
-    def __init__(
-        self, enable_parallel: bool = False, prefer_native_python: bool = False
-    ):
+    def __init__(self, enable_parallel: bool = False):
         """Initialize the orchestrator.
 
         Args:
             enable_parallel: Whether to enable parallel execution (future feature)
-            prefer_native_python: Ignored (bd-86: Python is always used)
         """
         self.enable_parallel = enable_parallel
         # bd-86: Native acceleration removed, always use Python
-        self._native_file_ops_available = False
         self._backend_source = "python"
 
         self._operation_handlers: dict[OperationType, Callable] = {
@@ -75,7 +73,7 @@ class TurboOrchestrator:
 
     @property
     def using_native_ops(self) -> bool:
-        """Check if using native Python operations.
+        """Check if using Python file operations.
 
         bd-86: Always returns True since Python is always used.
         """
@@ -266,11 +264,11 @@ class TurboOrchestrator:
         return "success"
 
     async def _execute_list_files(self, args: dict[str, Any]) -> dict[str, Any]:
-        """Execute list_files operation with fallback to native Python."""
+        """Execute list_files operation using Python file operations."""
         directory = args.get("directory", ".")
         recursive = args.get("recursive", True)
 
-        # Security gate: validate directory before native acceleration
+        # Security gate: validate directory
         is_valid, error_msg = validate_file_path(directory, "list")
         if not is_valid:
             return {
@@ -279,47 +277,51 @@ class TurboOrchestrator:
                 "source": "security_blocked",
             }
 
-        # Use NativeBackend with fallback
-        prefer_native = not self.prefer_native_python
-        result = NativeBackend.list_files(
-            directory, recursive, _prefer_native=prefer_native
-        )
+        # Pure Python implementation
+        try:
+            dir_path = Path(directory).resolve()
+            if not dir_path.exists():
+                return {
+                    "content": None,
+                    "error": f"Directory not found: {directory}",
+                    "source": "python",
+                }
+            if not dir_path.is_dir():
+                return {
+                    "content": None,
+                    "error": f"Not a directory: {directory}",
+                    "source": "python",
+                }
 
-        # bd-94: Map source names to actual backend (elixir/python)
-        actual_source = (
-            NativeBackend._get_file_ops_source()
-            if hasattr(NativeBackend, "_get_file_ops_source")
-            else "python"
-        )
-        source_mapping = {
-            "native_backend": actual_source,
-            "python_fallback": "python",
-            "elixir": "elixir",
-            "python": "python",
-            "file_ops": actual_source,
-        }
-        source = source_mapping.get(result.get("source"), actual_source)
+            files = []
+            if recursive:
+                for root, _dirs, filenames in os.walk(dir_path):
+                    for filename in filenames:
+                        full_path = Path(root) / filename
+                        files.append(str(full_path.relative_to(dir_path)))
+            else:
+                for item in dir_path.iterdir():
+                    if item.is_file():
+                        files.append(item.name)
 
-        if "error" in result and result["error"]:
+            return {
+                "content": files,
+                "error": None,
+                "source": "python",
+            }
+        except Exception as e:
             return {
                 "content": None,
-                "error": result["error"],
-                "source": source,
+                "error": f"Error listing files: {str(e)}",
+                "source": "python",
             }
 
-        files = result.get("files", [])
-        return {
-            "content": files,
-            "error": None,
-            "source": source,
-        }
-
     async def _execute_grep(self, args: dict[str, Any]) -> dict[str, Any]:
-        """Execute grep operation with fallback to native Python."""
+        """Execute grep operation using Python file operations."""
         search_string = args.get("search_string", "")
         directory = args.get("directory", ".")
 
-        # Security gate: validate directory before native acceleration
+        # Security gate: validate directory
         is_valid, error_msg = validate_file_path(directory, "search")
         if not is_valid:
             return {
@@ -329,138 +331,106 @@ class TurboOrchestrator:
                 "source": "security_blocked",
             }
 
-        # Use NativeBackend with fallback
-        prefer_native = not self.prefer_native_python
-        result = NativeBackend.grep(
-            search_string, directory, _prefer_native=prefer_native
-        )
+        # Pure Python implementation
+        try:
+            dir_path = Path(directory).resolve()
+            if not dir_path.exists():
+                return {
+                    "matches": [],
+                    "total_matches": 0,
+                    "error": f"Directory not found: {directory}",
+                    "source": "python",
+                }
 
-        # bd-94: Map source names to actual backend (elixir/python)
-        actual_source = (
-            NativeBackend._get_file_ops_source()
-            if hasattr(NativeBackend, "_get_file_ops_source")
-            else "python"
-        )
-        source_mapping = {
-            "native_backend": actual_source,
-            "python_fallback": "python",
-            "elixir": "elixir",
-            "python": "python",
-            "file_ops": actual_source,
-        }
-        source = source_mapping.get(result.get("source"), actual_source)
+            matches = []
+            for root, _dirs, filenames in os.walk(dir_path):
+                for filename in filenames:
+                    file_path = Path(root) / filename
+                    try:
+                        with open(file_path, "r", encoding="utf-8", errors="ignore") as f:
+                            for line_num, line in enumerate(f, start=1):
+                                if search_string in line:
+                                    matches.append({
+                                        "file_path": str(file_path),
+                                        "line_number": line_num,
+                                        "line_content": line.rstrip("\n"),
+                                    })
+                    except Exception:
+                        # Skip files that can't be read
+                        pass
 
-        if "error" in result and result["error"]:
+            return {
+                "matches": matches,
+                "total_matches": len(matches),
+                "error": None,
+                "source": "python",
+            }
+        except Exception as e:
             return {
                 "matches": [],
                 "total_matches": 0,
-                "error": result["error"],
-                "source": source,
+                "error": f"Error searching: {str(e)}",
+                "source": "python",
             }
 
-        matches = result.get("matches", [])
-        return {
-            "matches": [
-                {
-                    "file_path": m.get("file_path", ""),
-                    "line_number": m.get("line_number", 0),
-                    "line_content": m.get("line_content", ""),
-                }
-                for m in matches
-            ],
-            "total_matches": len(matches),
-            "error": None,
-            "source": source,
-        }
-
     async def _execute_read_files(self, args: dict[str, Any]) -> dict[str, Any]:
-        """Execute read_files operation with fallback to native Python."""
+        """Execute read_files operation using Python file operations."""
         file_paths = args.get("file_paths", [])
         start_line = args.get("start_line")
         num_lines = args.get("num_lines")
 
         files_data: list[dict[str, Any]] = []
-        original_total = len(file_paths)  # Track original count for reporting
+        original_total = len(file_paths)
 
-        # Security gate: validate paths before native acceleration
-        validated_paths = []
         for file_path in file_paths:
             try:
+                # Security gate: validate path
                 is_valid, error_msg = validate_file_path(file_path, "read")
                 if not is_valid:
-                    # Add to results as blocked
-                    files_data.append(
-                        {
-                            "file_path": file_path,
-                            "content": None,
-                            "num_tokens": 0,
-                            "error": f"Security: {error_msg}",
-                            "success": False,
-                        }
-                    )
-                else:
-                    validated_paths.append(file_path)
-            except Exception as e:
-                files_data.append(
-                    {
+                    files_data.append({
                         "file_path": file_path,
                         "content": None,
                         "num_tokens": 0,
-                        "error": f"Validation error: {e}",
+                        "error": f"Security: {error_msg}",
                         "success": False,
-                    }
+                    })
+                    continue
+
+                # Use _read_file_sync with line range support
+                content, num_tokens, error = _read_file_sync(
+                    file_path, start_line=start_line, num_lines=num_lines
                 )
 
-        # Only process validated paths through native backend
-        file_paths = validated_paths
-
-        if file_paths:
-            # Use NativeBackend batch read with fallback
-            prefer_native = not self.prefer_native_python
-            result = NativeBackend.read_files(
-                file_paths, start_line, num_lines, _prefer_native=prefer_native
-            )
-
-            # Merge with security-blocked files and format
-            native_files = result.get("files", [])
-            files_data.extend(native_files)
-
-            # bd-94: Map source names to actual backend (elixir/python)
-            actual_source = (
-                NativeBackend._get_file_ops_source()
-                if hasattr(NativeBackend, "_get_file_ops_source")
-                else "python"
-            )
-            source_mapping = {
-                "native_backend": actual_source,
-                "python_fallback": "python",
-                "elixir": "elixir",
-                "python": "python",
-                "file_ops": actual_source,
-            }
-            source = source_mapping.get(result.get("source"), actual_source)
-
-            return {
-                "files": files_data,
-                "total_files": original_total,
-                "successful_reads": sum(
-                    1 for f in files_data if f.get("success", False)
-                ),
-                "source": source,
-            }
-
-        # bd-94: Map source names to actual backend (elixir/python)
-        actual_source = (
-            NativeBackend._get_file_ops_source()
-            if hasattr(NativeBackend, "_get_file_ops_source")
-            else "python"
-        )
+                if error:
+                    files_data.append({
+                        "file_path": file_path,
+                        "content": None,
+                        "num_tokens": 0,
+                        "error": error,
+                        "success": False,
+                    })
+                else:
+                    files_data.append({
+                        "file_path": file_path,
+                        "content": content,
+                        "num_tokens": num_tokens,
+                        "error": None,
+                        "success": True,
+                    })
+            except Exception as e:
+                files_data.append({
+                    "file_path": file_path,
+                    "content": None,
+                    "num_tokens": 0,
+                    "error": f"Error reading file: {str(e)}",
+                    "success": False,
+                })
 
         return {
             "files": files_data,
             "total_files": original_total,
-            "successful_reads": 0,
-            "source": actual_source,
+            "successful_reads": sum(1 for f in files_data if f.get("success", False)),
+            "source": "python",
         }
 
     def validate_plan(self, plan: Plan) -> list[str]:

@@ -20,8 +20,7 @@ from code_puppy.code_context import (
     get_code_context,
     get_file_outline,
 )
-# bd-13: Import through NativeBackend instead of direct bridge import
-from code_puppy.native_backend import NativeBackend
+# bd-86: Native acceleration layer removed
 
 
 # -----------------------------------------------------------------------------
@@ -467,15 +466,8 @@ class TestCodeExplorer:
         """Test finding symbol definitions across directory."""
         results = explorer.find_symbol_definitions(sample_directory, "main")
 
-        # When turbo_parse is not available, symbols won't be extracted
-        # When available, should find 'main' function
-        if NativeBackend.is_available(NativeBackend.Capabilities.PARSE):
-            assert len(results) >= 1
-            for file_path, symbol in results:
-                assert symbol.name == "main"
-        else:
-            # Without turbo_parse, no symbols are found
-            assert len(results) == 0
+        # bd-86: Native acceleration layer removed, symbols not extracted
+        assert len(results) == 0
 
 
 # -----------------------------------------------------------------------------
@@ -564,39 +556,7 @@ class TestModuleFunctions:
 # -----------------------------------------------------------------------------
 
 
-@pytest.mark.skipif(
-    not NativeBackend.is_available(NativeBackend.Capabilities.PARSE),
-    reason="turbo_parse not available",
-)
-class TestTurboParseIntegration:
-    """Integration tests requiring turbo_parse."""
-
-    def test_symbol_extraction_with_turbo_parse(self, sample_python_file):
-        """Test that symbols are extracted when turbo_parse is available."""
-        explorer = CodeExplorer(enable_cache=False)
-        context = explorer.explore_file(sample_python_file, include_content=False)
-
-        assert context.outline is not None
-        assert context.outline.success is True
-        assert len(context.outline.symbols) > 0
-
-        # Check for expected symbols
-        symbol_names = [s.name for s in context.outline.symbols]
-        assert "MyClass" in symbol_names or "standalone_function" in symbol_names
-
-    def test_hierarchy_building(self, sample_python_file):
-        """Test that symbol hierarchy is built correctly."""
-        explorer = CodeExplorer(enable_cache=False)
-        context = explorer.explore_file(sample_python_file, include_content=False)
-
-        if context.outline and context.outline.symbols:
-            # Check that any class has its methods as children
-            for symbol in context.outline.symbols:
-                if symbol.kind == "class" and symbol.children:
-                    # Verify children are contained in parent
-                    for child in symbol.children:
-                        assert child.start_line >= symbol.start_line
-                        assert child.end_line <= symbol.end_line
+# bd-86: TestTurboParseIntegration removed - Native acceleration layer removed
 
 
 # -----------------------------------------------------------------------------

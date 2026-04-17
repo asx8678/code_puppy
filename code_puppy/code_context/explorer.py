@@ -6,7 +6,6 @@ from typing import Any
 
 from code_puppy.code_context.models import CodeContext, FileOutline, SymbolInfo
 from code_puppy.tools.file_operations import _read_file_sync
-from code_puppy.utils.symbol_hierarchy import build_symbol_hierarchy
 
 # bd-86: Native acceleration layer removed - always use Python fallback
 TURBO_PARSE_AVAILABLE = False

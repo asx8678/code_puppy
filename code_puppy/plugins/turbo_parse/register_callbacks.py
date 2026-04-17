@@ -7,7 +7,6 @@ Parsing functionality has been moved to pure Python implementations.
 import logging
 
 from code_puppy.callbacks import register_callback
-from code_puppy.plugins.turbo_parse import is_turbo_parse_available
 
 logger = logging.getLogger(__name__)
 
