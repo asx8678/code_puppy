@@ -1328,7 +1328,7 @@
       "id": "bd-71",
       "title": "Port round-robin model to Elixir",
       "description": "Source: round_robin_model.py (9KB).\n\nPart of Phase 4 \u2014 Config & model management.",
-      "status": "open",
+      "status": "closed",
       "priority": 2,
       "type": "task",
       "labels": [
@@ -1340,8 +1340,10 @@
         ]
       },
       "created_at": "2026-04-16T17:51:59.578339",
-      "updated_at": "2026-04-16T17:51:59.578346",
-      "comments": []
+      "updated_at": "2026-04-17T03:51:25.656895",
+      "comments": [
+        "Completed: Ported round_robin_model.py to Elixir\n\nFiles created:\n- elixir/code_puppy_control/lib/code_puppy_control/round_robin_model.ex (292 lines)\n- elixir/code_puppy_control/test/code_puppy_control/round_robin_model_test.exs (314 lines, 22 tests)\n\nFiles modified:\n- application.ex (added to supervision tree)\n- stdio_service.ex (added 6 JSON-RPC methods)\n\nFeatures:\n- GenServer + ETS state management\n- configure/1, get_next_model/0, advance_and_get/0, get_current_model/0, reset/0, get_state/0, list_models/0\n- rotate_every support for batch rotation\n- Full RPC bridge for remote access"
+      ]
     },
     "bd-72": {
       "id": "bd-72",
