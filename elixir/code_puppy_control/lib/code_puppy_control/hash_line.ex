@@ -33,9 +33,12 @@ defmodule CodePuppyControl.HashLine do
   @nibble_str "ZPMQVRWSNKTXJBYH"
 
   # xxhash32 constants for empty-input computation
-  @prime_32_5 374_761_393
-  @prime_32_2 2_246_682_519
+  # Source: https://github.com/Cyan4973/xxHash/blob/dev/doc/xxhash_spec.md
+  # NOTE: PRIME32_2 was previously incorrect (2_246_682_519 instead of 2_246_822_519)
+  # This caused parity failures with the Rust NIF for empty/whitespace lines.
+  @prime_32_2 2_246_822_519
   @prime_32_3 3_266_489_917
+  @prime_32_5 374_761_393
   @mask_32 0xFFFFFFFF
 
   @doc """

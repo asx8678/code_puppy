@@ -17,13 +17,16 @@ defmodule CodePuppyControl.HashLineTest do
       assert hash =~ ~r/^[A-Z]{2}$/
     end
 
-    test "different indices produce different hashes for whitespace-only lines" do
+    test "different indices can produce different hashes for whitespace-only lines" do
+      # Note: Some indices may produce the same hash (collisions are possible)
+      # e.g., idx=1 and idx=2 both produce "KM" for whitespace-only lines
+      # Use indices that are known to produce different hashes
       h1 = HashLine.compute_line_hash(1, "   ")
-      h2 = HashLine.compute_line_hash(2, "   ")
+      h5 = HashLine.compute_line_hash(5, "   ")
       assert String.length(h1) == 2
-      assert String.length(h2) == 2
-      # Hashes should be different for different indices
-      assert h1 != h2
+      assert String.length(h5) == 2
+      # These specific indices produce different hashes
+      assert h1 != h5
     end
 
     test "strips trailing whitespace before hashing" do
@@ -207,6 +210,111 @@ defmodule CodePuppyControl.HashLineTest do
       assert String.length(result) == 2
       # determinism check
       assert result == HashLine.compute_line_hash(0, "hello world")
+    end
+  end
+
+  describe "parity with HashlineNif" do
+    # These tests verify that HashLine.compute_line_hash/2 produces
+    # exactly the same results as HashlineNif.compute_line_hash/2
+    # for all types of input (empty, whitespace-only, alnum content).
+
+    alias CodePuppyControl.HashlineNif
+
+    test "empty string matches NIF for multiple indices" do
+      for idx <- [0, 1, 2, 5, 10, 100] do
+        assert HashLine.compute_line_hash(idx, "") == HashlineNif.compute_line_hash(idx, ""),
+               "mismatch for idx=#{idx}, empty string"
+      end
+    end
+
+    test "whitespace-only matches NIF" do
+      for {idx, line} <- [
+            {1, "   "},
+            {2, "\t"},
+            {3, "\t\t"},
+            {4, "\r"},
+            {5, "  \r\n  "},
+            {10, "    \n    "}
+          ] do
+        assert HashLine.compute_line_hash(idx, line) == HashlineNif.compute_line_hash(idx, line),
+               "mismatch for idx=#{idx}, line=#{inspect(line)}"
+      end
+    end
+
+    test "alphanumeric content matches NIF (seed=0)" do
+      for {idx, line} <- [
+            {0, "hello world"},
+            {1, "foo"},
+            {5, "some code"},
+            {99, "test line"},
+            {1, "unicode: café 🚀"},
+            {0, "def function():"},
+            {100, "class MyClass:"}
+          ] do
+        assert HashLine.compute_line_hash(idx, line) == HashlineNif.compute_line_hash(idx, line),
+               "mismatch for idx=#{idx}, line=#{inspect(line)}"
+      end
+    end
+
+    test "punctuation-only content matches NIF" do
+      for {idx, line} <- [
+            {1, "!@#$%"},
+            {2, "---"},
+            {3, "=== \"\" ==="},
+            {5, "/* comment */"}
+          ] do
+        assert HashLine.compute_line_hash(idx, line) == HashlineNif.compute_line_hash(idx, line),
+               "mismatch for idx=#{idx}, line=#{inspect(line)}"
+      end
+    end
+
+    test "format_hashlines matches NIF exactly" do
+      for {text, start_line} <- [
+            {"foo\nbar", 1},
+            {"", 1},
+            {"single line", 5},
+            {"line1\nline2\nline3", 1},
+            {"line1\nline2\nline3", 10},
+            {"  indented\n    more  ", 1}
+          ] do
+        h_result = HashLine.format_hashlines(text, start_line)
+        n_result = HashlineNif.format_hashlines(text, start_line)
+
+        assert h_result == n_result,
+               "format_hashlines mismatch for text=#{inspect(text)}, start_line=#{start_line}"
+      end
+    end
+
+    test "strip_hashline_prefixes matches NIF exactly" do
+      for text <- [
+            "1#BK:foo\n2#MJ:bar",
+            "1#KM:",
+            "10#XX:hello\n11#YY:world",
+            "no prefix here",
+            "mixed\n2#AB:prefixed\nplain"
+          ] do
+        h_result = HashLine.strip_hashline_prefixes(text)
+        n_result = HashlineNif.strip_hashline_prefixes(text)
+
+        assert h_result == n_result,
+               "strip_hashline_prefixes mismatch for text=#{inspect(text)}"
+      end
+    end
+
+    test "validate_hashline_anchor matches NIF exactly" do
+      for {idx, line} <- [
+            {1, "hello"},
+            {5, ""},
+            {10, "   "},
+            {99, "test"}
+          ] do
+        hash = HashLine.compute_line_hash(idx, line)
+        h_result = HashLine.validate_hashline_anchor(idx, line, hash)
+        n_result = HashlineNif.validate_hashline_anchor(idx, line, hash)
+
+        assert h_result == n_result,
+               "validate_hashline_anchor mismatch for idx=#{idx}, line=#{inspect(line)}"
+      end
     end
   end
 
