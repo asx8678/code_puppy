@@ -150,7 +150,7 @@ false : {token, {false_token, TokenLine}}.
 % Operators - bitwise
 << : {token, {lshift, TokenLine}}.
 >> : {token, {rshift, TokenLine}}.
-& : {token, {bitand, TokenLine}}.
+& : {token, {'&', TokenLine}}.
 \| : {token, {bitor, TokenLine}}.
 \^ : {token, {bitxor, TokenLine}}.
 
@@ -177,7 +177,7 @@ false : {token, {false_token, TokenLine}}.
 ; : {token, {';', TokenLine}}.
 , : {token, {',', TokenLine}}.
 : : {token, {':', TokenLine}}.
-. : {token, {dot, TokenLine}}.
+\. : {token, {dot, TokenLine}}.
 \# : {token, {'#', TokenLine}}.
 \$ : {token, {'$', TokenLine}}.
 \? : {token, {'?', TokenLine}}.

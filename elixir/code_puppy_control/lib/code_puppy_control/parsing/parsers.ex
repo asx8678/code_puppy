@@ -18,7 +18,8 @@ defmodule CodePuppyControl.Parsing.Parsers do
     parsers = [
       CodePuppyControl.Parsing.Parsers.ElixirParser,
       CodePuppyControl.Parsing.Parsers.PythonParser,
-      CodePuppyControl.Parsing.Parsers.JavaScriptParser
+      CodePuppyControl.Parsing.Parsers.JavaScriptParser,
+      CodePuppyControl.Parsing.Parsers.RustParser
     ]
 
     Enum.each(parsers, fn parser ->
