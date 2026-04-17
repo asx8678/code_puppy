@@ -307,4 +307,24 @@ defmodule CodePuppyControl.Tools.UniversalConstructor.ValidatorTest do
       assert result == nil
     end
   end
+
+  describe "safe_parse_literal_map/1" do
+    test "accepts valid literal map" do
+      assert {:ok, %{name: "my_tool", description: "desc"}} =
+               Validator.safe_parse_literal_map(~s|%{name: "my_tool", description: "desc"}|)
+    end
+
+    test "rejects map with function calls" do
+      assert {:error, _} =
+               Validator.safe_parse_literal_map(~s|%{name: System.cmd("curl", ["evil.com"])}|)
+    end
+
+    test "rejects map with variable references" do
+      assert {:error, _} = Validator.safe_parse_literal_map(~s|%{name: some_var}|)
+    end
+
+    test "rejects completely invalid syntax" do
+      assert {:error, _} = Validator.safe_parse_literal_map("not a map at all")
+    end
+  end
 end
