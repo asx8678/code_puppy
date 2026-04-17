@@ -8,8 +8,13 @@ defmodule CodePuppyControl.Transport.ModelServicesRpcTest do
 
   use ExUnit.Case
 
+  import ExUnit.CaptureIO
+
+  alias CodePuppyControl.ModelRegistry
   alias CodePuppyControl.Transport.StdioService
   alias CodePuppyControl.Support.StdioTestHelper
+
+  @test_models_path Path.expand("../../fixtures/test_models.json", __DIR__)
 
   # ============================================================================
   # Model Registry RPC Tests
@@ -55,13 +60,12 @@ defmodule CodePuppyControl.Transport.ModelServicesRpcTest do
       assert response["error"]["message"] =~ "model_name"
     end
 
-    test "returns enabled:false for disabled models (bd-96 regression test)" do
-      # Regression test for bd-96: verify enabled field is correctly preserved
+    test "returns error for non-map params instead of crashing" do
       request = %{
         "jsonrpc" => "2.0",
         "id" => 1,
         "method" => "model_registry.get_config",
-        "params" => %{"model_name" => "disabled-test-model"}
+        "params" => []
       }
 
       output =
@@ -70,9 +74,29 @@ defmodule CodePuppyControl.Transport.ModelServicesRpcTest do
         end)
 
       response = Jason.decode!(output)
+      assert response["error"]["code"] == -32602
+      assert response["error"]["message"] == "Invalid params: expected object"
+    end
+
+    test "returns enabled:false for disabled models (bd-96 regression test)" do
+      request = %{
+        "jsonrpc" => "2.0",
+        "id" => 1,
+        "method" => "model_registry.get_config",
+        "params" => %{"model_name" => "disabled-test-model"}
+      }
+
+      output =
+        with_bundled_models_path(@test_models_path, fn ->
+          capture_local_stdio([Jason.encode!(request)], fn ->
+            StdioService.run()
+          end)
+        end)
+
+      response = Jason.decode!(output)
       assert response["jsonrpc"] == "2.0"
       assert response["id"] == 1
-      # The disabled-test-model has "enabled" => false in models.json
+      assert response["result"]["model_name"] == "disabled-test-model"
       assert response["result"]["config"]["enabled"] == false
     end
   end
@@ -381,5 +405,35 @@ defmodule CodePuppyControl.Transport.ModelServicesRpcTest do
 
   defp capture_stdio(inputs, fun) do
     StdioTestHelper.capture_stdio(inputs, fun)
+  end
+
+  defp capture_local_stdio(inputs, fun) do
+    input = Enum.join(inputs, "\n") <> "\n"
+
+    capture_io(input, fun)
+    |> String.split("\n")
+    |> Enum.find(&(String.starts_with?(&1, "{") and &1 != ""))
+    |> case do
+      nil -> "{}"
+      line -> line
+    end
+  end
+
+  defp with_bundled_models_path(path, fun) do
+    original = Application.get_env(:code_puppy_control, :bundled_models_path)
+
+    try do
+      Application.put_env(:code_puppy_control, :bundled_models_path, path)
+      :ok = ModelRegistry.reload()
+      fun.()
+    after
+      if original do
+        Application.put_env(:code_puppy_control, :bundled_models_path, original)
+      else
+        Application.delete_env(:code_puppy_control, :bundled_models_path)
+      end
+
+      ModelRegistry.reload()
+    end
   end
 end

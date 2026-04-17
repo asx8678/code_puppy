@@ -1852,8 +1852,10 @@
       "labels": [],
       "dependencies": {},
       "created_at": "2026-04-17T10:16:53.489836",
-      "updated_at": "2026-04-17T15:27:12.513142",
-      "comments": []
+      "updated_at": "2026-04-17T16:25:48.894721",
+      "comments": [
+        "Fixed final regression in follow-up: moved disabled-test-model out of priv/models.json into test/fixtures/test_models.json, updated model_services_rpc_test to override :bundled_models_path for the regression case, and added non-map params validation coverage."
+      ]
     },
     "bd-97": {
       "id": "bd-97",
