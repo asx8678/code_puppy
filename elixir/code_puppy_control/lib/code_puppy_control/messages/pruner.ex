@@ -145,9 +145,9 @@ defmodule CodePuppyControl.Messages.Pruner do
       |> Enum.slice(start_idx, length(per_message_tokens) - start_idx)
       |> Enum.reverse()
 
-    # Walk from end backwards
+    # Walk from end backwards, halt when budget exceeded
     {_, tail} =
-      Enum.reduce(
+      Enum.reduce_while(
         Enum.with_index(tail_tokens),
         {protected_tokens, []},
         fn {tokens, idx}, {budget, tail_acc} ->
@@ -155,9 +155,9 @@ defmodule CodePuppyControl.Messages.Pruner do
           new_budget = budget - tokens
 
           if new_budget >= 0 do
-            {new_budget, [actual_idx | tail_acc]}
+            {:cont, {new_budget, [actual_idx | tail_acc]}}
           else
-            {budget, tail_acc}
+            {:halt, {budget, tail_acc}}
           end
         end
       )
@@ -187,11 +187,11 @@ defmodule CodePuppyControl.Messages.Pruner do
     }
   end
 
-  def split_for_summarization([_], _, _) do
+  def split_for_summarization([token_count], _, _) do
     %{
       summarize_indices: [],
       protected_indices: [0],
-      protected_token_count: 0
+      protected_token_count: token_count
     }
   end
 
@@ -271,8 +271,8 @@ defmodule CodePuppyControl.Messages.Pruner do
         end)
       end)
 
-    # Walk backwards from prot_start to find paired tool calls
-    Enum.reduce((prot_start - 1)..1//-1, prot_start, fn i, adj ->
+    # Walk backwards from prot_start to find paired tool calls, halt on non-matching
+    Enum.reduce_while((prot_start - 1)..1//-1, prot_start, fn i, adj ->
       msg = Enum.at(messages, i)
       parts = (msg && msg["parts"]) || []
 
@@ -283,7 +283,7 @@ defmodule CodePuppyControl.Messages.Pruner do
           id && (kind == "tool-call" || kind == "tool_call") && MapSet.member?(ret_ids, id)
         end)
 
-      if has_matching_call, do: i, else: adj
+      if has_matching_call, do: {:cont, i}, else: {:halt, adj}
     end)
   end
 
