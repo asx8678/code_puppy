@@ -82,6 +82,17 @@ defmodule CodePuppyControl.MessageCoreTest do
     }
   end
 
+  defp sample_part do
+    %{
+      part_kind: "text",
+      content: "def hello, do: :world",
+      content_json: nil,
+      tool_call_id: nil,
+      tool_name: nil,
+      args: nil
+    }
+  end
+
   # ============================================================================
   # Namespace Structure Smoke Tests
   # ============================================================================
@@ -114,6 +125,136 @@ defmodule CodePuppyControl.MessageCoreTest do
 
       # MessageBatch placeholder namespace only
       assert is_atom(MessageBatch)
+    end
+  end
+
+  # ============================================================================
+  # Hasher Delegation Tests
+  # ============================================================================
+
+  describe "Hasher delegation" do
+    test "stringify_part_for_hash/1 delegates correctly" do
+      part = sample_part()
+
+      assert Hasher.stringify_part_for_hash(part) == OldHasher.stringify_part_for_hash(part)
+      assert is_binary(Hasher.stringify_part_for_hash(part))
+    end
+  end
+
+  # ============================================================================
+  # Pruner Delegation Tests
+  # ============================================================================
+
+  describe "Pruner delegation" do
+    test "truncation_indices/3 delegates correctly" do
+      tokens = [100, 200, 300, 400]
+      protected = 150
+
+      result = Pruner.truncation_indices(tokens, protected, false)
+      old_result = OldPruner.truncation_indices(tokens, protected, false)
+
+      assert result == old_result
+      assert is_list(result)
+    end
+
+    test "truncation_indices/3 with thinking flag delegates correctly" do
+      tokens = [100, 200, 300, 400]
+      protected = 150
+
+      result = Pruner.truncation_indices(tokens, protected, true)
+      old_result = OldPruner.truncation_indices(tokens, protected, true)
+
+      assert result == old_result
+    end
+
+    test "split_for_summarization/3 delegates correctly" do
+      tokens = [100, 50, 200, 75, 300]
+      messages = Enum.map(1..5, fn i -> sample_message() |> Map.put(:id, i) end)
+      protected_limit = 500
+
+      result = Pruner.split_for_summarization(tokens, messages, protected_limit)
+      old_result = OldPruner.split_for_summarization(tokens, messages, protected_limit)
+
+      assert result == old_result
+      assert is_map(result)
+      assert Map.has_key?(result, :summarize_indices)
+      assert Map.has_key?(result, :protected_indices)
+    end
+  end
+
+  # ============================================================================
+  # Serializer Delegation Tests
+  # ============================================================================
+
+  describe "Serializer delegation" do
+    test "serialize_session_incremental/2 delegates correctly" do
+      messages = [sample_message()]
+
+      # Fresh serialization
+      {:ok, result} = Serializer.serialize_session_incremental(messages, nil)
+      {:ok, old_result} = OldSerializer.serialize_session_incremental(messages, nil)
+
+      assert result == old_result
+      assert is_binary(result)
+
+      # Incremental append
+      more_messages = [sample_message_with_tools()]
+      {:ok, appended} = Serializer.serialize_session_incremental(more_messages, result)
+      {:ok, old_appended} = OldSerializer.serialize_session_incremental(more_messages, old_result)
+
+      assert appended == old_appended
+    end
+  end
+
+  # ============================================================================
+  # TokenEstimator Delegation Tests
+  # ============================================================================
+
+  describe "TokenEstimator delegation" do
+    test "chars_per_token/1 delegates correctly" do
+      text = "defmodule Foo do\n  def bar, do: :baz\nend"
+
+      result = TokenEstimator.chars_per_token(text)
+      old_result = OldEstimator.chars_per_token(text)
+
+      assert result == old_result
+      assert is_float(result) or is_integer(result)
+    end
+
+    test "is_code_heavy/1 delegates correctly" do
+      code = "defmodule Foo do\n  def bar, do: :baz\nend"
+      prose = "This is a simple sentence about Elixir programming."
+
+      assert TokenEstimator.is_code_heavy(code) == OldEstimator.is_code_heavy(code)
+      assert TokenEstimator.is_code_heavy(prose) == OldEstimator.is_code_heavy(prose)
+      assert is_boolean(TokenEstimator.is_code_heavy(code))
+    end
+
+    test "stringify_part_for_tokens/1 delegates correctly" do
+      part = sample_part()
+
+      result = TokenEstimator.stringify_part_for_tokens(part)
+      old_result = OldEstimator.stringify_part_for_tokens(part)
+
+      assert result == old_result
+      assert is_binary(result)
+    end
+
+    test "estimate_context_overhead/3 delegates correctly" do
+      tool_defs = [%{name: "test_tool", description: "A test tool"}]
+      mcp_defs = []
+      system = "You are a helpful assistant."
+
+      result = TokenEstimator.estimate_context_overhead(tool_defs, mcp_defs, system)
+      old_result = OldEstimator.estimate_context_overhead(tool_defs, mcp_defs, system)
+
+      assert result == old_result
+      assert is_integer(result)
+    end
+
+    test "ensure_table_exists/0 delegates correctly" do
+      # Just verify it doesn't raise and returns :ok
+      assert TokenEstimator.ensure_table_exists() == OldEstimator.ensure_table_exists()
     end
   end
 

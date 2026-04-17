@@ -781,9 +781,11 @@ defmodule CodePuppyControl.ModelsDevParserTest do
     end
 
     test "load_data_async falls back to bundled file when API fails" do
-      # Create a temporary bundled file for testing
       priv_dir = :code.priv_dir(:code_puppy_control)
       bundled_path = Path.join(priv_dir, "models_dev_api.json")
+
+      # Save original content if file exists
+      original_content = if File.exists?(bundled_path), do: File.read!(bundled_path), else: nil
 
       fallback_data = %{
         "fallback-provider" => %{
@@ -794,12 +796,15 @@ defmodule CodePuppyControl.ModelsDevParserTest do
         }
       }
 
-      # Ensure priv dir exists
+      # Ensure priv dir exists and write fallback data
       File.mkdir_p!(priv_dir)
       File.write!(bundled_path, Jason.encode!(fallback_data))
 
+      # Restore original content on exit (or delete if there was none)
       on_exit(fn ->
-        if File.exists?(bundled_path) do
+        if original_content do
+          File.write!(bundled_path, original_content)
+        else
           File.rm!(bundled_path)
         end
       end)
@@ -818,19 +823,29 @@ defmodule CodePuppyControl.ModelsDevParserTest do
       assert {:ok, new_state} = ApiClient.load_data_async(state)
       assert new_state.data_source =~ "bundled:"
       assert Map.has_key?(new_state.providers, "fallback-provider")
-
-      # Cleanup
-      File.rm!(bundled_path)
     end
 
     test "load_data_async returns error when both API and bundled file fail" do
       priv_dir = :code.priv_dir(:code_puppy_control)
       bundled_path = Path.join(priv_dir, "models_dev_api.json")
 
-      # Ensure bundled file does not exist
+      # Save original content if file exists
+      original_content = if File.exists?(bundled_path), do: File.read!(bundled_path), else: nil
+
+      # Delete the bundled file to simulate it being missing
       if File.exists?(bundled_path) do
         File.rm!(bundled_path)
       end
+
+      # Restore original content on exit (or ensure deleted if there was none)
+      on_exit(fn ->
+        if original_content do
+          File.mkdir_p!(priv_dir)
+          File.write!(bundled_path, original_content)
+        else
+          if File.exists?(bundled_path), do: File.rm!(bundled_path)
+        end
+      end)
 
       state = %{
         json_path: nil,

@@ -53,8 +53,12 @@ defmodule CodePuppyControl.MessageCore.Pruner do
   Delegates to `CodePuppyControl.Messages.Pruner.truncation_indices/3`.
   """
   @spec truncation_indices([integer()], integer(), boolean()) :: [non_neg_integer()]
-  defdelegate truncation_indices(per_message_tokens, protected_tokens, second_has_thinking \\ false),
-    to: Impl
+  defdelegate truncation_indices(
+                per_message_tokens,
+                protected_tokens,
+                second_has_thinking \\ false
+              ),
+              to: Impl
 
   @doc """
   Split messages for summarization.
