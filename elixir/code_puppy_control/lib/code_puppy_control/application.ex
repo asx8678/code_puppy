@@ -32,13 +32,18 @@ defmodule CodePuppyControl.Application do
 
   use Application
 
+  alias CodePuppyControl.Parsing.ParserRegistry
+  alias CodePuppyControl.Parsing.Parsers.ErlangParser
+
   @impl true
   def start(_type, _args) do
     children = [
       # HTTP client connection pool (Finch)
       CodePuppyControl.HttpClient.child_spec(),
       # Parser registry (must start before any parsing operations)
-      CodePuppyControl.Parsing.ParserRegistry,
+      ParserRegistry,
+      # Parser registration (runs after registry starts)
+      %{id: :parser_registration, start: {__MODULE__, :register_parsers, []}},
       CodePuppyControl.Repo,
       {Phoenix.PubSub, name: CodePuppyControl.PubSub},
       CodePuppyControl.EventStore,
@@ -71,6 +76,39 @@ defmodule CodePuppyControl.Application do
 
     opts = [strategy: :one_for_one, name: CodePuppyControl.Supervisor]
     Supervisor.start_link(children, opts)
+  end
+
+  @doc """
+  Registers all built-in parsers with the ParserRegistry.
+  Called as a child_spec in the supervision tree after ParserRegistry starts.
+  """
+  def register_parsers do
+    # Wait for registry to be available (it's a sibling process)
+    # Use a simple retry loop since we're in the same supervision tree
+    wait_for_registry(10)
+
+    # Ensure parser modules are loaded before registration
+    Code.ensure_loaded(ErlangParser)
+
+    # Register Erlang parser (bd-105)
+    case ParserRegistry.register(ErlangParser) do
+      :ok -> :ignore
+      {:error, :unsupported} -> :ignore
+      {:error, :invalid_module} -> :ignore
+    end
+  end
+
+  defp wait_for_registry(0), do: :ok
+
+  defp wait_for_registry(retries) do
+    case Process.whereis(ParserRegistry) do
+      nil ->
+        Process.sleep(50)
+        wait_for_registry(retries - 1)
+
+      _pid ->
+        :ok
+    end
   end
 
   @impl true
