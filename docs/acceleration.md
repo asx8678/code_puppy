@@ -75,10 +75,10 @@ status = NativeBackend.get_status()
 result = NativeBackend.list_files("src/", recursive=True)
 result = NativeBackend.grep("def ", directory="src/")
 
-# Message processing (route through Rust)
+# Message processing (Elixir MessageCore)
 result = NativeBackend.serialize_messages(messages)
 
-# Parsing (route through Elixir NIF → Rust)
+# Parsing (Elixir native)
 ast = NativeBackend.parse_file("main.py", language="python")
 ```
 

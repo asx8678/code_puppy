@@ -240,22 +240,18 @@ Migrated the last portable Rust module from `code_puppy_core`:
 
 ### Result
 
-`code_puppy_core` is now **pure message_core** (~1,300 lines, 6 files):
+`code_puppy_core` has been **DELETED** as of bd-167 (2026-04-17). All components
+migrated to Elixir:
 
-| Module | Lines | Purpose |
-|--------|-------|---------|
-| `token_estimation.rs` | 335 | Token counting per message (every LLM turn) |
-| `pruning.rs` | 289 | Message pruning, filtering, truncation |
-| `serialization.rs` | 91 | Session serialize/deserialize (msgpack) |
-| `message_hashing.rs` | 121 | Message dedup hashing (FxHash) |
-| `types.rs` | 125 | Shared types (Message, ToolDefinition) |
-| `lib.rs` | 339 | PyO3 glue, MessageBatch pyclass |
+| Module | Lines | Destination | Status |
+|--------|-------|-------------|--------|
+| `token_estimation.rs` | 335 | Elixir + ETS | ✅ Migrated |
+| `pruning.rs` | 289 | Elixir GenServer | ✅ Migrated |
+| `serialization.rs` | 91 | Elixir (msgpack) | ✅ Migrated |
+| `message_hashing.rs` | 121 | Elixir (FxHash equiv) | ✅ Migrated |
+| `types.rs` + `lib.rs` | 464 | Elixir structs | ✅ Migrated |
 
-### Dependencies (5 remaining)
-- `pyo3` (workspace) — Python interop
-- `serde` + `serde_json` (workspace) — JSON serialization
-- `rustc-hash` — FxHash for message hashing
-- `rmp-serde` — MessagePack for session serialization
+**Total: ~1,300 lines DELETED** — Cargo workspace removed.
 
 ---
 
@@ -264,17 +260,18 @@ Migrated the last portable Rust module from `code_puppy_core`:
 ### `NativeBackend` Routing Logic (Current)
 
 ```python
-# Preferred order: Elixir → Rust → Python
-# Controlled via profile: elixir_first (default), rust_only, python_only
+# Preferred order: Elixir → Python fallback
+# Controlled via profile: elixir_first (default), python_only
 ```
 
-| Profile | Elixir | Rust | Python |
-|---------|--------|------|--------|
-| `elixir_first` (default) | ✅ Preferred | ✅ Fallback | ✅ Last resort |
-| `rust_only` | ❌ Disabled | ✅ Only | ❌ Disabled |
-| `python_only` | ❌ Disabled | ❌ Disabled | ✅ Only |
+| Profile | Elixir | Python |
+|---------|--------|--------|
+| `elixir_first` (default) | ✅ Preferred | ✅ Fallback |
+| `python_only` | ❌ Disabled | ✅ Only |
 
 **Configure:** `/fast_puppy profile <name>`
+
+> **Note:** `rust_only` profile removed — Rust completely eliminated (bd-167).
 
 ---
 
@@ -354,14 +351,13 @@ The repository had **four competing migration documents** with:
 
 ---
 
-## Final Rust Components (To Be Deleted in Phase 6)
+## Phase 6: Final Rust Deletion (COMPLETE ✅)
 
-### Remaining Rust: message_core
-These are the **last remaining Rust components** in the codebase. All will be
-migrated to Elixir to achieve the "no Rust, thin Python" end state.
-ETS memoization will mitigate the ~5-10x perf overhead.
+### DELETED: message_core (bd-167)
+The final Rust components have been eliminated. The "no Rust, thin Python"
+end state has been achieved.
 
-**~1,300 lines** in `code_puppy_core/` → **Will be deleted**
+**~1,300 lines** in `code_puppy_core/` → **DELETED** ✅
 
 | Issue | Component | Lines | Elixir Destination |
 |-------|-----------|-------|-------------------|
@@ -402,7 +398,7 @@ All portable text processing has been migrated from Rust to Elixir:
 ### Routing Summary (Current)
 | Capability | Route | Backend | Future |
 |-----------|-------|---------|--------|
-| message_core | Python → Rust (PyO3) | code_puppy_core | → Elixir (bd-44/45/47/48) |
+| message_core | Python → Elixir | Elixir MessageCore | ✅ Complete (bd-167) |
 | file_ops | Python → Elixir → Python fallback | Elixir FileOps | Elixir complete ✅ |
 | edit_ops | Python → Elixir → Python fallback | Elixir Text.* | Elixir complete ✅ |
 | parse | Python → Elixir NIF → Rust → Python | turbo_parse_nif | Decision pending (bd-51) |

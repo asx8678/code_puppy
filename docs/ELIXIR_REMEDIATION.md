@@ -32,7 +32,10 @@ Based on the hybrid migration ADR and current implementation audit:
 
 > **Update (bd-167, 2026-04-17):** The architecture has shifted to **pure Elixir + Python**. Rust has been completely eliminated.
 
-**Key Decision**: Elixir should remain as an *optional* control plane, not a *required* dependency. The Python CLI must continue to work standalone.
+**Architecture Summary**:
+- **Current**: Python + Elixir — Elixir provides full functionality for all accelerated operations
+- **Fallback**: Python-only mode available for environments without Elixir (graceful degradation)
+- **Standalone**: Python CLI works without Elixir (using pure Python fallbacks)
 
 ---
 

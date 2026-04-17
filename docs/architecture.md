@@ -59,10 +59,10 @@ Code Puppy is a **dual-runtime system** designed for maximum performance and sim
 │              JSON-RPC over stdio   │                                        │
 │                                    │                                        │
 │   ┌────────────────────────────────▼─────────────────────────────────────┐  │
-│   │                      RUST ACCELERATION LAYER                           │  │
+│   │                      ELIXIR SERVICES LAYER                             │  │
 │   │                                                                        │  │
 │   │   ┌────────────────┐  ┌────────────────┐  ┌────────────────┐         │  │
-│   │   │ code_puppy_core│  │   turbo_ops    │  │  turbo_parse   │         │  │
+│   │   │  MessageCore   │  │    FileOps     │  │  TurboParse    │         │  │
 │   │   │  (Messages)    │  │  (File Ops)    │  │  (Parsing)     │         │  │
 │   │   ├────────────────┤  ├────────────────┤  ├────────────────┤         │  │
 │   │   │ • Pruning      │  │ • list_files   │  │ • Symbols      │         │  │
