@@ -447,7 +447,13 @@ defmodule CodePuppyControl.Transport.StdioService do
         alias CodePuppyControl.Text.FuzzyMatch
 
         case FuzzyMatch.fuzzy_match_window(haystack_lines, needle) do
-          {:ok, %{matched_text: matched_text, start_line: start_line, end_line: end_line, similarity: similarity}} ->
+          {:ok,
+           %{
+             matched_text: matched_text,
+             start_line: start_line,
+             end_line: end_line,
+             similarity: similarity
+           }} ->
             Protocol.encode_response(
               %{
                 "matched_text" => matched_text,
@@ -486,11 +492,12 @@ defmodule CodePuppyControl.Transport.StdioService do
         from_file = params["from_file"] || ""
         to_file = params["to_file"] || ""
 
-        result = Diff.unified_diff(old, new,
-          context_lines: context_lines,
-          from_file: from_file,
-          to_file: to_file
-        )
+        result =
+          Diff.unified_diff(old, new,
+            context_lines: context_lines,
+            from_file: from_file,
+            to_file: to_file
+          )
 
         Protocol.encode_response(%{"diff" => result}, id)
     end
@@ -504,8 +511,10 @@ defmodule CodePuppyControl.Transport.StdioService do
     cond do
       is_nil(idx) or not is_integer(idx) ->
         Protocol.encode_error(-32602, "Missing or invalid param: idx", nil, id)
+
       is_nil(line) or not is_binary(line) ->
         Protocol.encode_error(-32602, "Missing or invalid param: line", nil, id)
+
       true ->
         hash = CodePuppyControl.HashlineNif.compute_line_hash(idx, line)
         Protocol.encode_response(%{"hash" => hash}, id)
@@ -520,6 +529,7 @@ defmodule CodePuppyControl.Transport.StdioService do
     cond do
       is_nil(text) or not is_binary(text) ->
         Protocol.encode_error(-32602, "Missing or invalid param: text", nil, id)
+
       true ->
         result = CodePuppyControl.HashlineNif.format_hashlines(text, start_line)
         Protocol.encode_response(%{"formatted" => result}, id)
@@ -533,6 +543,7 @@ defmodule CodePuppyControl.Transport.StdioService do
     cond do
       is_nil(text) or not is_binary(text) ->
         Protocol.encode_error(-32602, "Missing or invalid param: text", nil, id)
+
       true ->
         result = CodePuppyControl.HashlineNif.strip_hashline_prefixes(text)
         Protocol.encode_response(%{"stripped" => result}, id)
@@ -548,10 +559,13 @@ defmodule CodePuppyControl.Transport.StdioService do
     cond do
       is_nil(idx) or not is_integer(idx) ->
         Protocol.encode_error(-32602, "Missing or invalid param: idx", nil, id)
+
       is_nil(line) or not is_binary(line) ->
         Protocol.encode_error(-32602, "Missing or invalid param: line", nil, id)
+
       is_nil(expected_hash) or not is_binary(expected_hash) ->
         Protocol.encode_error(-32602, "Missing or invalid param: expected_hash", nil, id)
+
       true ->
         valid = CodePuppyControl.HashlineNif.validate_hashline_anchor(idx, line, expected_hash)
         Protocol.encode_response(%{"valid" => valid}, id)
