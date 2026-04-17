@@ -18,7 +18,7 @@
 
 ## 1. High-Level Overview
 
-Code Puppy is a **hybrid polyglot system** designed for maximum performance and flexibility. It combines three runtime environments that work together seamlessly:
+Code Puppy is a **dual-runtime system** designed for maximum performance and simplicity. It combines Python (for agent orchestration and UX) with Elixir (for all runtime operations):
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────────┐
@@ -56,13 +56,13 @@ Code Puppy is a **hybrid polyglot system** designed for maximum performance and 
 │   │   └──────────────────────────────────────────────────────────┘    │  │
 │   └────────────────────────────────▲─────────────────────────────────────┘  │
 │                                    │                                        │
-│              PyO3 / FFI Bridges    │                                        │
+│              JSON-RPC over stdio   │                                        │
 │                                    │                                        │
 │   ┌────────────────────────────────▼─────────────────────────────────────┐  │
-│   │                      RUST ACCELERATION LAYER                           │  │
+│   │                      ELIXIR SERVICES LAYER                             │  │
 │   │                                                                        │  │
 │   │   ┌────────────────┐  ┌────────────────┐  ┌────────────────┐         │  │
-│   │   │ code_puppy_core│  │   turbo_ops    │  │  turbo_parse   │         │  │
+│   │   │  MessageCore   │  │    FileOps     │  │  TurboParse    │         │  │
 │   │   │  (Messages)    │  │  (File Ops)    │  │  (Parsing)     │         │  │
 │   │   ├────────────────┤  ├────────────────┤  ├────────────────┤         │  │
 │   │   │ • Pruning      │  │ • list_files   │  │ • Symbols      │         │  │
@@ -81,7 +81,7 @@ Code Puppy is a **hybrid polyglot system** designed for maximum performance and 
 |---------|-------------|----------|---------------|
 | **Python CLI** | Agent execution, tool orchestration, LLM interaction | Python 3.12+ | Asyncio + ThreadPool |
 | **Elixir Control Plane** | Web API, real-time events, distributed supervision | Elixir/OTP | BEAM VM (Processes) |
-| **Rust Acceleration** | CPU-intensive operations, parsing, file I/O | Rust | Native threads (Rayon) |
+| **Elixir Backend** | ALL runtime operations (file I/O, parsing, messages) | Elixir | BEAM VM (OTP) |
 
 ---
 
@@ -166,8 +166,8 @@ Code Puppy is a **hybrid polyglot system** designed for maximum performance and 
 │  │              ┌─────────────────────────────────────────────┼──────────┐    │ │
 │  │              ▼                                             ▼          │    │ │
 │  │      ┌───────────────┐     ┌───────────────┐     ┌───────────────┐  │    │ │
-│  │      │   turbo_ops   │     │   turbo_parse │     │    Native     │  │    │ │
-│  │      │   (Rust FFI)  │     │   (Rust FFI)  │     │   (Python)    │──┘    │ │
+│  │      │   FileOps     │     │   TreeSitter  │     │    Native     │  │    │ │
+│  │      │   (Elixir)    │     │   (Elixir)    │     │   (Python)    │──┘    │ │
 │  │      └───────────────┘     └───────────────┘     └───────────────┘       │ │
 │  │                                                                             │ │
 │  └────────────────────────────────────────────────────────────────────────────┘ │
@@ -250,37 +250,37 @@ Code Puppy is a **hybrid polyglot system** designed for maximum performance and 
 └────────────────────────────────────────────────────────────────────────────────────┘
 ```
 
-### Rust Acceleration Stack
+### Elixir Native Services
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────────────────┐
-│                              RUST ACCELERATION LAYER                                   │
+│                              ELIXIR RUNTIME SERVICES                                   │
 │                                                                                       │
 │  ┌────────────────────────────────────────────────────────────────────────────────┐ │
-│  │                         code_puppy_core (PyO3)                                    │ │
-│  │  Message processing, token management, hashing, serialization                   │ │
+│  │                         Message Processing (Elixir)                               │ │
+│  │  Message serialization, token management, hashing, pruning                        │ │
 │  │                                                                                   │ │
 │  │  ┌────────────────────────────────────────────────────────────────────────────┐ │ │
-│  │  │                           MessageBatchHandle                                │ │ │
-│  │  │  Zero-copy wrapper for batched message operations                           │ │ │
+│  │  │                           MessageBatch                                        │ │ │
+│  │  │  High-performance message operations with ETS caching                         │ │ │
 │  │  │                                                                             │ │ │
 │  │  │  process() ─────────▶ ProcessResult (token counts, hashes)                   │ │ │
 │  │  │  prune_and_filter() ─▶ PruneResult (interrupted tool removal)                 │ │ │
-│  │  │  truncation_indices() ▶ Vec<usize> (protected token calc)                    │ │ │
+│  │  │  truncation_indices() ▶ List (protected token calc)                          │ │ │
 │  │  │  split_for_summarization() ▶ SplitResult (binary partition)                  │ │ │
 │  │  └────────────────────────────────────────────────────────────────────────────┘ │ │
 │  │                                                                                   │ │
 │  │  Features:                                                                        │ │
 │  │   • Message serialization for pydantic-ai objects                                 │ │
 │  │   • Incremental session serialization                                             │ │
-│  │   • Token estimation (GPT-4, Claude, Gemini)                                    │ │
+│  │   • Token estimation (GPT-4, Claude, Gemini) with ETS caching                   │ │
 │  │   • Hashline computation (line-level integrity)                                 │ │
-│  │   • SHA-based message hashing                                                     │ │ │
+│  │   • Fast message hashing with ETS memoization                                     │ │
 │  └──────────────────────────────────────────────────────────────────────────────────┘ │
 │                                                                                       │
 │  ┌────────────────────────────────────────────────────────────────────────────────┐ │
-│  │                            turbo_ops (PyO3)                                       │ │
-│  │  Batch file operations with Rayon parallelization                                 │ │
+│  │                            File Operations (Elixir)                               │ │
+│  │  Batch file operations with BEAM concurrency                                        │ │
 │  │                                                                                   │ │
 │  │   ┌──────────────────┐  ┌──────────────────┐  ┌──────────────────┐                 │ │
 │  │   │   list_files     │  │      grep        │  │   read_files     │                 │ │
@@ -291,18 +291,18 @@ Code Puppy is a **hybrid polyglot system** designed for maximum performance and 
 │  │   └──────────────────┘  └──────────────────┘  └──────────────────┘                 │ │
 │  │                                                                                   │ │
 │  │   Batch Execution API:                                                            │ │
-│  │   turbo_ops.batch(operations)          → Parallel with dependencies               │ │
-│  │   turbo_ops.batch_grouped(operations)  → Priority-based grouping                  │ │
+│  │   FileOps.batch(operations)            → Concurrent with dependencies            │ │
+│  │   FileOps.batch_grouped(operations)    → Priority-based grouping                  │ │
 │  │                                                                                   │ │
 │  │   Features:                                                                       │ │
-│  │    • Rayon-based parallelism (CPU cores)                                         │ │
+│  │    • BEAM process-based concurrency (lightweight)                              │ │
 │  │    • Safety filtering (respects .gitignore)                                      │ │
 │  │    • Result aggregation with timing                                                │ │
 │  └──────────────────────────────────────────────────────────────────────────────────┘ │
 │                                                                                       │
 │  ┌────────────────────────────────────────────────────────────────────────────────┐ │
-│  │                           turbo_parse (PyO3)                                      │ │
-│  │  High-performance parsing with tree-sitter                                       │ │
+│  │                           Tree-sitter Parsing (Elixir)                              │ │
+│  │  High-performance parsing with tree-sitter via Elixir NIF                        │ │
 │  │                                                                                   │ │
 │  │   Language Support:                                                               │ │
 │  │   ┌──────────┐ ┌──────────┐ ┌──────────┐ ┌──────────┐ ┌──────────┐ ┌─────────┐ │ │
@@ -635,9 +635,8 @@ Entry Point:
 | **PubSub (Elixir)** | Phoenix.PubSub | Event broadcasting |
 | **Database (Elixir)** | PostgreSQL + Ecto | Scheduled tasks |
 | **Jobs (Elixir)** | Oban | Background job processing |
-| **Rust Core** | PyO3 | Python bindings |
-| **Rust Parsing** | tree-sitter | Syntax analysis |
-| **Rust Parallelism** | Rayon | Data parallelism |
+| **Parsing (Elixir)** | tree-sitter | Syntax analysis |
+| **Concurrency (Elixir)** | BEAM/OTP | Lightweight processes |
 | **Process Runner** | Elixir | MCP server management |
 
 ### Python Dependencies
@@ -725,11 +724,12 @@ Code Puppy uses a **callback-based plugin system** for extensibility.
 
 ## Architecture Principles
 
-1. **Fail Graceful**: Rust operations fall back to Python; Python falls back to safe defaults
-2. **Zero-Copy Where Possible**: MessageBatchHandle avoids repeated serialization
+1. **Fail Graceful**: Elixir operations fall back to Python; Python falls back to safe defaults
+2. **Zero-Copy Where Possible**: MessageBatch avoids repeated serialization
 3. **Event-Driven**: PubSub pattern enables loose coupling between components
-4. **Type Safety**: Pydantic models at boundaries; Rust for performance-critical paths
+4. **Type Safety**: Pydantic models at boundaries; Elixir for performance-critical paths
 5. **Plugin-First**: New features should prefer plugin architecture over core modification
+6. **Pure Elixir + Python**: No Rust — simplified build, same performance via BEAM/OTP
 
 ---
 

@@ -1,8 +1,16 @@
-# Speed Improvement: Rewrite Hot Paths in Rust (PyO3)
+# ARCHIVED: Speed Improvement via Rust (PyO3)
 
-## Purpose
+> **⚠️ ARCHIVED as of bd-167 (2026-04-17):** This document is preserved for historical reference only.
+> 
+> **Rust has been completely eliminated from the Code Puppy architecture.** All functionality described here has been migrated to pure Elixir (see MIGRATION_STATUS.md for details).
+>
+> The current architecture is: **Thin Python Shell + Pure Elixir Backend** (zero Rust).
 
-This document instructs an AI agent to create a Rust extension module (`_code_puppy_core`) that replaces the CPU-bound hot paths in Code Puppy's message processing pipeline. The goal is a 10-30x speedup on the per-turn message processing that runs every LLM interaction.
+---
+
+## Original Purpose (Historical)
+
+This document originally instructed an AI agent to create a Rust extension module (`_code_puppy_core`) that replaces the CPU-bound hot paths in Code Puppy's message processing pipeline. The goal was a 10-30x speedup on the per-turn message processing that runs every LLM interaction.
 
 ## Workspace Structure (April 2025)
 

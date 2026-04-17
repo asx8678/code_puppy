@@ -25,12 +25,17 @@ Based on the hybrid migration ADR and current implementation audit:
 
 | Component | Verdict | Percentage | Rationale |
 |-----------|---------|------------|-----------|
-| **Python** | Keep | ~75% | CLI and agent runtime remain primary; no changes needed |
-| **Rust** | Keep & Expand | ~20% | Acceleration layer (turbo_ops, turbo_parse) is working well |
-| **Elixir** | Fix & Keep Optional | ~5% | Control plane is valuable but must stabilize first |
+| **Python** | Keep | ~25% | Thin shell: CLI, TUI, agent orchestration only |
+| **Elixir** | Keep & Expand | ~75% | ALL runtime operations (file ops, parsing, messages, scheduling) |
+| **Rust** | **REMOVED** | 0% | **Completely eliminated as of bd-167 (2026-04-17)** |
 | **Zig** | Removed (historical) | 0% | No longer on the active runtime path; references below are historical |
 
-**Key Decision**: Elixir should remain as an *optional* control plane, not a *required* dependency. The Python CLI must continue to work standalone.
+> **Update (bd-167, 2026-04-17):** The architecture has shifted to **pure Elixir + Python**. Rust has been completely eliminated.
+
+**Architecture Summary**:
+- **Current**: Python + Elixir — Elixir provides full functionality for all accelerated operations
+- **Fallback**: Python-only mode available for environments without Elixir (graceful degradation)
+- **Standalone**: Python CLI works without Elixir (using pure Python fallbacks)
 
 ---
 

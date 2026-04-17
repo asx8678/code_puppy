@@ -57,7 +57,7 @@ This fork adds significant capabilities to the original code_puppy, transforming
 
 | Feature | Description | Speedup/Impact |
 |---------|-------------|----------------|
-| ⚡ Native Acceleration | Elixir-first with Rust/Python fallback for message processing, parsing | 10-50x faster |
+| ⚡ Native Acceleration | Pure Elixir + Python architecture for high-performance operations | 10-50x faster |
 | 🐕 Pack Parallelism | 8-agent concurrent execution with intelligent queuing | 8x throughput |
 | 📚 Progressive Skills | Metadata-only skill injection until needed | Zero context cost |
 | 🔍 Supervisor Review | Quality-gated multi-agent review loops | Higher quality |
@@ -201,14 +201,36 @@ Please review this code for security issues." > .claude/commands/review.md
 
 ## ⚡ Fast Puppy (Native Acceleration)
 
-Code Puppy uses native backends for performance-critical operations:
+Code Puppy uses a **pure Elixir + Python architecture** for high-performance operations:
 
 | Capability | Backend | Purpose |
 |------------|---------|---------|
-| `message_core` | Rust | Message serialization, hashing, pruning |
+| `message_core` | Elixir | Message serialization, hashing, pruning |
 | `file_ops` | Elixir | Fast file listing, grep, reading |
 | `repo_index` | Elixir | Repository indexing |
-| `parse` | Rust | Tree-sitter code parsing |
+| `parse` | Elixir | Tree-sitter code parsing |
+
+**Architecture:**
+```
+┌─────────────────────────────────────────────────┐
+│                   Python Layer                   │
+│   Code Puppy agents, LLM clients, plugins       │
+│   Communications via JSON-RPC over stdio        │
+└──────────────────────┬──────────────────────────┘
+                       │ JSON-RPC (Content-Length framed)
+┌──────────────────────▼──────────────────────────┐
+│                  Elixir Layer                    │
+│   CodePuppyControl (BEAM/OTP)                   │
+│   • Message processing & pruning               │
+│   • Token estimation                           │
+│   • File operations (list, read, grep)         │
+│   • Tree-sitter parsing                        │
+│   • Session serialization (MessagePack)        │
+│   • Agent session management                   │
+│   • Scheduler (Oban)                           │
+│   • Model registry                             │
+└─────────────────────────────────────────────────┘
+```
 
 **Quick Start:**
 ```bash
@@ -216,8 +238,8 @@ Code Puppy uses native backends for performance-critical operations:
 /fast_puppy
 
 # Switch profile (primary action)
-/fast_puppy profile elixir_first   # Prefer Elixir (default)
-/fast_puppy profile python_only     # Pure Python mode
+/fast_puppy profile elixir_first   # Use Elixir backend (default)
+/fast_puppy profile python_only    # Pure Python mode (no Elixir)
 
 # Enable/disable capabilities
 /fast_puppy enable message_core
@@ -225,49 +247,16 @@ Code Puppy uses native backends for performance-critical operations:
 
 # Detailed diagnostics
 /fast_puppy status
-
-# Build Rust crates (advanced)
-/fast_puppy build --all
 ```
 
-Python fallback is always available - native backends are optional acceleration.
+Python fallback is always available - Elixir backend provides optional acceleration.
 
-### Automatic Build (Zero Config)
+### Automatic Elixir Control Plane (Zero Config)
 
-On first startup, native backends are automatically built if their toolchains are present:
+On first startup, the Elixir control plane is automatically started if available:
 
-- **Rust crates**: Built when Rust toolchain detected (~2-5 minutes first build)
 - **Elixir control plane**: Started via Docker or local Elixir if available
-- **Cached builds**: Subsequent startups skip rebuild unless source changed
-- **No native toolchain? No problem**: Gracefully degrades to pure Python
-
-### Using uvx with Rust Acceleration
-
-To run code-puppy via `uvx` **with** Rust acceleration enabled, use the `[rust]` extra which ensures the build dependencies are available:
-
-```bash
-# Run with Rust acceleration (recommended for speed)
-uvx --from 'codepp[rust]' code-puppy
-
-# Run pure-Python mode (no Rust build overhead)
-uvx --from codepp code-puppy
-```
-
-> **Note:** The `[rust]` extra includes `maturin` for building the Rust crates. The first startup will build the extensions (~2-5 minutes). Subsequent launches use cached builds.
-
-### Manual Build (For Developers)
-
-```bash
-# Prereq: Rust toolchain (https://rustup.rs)
-# (uv will install maturin automatically if needed)
-
-# Build all Rust crates via cargo workspace + maturin (recommended)
-cargo build --release --workspace
-uv run maturin develop --release --manifest-path code_puppy_core/Cargo.toml
-uv run maturin develop --release --manifest-path turbo_parse/Cargo.toml
-
-# OR: just start code-puppy and let fast_puppy auto-build on startup
-```
+- **Graceful fallback**: No Elixir? No problem - degrades to pure Python
 
 ### `/fast_puppy` Commands
 
@@ -275,25 +264,21 @@ uv run maturin develop --release --manifest-path turbo_parse/Cargo.toml
 /fast_puppy                        → show status for all capabilities
 /fast_puppy status                 → detailed per-capability status
 /fast_puppy profile <name>         → switch runtime profile
-/fast_puppy build                  → build all Rust crates
-/fast_puppy build turbo_parse      → build specific crate
 /fast_puppy enable <capability>    → enable a capability
 /fast_puppy disable <capability>   → disable a capability
 ```
 
 ### Opt-Out (Air-Gapped CI, etc.)
 
-To disable auto-build, set in `~/.code_puppy/puppy.cfg`:
+To disable Elixir auto-start, set in `~/.code_puppy/puppy.cfg`:
 
 ```ini
-disable_rust_autobuild=true
+enable_elixir_control=false
 ```
 
 ### 🚀 Python 3.14 Free-Threaded Support (No-GIL)
 
 **Code Puppy is Python 3.14 ready!** Take advantage of the new free-threaded mode for true parallelism.
-
-The Rust accelerators automatically adapt to your Python build:
 
 | Python Version | GIL Status | Parallelism |
 |----------------|------------|-------------|
@@ -317,7 +302,6 @@ free_threading=true
 #### What You Get with Python 3.14 Free-Threading
 
 - **True Parallelism**: Multiple threads can execute Python bytecode simultaneously
-- **Rust Acceleration Synergy**: Rust crates (`code_puppy_core`, `turbo_parse`) are built with PyO3's `free-threaded` feature
 - **Pack Parallelism Boost**: Run 8+ agents truly in parallel, not just concurrently
 - **No Code Changes Required**: Works transparently with existing Code Puppy features
 
@@ -327,7 +311,7 @@ free_threading=true
 # Verify free-threading is active
 python3.14t -c "import sys; print(f'Free-threading: {not sys._is_gil_enabled()}')"
 
-# Check Code Puppy's Rust stack status
+# Check Code Puppy's Elixir backend status
 /fast_puppy status
 ```
 
