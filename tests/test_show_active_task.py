@@ -356,7 +356,9 @@ class TestEnvVarNormalization:
         ],
         ids=lambda v: str(v),
     )
-    def test_enabled_known_truthy_falsy(self, tmp_git_repo: Path, env_val: str, expected: bool):
+    def test_enabled_known_truthy_falsy(
+        self, tmp_git_repo: Path, env_val: str, expected: bool
+    ):
         """Recognised boolean-ish strings must produce strict JSON bools."""
         result = _run_script(tmp_git_repo, {"PUP_GUIDANCE_ENABLED": env_val})
         assert result.returncode == 0, f"Script failed: {result.stderr}"
@@ -371,7 +373,9 @@ class TestEnvVarNormalization:
         ["maybe", "sure", "2", "enabled", "random"],
         ids=lambda v: v,
     )
-    def test_enabled_unrecognised_falls_back_to_true(self, tmp_git_repo: Path, env_val: str):
+    def test_enabled_unrecognised_falls_back_to_true(
+        self, tmp_git_repo: Path, env_val: str
+    ):
         """Unrecognised values must fall back to the default (true)."""
         result = _run_script(tmp_git_repo, {"PUP_GUIDANCE_ENABLED": env_val})
         assert result.returncode == 0, f"Script failed: {result.stderr}"
