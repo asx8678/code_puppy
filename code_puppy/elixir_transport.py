@@ -344,38 +344,45 @@ class ElixirTransport:
             except (BrokenPipeError, OSError) as e:
                 raise ElixirTransportError(f"Failed to send request: {e}")
 
-            # Read response (skip empty lines that may be warnings/startup messages)
-            max_empty_reads = 10
-            response_line = ""
-            for _ in range(max_empty_reads):
+            # Read response (skip non-JSON lines that may be warnings/startup messages)
+            max_non_json_reads: int = 50
+            response_line: str = ""
+            response: dict[str, Any] | None = None
+
+            for _ in range(max_non_json_reads):
                 line = self._process.stdout.readline()
                 if not line:
                     raise ElixirTransportError(
                         "Empty response from service (process died?)"
                     )
                 line = line.strip()
-                if line:  # Skip empty lines
-                    response_line = line
-                    break
+                if not line:
+                    continue  # Skip empty lines
 
-            if not response_line:
+                try:
+                    response = json.loads(line)
+                    # Validate the response has the expected request id
+                    if response.get("id") == request_id:
+                        response_line = line
+                        break
+                    else:
+                        # Valid JSON but wrong id - could be a stray response
+                        logger.warning(f"Discarding response with mismatched id: {line[:100]}")
+                        response = None
+                except json.JSONDecodeError:
+                    # Not valid JSON - log and continue searching
+                    logger.warning(f"Discarding non-JSON line: {line[:100]}")
+                    continue
+
+            if response is None:
                 raise ElixirTransportError(
-                    "No valid response after skipping empty lines"
+                    f"No valid JSON response with id={request_id} after "
+                    f"{max_non_json_reads} attempts"
                 )
 
             logger.debug(f"Received response: {response_line.strip()}")
 
-            try:
-                response = json.loads(response_line)
-            except json.JSONDecodeError as e:
-                raise ElixirTransportError(f"Invalid JSON response: {e}")
-
-            # Validate response
-            if response.get("id") != request_id:
-                raise ElixirTransportError(
-                    f"Response ID mismatch: expected {request_id}, got {response.get('id')}"
-                )
-
+            # Handle error responses
             if "error" in response:
                 error = response["error"]
                 raise ElixirTransportError(
