@@ -166,7 +166,33 @@ def pytest_pyfunc_call(pyfuncitem: pytest.Item) -> bool | None:
 
 @pytest.hookimpl(trylast=True)
 def pytest_sessionfinish(session, exitstatus):
-    """Post-test hook: warn about stray .py files not tracked by git."""
+    """Post-test hook: shut down thread pools, warn about stray .py files not tracked by git."""
+    import concurrent.futures
+    import importlib
+    import threading
+    
+    # Shutdown all ThreadPoolExecutor instances to prevent hanging at teardown
+    # Python's atexit doesn't run cleanly during pytest shutdown, so we do it here.
+    for thread in threading.enumerate():
+        if hasattr(thread, '_target') and thread.is_alive():
+            # Try to identify worker threads
+            pass
+    
+    # Shut down known global executors
+    for module_path, attr_name in [
+        ("code_puppy.tools.command_runner", "_SHELL_EXECUTOR"),
+        ("code_puppy.async_utils", "_executor"),
+        ("code_puppy.summarization_agent", "_thread_pool"),
+        ("code_puppy.session_storage", "_autosave_executor"),
+    ]:
+        try:
+            mod = importlib.import_module(module_path)
+            executor = getattr(mod, attr_name, None)
+            if executor is not None and isinstance(executor, concurrent.futures.ThreadPoolExecutor):
+                executor.shutdown(wait=False, cancel_futures=True)
+        except Exception:
+            pass
+    
     try:
         result = subprocess.run(
             ["git", "status", "--porcelain"],
