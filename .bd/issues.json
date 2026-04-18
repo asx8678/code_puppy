@@ -2089,13 +2089,13 @@
       "id": "bd-111",
       "title": "Epic: Message Core Integration (Phase 5)",
       "description": "Wire up Elixir message modules to Python via JSON-RPC bridge.\n\n## Status\n- [x] Phase 1: Elixir StdioService handlers (DONE - commit 1db4453a)\n- [ ] Phase 2: Python transport wrappers\n- [ ] Phase 3: Integration into compaction\n- [ ] Phase 4: Tests and benchmarks\n\n## Completed Work\n- message.prune_and_filter handler\n- message.truncation_indices handler\n- message.split_for_summarization handler\n- message.serialize_session handler\n- message.deserialize_session handler\n- message.serialize_incremental handler\n- message.hash handler\n- message.hash_batch handler\n- message.stringify_part handler\n- 16 test cases added",
-      "status": "open",
+      "status": "closed",
       "priority": 1,
       "type": "task",
       "labels": [],
       "dependencies": {},
       "created_at": "2026-04-18T00:41:39.168838",
-      "updated_at": "2026-04-18T01:10:48.780139",
+      "updated_at": "2026-04-18T01:15:55.653788",
       "comments": [
         "Wire up Elixir message modules to Python via JSON-RPC bridge.\n\n## Status\n- [x] Phase 1: Elixir StdioService handlers (DONE - commit 1db4453a)\n- [x] Phase 2: Python transport wrappers (DONE - commit b41ea054)\n- [x] Phase 3: Shadow mode integration (DONE - commit f1c6b341)\n- [ ] Phase 4: Integration tests (bd-115)\n- [ ] Phase 5: Performance benchmarks (bd-114)\n\n## Completed Work\n\n### Phase 1: Elixir Handlers (16 test cases)\n- message.prune_and_filter\n- message.truncation_indices\n- message.split_for_summarization\n- message.serialize_session / deserialize_session\n- message.serialize_incremental\n- message.hash / hash_batch\n- message.stringify_part\n\n### Phase 2: Python Wrappers\n- code_puppy/message_transport.py with all wrapper functions\n- Proper base64 encoding for binary data\n- Integration tests in tests/test_message_transport.py\n\n### Phase 3: Shadow Mode Integration\n- Config flag: enable_elixir_message_shadow_mode\n- Shadow mode module: code_puppy/compaction/shadow_mode.py\n- Integration into base_agent.py prune_interrupted_tool_calls()\n- Compares Python vs Elixir results, logs mismatches\n\n## How to Enable Shadow Mode\nAdd to puppy.cfg:\n```ini\nenable_elixir_message_shadow_mode = true\n```\n\n## Remaining\n- bd-115: Add integration tests for message RPC\n- bd-114: Benchmark Python vs Elixir performance"
       ]
@@ -2151,7 +2151,7 @@
       "id": "bd-114",
       "title": "Benchmark Python vs Elixir message processing",
       "description": "Create benchmarks comparing performance.\n\nMetrics:\n- Serialization throughput (messages/sec)\n- Hash computation time\n- Pruning time for large message sets",
-      "status": "open",
+      "status": "closed",
       "priority": 3,
       "type": "task",
       "labels": [],
@@ -2165,16 +2165,17 @@
         ]
       },
       "created_at": "2026-04-18T00:41:39.182809",
-      "updated_at": "2026-04-18T01:11:58.781307",
+      "updated_at": "2026-04-18T01:15:30.894728",
       "comments": [
-        "Starting work - Code-Puppy (code-puppy-019d9d)"
+        "Starting work - Code-Puppy (code-puppy-019d9d)",
+        "Added benchmark script at scripts/bench_message_transport.py. Results show Python faster for small batches due to IPC overhead."
       ]
     },
     "bd-115": {
       "id": "bd-115",
       "title": "Add integration tests for message RPC",
       "description": "Add end-to-end tests verifying Python -> Elixir message flow.\n\nTests needed:\n- Round-trip serialize/deserialize\n- Pruning preserves message integrity\n- Hash consistency between calls",
-      "status": "open",
+      "status": "closed",
       "priority": 2,
       "type": "task",
       "labels": [],
@@ -2188,9 +2189,274 @@
         ]
       },
       "created_at": "2026-04-18T00:41:39.187862",
-      "updated_at": "2026-04-18T00:42:35.607118",
+      "updated_at": "2026-04-18T01:15:30.888814",
+      "comments": [
+        "Added 19 E2E tests in tests/integration/test_message_rpc_e2e.py covering serialization, hashing, pruning, truncation, and summarization."
+      ]
+    },
+    "bd-116": {
+      "id": "bd-116",
+      "title": "Epic: Expose Remaining Elixir Capabilities to Python (Phase 6)",
+      "description": "## Overview\n\nThe Elixir StdioService has 82 RPC methods but Python only exposes ~15 of them.\nThis epic exposes the remaining high-value Elixir capabilities to Python.\n\n## Current State\n- Elixir: 82 RPC handlers in stdio_service.ex\n- Python exposed: file_list, file_read, file_read_batch, grep_search, message.* (13 total)\n- Python NOT exposed: 69 methods!\n\n## Gap Analysis\n\n### High Priority (Write Operations)\n1. text_replace, text_fuzzy_match, text_unified_diff - Enable Elixir-powered file editing\n2. hashline_* - Content fingerprinting for edit validation\n\n### Medium Priority (Runtime State)\n3. runtime_* methods (7) - Autosave, session state\n4. agent_pinning.* (4) - Model pinning per agent\n5. model_packs.*, model_registry.* - Model configuration\n\n### Lower Priority (Already Have Python Equivalents)\n6. shell.run, shell.run_batch - Shell execution (Python works fine)\n7. http.* - HTTP client (Python works fine)\n8. scheduler.* - Task scheduling\n9. code_context.* - Symbol exploration\n\n## Success Criteria\n- Python wrappers for text_replace operations\n- Python wrappers for hashline operations  \n- Python wrappers for runtime state operations\n- Integration into relevant tools (file_modifications.py, etc.)\n\n## Architecture Goal\nCreate the missing NativeBackend abstraction that routes operations to Elixir with Python fallback.",
+      "status": "open",
+      "priority": 1,
+      "type": "task",
+      "labels": [],
+      "dependencies": {},
+      "created_at": "2026-04-18T01:21:44.030294",
+      "updated_at": "2026-04-18T01:21:44.030301",
+      "comments": []
+    },
+    "bd-117": {
+      "id": "bd-117",
+      "title": "Add Elixir routing to runtime_state.py (runtime_* methods)",
+      "description": "## What\n`code_puppy/runtime_state.py` is pure Python today. Elixir has 9 runtime_* RPC handlers (lines 673-750 of stdio_service.ex):\n- runtime_get_autosave_id\n- runtime_get_autosave_session_name\n- runtime_rotate_autosave_id\n- runtime_set_autosave_from_session\n- runtime_reset_autosave_id\n- runtime_get_session_model\n- runtime_set_session_model\n- runtime_reset_session_model\n- runtime_get_state\n\n## Approach\nAdd an optional Elixir routing layer with Python fallback (Elixir-first pattern from CONTRIBUTING.md).\nFor each public function in runtime_state.py, try the Elixir transport first; if unavailable/errored, use existing Python implementation.\n\n## Deliverables\n1. Update `code_puppy/runtime_state.py` with optional Elixir routing via `_try_elixir_*` helpers\n2. Add `tests/test_runtime_state_elixir.py` with mock-transport tests for the Elixir routing path\n3. Existing Python fallback behavior must remain intact (don't break existing tests)",
+      "status": "open",
+      "priority": 2,
+      "type": "task",
+      "labels": [],
+      "dependencies": {
+        "blocks": [
+          "bd-116"
+        ]
+      },
+      "created_at": "2026-04-18T01:24:48.260632",
+      "updated_at": "2026-04-18T01:24:48.260641",
+      "comments": []
+    },
+    "bd-118": {
+      "id": "bd-118",
+      "title": "Create text_ops.py: Python transport wrappers for text_replace/fuzzy_match/unified_diff",
+      "description": "## What\nCreate `code_puppy/text_ops.py` with Python wrappers for three Elixir text processing RPC methods:\n- `text_replace` (line 480 of stdio_service.ex)\n- `text_fuzzy_match` (line 528)\n- `text_unified_diff` (line 570)\n\n## Pattern to Follow\nSee `code_puppy/message_transport.py` for the established pattern. Each function calls:\n```python\ntransport._send_request(text_replace, {...params...})\n```\nvia `_get_transport()` from `code_puppy.elixir_transport_helpers`.\n\n## Elixir Signatures\nRead the Elixir handlers in:\n`elixir/code_puppy_control/lib/code_puppy_control/transport/stdio_service.ex`\naround lines 480-600 to understand params/return shapes.\n\n## Deliverables\n1. `code_puppy/text_ops.py` with full docstrings, type hints, Python fallback where practical\n2. `tests/test_text_ops.py` with unit tests (mock transport, test happy path + errors)\n3. Export the new module from `code_puppy/__init__.py` if appropriate",
+      "status": "open",
+      "priority": 1,
+      "type": "task",
+      "labels": [],
+      "dependencies": {
+        "blocks": [
+          "bd-116"
+        ]
+      },
+      "created_at": "2026-04-18T01:24:48.262059",
+      "updated_at": "2026-04-18T01:24:48.262073",
+      "comments": []
+    },
+    "bd-119": {
+      "id": "bd-119",
+      "title": "Wire Elixir transport stubs in hashline.py (bd-86 regression fix)",
+      "description": "## Background\n`code_puppy/utils/hashline.py` has 4 `_try_elixir_*` stub functions that were gutted in bd-86.\nThey currently hard-return `None` with a comment \"bd-86: Native acceleration removed\".\nThe Elixir service now has real handlers for these (lines 600-671 of stdio_service.ex).\n\n## What to Do\nWire the 4 stubs to actually call the Elixir transport:\n- `_try_elixir_compute_line_hash(idx, line)` \u2192 calls `hashline_compute`\n- `_try_elixir_format_hashlines(text, start_line)` \u2192 calls `hashline_format`\n- `_try_elixir_strip_hashline_prefixes(text)` \u2192 calls `hashline_strip`\n- `_try_elixir_validate_hashline_anchor(idx, line, hash)` \u2192 calls `hashline_validate`\n\nEach stub should:\n1. Try to import `_get_transport` from `code_puppy.elixir_transport_helpers`\n2. Call the transport, parse the result\n3. Return `None` on any exception (so Python fallback kicks in)\n\nUpdate `is_using_elixir()` to return True when transport is available.\n\n## Test Updates\nUpdate `tests/test_hashline.py` \u2014 the monkey-patching approach already works well for the fallback path. Add tests for the happy-path Elixir routing using mock transport.",
+      "status": "closed",
+      "priority": 1,
+      "type": "task",
+      "labels": [],
+      "dependencies": {
+        "blocks": [
+          "bd-116"
+        ]
+      },
+      "created_at": "2026-04-18T01:24:48.269124",
+      "updated_at": "2026-04-18T12:00:00.000000",
+      "comments": []
+    },
+    "bd-120": {
+      "id": "bd-120",
+      "title": "Create agent_pinning_transport.py: Python wrappers for agent_pinning.* RPC methods",
+      "description": "## What\n`code_puppy/agent_model_pinning.py` handles pinning via JSON files and config, but there are\n4 Elixir RPC methods for agent pinning (lines 750-806 of stdio_service.ex):\n- agent_pinning.get\n- agent_pinning.set\n- agent_pinning.clear\n- agent_pinning.list\n\n## Deliverables\n1. Create `code_puppy/agent_pinning_transport.py` with Python transport wrappers for all 4 methods\n2. Follow pattern from `code_puppy/message_transport.py`\n3. Read Elixir handler params/returns from stdio_service.ex lines 750-806\n4. Add `tests/test_agent_pinning_transport.py` with mock-transport unit tests\n\nNote: This is a NEW transport module, not a replacement for agent_model_pinning.py (which handles\nJSON agent pinning). These transport wrappers expose the Elixir server-side pinning state.",
+      "status": "open",
+      "priority": 2,
+      "type": "task",
+      "labels": [],
+      "dependencies": {
+        "blocks": [
+          "bd-116"
+        ]
+      },
+      "created_at": "2026-04-18T01:24:48.275254",
+      "updated_at": "2026-04-18T01:24:48.275263",
+      "comments": []
+    },
+    "bd-121": {
+      "id": "bd-121",
+      "title": "Epic: Python\u2192Elixir Phase 7 - Thin Python End State",
+      "description": "Migration of runtime-critical Python components to Elixir to achieve the 'Thin Python + Elixir Runtime' architecture. Python should only contain: TUI (Textual), CLI (prompt_toolkit), Agent loop (pydantic-ai). All state management, messaging, process supervision should move to Elixir.",
+      "status": "open",
+      "priority": 2,
+      "type": "task",
+      "labels": [],
+      "dependencies": {},
+      "created_at": "2026-04-18T08:28:25.069236",
+      "updated_at": "2026-04-18T08:28:25.069245",
+      "comments": []
+    },
+    "bd-122": {
+      "id": "bd-122",
+      "title": "Epic: Session & State \u2192 Elixir",
+      "description": "Migrate session storage (27KB), runtime state (5KB), and agent state tracking from Python to Elixir. Use ETS for fast state access, Ecto/SQLite for persistence. Currently in: session_storage.py, runtime_state.py, agents/agent_state.py",
+      "status": "open",
+      "priority": 1,
+      "type": "task",
+      "labels": [],
+      "dependencies": {},
+      "created_at": "2026-04-18T08:28:30.407939",
+      "updated_at": "2026-04-18T08:28:30.407952",
+      "comments": []
+    },
+    "bd-123": {
+      "id": "bd-123",
+      "title": "Port session_storage.py to Elixir Ecto",
+      "description": "Migrate session_storage.py (27KB) to Elixir. Current: Python SQLite via raw queries. Target: Elixir Ecto with SQLite adapter. Includes: session CRUD, conversation history, checkpoint management. Route via elixir_bridge RPC.",
+      "status": "open",
+      "priority": 1,
+      "type": "task",
+      "labels": [],
+      "dependencies": {},
+      "created_at": "2026-04-18T08:28:30.411775",
+      "updated_at": "2026-04-18T08:28:30.411788",
+      "comments": []
+    },
+    "bd-124": {
+      "id": "bd-124",
+      "title": "Port agent_state.py to Elixir Registry",
+      "description": "Migrate agents/agent_state.py (6KB) to Elixir. Current: Python dataclass with runtime tracking. Target: Elixir GenServer per agent + Registry for lookup. Includes: AgentRuntimeState, cancellation tokens, thinking state.",
+      "status": "open",
+      "priority": 1,
+      "type": "task",
+      "labels": [],
+      "dependencies": {},
+      "created_at": "2026-04-18T08:28:30.417324",
+      "updated_at": "2026-04-18T08:28:30.417335",
+      "comments": []
+    },
+    "bd-125": {
+      "id": "bd-125",
+      "title": "Port runtime_state.py to Elixir GenServer",
+      "description": "Migrate runtime_state.py (5KB) to Elixir GenServer. Current: Python module-level state. Target: Elixir Registry + GenServer. Includes: current agent tracking, session ID management, run context.",
+      "status": "open",
+      "priority": 1,
+      "type": "task",
+      "labels": [],
+      "dependencies": {},
+      "created_at": "2026-04-18T08:28:30.420444",
+      "updated_at": "2026-04-18T08:28:30.420452",
+      "comments": []
+    },
+    "bd-126": {
+      "id": "bd-126",
+      "title": "Epic: Message Bus \u2192 Elixir PubSub",
+      "description": "Migrate messaging infrastructure from Python to Elixir. Current: Python asyncio queues + threading. Target: Phoenix.PubSub + GenStage. Files: messaging/bus.py (32KB), messaging/messages.py (21KB), messaging/message_queue.py (15KB)",
+      "status": "open",
+      "priority": 1,
+      "type": "task",
+      "labels": [],
+      "dependencies": {},
+      "created_at": "2026-04-18T08:28:35.306179",
+      "updated_at": "2026-04-18T08:28:35.306189",
+      "comments": []
+    },
+    "bd-127": {
+      "id": "bd-127",
+      "title": "Port messaging/bus.py to Elixir PubSub",
+      "description": "Migrate MessageBus (32KB) to Elixir Phoenix.PubSub. Current: asyncio.Queue with threading locks. Target: Phoenix.PubSub for Agent\u2194UI communication. Keep Python thin wrapper that forwards to Elixir.",
+      "status": "open",
+      "priority": 1,
+      "type": "task",
+      "labels": [],
+      "dependencies": {},
+      "created_at": "2026-04-18T08:28:35.307667",
+      "updated_at": "2026-04-18T08:28:35.307674",
+      "comments": []
+    },
+    "bd-128": {
+      "id": "bd-128",
+      "title": "Port messaging/message_queue.py to Elixir GenStage",
+      "description": "Migrate message_queue.py (15KB) to Elixir GenStage. Current: Python deque with async iteration. Target: Elixir GenStage for backpressure-aware message flow.",
+      "status": "open",
+      "priority": 1,
+      "type": "task",
+      "labels": [],
+      "dependencies": {},
+      "created_at": "2026-04-18T08:28:35.312647",
+      "updated_at": "2026-04-18T08:28:35.312656",
+      "comments": []
+    },
+    "bd-129": {
+      "id": "bd-129",
+      "title": "Port mcp_/manager.py to Elixir DynamicSupervisor",
+      "description": "Migrate MCP Manager (37KB) to Elixir. Current: Python subprocess management with health checks. Target: Elixir DynamicSupervisor + GenServer per MCP server. Includes: start/stop servers, health monitoring, auto-restart.",
+      "status": "open",
+      "priority": 2,
+      "type": "task",
+      "labels": [],
+      "dependencies": {},
+      "created_at": "2026-04-18T08:28:38.654435",
+      "updated_at": "2026-04-18T08:28:38.654448",
+      "comments": []
+    },
+    "bd-130": {
+      "id": "bd-130",
+      "title": "Port mcp_/health_monitor.py to Elixir",
+      "description": "Migrate MCP health monitoring (21KB) to Elixir Telemetry. Current: Python async polling. Target: Elixir Telemetry events + GenServer-based health checks.",
+      "status": "open",
+      "priority": 2,
+      "type": "task",
+      "labels": [],
+      "dependencies": {},
+      "created_at": "2026-04-18T08:28:38.657381",
+      "updated_at": "2026-04-18T08:28:38.657389",
+      "comments": []
+    },
+    "bd-131": {
+      "id": "bd-131",
+      "title": "Epic: MCP Manager \u2192 Elixir Supervision",
+      "description": "Migrate MCP server lifecycle management to Elixir. Current: mcp_/manager.py (37KB) with Python subprocess. Target: Elixir DynamicSupervisor for MCP server processes. Benefits: proper supervision, restart policies, health monitoring.",
+      "status": "open",
+      "priority": 2,
+      "type": "task",
+      "labels": [],
+      "dependencies": {},
+      "created_at": "2026-04-18T08:28:38.659557",
+      "updated_at": "2026-04-18T08:28:38.659567",
+      "comments": []
+    },
+    "bd-132": {
+      "id": "bd-132",
+      "title": "Epic: Command Runner \u2192 Elixir Port Supervision",
+      "description": "Migrate shell command execution to Elixir for better process supervision. Current: tools/command_runner.py (65KB) with subprocess. Target: Elixir Port with GenServer wrapper. Benefits: proper process tree management, graceful termination, better timeout handling.",
+      "status": "open",
+      "priority": 2,
+      "type": "task",
+      "labels": [],
+      "dependencies": {},
+      "created_at": "2026-04-18T08:28:41.449075",
+      "updated_at": "2026-04-18T08:28:41.449082",
+      "comments": []
+    },
+    "bd-133": {
+      "id": "bd-133",
+      "title": "Epic: Config \u2192 Elixir Application Config",
+      "description": "Migrate configuration management to Elixir. Current: config.py (84KB) with module-level caching. Target: Elixir Application config + Config module. Most model registry already in Elixir (ModelRegistry).",
+      "status": "open",
+      "priority": 3,
+      "type": "task",
+      "labels": [],
+      "dependencies": {},
+      "created_at": "2026-04-18T08:28:44.204053",
+      "updated_at": "2026-04-18T08:28:44.204064",
+      "comments": []
+    },
+    "bd-134": {
+      "id": "bd-134",
+      "title": "Consolidate model config in Elixir ModelRegistry",
+      "description": "Complete model configuration migration. Current: Split between Python model_factory.py (42KB), model_config.py (5KB) and Elixir ModelRegistry. Target: Single source of truth in Elixir. Python thin wrapper for pydantic-ai model instantiation only.",
+      "status": "open",
+      "priority": 3,
+      "type": "task",
+      "labels": [],
+      "dependencies": {},
+      "created_at": "2026-04-18T08:28:44.208809",
+      "updated_at": "2026-04-18T08:28:44.208819",
       "comments": []
     }
   },
-  "counter": 115
+  "counter": 134
 }
