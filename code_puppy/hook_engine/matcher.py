@@ -11,6 +11,51 @@ from typing import Any
 from .aliases import get_aliases
 
 
+# ReDoS protection: patterns that are likely to cause catastrophic backtracking
+_DANGEROUS_PATTERN = re.compile(
+    r'''
+    # Nested quantifiers: (a+)+ or (a*)* etc
+    \([^)]*[+*][^)]*\)[+*]
+    |
+    # Adjacent quantifiers with overlapping: a+a+
+    [+*]\w[+*]
+    |
+    # Alternation at end with quantifier: (a|aa)+
+    \([^)]*\|[^)]*\)[+*]
+    ''',
+    re.VERBOSE
+)
+
+
+def _is_safe_pattern(pattern: str) -> bool:
+    """Check if a regex pattern is safe from ReDoS attacks.
+    
+    Returns True if the pattern appears safe, False if it contains
+    dangerous constructs that could cause catastrophic backtracking.
+    """
+    # Reject patterns that match known dangerous constructs
+    if _DANGEROUS_PATTERN.search(pattern):
+        return False
+    return True
+
+
+def _safe_regex_match(pattern: str, text: str, flags: int = 0) -> bool:
+    """Execute regex match with safety checks against ReDoS attacks.
+    
+    Returns True if pattern matches, False otherwise (including unsafe patterns).
+    """
+    # First, check if the pattern is safe
+    if not _is_safe_pattern(pattern):
+        # Unsafe pattern - return False (no match) to prevent ReDoS
+        return False
+    
+    try:
+        return bool(re.search(pattern, text, flags))
+    except re.error:
+        # Invalid regex pattern
+        return False
+
+
 def matches(matcher: str, tool_name: str, tool_args: dict[str, Any]) -> bool:
     """
     Evaluate if a matcher pattern matches the tool call.
@@ -66,18 +111,15 @@ def _match_single(pattern: str, tool_name: str, tool_args: dict[str, Any]) -> bo
     if "*" in pattern:
         parts = pattern.split("*")
         regex_pattern = ".*".join(re.escape(part) for part in parts)
-        if re.match(f"^{regex_pattern}$", tool_name, re.IGNORECASE):
+        if _safe_regex_match(f"^{regex_pattern}$", tool_name, re.IGNORECASE):
             return True
 
     if _is_regex_pattern(pattern):
-        try:
-            if re.search(pattern, tool_name, re.IGNORECASE):
-                return True
-            file_path = _extract_file_path(tool_args)
-            if file_path and re.search(pattern, file_path, re.IGNORECASE):
-                return True
-        except re.error:
-            pass
+        if _safe_regex_match(pattern, tool_name, re.IGNORECASE):
+            return True
+        file_path = _extract_file_path(tool_args)
+        if file_path and _safe_regex_match(pattern, file_path, re.IGNORECASE):
+            return True
 
     return False
 
@@ -156,7 +198,4 @@ def matches_file_pattern(tool_args: dict[str, Any], pattern: str) -> bool:
     file_path = _extract_file_path(tool_args)
     if not file_path:
         return False
-    try:
-        return bool(re.search(pattern, file_path, re.IGNORECASE))
-    except re.error:
-        return False
+    return _safe_regex_match(pattern, file_path, re.IGNORECASE)
