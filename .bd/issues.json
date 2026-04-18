@@ -2259,7 +2259,7 @@
       ],
       "dependencies": {},
       "created_at": "2026-04-18T09:47:12.215052",
-      "updated_at": "2026-04-18T19:27:31.386957",
+      "updated_at": "2026-04-18T19:28:22.894229",
       "comments": [
         "Analysis: 200+ tests fail in parallel but pass sequentially. Root causes appear to be:\n1. Shared singletons not being reset between tests (run_limiter, policy_engine, security_boundary)\n2. Callback registrations persisting across tests\n3. Config file reads during tests (e.g., pack_parallelism.toml)\n\nFix approaches:\n- Add autouse fixtures that reset singletons before each test\n- Use pytest marks to force certain tests to run in isolation\n- Mock config file reads in affected tests\n\nPriority: Medium - tests pass when run with -n0",
         "Added singleton resets to conftest.py:\n- security boundary reset\n- run limiter reset\n- callbacks reset\n\nThis improved some tests but ~291 tests still fail in parallel. The core issues:\n- Random test order with pytest-randomly causes different test failures each run\n- More singletons exist that need reset (MCP manager, retry manager, etc.)\n- Some tests may be inherently non-thread-safe\n\nTests pass when run individually or in small batches. For CI, recommend using -n0 (sequential) until all isolation issues are fixed.",
@@ -2359,7 +2359,7 @@
         ]
       },
       "created_at": "2026-04-18T17:44:24.338729",
-      "updated_at": "2026-04-18T19:27:17.338921",
+      "updated_at": "2026-04-18T19:28:22.865297",
       "comments": [
         "Epic completed. All children closed: bd-126 (hang diagnosis), bd-128 (singleton reset wiring), bd-129 (serial markers), bd-130 (verification). The main hang is fixed. Remaining work: fix 263-359 test failures. See bd-130-verification.md."
       ]
@@ -2457,7 +2457,7 @@
         ]
       },
       "created_at": "2026-04-18T17:44:43.715869",
-      "updated_at": "2026-04-18T19:26:37.707179",
+      "updated_at": "2026-04-18T19:28:22.834589",
       "comments": [
         "Verification complete. The parallel test hang is FIXED - test suite now completes in ~55 seconds (vs 20min timeout). However, 263-359 test failures remain (previously hidden by hangs). 219 consistent failures identified across runs. 184 flaky tests remain. Sequential mode still hangs at 93%. See bd-130-verification.md for details."
       ]
