@@ -1,0 +1,76 @@
+src/rust_parser.yrl:none: warning: conflicts: 42 shift/reduce, 0 reduce/reduce
+src/rust_parser.yrl:19:3: warning: terminal symbol where not used
+src/rust_parser.yrl:19:50: warning: terminal symbol extern not used
+src/rust_parser.yrl:22:19: warning: terminal symbol '[' not used
+src/rust_parser.yrl:22:23: warning: terminal symbol ']' not used
+src/rust_parser.yrl:23:9: warning: terminal symbol fat_arrow not used
+src/python_parser.yrl:none: warning: conflicts: 9 shift/reduce, 0 reduce/reduce
+src/typescript_parser.yrl:26:25: warning: terminal symbol namespace not used
+src/typescript_parser.yrl:26:35: warning: terminal symbol declare not used
+src/typescript_parser.yrl:27:28: warning: terminal symbol readonly not used
+src/typescript_parser.yrl:27:37: warning: terminal symbol private not used
+src/typescript_parser.yrl:27:45: warning: terminal symbol public not used
+src/typescript_parser.yrl:27:52: warning: terminal symbol protected not used
+src/typescript_parser.yrl:29:37: warning: terminal symbol semicolon not used
+src/typescript_parser.yrl:30:9: warning: terminal symbol static_token not used
+src/javascript_parser.yrl:25:37: warning: terminal symbol semicolon not used
+      warning: variable "key" is unused (if the variable is not meant to be used, prefix it with an underscore)
+      │
+ 2306 │       Enum.reduce(opts, msg, fn {key, value}, acc ->
+      │                                  ~
+      │
+      └─ lib/code_puppy_control/transport/stdio_service.ex:2306:34: CodePuppyControl.Transport.StdioService.traverse_changeset_errors/1
+
+      warning: clauses with the same name and arity (number of arguments) should be grouped together, "defp handle_request/3" was previously defined (lib/code_puppy_control/transport/stdio_service.ex:389)
+      │
+ 2312 │   defp handle_request(method, _params, id) do
+      │        ~
+      │
+      └─ lib/code_puppy_control/transport/stdio_service.ex:2312:8
+
+      warning: the following clause will never match:
+
+          {:error, reason}
+
+      because it attempts to match on the result of:
+
+          CodePuppyControl.Sessions.list_sessions()
+
+      which has type:
+
+          dynamic({:ok, term()})
+
+      typing violation found at:
+      │
+ 2266 │       {:error, reason} ->
+      │       ~~~~~~~~~~~~~~~~~~~
+      │
+      └─ lib/code_puppy_control/transport/stdio_service.ex:2266: CodePuppyControl.Transport.StdioService.handle_request/3
+
+      warning: the following clause will never match:
+
+          {:error, reason}
+
+      because it attempts to match on the result of:
+
+          CodePuppyControl.Sessions.list_sessions_with_metadata()
+
+      which has type:
+
+          dynamic({:ok, term()})
+
+      typing violation found at:
+      │
+ 2276 │       {:error, reason} ->
+      │       ~~~~~~~~~~~~~~~~~~~
+      │
+      └─ lib/code_puppy_control/transport/stdio_service.ex:2276: CodePuppyControl.Transport.StdioService.handle_request/3
+
+     warning: clauses with the same name and arity (number of arguments) should be grouped together, "defp handle_file_request/2" was previously defined (lib/code_puppy_control/python_worker/port.ex:333)
+     │
+ 703 │   defp handle_file_request(method, _params) do
+     │        ~
+     │
+     └─ lib/code_puppy_control/python_worker/port.ex:703:8
+
+{"id":1,"jsonrpc":"2.0","result":{"pong":true,"timestamp":"2026-04-18T15:04:08.853084Z"}}
