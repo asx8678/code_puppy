@@ -215,7 +215,7 @@ class ElixirTransport:
         time.sleep(0.5)
 
         start_time = time.time()
-        ping_id = 0
+        ping_id = 1
 
         while time.time() - start_time < timeout_sec:
             # Check if process died
@@ -229,9 +229,7 @@ class ElixirTransport:
                 )
 
             try:
-                ping_id += 1
-
-                # Send ping
+                # Send ping (same id until we get a matching pong)
                 request = {
                     "jsonrpc": "2.0",
                     "id": ping_id,
@@ -242,45 +240,46 @@ class ElixirTransport:
                 self._process.stdin.write(req_line)
                 self._process.stdin.flush()
 
-                # Wait for response with timeout
-                response_line = ""
+                # Read ALL available lines to find our pong
+                # (drains _ready handshake, stale output, etc.)
                 wait_start = time.time()
                 while time.time() - wait_start < 2.0:
-                    # Use select to check if data is available (non-blocking)
                     ready, _, _ = select.select([self._process.stdout], [], [], 0.1)
                     if ready:
                         line = self._process.stdout.readline()
                         if line:
                             stripped = line.strip()
-                            if stripped:
-                                response_line = stripped
-                                break
-
-                if not response_line:
-                    # No response yet, try again
-                    continue
-
-                try:
-                    response = json.loads(response_line)
-                    if response.get("id") == ping_id and response.get("result", {}).get(
-                        "pong"
-                    ):
-                        # Success! Now drain any leftover stdout before marking ready
-                        drained_count = self._drain_startup_stdout(timeout_sec=0.5)
-                        if drained_count > 0:
-                            logger.warning(
-                                f"Drained {drained_count} stale bytes from stdout during startup"
-                            )
-                        # Update the request counter only after drain completes
-                        with self._lock:
-                            self._request_id = ping_id
-                        return
-                except json.JSONDecodeError:
-                    # Not valid JSON, might be log output
-                    pass
+                            if not stripped:
+                                continue
+                            try:
+                                response = json.loads(stripped)
+                                if response.get("id") == ping_id and response.get(
+                                    "result", {}
+                                ).get("pong"):
+                                    # Success! Drain any remaining startup noise
+                                    drained_count = self._drain_startup_stdout(
+                                        timeout_sec=0.5
+                                    )
+                                    if drained_count > 0:
+                                        logger.warning(
+                                            f"Drained {drained_count} stale bytes from stdout during startup"
+                                        )
+                                    with self._lock:
+                                        self._request_id = ping_id
+                                    return
+                                else:
+                                    logger.debug(
+                                        f"Discarding non-matching response during startup: {stripped[:100]}"
+                                    )
+                            except json.JSONDecodeError:
+                                logger.debug(
+                                    f"Discarding non-JSON line during startup: {stripped[:100]}"
+                                )
+                    else:
+                        # No data available, retry ping
+                        break
 
             except Exception as e:
-                # Service might still be starting up
                 logger.debug(f"Wait for ready attempt failed: {e}")
 
             time.sleep(0.3)
