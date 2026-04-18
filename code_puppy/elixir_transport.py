@@ -298,8 +298,6 @@ class ElixirTransport:
             True if handshake was seen, False if timeout (backward compatible)
         """
         start_time = time.time()
-        handshake = {"jsonrpc": "2.0", "method": "_ready", "params": {}}
-        handshake_json = json.dumps(handshake)
 
         while time.time() - start_time < timeout_sec:
             # Check if process died
