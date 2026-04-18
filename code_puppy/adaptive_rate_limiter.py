@@ -1044,6 +1044,15 @@ def reset() -> None:
     _state.reset_to_defaults()
 
 
+def reset_state_for_tests() -> None:
+    """Reset the adaptive rate limiter state for test isolation.
+
+    Clears all per-model state and cancels the recovery task.
+    This is an alias for reset() provided for consistency with
+    other singleton reset helpers.
+    """
+    reset()
+
 # ── Context manager ─────────────────────────────────────────────────────────
 
 
