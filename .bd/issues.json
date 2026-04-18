@@ -2364,7 +2364,7 @@
       "id": "bd-126",
       "title": "Diagnose test-suite hang \u2014 all pytest runs time out at 20 minutes",
       "description": "bd-122 baseline capture found that ALL 5 pytest runs time out after 20 minutes, including sequential (-n0). This contradicts the original bd-120 premise that 'tests pass sequentially, fail in parallel.' Either:\n\n(a) The suite regressed between the audit and now, OR\n(b) The hang is specific to the current worktree's environment, OR\n(c) A test added since the audit introduced a deadlock, OR\n(d) One of the recent changes (e.g., bd-123's reset helpers) broke something\n\n## Acceptance Criteria\n\n- Identify the specific test(s) causing the hang\n- Reproduce consistently with a minimal subset\n- Document root cause (deadlock, infinite loop, blocked I/O, etc.)\n- Propose fix (mark as skip, add timeout, fix root cause)\n\n## Investigation Starting Points\n\n- Run pytest --collect-only to confirm collection completes (it does \u2014 14895 tests)\n- Run pytest -x --timeout=60 to find the first hanging test\n- Check tests using pexpect, PTY manager, or real subprocess (flagged in bd-125-serial-candidates.md)\n- Check tests that touch asyncio queues or long-running background threads\n- Check if the reset helpers from bd-123 are stopping threads cleanly\n- Consider pytest-timeout plugin if not already installed\n\n## Deliverable\n\nbd-hang-diagnosis.md at repo root with: root cause, reproduction recipe, proposed fix.",
-      "status": "open",
+      "status": "closed",
       "priority": 1,
       "type": "task",
       "labels": [
@@ -2374,7 +2374,7 @@
       ],
       "dependencies": {},
       "created_at": "2026-04-18T17:44:29.363793",
-      "updated_at": "2026-04-18T17:44:33.209384",
+      "updated_at": "2026-04-18T19:12:16.091014",
       "comments": []
     },
     "bd-127": {
@@ -2390,14 +2390,14 @@
       ],
       "dependencies": {},
       "created_at": "2026-04-18T17:44:33.120005",
-      "updated_at": "2026-04-18T18:20:09.419638",
+      "updated_at": "2026-04-18T19:12:16.150014",
       "comments": []
     },
     "bd-128": {
       "id": "bd-128",
       "title": "Wire all singleton resets into tests/conftest.py",
       "description": "After Issue 3 extracts the reset cascade, ensure tests/conftest.py's autouse fixture calls reset_all_singletons() both pre-yield and post-yield. Include all 9 new helpers from bd-123 plus the 2 that existed but were never wired:\n\n- reset_global_request_cache (code_puppy/request_cache.py \u2014 helper exists, not wired)\n- SubAgentConsoleManager.reset_instance (messaging/subagent_console.py \u2014 exists, not wired)\n\n## Acceptance\n\n- All 14 reset helpers called both pre-yield and post-yield\n- Each wrapped in its own try/except (one failing module doesn't nuke the session)\n- Unit test verifies the cascade calls every expected reset",
-      "status": "open",
+      "status": "closed",
       "priority": 2,
       "type": "task",
       "labels": [
@@ -2410,14 +2410,14 @@
         ]
       },
       "created_at": "2026-04-18T17:44:35.661013",
-      "updated_at": "2026-04-18T17:44:39.080738",
+      "updated_at": "2026-04-18T19:12:43.824343",
       "comments": []
     },
     "bd-129": {
       "id": "bd-129",
       "title": "Apply @pytest.mark.serial + xdist_group to non-parallel-safe tests",
       "description": "bd-124 classified ~45 tests as non-parallel-safe (see bd-125-serial-candidates.md). Apply @pytest.mark.serial + @pytest.mark.xdist_group(name=\"serial\") to each. With --dist=loadgroup (already in pyproject.toml), tests in the same xdist_group run on the same worker, giving true serialization.\n\n## Acceptance\n\n- All ~45 tests from bd-125-serial-candidates.md marked\n- pyproject.toml markers.serial docstring updated to explain how serial is enforced\n- Grouping matches the 'suggested_group_name' column in bd-125-serial-candidates.md (some tests may need different groups, e.g. 'pty', 'dbos', 'port_9999')\n- pytest -n0 still passes\n- pytest -n auto passes for the serially-marked subset: pytest -m serial -n auto",
-      "status": "open",
+      "status": "closed",
       "priority": 2,
       "type": "task",
       "labels": [
@@ -2425,7 +2425,7 @@
       ],
       "dependencies": {},
       "created_at": "2026-04-18T17:44:39.051291",
-      "updated_at": "2026-04-18T17:44:43.749274",
+      "updated_at": "2026-04-18T19:12:16.121932",
       "comments": []
     },
     "bd-130": {
