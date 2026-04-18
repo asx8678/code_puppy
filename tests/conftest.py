@@ -102,6 +102,27 @@ def isolate_config_between_tests(tmp_path_factory):
     except Exception:
         pass  # Module may not be loaded in all test contexts
 
+    # Reset security boundary singleton
+    try:
+        from code_puppy.security import reset_security_boundary
+        reset_security_boundary()
+    except Exception:
+        pass  # Module may not be loaded in all test contexts
+
+    # Reset run limiter singleton
+    try:
+        from code_puppy.plugins.pack_parallelism.run_limiter import reset_run_limiter_for_tests
+        reset_run_limiter_for_tests()
+    except Exception:
+        pass  # Module may not be loaded in all test contexts
+
+    # Reset callback registrations to prevent cross-test pollution
+    try:
+        from code_puppy.callbacks import _reset_for_tests
+        _reset_for_tests()
+    except Exception:
+        pass  # Function may not exist yet
+
     yield
 
     # Restore original config paths
@@ -123,6 +144,27 @@ def isolate_config_between_tests(tmp_path_factory):
         reset_policy_engine()
     except Exception:
         pass
+
+    # Reset security boundary singleton
+    try:
+        from code_puppy.security import reset_security_boundary
+        reset_security_boundary()
+    except Exception:
+        pass  # Module may not be loaded in all test contexts
+
+    # Reset run limiter singleton
+    try:
+        from code_puppy.plugins.pack_parallelism.run_limiter import reset_run_limiter_for_tests
+        reset_run_limiter_for_tests()
+    except Exception:
+        pass  # Module may not be loaded in all test contexts
+
+    # Reset callback registrations to prevent cross-test pollution
+    try:
+        from code_puppy.callbacks import _reset_for_tests
+        _reset_for_tests()
+    except Exception:
+        pass  # Function may not exist yet
 
     # Clean up the temp directory
     try:

@@ -20,6 +20,7 @@ __all__ = [
     "register_callback",
     "unregister_callback",
     "clear_callbacks",
+    "_reset_for_tests",
     "get_callbacks",
     "count_callbacks",
     # Trigger functions (used by core and plugins)
@@ -206,6 +207,15 @@ def clear_callbacks(phase: PhaseType | None = None) -> None:
     else:
         _backlog.clear(phase)
         logger.debug(f"Cleared async callbacks for phase '{phase}'")
+
+
+def _reset_for_tests() -> None:
+    """Reset all callback registrations for test isolation.
+
+    This clears ALL registered callbacks to prevent cross-test pollution.
+    Only use in test fixtures, never in production code.
+    """
+    clear_callbacks(None)
 
 
 def get_callbacks(phase: PhaseType) -> tuple[CallbackFunc, ...]:
