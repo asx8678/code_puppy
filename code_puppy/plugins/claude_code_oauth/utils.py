@@ -693,33 +693,70 @@ def filter_latest_claude_models(
     family_models: dict[str, list[tuple[str, int, int, int]]] = {}
 
     for model_name in models:
-        if model_name == "claude-opus-4-6":
-            family_models.setdefault("opus", []).append((model_name, 4, 6, 20260205))
-            continue
-        if model_name == "claude-opus-4-5":
-            family_models.setdefault("opus", []).append((model_name, 4, 5, 20251101))
-            continue
-        if model_name == "claude-sonnet-4-6":
-            family_models.setdefault("sonnet", []).append((model_name, 4, 6, 20250610))
-            continue
-        # Match pattern: claude-{family}-{major}-{minor}-{date}
-        # Examples: claude-haiku-3-5-20241022, claude-sonnet-4-5-20250929
-        match = re.match(r"claude-(haiku|sonnet|opus)-(\d+)-(\d+)-(\d+)", model_name)
-        if not match:
-            # Also try pattern with dots: claude-{family}-{major}.{minor}-{date}
-            match = re.match(
-                r"claude-(haiku|sonnet|opus)-(\d+)\.(\d+)-(\d+)", model_name
+        # Pattern 1: claude-{family}-{major}[-{num1}][-{num2}]
+        # Covers all modern naming variants:
+        #   claude-opus-4-7              → major=4, minor=7 (latest alias)
+        #   claude-opus-4-5-20251101     → major=4, minor=5, date=20251101
+        #   claude-opus-4-20250514       → major=4, date=20250514 (no minor)
+        match = re.match(
+            r"claude-(haiku|sonnet|opus)-(\d+)(?:-(\d+))?(?:-(\d+))?$",
+            model_name,
+        )
+        if match:
+            family = match.group(1)
+            major = int(match.group(2))
+            g3 = match.group(3)
+            g4 = match.group(4)
+
+            if g3 is None:
+                # Just claude-{family}-{major}
+                minor, date = 0, 99999999
+            elif g4 is not None:
+                # Both present: claude-{family}-{major}-{minor}-{date}
+                minor, date = int(g3), int(g4)
+            elif len(g3) >= 6:
+                # Long number is a date: claude-{family}-{major}-{date}
+                minor, date = 0, int(g3)
+            else:
+                # Short number is minor: claude-{family}-{major}-{minor}
+                minor, date = int(g3), 99999999
+
+            family_models.setdefault(family, []).append(
+                (model_name, major, minor, date)
             )
-
-        if not match:
             continue
 
-        family = match.group(1)
-        major = int(match.group(2))
-        minor = int(match.group(3))
-        date = int(match.group(4))
+        # Pattern 1b: claude-{family}-{major}.{minor}[-{date}] (dot separator)
+        # e.g., claude-haiku-3.5-20241022
+        match = re.match(
+            r"claude-(haiku|sonnet|opus)-(\d+)\.(\d+)(?:-(\d+))?$",
+            model_name,
+        )
+        if match:
+            family = match.group(1)
+            major = int(match.group(2))
+            minor = int(match.group(3))
+            date = int(match.group(4)) if match.group(4) else 99999999
+            family_models.setdefault(family, []).append(
+                (model_name, major, minor, date)
+            )
+            continue
 
-        family_models.setdefault(family, []).append((model_name, major, minor, date))
+        # Pattern 2: claude-{major}-{family}[-{date}] (legacy naming)
+        # e.g., claude-3-haiku-20240307
+        match = re.match(
+            r"claude-(\d+)-(haiku|sonnet|opus)(?:-(\d+))?$", model_name
+        )
+        if match:
+            major = int(match.group(1))
+            family = match.group(2)
+            date = int(match.group(3)) if match.group(3) else 99999999
+            family_models.setdefault(family, []).append(
+                (model_name, major, 0, date)
+            )
+            continue
+
+        # Model doesn't match any known pattern — skip it
 
     # Sort each family descending and keep the top N
     filtered: list[str] = []
@@ -794,9 +831,9 @@ def _build_model_entry(model_name: str, access_token: str, context_length: int) 
         "interleaved_thinking",
     ]
 
-    # Opus 4-6 models support the effort setting
+    # All opus models support the effort setting
     lower = model_name.lower()
-    if "opus-4-6" in lower or "4-6-opus" in lower:
+    if "opus" in lower:
         supported_settings.append("effort")
 
     return {
@@ -821,11 +858,6 @@ def add_models_to_extra_config(models: list[str]) -> bool:
     try:
         # Drop permanently-blocked entries before any further processing.
         models = _filter_blocked_claude_models(models)
-        # Filter to only latest haiku, sonnet, and opus models
-        filtered_models = filter_latest_claude_models(
-            models, max_per_family={"default": 1, "opus": 6}
-        )
-        filtered_models = _filter_blocked_claude_models(filtered_models)
 
         # Start fresh - overwrite the file on every auth instead of loading existing
         claude_models = {}
@@ -836,7 +868,7 @@ def add_models_to_extra_config(models: list[str]) -> bool:
         long_ctx = CLAUDE_CODE_OAUTH_CONFIG["long_context_length"]
         long_ctx_models = CLAUDE_CODE_OAUTH_CONFIG["long_context_models"]
 
-        for model_name in filtered_models:
+        for model_name in models:
             prefixed = f"{prefix}{model_name}"
             claude_models[prefixed] = _build_model_entry(
                 model_name, access_token, default_ctx
