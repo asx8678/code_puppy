@@ -44,6 +44,7 @@ from typing import Any
 def _get_transport() -> "ElixirTransport":  # type: ignore # noqa: F821
     """Get the shared transport singleton from elixir_transport_helpers."""
     from code_puppy.elixir_transport_helpers import get_transport
+
     return get_transport()
 
 
@@ -73,7 +74,8 @@ def text_replace(
         - "diff": Unified diff showing the changes
         - "success": Boolean indicating if all replacements succeeded
         - "error": Error message if any replacement failed (null if success)
-        - "jw_score": Jaro-Winkler similarity score (0.0-1.0) for best match
+        - "jw_score": Jaro-Winkler similarity score (0.0-1.0) for best match,
+          or None for exact matches
 
     Example:
         >>> result = text_replace(
@@ -84,10 +86,13 @@ def text_replace(
         >>> assert result["modified"] == "Hello Python"
     """
     transport = _get_transport()
-    return transport._send_request("text_replace", {
-        "content": content,
-        "replacements": replacements,
-    })
+    return transport._send_request(
+        "text_replace",
+        {
+            "content": content,
+            "replacements": replacements,
+        },
+    )
 
 
 # =============================================================================
@@ -112,7 +117,7 @@ def text_fuzzy_match(
     Returns:
         Dict with:
         - "matched_text": The matched text (null if no match found)
-        - "start": 1-based starting line number of match
+        - "start": 1-based starting line number of match (0 if no match)
         - "end": 1-based ending line number of match (null if no match)
         - "score": Jaro-Winkler similarity score (0.0-1.0)
 
@@ -123,10 +128,13 @@ def text_fuzzy_match(
         >>> assert result["score"] >= 0.9
     """
     transport = _get_transport()
-    return transport._send_request("text_fuzzy_match", {
-        "haystack_lines": haystack_lines,
-        "needle": needle,
-    })
+    return transport._send_request(
+        "text_fuzzy_match",
+        {
+            "haystack_lines": haystack_lines,
+            "needle": needle,
+        },
+    )
 
 
 # =============================================================================
@@ -167,13 +175,16 @@ def text_unified_diff(
         >>> assert "+Hello Python" in diff
     """
     transport = _get_transport()
-    result = transport._send_request("text_unified_diff", {
-        "old": old_string,
-        "new": new_string,
-        "context_lines": context_lines,
-        "from_file": from_file,
-        "to_file": to_file,
-    })
+    result = transport._send_request(
+        "text_unified_diff",
+        {
+            "old": old_string,
+            "new": new_string,
+            "context_lines": context_lines,
+            "from_file": from_file,
+            "to_file": to_file,
+        },
+    )
     return result["diff"]
 
 

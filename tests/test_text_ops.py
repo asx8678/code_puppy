@@ -23,7 +23,7 @@ class TestTextReplace:
             "diff": "-Hello World\n+Hello Python",
             "success": True,
             "error": None,
-            "jw_score": 1.0,
+            "jw_score": None,
         }
 
         with patch(
@@ -54,7 +54,7 @@ class TestTextReplace:
             "diff": "",
             "success": True,
             "error": None,
-            "jw_score": 1.0,
+            "jw_score": None,
         }
 
         with patch(
@@ -266,7 +266,7 @@ class TestConvenienceAliases:
             "diff": "",
             "success": True,
             "error": None,
-            "jw_score": 1.0,
+            "jw_score": None,
         }
 
         with patch(
@@ -306,7 +306,9 @@ class TestConvenienceAliases:
     def test_unified_diff_alias(self):
         """Verify unified_diff() is an alias for text_unified_diff()."""
         mock_transport = MagicMock()
-        mock_transport._send_request.return_value = {"diff": "--- \n+++ \n@@ -1 +1 @@\n-a\n+b\n"}
+        mock_transport._send_request.return_value = {
+            "diff": "--- \n+++ \n@@ -1 +1 @@\n-a\n+b\n"
+        }
 
         with patch(
             "code_puppy.text_ops._get_transport",
@@ -350,7 +352,7 @@ class TestTransportIntegration:
                 "diff": "",
                 "success": True,
                 "error": None,
-                "jw_score": 1.0,
+                "jw_score": None,
             }
             # Call the private function directly to test the import path
             transport = text_ops._get_transport()
@@ -368,7 +370,7 @@ class TestTypeAnnotations:
             "diff": "",
             "success": True,
             "error": None,
-            "jw_score": 0.0,
+            "jw_score": None,
         }
 
         with patch(

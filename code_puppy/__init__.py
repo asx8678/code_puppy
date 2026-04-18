@@ -36,6 +36,7 @@ _LAZY_SUBMODULES: dict[str, str] = {
     "model_factory": "code_puppy.model_factory",
     "interactive_loop": "code_puppy.interactive_loop",
     "message_transport": "code_puppy.message_transport",
+    "text_ops": "code_puppy.text_ops",
 }
 
 
