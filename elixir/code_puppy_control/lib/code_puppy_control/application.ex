@@ -18,16 +18,18 @@ defmodule CodePuppyControl.Application do
   10. CodePuppyControl.RoundRobinModel - Round-robin model rotation (ETS-backed)
   11a. CodePuppyControl.ModelsDevParser.Registry - Models.dev API registry (bd-74)
   12. CodePuppyControl.Run.Registry - Process registry for run tracking
-  13. CodePuppyControl.Run.Supervisor - DynamicSupervisor for run processes
-  14. CodePuppyControl.PythonWorker.Supervisor - DynamicSupervisor for Python workers
-  15. CodePuppyControl.MCP.Registry - Process registry for MCP servers
-  16. CodePuppyControl.MCP.Supervisor - DynamicSupervisor for MCP servers
-  17. CodePuppyControl.Concurrency.Supervisor - Concurrency limiter (ETS-backed)
-  18. CodePuppyControl.RequestTracker - Tracks JSON-RPC request/response correlation
-  19. CodePuppyControl.Tools.CommandRunner.ProcessManager - Shell process tracking (bd-64)
-  20. Oban - Job processing engine with SQLite Lite engine
-  21. CodePuppyControl.Scheduler.CronScheduler - Periodic scheduler for cron tasks
-  22. CodePuppyControlWeb.Endpoint - HTTP API endpoint
+  13. CodePuppyControl.Tool.Registry - ETS-backed tool registry (bd-149)
+  14. CodePuppyControl.Run.Supervisor - DynamicSupervisor for run processes
+  15. CodePuppyControl.PythonWorker.Supervisor - DynamicSupervisor for Python workers
+  16. CodePuppyControl.MCP.Registry - Process registry for MCP servers
+  17. CodePuppyControl.MCP.Supervisor - DynamicSupervisor for MCP servers
+  18. CodePuppyControl.Concurrency.Supervisor - Concurrency limiter (ETS-backed)
+  19. CodePuppyControl.TokenLedger - Token usage accounting (bd-152)
+  20. CodePuppyControl.RequestTracker - Tracks JSON-RPC request/response correlation
+  21. CodePuppyControl.Tools.CommandRunner.ProcessManager - Shell process tracking (bd-64)
+  22. Oban - Job processing engine with SQLite Lite engine
+  23. CodePuppyControl.Scheduler.CronScheduler - Periodic scheduler for cron tasks
+  24. CodePuppyControlWeb.Endpoint - HTTP API endpoint
   """
 
   use Application
@@ -54,6 +56,10 @@ defmodule CodePuppyControl.Application do
       CodePuppyControl.RoundRobinModel,
       CodePuppyControl.ModelsDevParser.Registry,
       CodePuppyControl.Run.Registry,
+      # Tool registry (ETS-backed) for agent tool dispatch (bd-149)
+      CodePuppyControl.Tool.Registry,
+      # Staged changes sandbox for diff-preview system (bd-150)
+      CodePuppyControl.Tools.StagedChanges,
       {CodePuppyControl.Run.Supervisor, []},
       CodePuppyControl.PythonWorker.Supervisor,
       # MCP Server supervision
@@ -61,7 +67,12 @@ defmodule CodePuppyControl.Application do
       CodePuppyControl.MCP.Supervisor,
       # Concurrency limiter (ETS-backed semaphores for file_ops, api_calls, tool_calls)
       CodePuppyControl.Concurrency.Supervisor,
+      # Adaptive rate limiter with circuit breaker (bd-151)
+      CodePuppyControl.RateLimiter.Supervisor,
+      # Token ledger for per-run/session token accounting (bd-152)
+      CodePuppyControl.TokenLedger,
       CodePuppyControl.RequestTracker,
+
       # Shell command runner process tracking (bd-64)
       CodePuppyControl.Tools.CommandRunner.ProcessManager,
       # Oban job processing with SQLite engine
