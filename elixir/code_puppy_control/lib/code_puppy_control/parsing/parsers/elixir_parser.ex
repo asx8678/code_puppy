@@ -99,40 +99,69 @@ defmodule CodePuppyControl.Parsing.Parsers.ElixirParser do
     end_line = meta[:end_line] || meta[:line] || 1
 
     # Extract nested symbols from module body
-    # Module doc can come from: 1) parent acc (unlikely) 2) extracted from module body
     {children, child_acc} = extract_symbols(module_body, [], %{current_module: module_name})
 
-    # Get module doc from child accumulator (from @moduledoc inside the module)
+    # Get module doc from child accumulator
     doc = Map.get(child_acc, :module_doc, nil)
 
-    symbol = %{
+    # Module symbol (no children - we flatten them)
+    module_symbol = %{
       name: module_name,
       kind: :module,
       line: line,
       end_line: end_line,
       doc: doc,
-      children: children
+      children: []
     }
 
-    # Clear the module_doc from accumulator after consuming it
-    {[symbol | symbols], Map.delete(acc, :module_doc)}
+    # Add parent field to each child and flatten into top-level list
+    children_with_parent = Enum.map(children, fn child ->
+      Map.put(child, :parent, module_name)
+    end)
+
+    # Return flattened: module + its children + existing symbols
+    {[module_symbol | children_with_parent] ++ symbols, Map.delete(acc, :module_doc)}
   end
 
   # Handle defmodule with nested __aliases__ (e.g., defmodule Foo.Bar)
-  defp extract_symbols({:defmodule, meta, [{:__aliases__, _, module_parts} | _]}, symbols, acc) do
+  defp extract_symbols(
+         {:defmodule, meta, [{:__aliases__, _, module_parts} | rest]},
+         symbols,
+         acc
+       ) do
     module_name = Enum.join(module_parts, ".")
     line = meta[:line] || 1
 
-    symbol = %{
+    # Try to extract from rest (which may contain do: block)
+    {children, child_acc} =
+      case rest do
+        [[do: module_body]] ->
+          extract_symbols(module_body, [], %{current_module: module_name})
+
+        _ ->
+          {[], %{}}
+      end
+
+    # Get module doc from child accumulator if available
+    doc = Map.get(child_acc, :module_doc, nil)
+
+    # Module symbol (no children - we flatten them)
+    module_symbol = %{
       name: module_name,
       kind: :module,
       line: line,
       end_line: meta[:end_line] || line,
-      doc: nil,
+      doc: doc,
       children: []
     }
 
-    {[symbol | symbols], acc}
+    # Add parent field to each child and flatten into top-level list
+    children_with_parent = Enum.map(children, fn child ->
+      Map.put(child, :parent, module_name)
+    end)
+
+    # Return flattened: module + its children + existing symbols
+    {[module_symbol | children_with_parent] ++ symbols, Map.delete(acc, :module_doc)}
   end
 
   # Handle def with guard clause (when) - MUST come before non-guard patterns
