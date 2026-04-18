@@ -520,6 +520,20 @@ get_enable_streaming = _make_bool_getter(
     """,
 )
 
+# bd-112: Elixir message shadow mode
+get_elixir_message_shadow_mode_enabled = _make_bool_getter(
+    "enable_elixir_message_shadow_mode",
+    default=False,
+    doc="""Return True if Elixir message shadow mode is enabled (default: False).
+
+    When enabled, message operations (pruning, hashing) are executed by both
+    Python and Elixir backends, with results compared for validation. Python
+    results are used; mismatches are logged as warnings.
+
+    Set `enable_elixir_message_shadow_mode = true` in puppy.cfg to enable.
+    """,
+)
+
 
 # bd code_puppy-31a.10: Post-edit syntax validation
 def get_post_edit_validation_enabled() -> bool:

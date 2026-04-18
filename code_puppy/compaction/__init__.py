@@ -20,6 +20,10 @@ from code_puppy.compaction.thresholds import (
     compute_summarization_thresholds,
     get_model_context_window,
 )
+from code_puppy.compaction.shadow_mode import (
+    shadow_hash_messages,
+    shadow_prune_and_filter,
+)
 from code_puppy.compaction.tool_arg_truncation import (
     pretruncate_messages,
     truncate_tool_arg,
@@ -35,6 +39,8 @@ __all__ = [
     "get_model_context_window",
     "offload_evicted_messages",
     "pretruncate_messages",
+    "shadow_hash_messages",
+    "shadow_prune_and_filter",
     "SummarizationThresholds",
     "truncate_tool_arg",
     "truncate_tool_call_args",

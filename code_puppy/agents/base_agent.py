@@ -71,6 +71,7 @@ from code_puppy.compaction import (
     offload_evicted_messages,
     pretruncate_messages,
 )
+from code_puppy.compaction.shadow_mode import shadow_prune_and_filter
 
 # Consolidated relative imports
 from code_puppy.config import (
@@ -1566,6 +1567,10 @@ class BaseAgent(ABC, AgentPromptMixin):
                 dropped_count += 1
                 continue
             pruned.append(msg)
+        
+        # Shadow mode: compare with Elixir implementation (bd-112)
+        shadow_prune_and_filter(messages, pruned)
+        
         return pruned
 
     def message_history_processor(
