@@ -14,6 +14,7 @@ from unittest.mock import MagicMock
 import pytest
 
 from code_puppy import config as cp_config
+from tests._helpers.singleton_reset import reset_all_singletons
 
 
 def pytest_addoption(parser):
@@ -99,42 +100,8 @@ def isolate_config_between_tests(tmp_path_factory):
     except Exception:
         pass  # Elixir transport unavailable, skip runtime state cleanup
 
-    # Reset the policy engine singleton so each test gets a fresh engine
-    # built from the test's (isolated) config, not from a prior test's config.
-    try:
-        from code_puppy.policy_engine import reset_policy_engine
-
-        reset_policy_engine()
-    except Exception:
-        pass  # Module may not be loaded in all test contexts
-
-    # Reset security boundary singleton
-    try:
-        from code_puppy.security import reset_security_boundary
-        reset_security_boundary()
-    except Exception:
-        pass  # Module may not be loaded in all test contexts
-
-    # Reset run limiter singleton
-    try:
-        from code_puppy.plugins.pack_parallelism.run_limiter import reset_run_limiter_for_tests
-        reset_run_limiter_for_tests()
-    except Exception:
-        pass  # Module may not be loaded in all test contexts
-
-    # Reset global message queue
-    try:
-        from code_puppy.messaging.message_queue import reset_global_queue_for_tests
-        reset_global_queue_for_tests()
-    except Exception:
-        pass  # Module may not be loaded in all test contexts
-
-    # Reset callback registrations to prevent cross-test pollution
-    try:
-        from code_puppy.callbacks import _reset_for_tests
-        _reset_for_tests()
-    except Exception:
-        pass  # Function may not exist yet
+    # Reset all singletons for test isolation
+    reset_all_singletons()
 
     yield
 
@@ -153,41 +120,8 @@ def isolate_config_between_tests(tmp_path_factory):
     except Exception:
         pass
 
-    # Reset policy engine after test too
-    try:
-        from code_puppy.policy_engine import reset_policy_engine
-
-        reset_policy_engine()
-    except Exception:
-        pass
-
-    # Reset security boundary singleton
-    try:
-        from code_puppy.security import reset_security_boundary
-        reset_security_boundary()
-    except Exception:
-        pass  # Module may not be loaded in all test contexts
-
-    # Reset run limiter singleton
-    try:
-        from code_puppy.plugins.pack_parallelism.run_limiter import reset_run_limiter_for_tests
-        reset_run_limiter_for_tests()
-    except Exception:
-        pass  # Module may not be loaded in all test contexts
-
-    # Reset global message queue
-    try:
-        from code_puppy.messaging.message_queue import reset_global_queue_for_tests
-        reset_global_queue_for_tests()
-    except Exception:
-        pass  # Module may not be loaded in all test contexts
-
-    # Reset callback registrations to prevent cross-test pollution
-    try:
-        from code_puppy.callbacks import _reset_for_tests
-        _reset_for_tests()
-    except Exception:
-        pass  # Function may not exist yet
+    # Reset all singletons for test isolation
+    reset_all_singletons()
 
     # Clean up the temp directory
     try:
