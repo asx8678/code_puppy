@@ -2174,7 +2174,7 @@
       "id": "bd-115",
       "title": "Add integration tests for message RPC",
       "description": "Add end-to-end tests verifying Python -> Elixir message flow.\n\nTests needed:\n- Round-trip serialize/deserialize\n- Pruning preserves message integrity\n- Hash consistency between calls",
-      "status": "open",
+      "status": "closed",
       "priority": 2,
       "type": "task",
       "labels": [],
@@ -2188,7 +2188,7 @@
         ]
       },
       "created_at": "2026-04-18T00:41:39.187862",
-      "updated_at": "2026-04-18T00:42:35.607118",
+      "updated_at": "2026-04-18T09:28:52.494203",
       "comments": []
     },
     "bd-116": {
