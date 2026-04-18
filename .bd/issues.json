@@ -2095,8 +2095,10 @@
       "labels": [],
       "dependencies": {},
       "created_at": "2026-04-18T00:41:39.168838",
-      "updated_at": "2026-04-18T00:41:39.168847",
-      "comments": []
+      "updated_at": "2026-04-18T01:10:48.780139",
+      "comments": [
+        "Wire up Elixir message modules to Python via JSON-RPC bridge.\n\n## Status\n- [x] Phase 1: Elixir StdioService handlers (DONE - commit 1db4453a)\n- [x] Phase 2: Python transport wrappers (DONE - commit b41ea054)\n- [x] Phase 3: Shadow mode integration (DONE - commit f1c6b341)\n- [ ] Phase 4: Integration tests (bd-115)\n- [ ] Phase 5: Performance benchmarks (bd-114)\n\n## Completed Work\n\n### Phase 1: Elixir Handlers (16 test cases)\n- message.prune_and_filter\n- message.truncation_indices\n- message.split_for_summarization\n- message.serialize_session / deserialize_session\n- message.serialize_incremental\n- message.hash / hash_batch\n- message.stringify_part\n\n### Phase 2: Python Wrappers\n- code_puppy/message_transport.py with all wrapper functions\n- Proper base64 encoding for binary data\n- Integration tests in tests/test_message_transport.py\n\n### Phase 3: Shadow Mode Integration\n- Config flag: enable_elixir_message_shadow_mode\n- Shadow mode module: code_puppy/compaction/shadow_mode.py\n- Integration into base_agent.py prune_interrupted_tool_calls()\n- Compares Python vs Elixir results, logs mismatches\n\n## How to Enable Shadow Mode\nAdd to puppy.cfg:\n```ini\nenable_elixir_message_shadow_mode = true\n```\n\n## Remaining\n- bd-115: Add integration tests for message RPC\n- bd-114: Benchmark Python vs Elixir performance"
+      ]
     },
     "bd-112": {
       "id": "bd-112",
@@ -2116,7 +2118,7 @@
         ]
       },
       "created_at": "2026-04-18T00:41:39.175743",
-      "updated_at": "2026-04-18T01:07:26.370640",
+      "updated_at": "2026-04-18T01:09:56.200488",
       "comments": [
         "Claimed by code-puppy-019d9d - exploring compaction code and message_transport integration"
       ]
@@ -2163,8 +2165,10 @@
         ]
       },
       "created_at": "2026-04-18T00:41:39.182809",
-      "updated_at": "2026-04-18T00:42:35.636174",
-      "comments": []
+      "updated_at": "2026-04-18T01:11:58.781307",
+      "comments": [
+        "Starting work - Code-Puppy (code-puppy-019d9d)"
+      ]
     },
     "bd-115": {
       "id": "bd-115",
