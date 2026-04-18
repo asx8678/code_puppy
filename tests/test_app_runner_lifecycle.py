@@ -60,8 +60,6 @@ def _apply_patches(stack, patches_dict):
 class TestUVXDetectionImportError:
     """Test ImportError fallback for uvx_detection (lines 185-190)."""
 
-@pytest.mark.serial
-@pytest.mark.xdist_group(name="dbos")
     def test_uvx_detection_import_error_covered(self):
         """Test that ImportError on uvx_detection import is handled gracefully.
 
@@ -349,8 +347,6 @@ class TestDBOSShutdownCleanup:
 class TestAppRunnerArgumentParsing:
     """Test AppRunner.parse_args() for all argument combinations."""
 
-@pytest.mark.serial
-@pytest.mark.xdist_group(name="dbos")
     def test_parse_args_all_flags(self):
         """Test parsing all supported flags."""
         from code_puppy.app_runner import AppRunner
@@ -395,8 +391,6 @@ class TestAppRunnerArgumentParsing:
 class TestAppRunnerShowLogo:
     """Test AppRunner.show_logo() behavior."""
 
-@pytest.mark.serial
-@pytest.mark.xdist_group(name="dbos")
     def test_show_logo_skipped_in_prompt_mode(self):
         """Test that logo is skipped when args.prompt is set."""
         from code_puppy.app_runner import AppRunner
@@ -413,8 +407,6 @@ class TestAppRunnerShowLogo:
         # Logo should be skipped, no print calls
         mock_console.print.assert_not_called()
 
-@pytest.mark.serial
-@pytest.mark.xdist_group(name="dbos")
     def test_show_logo_displayed_in_interactive_mode(self):
         """Test that logo is displayed in interactive mode."""
         from code_puppy.app_runner import AppRunner
@@ -442,8 +434,6 @@ class TestAppRunnerShowLogo:
         # Logo should be displayed
         mock_console.print.assert_called()
 
-@pytest.mark.serial
-@pytest.mark.xdist_group(name="dbos")
     def test_show_logo_skipped_when_prompt_set(self):
         """Test that logo display is skipped when prompt is provided."""
         from code_puppy.app_runner import AppRunner
@@ -465,8 +455,6 @@ class TestAppRunnerShowLogo:
 class TestAppRunnerSetupRenderers:
     """Test AppRunner.setup_renderers() for renderer creation."""
 
-@pytest.mark.serial
-@pytest.mark.xdist_group(name="dbos")
     def test_setup_renderers_returns_tuple(self):
         """Test that setup_renderers returns a tuple of (message_renderer, bus_renderer, display_console)."""
         from code_puppy.app_runner import AppRunner
@@ -502,8 +490,6 @@ class TestAppRunnerSetupRenderers:
 class TestAppRunnerLoadAPIKeys:
     """Test AppRunner.load_api_keys()."""
 
-@pytest.mark.serial
-@pytest.mark.xdist_group(name="dbos")
     def test_load_api_keys_calls_config_function(self):
         """Test that load_api_keys calls the config function."""
         from code_puppy.app_runner import AppRunner
@@ -523,8 +509,6 @@ class TestAppRunnerConfigureAgent:
     @patch("code_puppy.config.set_model_name")
     @patch("code_puppy.config._validate_model_exists", return_value=True)
     @patch("code_puppy.messaging.emit_system_message")
-@pytest.mark.serial
-@pytest.mark.xdist_group(name="dbos")
     def test_configure_agent_valid_model(self, mock_emit, mock_validate, mock_set):
         """Test configure_agent with valid model."""
         from code_puppy.app_runner import AppRunner
@@ -545,8 +529,6 @@ class TestAppRunnerConfigureAgent:
     @patch("code_puppy.messaging.emit_error")
     @patch("code_puppy.messaging.emit_system_message")
     @patch("code_puppy.model_factory.ModelFactory.load_config")
-@pytest.mark.serial
-@pytest.mark.xdist_group(name="dbos")
     def test_configure_agent_invalid_model_exits(
         self, mock_load_config, mock_emit_sys, mock_emit_err, mock_validate, mock_set
     ):
@@ -574,8 +556,6 @@ class TestAppRunnerConfigureAgent:
     )
     @patch("code_puppy.messaging.emit_error")
     @patch("code_puppy.error_logging.log_error")
-@pytest.mark.serial
-@pytest.mark.xdist_group(name="dbos")
     def test_configure_agent_validation_exception(
         self, mock_log, mock_emit, mock_validate, mock_set
     ):
@@ -600,8 +580,6 @@ class TestAppRunnerConfigureAgent:
     )
     @patch("code_puppy.agents.agent_manager.set_current_agent")
     @patch("code_puppy.messaging.emit_system_message")
-@pytest.mark.serial
-@pytest.mark.xdist_group(name="dbos")
     def test_configure_agent_valid_agent(
         self, mock_emit, mock_set_agent, mock_get_agents
     ):
@@ -625,8 +603,6 @@ class TestAppRunnerConfigureAgent:
     )
     @patch("code_puppy.messaging.emit_error")
     @patch("code_puppy.messaging.emit_system_message")
-@pytest.mark.serial
-@pytest.mark.xdist_group(name="dbos")
     def test_configure_agent_invalid_agent_exits(
         self, mock_emit_sys, mock_emit_err, mock_get_agents
     ):
@@ -650,8 +626,6 @@ class TestAppRunnerConfigureAgent:
     )
     @patch("code_puppy.messaging.emit_error")
     @patch("code_puppy.error_logging.log_error")
-@pytest.mark.serial
-@pytest.mark.xdist_group(name="dbos")
     def test_configure_agent_agent_exception(
         self, mock_log, mock_emit, mock_get_agents
     ):

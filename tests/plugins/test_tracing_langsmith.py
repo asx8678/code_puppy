@@ -92,8 +92,6 @@ def _get_fresh_module_with_mock_client(mock_client=None, env_vars=None):
 class TestEnvVarNotSet:
     """Plugin should be silent and have zero overhead when env var not set."""
 
-@pytest.mark.serial
-@pytest.mark.xdist_group(name="env-mutation")
     def test_is_plugin_active_returns_false_without_env(self):
         """_is_plugin_active should return False when no API key."""
         # Clear all env vars
@@ -107,8 +105,6 @@ class TestEnvVarNotSet:
 
         assert reg_module._is_plugin_active() is False
 
-@pytest.mark.serial
-@pytest.mark.xdist_group(name="env-mutation")
     def test_callbacks_unchanged_without_env(self):
         """When LANGSMITH_API_KEY is not set, the module should not enable tracing."""
         # Clear all env vars
@@ -137,8 +133,6 @@ class TestEnvVarNotSet:
 class TestLangsmithNotInstalled:
     """Plugin should gracefully handle missing langsmith package."""
 
-@pytest.mark.serial
-@pytest.mark.xdist_group(name="env-mutation")
     def test_warn_once_fires_when_package_missing(self):
         """When langsmith package is missing, warn_once should hint at installation."""
         # Clear any existing env vars first
@@ -171,8 +165,6 @@ class TestLangsmithNotInstalled:
                 assert call_args[0][0] == "langsmith_missing"  # key
                 assert "pip install langsmith" in call_args[0][1]  # message
 
-@pytest.mark.serial
-@pytest.mark.xdist_group(name="env-mutation")
     def test_returns_none_when_package_missing(self):
         """_get_langsmith_client should return None when package missing."""
         # Clear any existing env vars first
@@ -198,8 +190,6 @@ class TestLangsmithNotInstalled:
 class TestWithMockClient:
     """Test span creation and nesting with a mock LangSmith client."""
 
-@pytest.mark.serial
-@pytest.mark.xdist_group(name="env-mutation")
     def test_agent_run_start_creates_trace(self, mock_langsmith_client):
         """agent_run_start should create a LangSmith run."""
         # Clear and set env vars
@@ -222,8 +212,6 @@ class TestWithMockClient:
         assert call_kwargs["session_id"] == "sess-123"
         assert call_kwargs["inputs"]["model"] == "gpt-4"
 
-@pytest.mark.serial
-@pytest.mark.xdist_group(name="env-mutation")
     def test_agent_run_end_updates_trace(self, mock_langsmith_client):
         """agent_run_end should update the LangSmith run."""
         # Clear and set env vars
@@ -255,8 +243,6 @@ class TestWithMockClient:
         assert call_kwargs["outputs"]["success"] is True
         assert "Hello, world!" in call_kwargs["outputs"]["response_preview"]
 
-@pytest.mark.serial
-@pytest.mark.xdist_group(name="env-mutation")
     def test_tool_span_nesting(self, mock_langsmith_client):
         """Tool spans should be nested under agent runs."""
         # Clear and set env vars
@@ -300,8 +286,6 @@ class TestWithMockClient:
             # Verify update was called for tool
             assert mock_langsmith_client.update_run.called
 
-@pytest.mark.serial
-@pytest.mark.xdist_group(name="env-mutation")
     def test_session_id_correlation(self, mock_langsmith_client):
         """session_id should be used as trace correlation ID."""
         # Clear and set env vars
@@ -322,8 +306,6 @@ class TestWithMockClient:
         call_kwargs = mock_langsmith_client.create_run.call_args[1]
         assert call_kwargs["session_id"] == session_id
 
-@pytest.mark.serial
-@pytest.mark.xdist_group(name="env-mutation")
     def test_error_handling_in_agent_run(self, mock_langsmith_client):
         """Errors in agent runs should be captured in trace."""
         # Clear and set env vars
@@ -355,8 +337,6 @@ class TestWithMockClient:
         assert "error" in call_kwargs["outputs"]
         assert "Something went wrong" in call_kwargs["error"]
 
-@pytest.mark.serial
-@pytest.mark.xdist_group(name="env-mutation")
     def test_stream_event_logging(self, mock_langsmith_client):
         """Stream events should be logged to the trace."""
         # Clear and set env vars
@@ -389,8 +369,6 @@ class TestWithMockClient:
 class TestEdgeCases:
     """Edge cases and error handling."""
 
-@pytest.mark.serial
-@pytest.mark.xdist_group(name="env-mutation")
     def test_no_active_trace_for_tool_call(self, mock_langsmith_client):
         """Tool calls without active run context should be gracefully skipped."""
         # Clear and set env vars
@@ -407,8 +385,6 @@ class TestEdgeCases:
             # Should not raise
             asyncio.run(reg_module._on_pre_tool_call("list_files", {"directory": "/tmp"}))
 
-@pytest.mark.serial
-@pytest.mark.xdist_group(name="env-mutation")
     def test_missing_session_id_handling(self, mock_langsmith_client):
         """Missing session_id should result in generated UUID."""
         # Clear and set env vars
@@ -434,8 +410,6 @@ class TestEdgeCases:
         except ValueError:
             pytest.fail("session_id should be a valid UUID")
 
-@pytest.mark.serial
-@pytest.mark.xdist_group(name="env-mutation")
     def test_cleanup_on_trace_end(self, mock_langsmith_client):
         """Trace context should be cleaned up after agent_run_end."""
         # Clear and set env vars
@@ -472,8 +446,6 @@ class TestEdgeCases:
 class TestZeroOverhead:
     """Verify zero overhead when plugin is disabled."""
 
-@pytest.mark.serial
-@pytest.mark.xdist_group(name="env-mutation")
     def test_quick_return_without_api_key(self):
         """Callbacks should return immediately when API key not set."""
         # Clear all env vars
@@ -525,8 +497,6 @@ class TestZeroOverhead:
 class TestClientExceptionHandling:
     """Test handling when LangSmith client throws exceptions."""
 
-@pytest.mark.serial
-@pytest.mark.xdist_group(name="env-mutation")
     def test_exception_during_trace_start(self, mock_langsmith_client):
         """Exception during trace start should be caught gracefully."""
         # Make create_run throw exception
@@ -547,8 +517,6 @@ class TestClientExceptionHandling:
         # create_run was called but exception was caught
         assert mock_langsmith_client.create_run.called
 
-@pytest.mark.serial
-@pytest.mark.xdist_group(name="env-mutation")
     def test_exception_during_trace_end(self, mock_langsmith_client):
         """Exception during trace end should be caught gracefully."""
         # Make update_run throw exception
@@ -571,8 +539,6 @@ class TestClientExceptionHandling:
         # update_run was called but exception was caught
         assert mock_langsmith_client.update_run.called
 
-@pytest.mark.serial
-@pytest.mark.xdist_group(name="env-mutation")
     def test_exception_during_tool_span(self, mock_langsmith_client):
         """Exception during tool span creation should be caught."""
         # Make second create_run (for tool) throw
@@ -610,8 +576,6 @@ class TestClientExceptionHandling:
 class TestConcurrentSessions:
     """Test handling of multiple concurrent sessions."""
 
-@pytest.mark.serial
-@pytest.mark.xdist_group(name="env-mutation")
     def test_multiple_concurrent_sessions(self, mock_langsmith_client):
         """Multiple concurrent sessions should be tracked independently."""
         for key in ["LANGSMITH_API_KEY", "LANGSMITH_PROJECT", "LANGSMITH_BASE_URL"]:
@@ -638,8 +602,6 @@ class TestConcurrentSessions:
         # Verify all cleaned up
         assert len(reg_module._active_traces) == 0
 
-@pytest.mark.serial
-@pytest.mark.xdist_group(name="env-mutation")
     def test_same_session_id_reuse(self, mock_langsmith_client):
         """Reusing same session_id should replace previous trace."""
         for key in ["LANGSMITH_API_KEY", "LANGSMITH_PROJECT", "LANGSMITH_BASE_URL"]:
@@ -684,8 +646,6 @@ class TestConcurrentSessions:
 class TestEnvironmentVariables:
     """Test environment variable configuration."""
 
-@pytest.mark.serial
-@pytest.mark.xdist_group(name="env-mutation")
     def test_custom_project_name(self, mock_langsmith_client):
         """LANGSMITH_PROJECT should be used as project name."""
         # Clear any existing env vars first
@@ -707,8 +667,6 @@ class TestEnvironmentVariables:
         call_kwargs = mock_langsmith_client.create_run.call_args[1]
         assert call_kwargs["project_name"] == "my-custom-project"
 
-@pytest.mark.serial
-@pytest.mark.xdist_group(name="env-mutation")
     def test_custom_base_url(self, mock_langsmith_client):
         """LANGSMITH_BASE_URL should be passed to client."""
         # Clear any existing env vars first
@@ -737,8 +695,6 @@ class TestEnvironmentVariables:
             call_kwargs = MockClientClass.call_args[1]
             assert call_kwargs["api_url"] == "https://custom.langsmith.com/api"
 
-@pytest.mark.serial
-@pytest.mark.xdist_group(name="env-mutation")
     def test_default_project_name(self, mock_langsmith_client):
         """Default project name should be 'default'."""
         # Clear any existing env vars first

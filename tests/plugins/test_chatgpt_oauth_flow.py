@@ -69,8 +69,6 @@ class TestOAuthServer:
     to avoid parallel test conflicts.
     """
 
-@pytest.mark.serial
-@pytest.mark.xdist_group(name="network")
     def test_oauth_server_initialization(self):
         """Test OAuth server initialization with proper parameters."""
         server = _OAuthServer(client_id="test_client_id")
@@ -84,8 +82,6 @@ class TestOAuthServer:
 
         server.server_close()
 
-@pytest.mark.serial
-@pytest.mark.xdist_group(name="network")
     def test_oauth_server_port_binding_error(self):
         """Test OAuth server handles port binding errors gracefully."""
         # Use a common port that's likely in use
@@ -95,8 +91,6 @@ class TestOAuthServer:
             with pytest.raises(OSError):
                 _OAuthServer(client_id="test_client_id")
 
-@pytest.mark.serial
-@pytest.mark.xdist_group(name="network")
     def test_auth_url_generation(self, mock_context):
         """Test authorization URL generation with all required parameters."""
         server = _OAuthServer(client_id="test_client_id")
@@ -122,8 +116,6 @@ class TestOAuthServer:
         server.server_close()
 
     @patch("requests.post")
-@pytest.mark.serial
-@pytest.mark.xdist_group(name="network")
     def test_exchange_code_success(self, mock_post, mock_context, mock_tokens_data):
         """Test successful code exchange for access tokens."""
         # Mock successful response
@@ -182,8 +174,6 @@ class TestOAuthServer:
             server.server_close()
 
     @patch("requests.post")
-@pytest.mark.serial
-@pytest.mark.xdist_group(name="network")
     def test_exchange_code_http_error(self, mock_post, mock_context):
         """Test code exchange handles HTTP errors gracefully."""
         mock_response = Mock()
@@ -202,8 +192,6 @@ class TestOAuthServer:
         server.server_close()
 
     @patch("requests.post")
-@pytest.mark.serial
-@pytest.mark.xdist_group(name="network")
     def test_exchange_code_timeout(self, mock_post, mock_context):
         """Test code exchange handles timeout gracefully."""
         mock_post.side_effect = requests.Timeout("Request timed out")
@@ -218,8 +206,6 @@ class TestOAuthServer:
         server.server_close()
 
     @patch("requests.post")
-@pytest.mark.serial
-@pytest.mark.xdist_group(name="network")
     def test_exchange_code_network_error(self, mock_post, mock_context):
         """Test code exchange handles network errors gracefully."""
         mock_post.side_effect = requests.ConnectionError("Network error")
@@ -234,8 +220,6 @@ class TestOAuthServer:
         server.server_close()
 
     @patch("requests.post")
-@pytest.mark.serial
-@pytest.mark.xdist_group(name="network")
     def test_exchange_code_missing_tokens(self, mock_post, mock_context):
         """Test code exchange handles missing token data gracefully."""
         mock_response = Mock()
@@ -264,8 +248,6 @@ class TestOAuthServer:
             server.server_close()
 
     @patch("requests.post")
-@pytest.mark.serial
-@pytest.mark.xdist_group(name="network")
     def test_exchange_code_success_url_security(self, mock_post, mock_context):
         """Test that tokens are not exposed in the success URL (security fix)."""
         mock_response = Mock()
@@ -360,8 +342,6 @@ class TestCallbackHandler:
             )
             return handler
 
-@pytest.mark.serial
-@pytest.mark.xdist_group(name="network")
     def test_do_get_success_endpoint(self, callback_handler):
         """Test successful callback handler for success endpoint."""
         with patch.object(callback_handler, "_send_html") as mock_send:
@@ -378,8 +358,6 @@ class TestCallbackHandler:
                 assert "You can now close this window" in html_content
                 mock_shutdown.assert_called_once_with(2.0)
 
-@pytest.mark.serial
-@pytest.mark.xdist_group(name="network")
     def test_do_get_invalid_path(self, callback_handler):
         """Test callback handler rejects invalid paths."""
         with patch.object(callback_handler, "_send_failure") as mock_failure:
@@ -392,8 +370,6 @@ class TestCallbackHandler:
                 )
                 mock_shutdown.assert_called_once()
 
-@pytest.mark.serial
-@pytest.mark.xdist_group(name="network")
     def test_do_get_missing_code(self, callback_handler):
         """Test callback handler handles missing auth code."""
         with patch.object(callback_handler, "_send_failure") as mock_failure:
@@ -406,8 +382,6 @@ class TestCallbackHandler:
                 )
                 mock_shutdown.assert_called_once()
 
-@pytest.mark.serial
-@pytest.mark.xdist_group(name="network")
     def test_do_get_code_exchange_failure(self, callback_handler):
         """Test callback handler handles code exchange failure."""
         callback_handler.server.exchange_code.side_effect = Exception(
@@ -425,8 +399,6 @@ class TestCallbackHandler:
                 mock_shutdown.assert_called_once()
 
     @patch("code_puppy.plugins.chatgpt_oauth.oauth_flow.save_tokens")
-@pytest.mark.serial
-@pytest.mark.xdist_group(name="network")
     def test_do_get_successful_callback(self, mock_save_tokens, callback_handler):
         """Test successful OAuth callback handling."""
         mock_save_tokens.return_value = True
@@ -471,8 +443,6 @@ class TestCallbackHandler:
                 mock_shutdown.assert_called_once_with(2.0)
 
     @patch("code_puppy.plugins.chatgpt_oauth.oauth_flow.save_tokens")
-@pytest.mark.serial
-@pytest.mark.xdist_group(name="network")
     def test_do_get_token_save_failure(self, mock_save_tokens, callback_handler):
         """Test callback handling when token saving fails."""
         mock_save_tokens.return_value = False
@@ -503,8 +473,6 @@ class TestCallbackHandler:
                 )
                 mock_shutdown.assert_called_once()
 
-@pytest.mark.serial
-@pytest.mark.xdist_group(name="network")
     def test_do_post_not_supported(self, callback_handler):
         """Test POST requests are rejected."""
         with patch.object(callback_handler, "_send_failure") as mock_failure:
@@ -516,8 +484,6 @@ class TestCallbackHandler:
                 )
                 mock_shutdown.assert_called_once()
 
-@pytest.mark.serial
-@pytest.mark.xdist_group(name="network")
     def test_log_message_verbose_mode(self, callback_handler):
         """Test log message is only shown in verbose mode."""
         callback_handler.server.verbose = True
@@ -528,8 +494,6 @@ class TestCallbackHandler:
             callback_handler.log_message("Test message %s", "arg")
             mock_log.assert_called_once_with("Test message %s", "arg")
 
-@pytest.mark.serial
-@pytest.mark.xdist_group(name="network")
     def test_log_message_non_verbose(self, callback_handler):
         """Test log message is suppressed in non-verbose mode."""
         callback_handler.server.verbose = False
@@ -538,8 +502,6 @@ class TestCallbackHandler:
             callback_handler.log_message("Test message %s", "arg")
             mock_print.assert_not_called()
 
-@pytest.mark.serial
-@pytest.mark.xdist_group(name="network")
     def test_send_redirect(self, callback_handler):
         """Test redirect response sending."""
         callback_handler.send_response = Mock()
@@ -552,8 +514,6 @@ class TestCallbackHandler:
         callback_handler.send_response.assert_called_once_with(302)
         callback_handler.send_header.assert_any_call("Location", "http://example.com")
 
-@pytest.mark.serial
-@pytest.mark.xdist_group(name="network")
     def test_send_html(self, callback_handler):
         """Test HTML response sending."""
         callback_handler.send_response = Mock()
@@ -575,8 +535,6 @@ class TestCallbackHandler:
         # Verify HTML was written
         callback_handler.wfile.write.assert_called_once_with(test_html.encode("utf-8"))
 
-@pytest.mark.serial
-@pytest.mark.xdist_group(name="network")
     def test_send_failure(self, callback_handler):
         """Test failure response sending."""
         with patch.object(callback_handler, "_send_html") as mock_send_html:
@@ -588,8 +546,6 @@ class TestCallbackHandler:
             assert "ChatGPT" in html_content
             assert "Test error" in html_content
 
-@pytest.mark.serial
-@pytest.mark.xdist_group(name="network")
     def test_shutdown(self, callback_handler):
         """Test server shutdown in separate thread."""
         callback_handler.server.shutdown = Mock()
@@ -600,8 +556,6 @@ class TestCallbackHandler:
         # Can't easily test threading, but we can verify the method exists
         assert hasattr(callback_handler, "_shutdown")
 
-@pytest.mark.serial
-@pytest.mark.xdist_group(name="network")
     def test_shutdown_after_delay(self, callback_handler_for_shutdown):
         """Test delayed shutdown functionality."""
         with patch("threading.Thread") as mock_thread:
@@ -634,8 +588,6 @@ class TestRunOAuthFlow:
     @patch("code_puppy.plugins.chatgpt_oauth.oauth_flow._OAuthServer")
     @patch("code_puppy.plugins.chatgpt_oauth.oauth_flow.emit_warning")
     @patch("code_puppy.plugins.chatgpt_oauth.oauth_flow.emit_info")
-@pytest.mark.serial
-@pytest.mark.xdist_group(name="network")
     def test_existing_tokens_warning(
         self, mock_info, mock_warning, mock_server_class, mock_load_tokens
     ):
@@ -664,8 +616,6 @@ class TestRunOAuthFlow:
     @patch("code_puppy.plugins.chatgpt_oauth.oauth_flow._OAuthServer")
     @patch("code_puppy.plugins.chatgpt_oauth.oauth_flow.emit_error")
     @patch("code_puppy.plugins.chatgpt_oauth.oauth_flow.emit_info")
-@pytest.mark.serial
-@pytest.mark.xdist_group(name="network")
     def test_server_start_error(
         self, mock_info, mock_error, mock_server_class, mock_load_tokens
     ):
@@ -685,8 +635,6 @@ class TestRunOAuthFlow:
     @patch("code_puppy.plugins.chatgpt_oauth.oauth_flow._OAuthServer")
     @patch("code_puppy.plugins.chatgpt_oauth.oauth_flow.emit_info")
     @patch("code_puppy.plugins.chatgpt_oauth.oauth_flow.emit_success")
-@pytest.mark.serial
-@pytest.mark.xdist_group(name="network")
     def test_successful_oauth_flow(
         self,
         mock_info,
@@ -742,8 +690,6 @@ class TestRunOAuthFlow:
     @patch("code_puppy.plugins.chatgpt_oauth.oauth_flow._OAuthServer")
     @patch("code_puppy.messaging.emit_error")
     @patch("code_puppy.messaging.emit_info")
-@pytest.mark.serial
-@pytest.mark.xdist_group(name="network")
     def test_authentication_timeout(
         self, mock_info, mock_error, mock_server_class, mock_load_tokens
     ):
@@ -775,8 +721,6 @@ class TestRunOAuthFlow:
     @patch("code_puppy.plugins.chatgpt_oauth.oauth_flow._OAuthServer")
     @patch("code_puppy.messaging.emit_error")
     @patch("code_puppy.messaging.emit_info")
-@pytest.mark.serial
-@pytest.mark.xdist_group(name="network")
     def test_tokens_cannot_be_loaded_after_success(
         self, mock_info, mock_error, mock_server_class, mock_load_tokens
     ):
@@ -799,8 +743,6 @@ class TestRunOAuthFlow:
     @patch("code_puppy.plugins.chatgpt_oauth.oauth_flow._OAuthServer")
     @patch("code_puppy.messaging.emit_warning")
     @patch("code_puppy.messaging.emit_info")
-@pytest.mark.serial
-@pytest.mark.xdist_group(name="network")
     def test_no_api_key_obtained(
         self, mock_info, mock_warning, mock_server_class, mock_load_tokens
     ):
@@ -838,8 +780,6 @@ class TestRunOAuthFlow:
     @patch("webbrowser.open")
     @patch("code_puppy.messaging.emit_warning")
     @patch("code_puppy.messaging.emit_info")
-@pytest.mark.serial
-@pytest.mark.xdist_group(name="network")
     def test_browser_auto_open(
         self,
         mock_info,
@@ -884,8 +824,6 @@ class TestRunOAuthFlow:
     @patch("webbrowser.open")
     @patch("code_puppy.messaging.emit_warning")
     @patch("code_puppy.messaging.emit_info")
-@pytest.mark.serial
-@pytest.mark.xdist_group(name="network")
     def test_browser_open_failure(
         self,
         mock_info,
@@ -927,8 +865,6 @@ class TestRunOAuthFlow:
 class TestTokenDataAndAuthBundle:
     """Test token data structures."""
 
-@pytest.mark.serial
-@pytest.mark.xdist_group(name="network")
     def test_token_data_creation(self):
         """Test TokenData dataclass creation and attributes."""
         token_data = TokenData(
@@ -943,8 +879,6 @@ class TestTokenDataAndAuthBundle:
         assert token_data.refresh_token == "test_refresh_token"
         assert token_data.account_id == "test_account_id"
 
-@pytest.mark.serial
-@pytest.mark.xdist_group(name="network")
     def test_auth_bundle_creation(self):
         """Test AuthBundle dataclass creation and attributes."""
         token_data = TokenData(
@@ -975,8 +909,6 @@ class TestShutdownAfterDelay:
     to avoid parallel test conflicts.
     """
 
-@pytest.mark.serial
-@pytest.mark.xdist_group(name="network")
     def test_shutdown_after_delay_calls_shutdown(self):
         """Test that _shutdown_after_delay spawns a thread that calls _shutdown."""
         handler = Mock(spec=_CallbackHandler)
@@ -1018,8 +950,6 @@ class TestRunOAuthFlowBrowserPaths:
     @patch("code_puppy.plugins.chatgpt_oauth.oauth_flow.emit_warning")
     @patch("code_puppy.plugins.chatgpt_oauth.oauth_flow.emit_info")
     @patch("code_puppy.plugins.chatgpt_oauth.oauth_flow.emit_error")
-@pytest.mark.serial
-@pytest.mark.xdist_group(name="network")
     def test_non_headless_browser_open_success(
         self, mock_error, mock_info, mock_warning, mock_server_class, mock_load_tokens
     ):
@@ -1049,8 +979,6 @@ class TestRunOAuthFlowBrowserPaths:
     @patch("code_puppy.plugins.chatgpt_oauth.oauth_flow.emit_warning")
     @patch("code_puppy.plugins.chatgpt_oauth.oauth_flow.emit_info")
     @patch("code_puppy.plugins.chatgpt_oauth.oauth_flow.emit_error")
-@pytest.mark.serial
-@pytest.mark.xdist_group(name="network")
     def test_non_headless_browser_open_failure_shows_manual_warning(
         self, mock_error, mock_info, mock_warning, mock_server_class, mock_load_tokens
     ):
@@ -1082,8 +1010,6 @@ class TestRunOAuthFlowBrowserPaths:
     @patch("code_puppy.plugins.chatgpt_oauth.oauth_flow.emit_warning")
     @patch("code_puppy.plugins.chatgpt_oauth.oauth_flow.emit_info")
     @patch("code_puppy.plugins.chatgpt_oauth.oauth_flow.emit_error")
-@pytest.mark.serial
-@pytest.mark.xdist_group(name="network")
     def test_non_headless_browser_exception(
         self, mock_error, mock_info, mock_warning, mock_server_class, mock_load_tokens
     ):
