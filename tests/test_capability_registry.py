@@ -130,8 +130,6 @@ def _clean_registry():
 @pytest.mark.serial
 @pytest.mark.xdist_group(name="threading")
 class TestDefineCapability:
-@pytest.mark.serial
-@pytest.mark.xdist_group(name="threading")
     def test_creates_and_returns_capability(self):
         cap_id = _cap_id("create")
         cap = define_capability(cap_id, "Test Cap", "A test capability")
@@ -141,8 +139,6 @@ class TestDefineCapability:
         assert cap.description == "A test capability"
         assert cap.providers == []
 
-@pytest.mark.serial
-@pytest.mark.xdist_group(name="threading")
     def test_idempotent_returns_existing(self):
         cap_id = _cap_id("idem")
         cap1 = define_capability(cap_id, "Cap", "desc")
@@ -151,16 +147,12 @@ class TestDefineCapability:
         assert cap1 is cap2
         assert cap2.display_name == "Cap"
 
-@pytest.mark.serial
-@pytest.mark.xdist_group(name="threading")
     def test_key_fn_defaults_to_no_dedup(self):
         cap_id = _cap_id("keyfn")
         cap = define_capability(cap_id, "Cap", "desc")
         # Default key_fn returns None (no dedup)
         assert cap.key_fn({"anything": "here"}) is None
 
-@pytest.mark.serial
-@pytest.mark.xdist_group(name="threading")
     def test_custom_key_fn_stored(self):
         cap_id = _cap_id("customkey")
         key_fn = lambda item: item.get("id") if isinstance(item, dict) else None
@@ -177,8 +169,6 @@ class TestDefineCapability:
 @pytest.mark.serial
 @pytest.mark.xdist_group(name="threading")
 class TestRegisterProvider:
-@pytest.mark.serial
-@pytest.mark.xdist_group(name="threading")
     def test_register_adds_provider(self):
         cap_id = _cap_id("reg")
         define_capability(cap_id, "Cap", "desc")
@@ -189,8 +179,6 @@ class TestRegisterProvider:
         provider_ids = [p["id"] for p in info["providers"]]
         assert "p1" in provider_ids
 
-@pytest.mark.serial
-@pytest.mark.xdist_group(name="threading")
     def test_providers_ordered_by_priority_descending(self):
         cap_id = _cap_id("priority")
         define_capability(cap_id, "Cap", "desc")
@@ -207,8 +195,6 @@ class TestRegisterProvider:
         ordered_ids = [p["id"] for p in info["providers"]]
         assert ordered_ids == ["high", "mid", "low"]
 
-@pytest.mark.serial
-@pytest.mark.xdist_group(name="threading")
     def test_same_priority_preserves_insertion_order(self):
         cap_id = _cap_id("samepri")
         define_capability(cap_id, "Cap", "desc")
@@ -222,14 +208,10 @@ class TestRegisterProvider:
         ordered_ids = [p["id"] for p in info["providers"]]
         assert ordered_ids == ["a", "b"]
 
-@pytest.mark.serial
-@pytest.mark.xdist_group(name="threading")
     def test_unknown_capability_raises_key_error(self):
         with pytest.raises(KeyError, match="not defined"):
             register_provider("nonexistent_cap_xyz", _SimpleProvider("p", []))
 
-@pytest.mark.serial
-@pytest.mark.xdist_group(name="threading")
     def test_register_invalidates_cache(self):
         cap_id = _cap_id("cache_inv")
         define_capability(cap_id, "Cap", "desc", key_fn=lambda x: None)
@@ -511,8 +493,6 @@ class TestCache:
 @pytest.mark.serial
 @pytest.mark.xdist_group(name="threading")
 class TestIntrospection:
-@pytest.mark.serial
-@pytest.mark.xdist_group(name="threading")
     def test_list_capabilities_includes_defined(self):
         cap_id = _cap_id("listcaps")
         define_capability(cap_id, "My Cap", "desc")
@@ -520,8 +500,6 @@ class TestIntrospection:
         cap_ids = [c["id"] for c in caps]
         assert cap_id in cap_ids
 
-@pytest.mark.serial
-@pytest.mark.xdist_group(name="threading")
     def test_list_capabilities_structure(self):
         cap_id = _cap_id("struct")
         define_capability(cap_id, "Structured Cap", "A cap for structure test")
@@ -535,8 +513,6 @@ class TestIntrospection:
         assert entry["providers"][0]["id"] == "prov"
         assert entry["providers"][0]["priority"] == 42
 
-@pytest.mark.serial
-@pytest.mark.xdist_group(name="threading")
     def test_get_capability_info_returns_details(self):
         cap_id = _cap_id("info")
         define_capability(cap_id, "Info Cap", "Detailed info")
@@ -551,13 +527,9 @@ class TestIntrospection:
         assert provider_info["id"] == "p1"
         assert provider_info["priority"] == 99
 
-@pytest.mark.serial
-@pytest.mark.xdist_group(name="threading")
     def test_get_capability_info_unknown_returns_none(self):
         assert get_capability_info("definitely_not_a_real_cap_xyz") is None
 
-@pytest.mark.serial
-@pytest.mark.xdist_group(name="threading")
     def test_list_capabilities_returns_all_registered(self):
         ids = [_cap_id(f"multi_{i}") for i in range(3)]
         for cid in ids:
@@ -632,8 +604,6 @@ class TestErrorHandling:
         with pytest.raises(KeyError):
             await load_capability("ghost_cap_never_defined_xyz")
 
-@pytest.mark.serial
-@pytest.mark.xdist_group(name="threading")
     def test_register_provider_unknown_cap_raises(self):
         with pytest.raises(KeyError):
             register_provider("ghost_cap_xyz_2", _SimpleProvider("p", []))
@@ -647,8 +617,6 @@ class TestErrorHandling:
 @pytest.mark.serial
 @pytest.mark.xdist_group(name="threading")
 class TestThreadSafety:
-@pytest.mark.serial
-@pytest.mark.xdist_group(name="threading")
     def test_concurrent_define_and_register(self):
         """Multiple threads can define capabilities without corrupting state."""
         errors: list[Exception] = []
@@ -685,8 +653,6 @@ class TestThreadSafety:
         )
         assert all(len(r.items) == 1 for r in results)
 
-@pytest.mark.serial
-@pytest.mark.xdist_group(name="threading")
     def test_define_capability_idempotent_under_threads(self):
         """define_capability is idempotent even when called concurrently."""
         cap_id = _cap_id("idem_thread")
@@ -719,14 +685,10 @@ class TestThreadSafety:
 @pytest.mark.serial
 @pytest.mark.xdist_group(name="threading")
 class TestTypes:
-@pytest.mark.serial
-@pytest.mark.xdist_group(name="threading")
     def test_load_context_hashable(self):
         ctx = LoadContext(cwd="/proj", home="/home")
         assert hash(ctx) == hash(LoadContext(cwd="/proj", home="/home"))
 
-@pytest.mark.serial
-@pytest.mark.xdist_group(name="threading")
     def test_load_context_equality(self):
         ctx1 = LoadContext(cwd="/a", home="/b")
         ctx2 = LoadContext(cwd="/a", home="/b")
@@ -734,8 +696,6 @@ class TestTypes:
         assert ctx1 == ctx2
         assert ctx1 != ctx3
 
-@pytest.mark.serial
-@pytest.mark.xdist_group(name="threading")
     def test_source_meta_fields(self):
         sm = SourceMeta(
             provider="prov", provider_name="Prov", path="/some/path", level="user"
@@ -743,14 +703,10 @@ class TestTypes:
         assert sm.provider == "prov"
         assert sm.level == "user"
 
-@pytest.mark.serial
-@pytest.mark.xdist_group(name="threading")
     def test_load_result_defaults(self):
         lr = LoadResult(items=[1, 2, 3])
         assert lr.warnings == []
 
-@pytest.mark.serial
-@pytest.mark.xdist_group(name="threading")
     def test_capability_result_structure(self):
         cr = CapabilityResult(
             items=[1],
@@ -763,8 +719,6 @@ class TestTypes:
         assert cr.warnings == ["w"]
         assert cr.contributing_providers == ["p1"]
 
-@pytest.mark.serial
-@pytest.mark.xdist_group(name="threading")
     def test_provider_protocol_structural_check(self):
         """_SimpleProvider satisfies the Provider protocol."""
         p = _SimpleProvider("x", [])
@@ -779,8 +733,6 @@ class TestTypes:
 @pytest.mark.serial
 @pytest.mark.xdist_group(name="threading")
 class TestBuiltinProviders:
-@pytest.mark.serial
-@pytest.mark.xdist_group(name="threading")
     def test_builtin_capabilities_defined(self):
         """Importing the package defines models, rules, mcps capabilities."""
         import code_puppy.capability  # noqa: F401 – triggers builtin registration
@@ -798,8 +750,6 @@ class TestBuiltinProviders:
         result = await lc("models", ctx=_make_ctx())
         assert isinstance(result, CapabilityResult)
 
-@pytest.mark.serial
-@pytest.mark.xdist_group(name="threading")
     def test_models_key_fn(self):
         from code_puppy.capability.builtin_providers import models_capability
 
@@ -807,15 +757,11 @@ class TestBuiltinProviders:
         assert models_capability.key_fn({"other": "field"}) is None
         assert models_capability.key_fn("not a dict") is None
 
-@pytest.mark.serial
-@pytest.mark.xdist_group(name="threading")
     def test_rules_key_fn(self):
         from code_puppy.capability.builtin_providers import rules_capability
 
         assert rules_capability.key_fn({"name": "no_jargon"}) == "no_jargon"
 
-@pytest.mark.serial
-@pytest.mark.xdist_group(name="threading")
     def test_mcps_key_fn(self):
         from code_puppy.capability.builtin_providers import mcps_capability
 
@@ -831,8 +777,6 @@ class TestBuiltinProviders:
 @pytest.mark.serial
 @pytest.mark.xdist_group(name="threading")
 class TestPackageExports:
-@pytest.mark.serial
-@pytest.mark.xdist_group(name="threading")
     def test_all_public_symbols_importable(self):
         from code_puppy.capability import (
             Capability,

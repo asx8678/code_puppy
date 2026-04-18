@@ -23,8 +23,6 @@ from code_puppy.utils.path_safety import (
 class TestSafePathComponent:
     """Tests for safe_path_component() function."""
 
-@pytest.mark.serial
-@pytest.mark.xdist_group(name="chdir")
     def test_valid_names(self):
         """Test that valid alphanumeric/underscore/hyphen names pass."""
         valid_names = [
@@ -43,15 +41,11 @@ class TestSafePathComponent:
         for name in valid_names:
             assert safe_path_component(name) == name
 
-@pytest.mark.serial
-@pytest.mark.xdist_group(name="chdir")
     def test_empty_name_raises(self):
         """Test that empty names are rejected."""
         with pytest.raises(UnsafeComponentError, match="must not be empty"):
             safe_path_component("")
 
-@pytest.mark.serial
-@pytest.mark.xdist_group(name="chdir")
     def test_slash_rejection(self):
         """Test that forward slashes (path separators) are rejected."""
         with pytest.raises(UnsafeComponentError, match="forbidden characters.*'/'"):
@@ -59,15 +53,11 @@ class TestSafePathComponent:
         with pytest.raises(UnsafeComponentError, match="forbidden"):
             safe_path_component("/absolute/path")
 
-@pytest.mark.serial
-@pytest.mark.xdist_group(name="chdir")
     def test_backslash_rejection(self):
         """Test that backslashes are rejected."""
         with pytest.raises(UnsafeComponentError, match="forbidden characters.*\\u005c\\u005c"):
             safe_path_component("path\\to\\file")
 
-@pytest.mark.serial
-@pytest.mark.xdist_group(name="chdir")
     def test_dot_rejection(self):
         """Test that dots are rejected (preventing .. traversal)."""
         with pytest.raises(UnsafeComponentError, match="forbidden characters.*'.'"):
@@ -77,8 +67,6 @@ class TestSafePathComponent:
         with pytest.raises(UnsafeComponentError, match="forbidden"):
             safe_path_component(".hidden")
 
-@pytest.mark.serial
-@pytest.mark.xdist_group(name="chdir")
     def test_colon_rejection(self):
         """Test that colons are rejected (Windows drive letters, alternate data streams)."""
         with pytest.raises(UnsafeComponentError, match="forbidden characters.*':'"):
@@ -86,15 +74,11 @@ class TestSafePathComponent:
         with pytest.raises(UnsafeComponentError, match="forbidden"):
             safe_path_component("C:file")
 
-@pytest.mark.serial
-@pytest.mark.xdist_group(name="chdir")
     def test_null_byte_rejection(self):
         """Test that null bytes are rejected."""
         with pytest.raises(UnsafeComponentError, match="forbidden characters.*\\\\x00"):
             safe_path_component("file\x00name")
 
-@pytest.mark.serial
-@pytest.mark.xdist_group(name="chdir")
     def test_max_length_enforcement(self):
         """Test that max_len is enforced."""
         # Default max_len of 64
@@ -115,8 +99,6 @@ class TestSafePathComponent:
         with pytest.raises(UnsafeComponentError, match="max_len must be >= 1"):
             safe_path_component("a", max_len=-1)
 
-@pytest.mark.serial
-@pytest.mark.xdist_group(name="chdir")
     def test_unicode_rejection(self):
         """Test that unicode characters outside ASCII are rejected."""
         with pytest.raises(UnsafeComponentError, match="must match pattern"):
@@ -127,8 +109,6 @@ class TestSafePathComponent:
         with pytest.raises(UnsafeComponentError, match="forbidden"):
             safe_path_component("file\u0000name")  # Null as unicode escape
 
-@pytest.mark.serial
-@pytest.mark.xdist_group(name="chdir")
     def test_special_chars_rejection(self):
         """Test various special characters are rejected."""
         special_chars = [
@@ -159,8 +139,6 @@ class TestSafePathComponent:
             with pytest.raises(UnsafeComponentError, match="must match pattern"):
                 safe_path_component(name)
 
-@pytest.mark.serial
-@pytest.mark.xdist_group(name="chdir")
     def test_traversal_patterns(self):
         """Test common path traversal patterns are all blocked."""
         traversal_patterns = [
@@ -179,8 +157,6 @@ class TestSafePathComponent:
             with pytest.raises(UnsafeComponentError):
                 safe_path_component(pattern)
 
-@pytest.mark.serial
-@pytest.mark.xdist_group(name="chdir")
     def test_null_and_control_chars(self):
         """Test null bytes and control characters are blocked."""
         # Test specific control chars that should be rejected
@@ -196,8 +172,6 @@ class TestSafePathComponent:
                 with pytest.raises((UnsafeComponentError, ValueError)):
                     safe_path_component(f"file{char}name")
 
-@pytest.mark.serial
-@pytest.mark.xdist_group(name="chdir")
     def test_non_string_input(self):
         """Test that non-string inputs raise appropriate errors."""
         with pytest.raises(UnsafeComponentError, match="must be a string"):
@@ -207,8 +181,6 @@ class TestSafePathComponent:
         with pytest.raises(UnsafeComponentError, match="must be a string"):
             safe_path_component(["file"])
 
-@pytest.mark.serial
-@pytest.mark.xdist_group(name="chdir")
     def test_return_value_unchanged(self):
         """Test that valid names are returned unchanged."""
         name = "my_safe_file_name_123"
@@ -222,8 +194,6 @@ class TestSafePathComponent:
 class TestVerifyContained:
     """Tests for verify_contained() function."""
 
-@pytest.mark.serial
-@pytest.mark.xdist_group(name="chdir")
     def test_simple_containment(self, tmp_path: Path):
         """Test basic path containment check."""
         root = tmp_path / "root"
@@ -236,8 +206,6 @@ class TestVerifyContained:
         result = verify_contained(file_path, root)
         assert result == file_path.resolve()
 
-@pytest.mark.serial
-@pytest.mark.xdist_group(name="chdir")
     def test_containment_with_relative_paths(self, tmp_path: Path):
         """Test containment with relative paths."""
         root = tmp_path / "root"
@@ -255,8 +223,6 @@ class TestVerifyContained:
         finally:
             os.chdir(original_cwd)
 
-@pytest.mark.serial
-@pytest.mark.xdist_group(name="chdir")
     def test_traversal_blocked(self, tmp_path: Path):
         """Test that path traversal is blocked."""
         root = tmp_path / "root"
@@ -270,8 +236,6 @@ class TestVerifyContained:
         with pytest.raises(PathTraversalError, match="not contained within root"):
             verify_contained(root / ".." / "other" / "secret.txt", root)
 
-@pytest.mark.serial
-@pytest.mark.xdist_group(name="chdir")
     def test_traversal_with_symlinks(self, tmp_path: Path):
         """Test that symlink-based traversal is blocked."""
         root = tmp_path / "root"
@@ -289,8 +253,6 @@ class TestVerifyContained:
         with pytest.raises(PathTraversalError, match="not contained within root"):
             verify_contained(symlink / "secret.txt", root)
 
-@pytest.mark.serial
-@pytest.mark.xdist_group(name="chdir")
     def test_same_directory(self, tmp_path: Path):
         """Test that root itself is considered contained."""
         root = tmp_path / "root"
@@ -299,8 +261,6 @@ class TestVerifyContained:
         result = verify_contained(root, root)
         assert result == root.resolve()
 
-@pytest.mark.serial
-@pytest.mark.xdist_group(name="chdir")
     def test_nonexistent_path(self, tmp_path: Path):
         """Test behavior with non-existent paths."""
         root = tmp_path / "root"
@@ -311,8 +271,6 @@ class TestVerifyContained:
         result = verify_contained(nonexistent, root)
         assert result == nonexistent.resolve()
 
-@pytest.mark.serial
-@pytest.mark.xdist_group(name="chdir")
     def test_nonexistent_root(self, tmp_path: Path):
         """Test behavior when root doesn't exist.
 
@@ -330,8 +288,6 @@ class TestVerifyContained:
         with pytest.raises(PathSafetyError):
             verify_contained(some_path, nonexistent_root)
 
-@pytest.mark.serial
-@pytest.mark.xdist_group(name="chdir")
     def test_broken_symlink(self, tmp_path: Path):
         """Test handling of broken symlinks.
 
@@ -352,8 +308,6 @@ class TestVerifyContained:
         with pytest.raises(PathTraversalError, match="not contained within root"):
             verify_contained(broken_link, root)
 
-@pytest.mark.serial
-@pytest.mark.xdist_group(name="chdir")
     def test_absolute_path_outside_root(self, tmp_path: Path):
         """Test that absolute paths outside root are blocked."""
         root = tmp_path / "root"
@@ -363,8 +317,6 @@ class TestVerifyContained:
         with pytest.raises(PathTraversalError, match="not contained within root"):
             verify_contained(Path("/etc/passwd"), root)
 
-@pytest.mark.serial
-@pytest.mark.xdist_group(name="chdir")
     def test_parent_traversal_blocked(self, tmp_path: Path):
         """Test various parent directory traversal attempts."""
         root = tmp_path / "root"
@@ -381,8 +333,6 @@ class TestVerifyContained:
             with pytest.raises(PathTraversalError, match="not contained within root"):
                 verify_contained(root / attempt, root)
 
-@pytest.mark.serial
-@pytest.mark.xdist_group(name="chdir")
     def test_path_is_root_subpath(self, tmp_path: Path):
         """Test subpath directly under root."""
         root = tmp_path / "root"
@@ -393,8 +343,6 @@ class TestVerifyContained:
         result = verify_contained(direct_file, root)
         assert result == direct_file.resolve()
 
-@pytest.mark.serial
-@pytest.mark.xdist_group(name="chdir")
     def test_invalid_input_types(self):
         """Test that invalid types raise appropriate errors."""
         with pytest.raises(PathSafetyError, match="path must be a Path"):
@@ -409,8 +357,6 @@ class TestVerifyContained:
 class TestSafeJoin:
     """Tests for safe_join() function."""
 
-@pytest.mark.serial
-@pytest.mark.xdist_group(name="chdir")
     def test_simple_join(self, tmp_path: Path):
         """Test basic path joining with sanitization."""
         root = tmp_path / "root"
@@ -420,8 +366,6 @@ class TestSafeJoin:
         expected = (root / "subdir" / "file").resolve()
         assert result == expected
 
-@pytest.mark.serial
-@pytest.mark.xdist_group(name="chdir")
     def test_multiple_components(self, tmp_path: Path):
         """Test joining multiple components."""
         root = tmp_path / "root"
@@ -431,8 +375,6 @@ class TestSafeJoin:
         expected = (root / "a" / "b" / "c" / "d").resolve()
         assert result == expected
 
-@pytest.mark.serial
-@pytest.mark.xdist_group(name="chdir")
     def test_single_component(self, tmp_path: Path):
         """Test joining single component."""
         root = tmp_path / "root"
@@ -442,8 +384,6 @@ class TestSafeJoin:
         expected = (root / "file").resolve()
         assert result == expected
 
-@pytest.mark.serial
-@pytest.mark.xdist_group(name="chdir")
     def test_traversal_in_component_blocked(self, tmp_path: Path):
         """Test that traversal attempts in components are blocked."""
         root = tmp_path / "root"
@@ -455,8 +395,6 @@ class TestSafeJoin:
         with pytest.raises(UnsafeComponentError, match="forbidden"):
             safe_join(root, "subdir", "..", "file")
 
-@pytest.mark.serial
-@pytest.mark.xdist_group(name="chdir")
     def test_dot_in_component_blocked(self, tmp_path: Path):
         """Test that dots in components are blocked."""
         root = tmp_path / "root"
@@ -465,8 +403,6 @@ class TestSafeJoin:
         with pytest.raises(UnsafeComponentError, match="forbidden"):
             safe_join(root, "file.txt")
 
-@pytest.mark.serial
-@pytest.mark.xdist_group(name="chdir")
     def test_special_chars_in_component_blocked(self, tmp_path: Path):
         """Test that special characters in components are blocked."""
         root = tmp_path / "root"
@@ -481,8 +417,6 @@ class TestSafeJoin:
         with pytest.raises(UnsafeComponentError):
             safe_join(root, "file;name")
 
-@pytest.mark.serial
-@pytest.mark.xdist_group(name="chdir")
     def test_empty_component_list(self, tmp_path: Path):
         """Test joining with no components (returns root)."""
         root = tmp_path / "root"
@@ -492,8 +426,6 @@ class TestSafeJoin:
         result = safe_join(root)
         assert result == root.resolve()
 
-@pytest.mark.serial
-@pytest.mark.xdist_group(name="chdir")
     def test_returns_resolved_path(self, tmp_path: Path):
         """Test that returned path is fully resolved."""
         root = tmp_path / "root"
@@ -518,15 +450,11 @@ class TestSafeJoin:
 class TestExceptionHierarchy:
     """Tests for exception class hierarchy."""
 
-@pytest.mark.serial
-@pytest.mark.xdist_group(name="chdir")
     def test_path_safety_error_base_class(self):
         """Test PathSafetyError is base for all path safety exceptions."""
         assert issubclass(PathTraversalError, PathSafetyError)
         assert issubclass(UnsafeComponentError, PathSafetyError)
 
-@pytest.mark.serial
-@pytest.mark.xdist_group(name="chdir")
     def test_catch_all_with_base_class(self):
         """Test that PathSafetyError catches all derived exceptions."""
         with pytest.raises(PathSafetyError):
@@ -535,8 +463,6 @@ class TestExceptionHierarchy:
         with pytest.raises(PathSafetyError):
             raise UnsafeComponentError("test")
 
-@pytest.mark.serial
-@pytest.mark.xdist_group(name="chdir")
     def test_value_error_inheritance(self):
         """Test that all exceptions inherit from ValueError via PathSafetyError."""
         assert issubclass(PathSafetyError, ValueError)
@@ -547,8 +473,6 @@ class TestExceptionHierarchy:
 class TestIntegrationScenarios:
     """Integration tests simulating real-world usage scenarios."""
 
-@pytest.mark.serial
-@pytest.mark.xdist_group(name="chdir")
     def test_session_file_creation(self, tmp_path: Path):
         """Simulate session logger creating files from session_id."""
         root = tmp_path / "sessions"
@@ -570,8 +494,6 @@ class TestIntegrationScenarios:
         assert manifest.exists()
         assert verify_contained(manifest, root)
 
-@pytest.mark.serial
-@pytest.mark.xdist_group(name="chdir")
     def test_artifact_writing(self, tmp_path: Path):
         """Simulate supervisor_review writing artifacts."""
         root = tmp_path / "artifacts"
@@ -594,8 +516,6 @@ class TestIntegrationScenarios:
         # Verify containment
         assert verify_contained(file_path, root)
 
-@pytest.mark.serial
-@pytest.mark.xdist_group(name="chdir")
     def test_history_offload_path(self, tmp_path: Path):
         """Simulate history_offload creating archive files."""
         root = tmp_path / "history"
