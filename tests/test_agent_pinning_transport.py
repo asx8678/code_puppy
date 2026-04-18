@@ -7,17 +7,7 @@ They use mocking and do NOT require the Elixir StdioService to be running.
 from unittest.mock import MagicMock, patch
 import pytest
 
-# Skip tests if module isn't available
-try:
-    from code_puppy import agent_pinning_transport as pinning
-    MODULE_AVAILABLE = True
-except ImportError:
-    MODULE_AVAILABLE = False
-    pinning = None  # type: ignore
-
-pytestmark = [
-    pytest.mark.skipif(not MODULE_AVAILABLE, reason="agent_pinning_transport not available"),
-]
+from code_puppy import agent_pinning_transport as pinning
 
 
 @pytest.fixture
@@ -227,6 +217,7 @@ class TestErrorHandling:
     def test_get_raises_on_transport_error(self, patched_transport):
         """Should propagate transport errors from get_pinned_model."""
         from code_puppy.elixir_transport import ElixirTransportError
+
         patched_transport._send_request.side_effect = ElixirTransportError(
             "Connection failed"
         )
@@ -237,6 +228,7 @@ class TestErrorHandling:
     def test_set_raises_on_transport_error(self, patched_transport):
         """Should propagate transport errors from set_pinned_model."""
         from code_puppy.elixir_transport import ElixirTransportError
+
         patched_transport._send_request.side_effect = ElixirTransportError(
             "RPC timeout"
         )
@@ -247,6 +239,7 @@ class TestErrorHandling:
     def test_clear_raises_on_transport_error(self, patched_transport):
         """Should propagate transport errors from clear_pinned_model."""
         from code_puppy.elixir_transport import ElixirTransportError
+
         patched_transport._send_request.side_effect = ElixirTransportError(
             "Service unavailable"
         )
@@ -257,6 +250,7 @@ class TestErrorHandling:
     def test_list_raises_on_transport_error(self, patched_transport):
         """Should propagate transport errors from list_pinned_models."""
         from code_puppy.elixir_transport import ElixirTransportError
+
         patched_transport._send_request.side_effect = ElixirTransportError(
             "Backend error"
         )
@@ -301,7 +295,10 @@ class TestRpcMethodNames:
 
     def test_get_uses_correct_method(self, patched_transport):
         """Should call agent_pinning.get RPC method."""
-        patched_transport._send_request.return_value = {"agent_name": "x", "model": None}
+        patched_transport._send_request.return_value = {
+            "agent_name": "x",
+            "model": None,
+        }
 
         pinning.get_pinned_model("x")
 
@@ -319,7 +316,10 @@ class TestRpcMethodNames:
 
     def test_clear_uses_correct_method(self, patched_transport):
         """Should call agent_pinning.clear RPC method."""
-        patched_transport._send_request.return_value = {"agent_name": "x", "cleared": True}
+        patched_transport._send_request.return_value = {
+            "agent_name": "x",
+            "cleared": True,
+        }
 
         pinning.clear_pinned_model("x")
 
@@ -334,3 +334,26 @@ class TestRpcMethodNames:
 
         call_args = patched_transport._send_request.call_args
         assert call_args[0][0] == "agent_pinning.list"
+
+
+class TestLazyImport:
+    """Tests verifying the lazy import registry works."""
+
+    def test_lazy_import_via_package_attribute(self):
+        """Accessing code_puppy.agent_pinning_transport should resolve via lazy __getattr__."""
+        import sys
+
+        # Ensure the module is NOT already cached
+        sys.modules.pop("code_puppy.agent_pinning_transport", None)
+        sys.modules.pop("code_puppy", None)
+
+        import code_puppy
+
+        # Access via lazy __getattr__ — this should import and cache the submodule
+        mod = code_puppy.agent_pinning_transport
+
+        assert mod.__name__ == "code_puppy.agent_pinning_transport"
+        assert hasattr(mod, "get_pinned_model")
+        assert hasattr(mod, "set_pinned_model")
+        assert hasattr(mod, "clear_pinned_model")
+        assert hasattr(mod, "list_pinned_models")

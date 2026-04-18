@@ -43,6 +43,7 @@ from typing import Any
 def _get_transport() -> "ElixirTransport":  # type: ignore # noqa: F821
     """Get the shared transport singleton from elixir_transport_helpers."""
     from code_puppy.elixir_transport_helpers import get_transport
+
     return get_transport()
 
 
@@ -73,9 +74,12 @@ def get_pinned_model(agent_name: str) -> dict[str, Any]:
         >>> print(result["model"])  # "claude-sonnet-4" or None
     """
     transport = _get_transport()
-    return transport._send_request("agent_pinning.get", {
-        "agent_name": agent_name,
-    })
+    return transport._send_request(
+        "agent_pinning.get",
+        {
+            "agent_name": agent_name,
+        },
+    )
 
 
 def set_pinned_model(agent_name: str, model_name: str) -> dict[str, Any]:
@@ -101,10 +105,13 @@ def set_pinned_model(agent_name: str, model_name: str) -> dict[str, Any]:
         >>> assert result["model"] == "claude-sonnet-4"
     """
     transport = _get_transport()
-    return transport._send_request("agent_pinning.set", {
-        "agent_name": agent_name,
-        "model": model_name,
-    })
+    return transport._send_request(
+        "agent_pinning.set",
+        {
+            "agent_name": agent_name,
+            "model": model_name,
+        },
+    )
 
 
 def clear_pinned_model(agent_name: str) -> dict[str, Any]:
@@ -129,9 +136,12 @@ def clear_pinned_model(agent_name: str) -> dict[str, Any]:
         >>> assert result["cleared"] is True
     """
     transport = _get_transport()
-    return transport._send_request("agent_pinning.clear", {
-        "agent_name": agent_name,
-    })
+    return transport._send_request(
+        "agent_pinning.clear",
+        {
+            "agent_name": agent_name,
+        },
+    )
 
 
 def list_pinned_models() -> dict[str, Any]:
