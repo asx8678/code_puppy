@@ -2280,7 +2280,63 @@
       "created_at": "2026-04-18T09:53:30.793489",
       "updated_at": "2026-04-18T09:58:37.092160",
       "comments": []
+    },
+    "bd-122": {
+      "id": "bd-122",
+      "title": "Capture baseline of parallel test failures",
+      "description": "Run parallel pytest 3 times with random order and once without. Capture failure count and patterns. Save as bd-120-baseline.log. Run sequential pytest to confirm pass count. This is the before snapshot. Part of epic bd-122.",
+      "status": "closed",
+      "priority": 2,
+      "type": "task",
+      "labels": [
+        "tests",
+        "bd-120"
+      ],
+      "dependencies": {},
+      "created_at": "2026-04-18T17:40:22.005585",
+      "updated_at": "2026-04-18T17:40:27.189471",
+      "comments": [
+        "DELIVERED: bd-120-baseline.log capturing 5 pytest runs (3 random parallel, 1 deterministic parallel, 1 sequential). Key finding: ALL runs timed out after 20 minutes, including sequential. The test suite has fundamental hanging issues beyond just parallel isolation. This baseline is critical for bd-128 verification work. Merged to main in commit f76cca4c. Unblocks bd-128."
+      ]
+    },
+    "bd-123": {
+      "id": "bd-123",
+      "title": "Add reset_*_for_tests helpers to singleton modules",
+      "description": "Add reset helpers to 9 singleton modules that lack them. Follow the pattern of reset_run_limiter_for_tests() in run_limiter.py. Modules: messaging/bus.py, messaging/history_buffer.py, code_context/__init__.py, agents/agent_manager.py, mcp_/manager.py, mcp_/retry_manager.py, mcp_/error_isolation.py, adaptive_rate_limiter.py, concurrency_limits.py.",
+      "status": "closed",
+      "priority": 2,
+      "type": "task",
+      "labels": [
+        "tests",
+        "tech-debt",
+        "bd-120"
+      ],
+      "dependencies": {},
+      "created_at": "2026-04-18T17:40:30.470625",
+      "updated_at": "2026-04-18T17:40:36.650285",
+      "comments": [
+        "DELIVERED: All 9 reset helpers implemented with proper lock acquisition and thread-safe cleanup. Tests in tests/test_singleton_resets.py (9 tests, all passing). Merged to main. Unblocks bd-124 and bd-126."
+      ]
+    },
+    "bd-124": {
+      "id": "bd-124",
+      "title": "Identify tests that are inherently non-parallel-safe",
+      "description": "Scan test suite for tests that cannot run in parallel even with perfect singleton isolation. Candidates: tests spawning real processes/PTY, tests using cli_harness, tests mutating os.environ, tests touching real config dirs, DBOS integration tests, hardcoded ports.",
+      "status": "closed",
+      "priority": 2,
+      "type": "task",
+      "labels": [
+        "tests",
+        "investigation",
+        "bd-120"
+      ],
+      "dependencies": {},
+      "created_at": "2026-04-18T17:40:40.407378",
+      "updated_at": "2026-04-18T17:40:45.933954",
+      "comments": [
+        "DELIVERED: bd-125-serial-candidates.md with ~45 tests classified across 8 categories (PTY spawning, subprocess, env mutation, chdir, network ports, time races, DBOS, threading). Recommended serial groups: integration-cli, oauth-server, api-fixed-port, elixir-stdio. Merged to main. Unblocks bd-127."
+      ]
     }
   },
-  "counter": 121
+  "counter": 124
 }
