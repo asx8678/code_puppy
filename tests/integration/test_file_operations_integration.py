@@ -99,6 +99,8 @@ def _retry_file_edit_with_content_check(
 
 
 @pytest.mark.skip(reason="Flaky pexpect timeouts in CI - needs investigation")
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="pty-spawn")
 def test_file_operations_integration(
     cli_harness: CliHarness,
     live_cli: SpawnResult,

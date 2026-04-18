@@ -64,9 +64,13 @@ def sample_token_data():
 
 
 @pytest.mark.xdist_group("oauth-server")
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="network")
 class TestOAuthFlow:
     """Test OAuth flow URL generation and code exchange."""
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="network")
     def test_assign_redirect_uri(self, mock_oauth_context):
         """Test redirect URI assignment."""
         redirect_uri = assign_redirect_uri(mock_oauth_context, 1455)
@@ -74,16 +78,22 @@ class TestOAuthFlow:
         assert redirect_uri == "http://localhost:1455/auth/callback"
         assert mock_oauth_context.redirect_uri == redirect_uri
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="network")
     def test_assign_redirect_uri_none_context_raises(self):
         """Test assign_redirect_uri with None context raises error."""
         with pytest.raises(RuntimeError):
             assign_redirect_uri(None, 1455)
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="network")
     def test_assign_redirect_uri_wrong_port_raises(self, mock_oauth_context):
         """Test assign_redirect_uri with wrong port raises error."""
         with pytest.raises(RuntimeError, match="must use port 1455"):
             assign_redirect_uri(mock_oauth_context, 9999)
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="network")
     def test_build_authorization_url(self, mock_oauth_context):
         """Test authorization URL is built correctly."""
         url = build_authorization_url(mock_oauth_context)
@@ -96,6 +106,8 @@ class TestOAuthFlow:
         assert "code_challenge_method=S256" in url
         assert "state=" in url
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="network")
     def test_build_authorization_url_no_redirect_uri(self):
         """Test build_authorization_url fails without redirect URI."""
         context = OAuthContext(
@@ -110,6 +122,8 @@ class TestOAuthFlow:
             build_authorization_url(context)
 
     @patch("requests.post")
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="network")
     def test_exchange_code_for_tokens_success(
         self, mock_post, mock_oauth_context, sample_token_data
     ):
@@ -126,6 +140,8 @@ class TestOAuthFlow:
         assert "last_refresh" in result  # Should add timestamp
 
     @patch("requests.post")
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="network")
     def test_exchange_code_for_tokens_expired_context(
         self, mock_post, sample_token_data
     ):
@@ -144,6 +160,8 @@ class TestOAuthFlow:
         assert result is None
 
     @patch("requests.post")
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="network")
     def test_exchange_code_for_tokens_http_error(self, mock_post, mock_oauth_context):
         """Test code exchange handles HTTP errors."""
         mock_response = Mock()
@@ -156,6 +174,8 @@ class TestOAuthFlow:
         assert result is None
 
     @patch("requests.post")
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="network")
     def test_exchange_code_for_tokens_network_error(
         self, mock_post, mock_oauth_context
     ):
@@ -167,6 +187,8 @@ class TestOAuthFlow:
         assert result is None
 
     @patch("requests.post")
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="network")
     def test_exchange_code_for_tokens_timeout(self, mock_post, mock_oauth_context):
         """Test code exchange handles timeouts."""
         mock_post.side_effect = requests.Timeout("Request timed out")
@@ -175,6 +197,8 @@ class TestOAuthFlow:
 
         assert result is None
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="network")
     def test_parse_authorization_error(self):
         """Test parsing OAuth error from callback URL."""
         error_url = "http://localhost:1455/auth/callback?error=access_denied&error_description=User%20denied%20access"
@@ -184,6 +208,8 @@ class TestOAuthFlow:
         assert "access_denied" in error
         assert "User denied access" in error
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="network")
     def test_parse_authorization_error_no_error(self):
         """Test parsing URL without error returns None."""
         url = "http://localhost:1455/auth/callback?code=test_code"
@@ -192,6 +218,8 @@ class TestOAuthFlow:
 
         assert error is None
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="network")
     def test_parse_authorization_error_invalid_url(self):
         """Test parsing invalid URL returns None gracefully."""
         error = parse_authorization_error("not a url at all")
@@ -204,9 +232,13 @@ class TestOAuthFlow:
 
 
 @pytest.mark.xdist_group("oauth-server")
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="network")
 class TestOAuthServer:
     """Test OAuth server initialization and operations."""
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="network")
     def test_oauth_server_init(self):
         """Test OAuth server initializes correctly."""
         server = _OAuthServer(client_id="test_client_id")
@@ -218,6 +250,8 @@ class TestOAuthServer:
 
         server.server_close()
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="network")
     def test_oauth_server_auth_url(self):
         """Test auth URL is generated with all parameters."""
         server = _OAuthServer(client_id="test_client_id")
@@ -232,6 +266,8 @@ class TestOAuthServer:
         server.server_close()
 
     @patch("requests.post")
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="network")
     def test_exchange_code_success(self, mock_post):
         """Test successful code exchange."""
         mock_response = Mock()
@@ -262,6 +298,8 @@ class TestOAuthServer:
         server.server_close()
 
     @patch("requests.post")
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="network")
     def test_exchange_code_network_error(self, mock_post):
         """Test exchange code handles network errors."""
         mock_post.side_effect = requests.ConnectionError("Network error")
@@ -273,6 +311,8 @@ class TestOAuthServer:
 
         server.server_close()
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="network")
     def test_token_data_creation(self):
         """Test TokenData dataclass creation and attributes."""
         token_data = TokenData(
@@ -287,6 +327,8 @@ class TestOAuthServer:
         assert token_data.refresh_token == "test_refresh_token"
         assert token_data.account_id == "test_account_id"
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="network")
     def test_auth_bundle_creation(self):
         """Test AuthBundle dataclass creation and attributes."""
         token_data = TokenData(
@@ -313,6 +355,8 @@ class TestOAuthServer:
 
 
 @pytest.mark.xdist_group("oauth-server")
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="network")
 class TestCallbackHandler:
     """Test OAuth callback HTTP handling."""
 
@@ -324,6 +368,8 @@ class TestCallbackHandler:
         server.verbose = False
         return server
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="network")
     def test_callback_handler_success_endpoint(self, mock_server):
         """Test success endpoint returns HTML."""
         mock_request = Mock()
@@ -343,6 +389,8 @@ class TestCallbackHandler:
                     html = mock_send.call_args[0][0]
                     assert "ChatGPT" in html
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="network")
     def test_callback_handler_invalid_path(self, mock_server):
         """Test invalid path returns 404."""
         mock_request = Mock()
@@ -361,6 +409,8 @@ class TestCallbackHandler:
                     mock_failure.assert_called_once()
                     assert mock_failure.call_args[0][0] == 404
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="network")
     def test_callback_handler_post_not_supported(self, mock_server):
         """Test POST requests return 404."""
         mock_request = Mock()

@@ -6,6 +6,7 @@ ensure recent events are printed. Guarded by CONTEXT7_API_KEY.
 """
 
 import os
+import pytest
 import re
 import time
 
@@ -19,6 +20,8 @@ from tests.integration.cli_expect.fixtures import (
 # No pytestmark - run in all environments but handle MCP server timing gracefully
 
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="pty-spawn")
 def test_mcp_context7_end_to_end(cli_harness: CliHarness) -> None:
     env = os.environ.copy()
     env.setdefault("CODE_PUPPY_TEST_FAST", "1")

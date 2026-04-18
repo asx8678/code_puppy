@@ -13,6 +13,8 @@ from tests.integration.cli_expect.fixtures import (
 
 
 @pytest.mark.skip(reason="Flaky in CI - LLM response times are unpredictable")
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="pty-spawn")
 def test_real_llm_commands_always_include_carriage_returns(
     cli_harness: CliHarness,
     live_cli: SpawnResult,

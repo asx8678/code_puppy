@@ -75,7 +75,11 @@ def _patch_prompt_sources():
     )
 
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="env-mutation")
 class TestPromptStoreIntegration:
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="env-mutation")
     def test_prompt_store_skills_and_repo_compass_all_reach_final_prompt(
         self, isolated_prompt_callbacks
     ):
@@ -99,6 +103,8 @@ class TestPromptStoreIntegration:
         assert "SKILLS_SECTION" in prepared.instructions
         assert "REPO_CONTEXT" in prepared.instructions
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="env-mutation")
     def test_model_system_prompt_callbacks_receive_chained_prompt_state(
         self, isolated_prompt_callbacks
     ):
@@ -126,6 +132,8 @@ class TestPromptStoreIntegration:
         assert "SKILLS_SECTION" in results[1]["instructions"]
         assert "REPO_CONTEXT" in results[1]["instructions"]
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="env-mutation")
     def test_prompt_store_content_survives_claude_code_preparation(
         self, isolated_prompt_callbacks
     ):

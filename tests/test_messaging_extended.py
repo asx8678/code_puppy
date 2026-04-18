@@ -1,4 +1,5 @@
 import threading
+import pytest
 import time
 from datetime import datetime, timezone
 
@@ -10,6 +11,8 @@ from code_puppy.messaging.message_queue import (
 )
 
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="threading")
 class TestMessagingExtended:
     """Test extended messaging functionality."""
 
@@ -25,6 +28,8 @@ class TestMessagingExtended:
         if self.queue:
             self.queue.stop()
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="threading")
     def test_emit_info(self):
         """Test info message emission."""
         # Mark renderer as active so messages don't get buffered
@@ -40,6 +45,8 @@ class TestMessagingExtended:
         assert message.content == "Test message"
         assert message.metadata.get("group") == "test"
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="threading")
     def test_emit_with_group(self):
         """Test message groups."""
         self.queue.mark_renderer_active()
@@ -70,6 +77,8 @@ class TestMessagingExtended:
         assert group_b_msgs[0].content == "Group B message"
         assert no_group_msgs[0].content == "No group message"
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="threading")
     def test_message_filtering_by_group(self):
         """Test filtering messages by group."""
         self.queue.mark_renderer_active()
@@ -101,6 +110,8 @@ class TestMessagingExtended:
         assert "Message 1" in alpha_contents
         assert "Message 3" in alpha_contents
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="threading")
     def test_queue_clearing(self):
         """Test clearing the message queue."""
         self.queue.mark_renderer_active()
@@ -131,6 +142,8 @@ class TestMessagingExtended:
         assert cleared_messages[0].content == "New message"
         assert self.queue.get_nowait() is None
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="threading")
     def test_message_rendering_helpers(self):
         """Test various message rendering helper functions."""
         self.queue.mark_renderer_active()
@@ -177,6 +190,8 @@ class TestMessagingExtended:
         cmd_msg = next(m for m in messages if m.type == MessageType.COMMAND_OUTPUT)
         assert cmd_msg.metadata.get("command") == "ls -la"
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="threading")
     def test_buffered_messages_before_renderer(self):
         """Test message buffering before renderer is active."""
         # Don't mark renderer as active - messages should be buffered
@@ -203,10 +218,14 @@ class TestMessagingExtended:
         assert message is not None
         assert message.content == "Direct message"
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="timing")
     def test_message_listeners(self):
         """Test message listener functionality."""
         received_messages = []
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="threading")
         def test_listener(message):
             received_messages.append(message)
 
@@ -242,6 +261,8 @@ class TestMessagingExtended:
         # Listener should not have received the new message
         assert len(received_messages) == 2
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="timing")
     def test_ui_message_timestamps(self):
         """Test that UIMessage objects get proper timestamps."""
         self.queue.mark_renderer_active()
@@ -255,6 +276,8 @@ class TestMessagingExtended:
         assert message.timestamp is not None
         assert before <= message.timestamp <= after
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="threading")
     def test_global_queue_singleton(self):
         """Test that global queue is a singleton."""
         queue1 = get_global_queue()
@@ -265,6 +288,8 @@ class TestMessagingExtended:
         # Test that it's started automatically
         assert queue1._running
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="threading")
     def test_emit_divider(self):
         """Test divider emission."""
         self.queue.mark_renderer_active()
@@ -278,6 +303,8 @@ class TestMessagingExtended:
         assert message.type == MessageType.DIVIDER
         assert message.content == divider_content
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="threading")
     def test_queue_full_behavior(self):
         """Test queue behavior when full."""
         # Create a small queue
@@ -307,6 +334,8 @@ class TestMessagingExtended:
         finally:
             small_queue.stop()
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="threading")
     def test_concurrent_access(self):
         """Test thread-safe concurrent access to queue."""
         # Start queue for concurrent test (needs background thread)
@@ -349,6 +378,8 @@ class TestMessagingExtended:
         # Queue should be empty now
         assert self.queue.get_nowait() is None
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="threading")
     def test_ui_message_creation(self):
         """Test UIMessage dataclass creation and defaults."""
         # Test with minimal parameters
@@ -372,6 +403,8 @@ class TestMessagingExtended:
         assert msg2.timestamp == custom_time
         assert msg2.metadata == custom_metadata
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="threading")
     def test_message_queue_operations(self):
         """Test basic queue operations."""
         self.queue.mark_renderer_active()

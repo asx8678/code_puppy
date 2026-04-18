@@ -284,6 +284,8 @@ class TrafficLoggingProxy:
         return f"http://{self.host}:{self.actual_port}"
 
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="pty-spawn")
 def test_network_traffic_on_simple_message(
     cli_harness,
     integration_env,

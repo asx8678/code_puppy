@@ -1,6 +1,9 @@
+import pytest
 from pathlib import Path
 
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="dbos")
 def test_dbos_initializes_and_creates_db(spawned_cli):
     # spawned_cli fixture starts the app and waits until interactive mode
     # Confirm DBOS initialization message appeared

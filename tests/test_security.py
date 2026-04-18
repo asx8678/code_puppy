@@ -26,9 +26,13 @@ def reset_boundary_fixture():
     reset_security_boundary()
 
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="threading")
 class TestSecurityDecision:
     """Tests for the SecurityDecision dataclass."""
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="threading")
     def test_bool_returns_allowed_field_true(self):
         """Test that __bool__ returns the allowed field when True."""
         decision = SecurityDecision(allowed=True, reason="Allowed")
@@ -36,6 +40,8 @@ class TestSecurityDecision:
         assert decision.allowed is True
         assert decision.reason == "Allowed"
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="threading")
     def test_bool_returns_allowed_field_false(self):
         """Test that __bool__ returns the allowed field when False."""
         decision = SecurityDecision(allowed=False, reason="Denied")
@@ -43,6 +49,8 @@ class TestSecurityDecision:
         assert decision.allowed is False
         assert decision.reason == "Denied"
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="threading")
     def test_bool_with_default_reason(self):
         """Test SecurityDecision with default None reason."""
         decision = SecurityDecision(allowed=True)
@@ -51,6 +59,8 @@ class TestSecurityDecision:
         assert decision.metadata == {}
 
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="threading")
 class TestSecurityBoundaryShellCommand:
     """Tests for check_shell_command method."""
 
@@ -96,9 +106,13 @@ class TestSecurityBoundaryShellCommand:
         mock.assert_awaited_once()
 
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="threading")
 class TestSecurityBoundaryFileAccess:
     """Tests for check_file_access method."""
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="threading")
     def test_empty_path_denied(self):
         """Test that empty path returns denied decision."""
         boundary = SecurityBoundary()
@@ -106,6 +120,8 @@ class TestSecurityBoundaryFileAccess:
         assert result.allowed is False
         assert "empty" in result.reason.lower()
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="threading")
     def test_sensitive_ssh_key_path_denied(self):
         """Test that access to SSH keys is denied."""
         boundary = SecurityBoundary()
@@ -113,6 +129,8 @@ class TestSecurityBoundaryFileAccess:
         assert result.allowed is False
         assert "sensitive" in result.reason.lower()
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="threading")
     def test_sensitive_aws_credentials_denied(self):
         """Test that access to AWS credentials is denied."""
         boundary = SecurityBoundary()
@@ -120,6 +138,8 @@ class TestSecurityBoundaryFileAccess:
         assert result.allowed is False
         assert "sensitive" in result.reason.lower()
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="threading")
     def test_sensitive_pem_file_in_secrets_dir_denied(self):
         """Test that .pem files in secrets directories are denied."""
         boundary = SecurityBoundary()
@@ -127,6 +147,8 @@ class TestSecurityBoundaryFileAccess:
         assert result.allowed is False
         assert "sensitive" in result.reason.lower()
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="threading")
     def test_sensitive_files_blocked_list(self):
         """SECURITY FIX b26: Test that all sensitive file paths are blocked."""
         from code_puppy.tools.file_operations import _is_sensitive_path
@@ -195,6 +217,8 @@ class TestSecurityBoundaryFileAccess:
         assert not _is_sensitive_path("/project/env_config.py"), "env_config.py should NOT be blocked"
         assert not _is_sensitive_path("/app/environment.ts"), "environment.ts should NOT be blocked"
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="threading")
     def test_file_access_allowed_with_mocked_callbacks(self):
         """Test that file access is allowed when callbacks permit it."""
         boundary = SecurityBoundary()
@@ -207,6 +231,8 @@ class TestSecurityBoundaryFileAccess:
         assert result.allowed is True
         mock.assert_called_once()
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="threading")
     def test_file_access_denied_by_plugin(self):
         """Test that file access is denied when a plugin returns False."""
         boundary = SecurityBoundary()
@@ -221,6 +247,8 @@ class TestSecurityBoundaryFileAccess:
         mock.assert_called_once()
 
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="threading")
 class TestSecurityBoundaryStats:
     """Tests for stats and reset methods."""
 
@@ -247,6 +275,8 @@ class TestSecurityBoundaryStats:
         assert stats["check_count"] == 2
         assert stats["block_count"] == 2
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="threading")
     def test_reset_stats_clears_counts(self):
         """Test that reset_stats clears the counters."""
         boundary = SecurityBoundary()
@@ -262,15 +292,21 @@ class TestSecurityBoundaryStats:
         assert stats["block_count"] == 0
 
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="threading")
 class TestSecurityBoundarySingleton:
     """Tests for the singleton behavior of SecurityBoundary."""
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="threading")
     def test_get_security_boundary_returns_same_instance(self):
         """Test that get_security_boundary returns the same singleton instance."""
         boundary1 = get_security_boundary()
         boundary2 = get_security_boundary()
         assert boundary1 is boundary2
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="threading")
     def test_get_security_boundary_thread_safety(self):
         """Regression test: concurrent singleton access must return same instance."""
         import threading
@@ -293,6 +329,8 @@ class TestSecurityBoundarySingleton:
 
         assert len(set(results)) == 1, f"Expected 1 unique instance, got {len(set(results))}"
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="threading")
     def test_get_security_boundary_creates_new_after_reset(self):
         """Test that a new instance is created after reset."""
         boundary1 = get_security_boundary()
@@ -300,6 +338,8 @@ class TestSecurityBoundarySingleton:
         boundary2 = get_security_boundary()
         assert boundary1 is not boundary2
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="threading")
     def test_set_security_boundary_sets_custom_instance(self):
         """Test that set_security_boundary sets a custom instance."""
         custom_boundary = SecurityBoundary()
@@ -307,6 +347,8 @@ class TestSecurityBoundarySingleton:
         retrieved = get_security_boundary()
         assert retrieved is custom_boundary
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="threading")
     def test_reset_security_boundary_creates_fresh_instance(self):
         """Test that reset creates a fresh instance."""
         # Get initial instance
@@ -322,6 +364,8 @@ class TestSecurityBoundarySingleton:
         assert fresh._check_count == 0
 
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="threading")
 class TestStatsCounterThreadSafety:
     """Regression tests for thread-safe stats counter increments.
 
@@ -330,6 +374,8 @@ class TestStatsCounterThreadSafety:
     to maximise contention.
     """
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="threading")
     def test_stats_counters_thread_safe(self):
         """All threads hit check_file_access concurrently; final counters must be exact."""
         N_THREADS = 8
@@ -366,6 +412,8 @@ class TestStatsCounterThreadSafety:
             f"block_count: expected {EXPECTED_BLOCKS}, got {stats['block_count']}"
         )
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="threading")
     def test_stats_counters_mixed_operations_thread_safe(self):
         """Mix of blocking and allowed calls; block_count < check_count."""
         N_THREADS = 6
@@ -408,6 +456,8 @@ class TestStatsCounterThreadSafety:
         )
 
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="threading")
 class TestLazyImportPatchability:
     """Tests that verify the lazy import pattern enables proper mocking."""
 
@@ -426,6 +476,8 @@ class TestLazyImportPatchability:
             assert result.allowed is False
             assert result.reason == "Mocked"
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="threading")
     def test_file_permission_callbacks_can_be_mocked(self):
         """Verify that on_file_permission can be mocked at call time."""
         with patch("code_puppy.callbacks.on_file_permission") as mock:

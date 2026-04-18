@@ -249,6 +249,8 @@ class TestEdgeCases:
         # All should complete, none should be serialized against each other
         assert len(order) == 20  # 10 starts + 10 ends
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="chdir")
     def test_relative_path_resolved(self, tmp_path):
         """Relative paths are resolved to absolute before locking."""
         target = tmp_path / "relative.txt"

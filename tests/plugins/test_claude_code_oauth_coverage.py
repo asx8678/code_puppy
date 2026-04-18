@@ -9,7 +9,11 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="network")
 class TestOAuthResult:
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="network")
     def test_init(self):
         from code_puppy.plugins.claude_code_oauth.register_callbacks import (
             _OAuthResult,
@@ -21,7 +25,11 @@ class TestOAuthResult:
         assert r.error is None
 
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="network")
 class TestCallbackHandler:
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="network")
     def test_do_get_success(self):
         from code_puppy.plugins.claude_code_oauth.register_callbacks import (
             _CallbackHandler,
@@ -47,6 +55,8 @@ class TestCallbackHandler:
         assert result.state == "xyz"
         assert event.is_set()
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="network")
     def test_do_get_missing_params(self):
         from code_puppy.plugins.claude_code_oauth.register_callbacks import (
             _CallbackHandler,
@@ -70,6 +80,8 @@ class TestCallbackHandler:
         _CallbackHandler.do_GET(handler)
         assert result.error == "Missing code or state"
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="network")
     def test_log_message_noop(self):
         from code_puppy.plugins.claude_code_oauth.register_callbacks import (
             _CallbackHandler,
@@ -79,7 +91,11 @@ class TestCallbackHandler:
         _CallbackHandler.log_message(handler, "test %s", "arg")
 
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="network")
 class TestStartCallbackServer:
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="network")
     def test_all_ports_busy(self):
         from code_puppy.plugins.claude_code_oauth.register_callbacks import (
             _start_callback_server,
@@ -99,6 +115,8 @@ class TestStartCallbackServer:
         ):
             assert _start_callback_server(ctx) is None
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="network")
     def test_success(self):
         from code_puppy.plugins.claude_code_oauth.register_callbacks import (
             _start_callback_server,
@@ -125,7 +143,11 @@ class TestStartCallbackServer:
             assert result[0] is mock_server
 
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="network")
 class TestAwaitCallback:
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="network")
     def test_server_start_fails(self):
         from code_puppy.plugins.claude_code_oauth.register_callbacks import (
             _await_callback,
@@ -138,6 +160,8 @@ class TestAwaitCallback:
         ):
             assert _await_callback(ctx) is None
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="network")
     def test_no_redirect_uri(self):
         from code_puppy.plugins.claude_code_oauth.register_callbacks import (
             _await_callback,
@@ -157,6 +181,8 @@ class TestAwaitCallback:
             assert _await_callback(ctx) is None
             mock_server.shutdown.assert_called_once()
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="network")
     def test_timeout(self):
         from code_puppy.plugins.claude_code_oauth.register_callbacks import (
             _await_callback,
@@ -190,6 +216,8 @@ class TestAwaitCallback:
         ):
             assert _await_callback(ctx) is None
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="network")
     def test_result_error(self):
         from code_puppy.plugins.claude_code_oauth.register_callbacks import (
             _await_callback,
@@ -226,6 +254,8 @@ class TestAwaitCallback:
         ):
             assert _await_callback(ctx) is None
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="network")
     def test_state_mismatch(self):
         from code_puppy.plugins.claude_code_oauth.register_callbacks import (
             _await_callback,
@@ -264,6 +294,8 @@ class TestAwaitCallback:
         ):
             assert _await_callback(ctx) is None
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="network")
     def test_success_headless(self):
         from code_puppy.plugins.claude_code_oauth.register_callbacks import (
             _await_callback,
@@ -301,6 +333,8 @@ class TestAwaitCallback:
         ):
             assert _await_callback(ctx) == "the_code"
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="network")
     def test_success_browser(self):
         from code_puppy.plugins.claude_code_oauth.register_callbacks import (
             _await_callback,
@@ -340,7 +374,11 @@ class TestAwaitCallback:
             assert _await_callback(ctx) == "c"
 
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="network")
 class TestCustomHelp:
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="network")
     def test_returns_entries(self):
         from code_puppy.plugins.claude_code_oauth.register_callbacks import (
             _custom_help,
@@ -353,7 +391,11 @@ class TestCustomHelp:
         assert "claude-code-logout" in names
 
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="network")
 class TestPerformAuthentication:
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="network")
     def test_no_code(self):
         from code_puppy.plugins.claude_code_oauth.register_callbacks import (
             _perform_authentication,
@@ -370,6 +412,8 @@ class TestPerformAuthentication:
         ):
             _perform_authentication()  # should return early
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="network")
     def test_token_exchange_fails(self):
         from code_puppy.plugins.claude_code_oauth.register_callbacks import (
             _perform_authentication,
@@ -392,6 +436,8 @@ class TestPerformAuthentication:
         ):
             _perform_authentication()
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="network")
     def test_save_fails(self):
         from code_puppy.plugins.claude_code_oauth.register_callbacks import (
             _perform_authentication,
@@ -418,6 +464,8 @@ class TestPerformAuthentication:
         ):
             _perform_authentication()
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="network")
     def test_no_access_token(self):
         from code_puppy.plugins.claude_code_oauth.register_callbacks import (
             _perform_authentication,
@@ -449,6 +497,8 @@ class TestPerformAuthentication:
         ):
             _perform_authentication()
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="network")
     def test_no_models_returned(self):
         from code_puppy.plugins.claude_code_oauth.register_callbacks import (
             _perform_authentication,
@@ -484,6 +534,8 @@ class TestPerformAuthentication:
         ):
             _perform_authentication()
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="network")
     def test_full_success(self):
         from code_puppy.plugins.claude_code_oauth.register_callbacks import (
             _perform_authentication,
@@ -521,7 +573,11 @@ class TestPerformAuthentication:
             _perform_authentication()
 
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="network")
 class TestHandleCustomCommand:
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="network")
     def test_empty_name(self):
         from code_puppy.plugins.claude_code_oauth.register_callbacks import (
             _handle_custom_command,
@@ -529,6 +585,8 @@ class TestHandleCustomCommand:
 
         assert _handle_custom_command("/x", "") is None
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="network")
     def test_unknown(self):
         from code_puppy.plugins.claude_code_oauth.register_callbacks import (
             _handle_custom_command,
@@ -536,6 +594,8 @@ class TestHandleCustomCommand:
 
         assert _handle_custom_command("/x", "unknown") is None
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="network")
     def test_auth(self):
         from code_puppy.plugins.claude_code_oauth.register_callbacks import (
             _handle_custom_command,
@@ -561,6 +621,8 @@ class TestHandleCustomCommand:
                 _handle_custom_command("/claude-code-auth", "claude-code-auth") is True
             )
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="network")
     def test_auth_no_existing_tokens(self):
         from code_puppy.plugins.claude_code_oauth.register_callbacks import (
             _handle_custom_command,
@@ -583,6 +645,8 @@ class TestHandleCustomCommand:
                 _handle_custom_command("/claude-code-auth", "claude-code-auth") is True
             )
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="network")
     def test_status_authenticated(self):
         from code_puppy.plugins.claude_code_oauth.register_callbacks import (
             _handle_custom_command,
@@ -609,6 +673,8 @@ class TestHandleCustomCommand:
                 is True
             )
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="network")
     def test_status_no_models(self):
         from code_puppy.plugins.claude_code_oauth.register_callbacks import (
             _handle_custom_command,
@@ -635,6 +701,8 @@ class TestHandleCustomCommand:
                 is True
             )
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="network")
     def test_status_not_authenticated(self):
         from code_puppy.plugins.claude_code_oauth.register_callbacks import (
             _handle_custom_command,
@@ -655,6 +723,8 @@ class TestHandleCustomCommand:
                 is True
             )
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="network")
     def test_logout(self):
         from code_puppy.plugins.claude_code_oauth.register_callbacks import (
             _handle_custom_command,
@@ -682,6 +752,8 @@ class TestHandleCustomCommand:
                 is True
             )
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="network")
     def test_logout_no_tokens(self):
         from code_puppy.plugins.claude_code_oauth.register_callbacks import (
             _handle_custom_command,
@@ -751,7 +823,11 @@ def _model_patches(
         yield
 
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="network")
 class TestCreateClaudeCodeModel:
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="network")
     def test_no_api_key(self):
         from code_puppy.plugins.claude_code_oauth.register_callbacks import (
             _create_claude_code_model,
@@ -765,6 +841,8 @@ class TestCreateClaudeCodeModel:
         ):
             assert _create_claude_code_model("m", {"name": "m"}, {}) is None
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="network")
     def test_oauth_source_refresh(self):
         from code_puppy.plugins.claude_code_oauth.register_callbacks import (
             _create_claude_code_model,
@@ -787,6 +865,8 @@ class TestCreateClaudeCodeModel:
             )
             assert result is mock_model
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="network")
     def test_interleaved_thinking_false_removes_beta(self):
         from code_puppy.plugins.claude_code_oauth.register_callbacks import (
             _create_claude_code_model,
@@ -803,6 +883,8 @@ class TestCreateClaudeCodeModel:
             )
             assert result is mock_model
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="network")
     def test_interleaved_thinking_false_removes_all_beta(self):
         from code_puppy.plugins.claude_code_oauth.register_callbacks import (
             _create_claude_code_model,
@@ -819,6 +901,8 @@ class TestCreateClaudeCodeModel:
             )
             assert result is mock_model
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="network")
     def test_1m_context_beta(self):
         from code_puppy.plugins.claude_code_oauth.register_callbacks import (
             _create_claude_code_model,
@@ -836,6 +920,8 @@ class TestCreateClaudeCodeModel:
             )
             assert result is mock_model
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="network")
     def test_1m_context_no_existing_beta(self):
         from code_puppy.plugins.claude_code_oauth.register_callbacks import (
             _create_claude_code_model,
@@ -849,7 +935,11 @@ class TestCreateClaudeCodeModel:
             assert result is mock_model
 
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="network")
 class TestRegisterModelTypes:
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="network")
     def test_returns_handler(self):
         from code_puppy.plugins.claude_code_oauth.register_callbacks import (
             _register_model_types,
@@ -860,6 +950,8 @@ class TestRegisterModelTypes:
         assert types[0]["type"] == "claude_code"
 
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="network")
 class TestAgentRunCallbacks:
     @pytest.mark.asyncio
     async def test_start_non_claude_model(self):
@@ -960,9 +1052,13 @@ class TestAgentRunCallbacks:
         await _on_agent_run_end("agent", "model", session_id="s2")
 
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="network")
 class TestOnStartup:
     """Tests for _on_startup proactive token refresh."""
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="network")
     def test_no_tokens_skips(self):
         from code_puppy.plugins.claude_code_oauth.register_callbacks import _on_startup
 
@@ -972,6 +1068,8 @@ class TestOnStartup:
         ):
             _on_startup()  # should return early, no warning
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="network")
     def test_no_access_token_skips(self):
         from code_puppy.plugins.claude_code_oauth.register_callbacks import _on_startup
 
@@ -981,6 +1079,8 @@ class TestOnStartup:
         ):
             _on_startup()  # should return early, no warning
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="network")
     def test_valid_token_no_warning(self):
         from code_puppy.plugins.claude_code_oauth.register_callbacks import _on_startup
 
@@ -1000,6 +1100,8 @@ class TestOnStartup:
             _on_startup()
             mock_warn.assert_not_called()
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="network")
     def test_expired_token_emits_warning(self):
         from code_puppy.plugins.claude_code_oauth.register_callbacks import _on_startup
 
@@ -1021,6 +1123,8 @@ class TestOnStartup:
             assert "/claude-code-auth" in mock_warn.call_args[0][0]
 
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="network")
 class TestNoShutdownCallback:
     """Verify that shutdown callback is NOT registered (code_puppy-1vv).
 
@@ -1029,6 +1133,8 @@ class TestNoShutdownCallback:
     unnecessary and potentially problematic.
     """
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="network")
     def test_no_shutdown_callback_registered(self):
         # Explicitly import to ensure the plugin's register_callbacks is loaded
         # before checking the registry (makes test order-independent)
@@ -1052,6 +1158,8 @@ class TestNoShutdownCallback:
             "Claude Code OAuth shutdown callback should not be registered"
         )
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="network")
     def test_on_shutdown_function_not_exported(self):
         """Verify _on_shutdown is not exported from register_callbacks module."""
         import code_puppy.plugins.claude_code_oauth.register_callbacks as rc
