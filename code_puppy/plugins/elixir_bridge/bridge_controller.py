@@ -54,6 +54,9 @@ from code_puppy.plugins.pack_parallelism.run_limiter import (
     RunLimiterConfig,
 )
 
+# Model packs import (bd-132)
+from code_puppy import model_packs
+
 
 class BridgeController:
     """Dispatches JSON-RPC commands to Python functionality.
@@ -165,6 +168,16 @@ class BridgeController:
             "agent_manager.list": self._handle_agent_manager_list,
             "agent_manager.get_current": self._handle_agent_manager_get_current,
             "agent_manager.set_current": self._handle_agent_manager_set_current,
+            # Model packs methods (bd-132)
+            "model_packs.get_pack": self._handle_model_packs_get_pack,
+            "model_packs.list_packs": self._handle_model_packs_list_packs,
+            "model_packs.set_current_pack": self._handle_model_packs_set_current_pack,
+            "model_packs.get_current_pack": self._handle_model_packs_get_current_pack,
+            "model_packs.get_model_for_role": self._handle_model_packs_get_model_for_role,
+            "model_packs.get_fallback_chain": self._handle_model_packs_get_fallback_chain,
+            "model_packs.create_pack": self._handle_model_packs_create_pack,
+            "model_packs.delete_pack": self._handle_model_packs_delete_pack,
+            "model_packs.reload": self._handle_model_packs_reload,
         }
 
         handler = handlers.get(normalized_method)
@@ -1351,3 +1364,242 @@ class BridgeController:
                 f"Failed to set current agent: {e}",
                 code=-32603,  # Internal error
             )
+
+    # Model packs handlers (bd-132)
+
+    async def _handle_model_packs_get_pack(
+        self, params: dict[str, Any]
+    ) -> dict[str, Any]:
+        """Handle model_packs.get_pack method (bd-132).
+
+        Args:
+            params: {"name": str | None}
+
+        Returns:
+            {"status": "ok", "pack": dict} or {"status": "error", "error": str}
+        """
+        try:
+            name = params.get("name")
+            pack = model_packs.get_pack(name)
+
+            # Convert pack to dict for serialization
+            pack_dict = {
+                "name": pack.name,
+                "description": pack.description,
+                "default_role": pack.default_role,
+                "roles": {
+                    role_name: {
+                        "primary": config.primary,
+                        "fallbacks": config.fallbacks,
+                        "trigger": config.trigger,
+                    }
+                    for role_name, config in pack.roles.items()
+                },
+            }
+
+            return {"status": "ok", "pack": pack_dict}
+        except Exception as e:
+            raise WireMethodError(f"Failed to get pack: {e}", code=-32000)
+
+    async def _handle_model_packs_list_packs(
+        self, params: dict[str, Any]
+    ) -> dict[str, Any]:
+        """Handle model_packs.list_packs method (bd-132).
+
+        Returns:
+            {"status": "ok", "packs": list[dict], "count": int}
+        """
+        try:
+            packs = model_packs.list_packs()
+
+            packs_list = []
+            for pack in packs:
+                packs_list.append({
+                    "name": pack.name,
+                    "description": pack.description,
+                    "default_role": pack.default_role,
+                    "roles": {
+                        role_name: {
+                            "primary": config.primary,
+                            "fallbacks": config.fallbacks,
+                            "trigger": config.trigger,
+                        }
+                        for role_name, config in pack.roles.items()
+                    },
+                })
+
+            return {"status": "ok", "packs": packs_list, "count": len(packs_list)}
+        except Exception as e:
+            raise WireMethodError(f"Failed to list packs: {e}", code=-32000)
+
+    async def _handle_model_packs_set_current_pack(
+        self, params: dict[str, Any]
+    ) -> dict[str, Any]:
+        """Handle model_packs.set_current_pack method (bd-132).
+
+        Args:
+            params: {"name": str}
+
+        Returns:
+            {"status": "ok", "name": str} or {"status": "error", "error": str}
+        """
+        try:
+            name = params["name"]
+            success = model_packs.set_current_pack(name)
+
+            if success:
+                return {"status": "ok", "name": name}
+            else:
+                available = [p.name for p in model_packs.list_packs()]
+                return {
+                    "status": "error",
+                    "error": f"Unknown pack: {name}",
+                    "available": available,
+                }
+        except Exception as e:
+            raise WireMethodError(f"Failed to set current pack: {e}", code=-32000)
+
+    async def _handle_model_packs_get_current_pack(
+        self, params: dict[str, Any]
+    ) -> dict[str, Any]:
+        """Handle model_packs.get_current_pack method (bd-132).
+
+        Returns:
+            {"status": "ok", "pack": dict}
+        """
+        try:
+            pack = model_packs.get_current_pack()
+
+            pack_dict = {
+                "name": pack.name,
+                "description": pack.description,
+                "default_role": pack.default_role,
+                "roles": {
+                    role_name: {
+                        "primary": config.primary,
+                        "fallbacks": config.fallbacks,
+                        "trigger": config.trigger,
+                    }
+                    for role_name, config in pack.roles.items()
+                },
+            }
+
+            return {"status": "ok", "pack": pack_dict}
+        except Exception as e:
+            raise WireMethodError(f"Failed to get current pack: {e}", code=-32000)
+
+    async def _handle_model_packs_get_model_for_role(
+        self, params: dict[str, Any]
+    ) -> dict[str, Any]:
+        """Handle model_packs.get_model_for_role method (bd-132).
+
+        Args:
+            params: {"role": str | None}
+
+        Returns:
+            {"status": "ok", "model": str}
+        """
+        try:
+            role = params.get("role")
+            model = model_packs.get_model_for_role(role)
+
+            return {"status": "ok", "model": model}
+        except Exception as e:
+            raise WireMethodError(f"Failed to get model for role: {e}", code=-32000)
+
+    async def _handle_model_packs_get_fallback_chain(
+        self, params: dict[str, Any]
+    ) -> dict[str, Any]:
+        """Handle model_packs.get_fallback_chain method (bd-132).
+
+        Args:
+            params: {"role": str | None}
+
+        Returns:
+            {"status": "ok", "chain": list[str]}
+        """
+        try:
+            role = params.get("role")
+            pack = model_packs.get_current_pack()
+            chain = pack.get_fallback_chain(role)
+
+            return {"status": "ok", "chain": chain}
+        except Exception as e:
+            raise WireMethodError(f"Failed to get fallback chain: {e}", code=-32000)
+
+    async def _handle_model_packs_create_pack(
+        self, params: dict[str, Any]
+    ) -> dict[str, Any]:
+        """Handle model_packs.create_pack method (bd-132).
+
+        Args:
+            params: {"name": str, "description": str, "roles": dict, "default_role": str}
+
+        Returns:
+            {"status": "ok", "pack": dict} or {"status": "error", "error": str}
+        """
+        try:
+            name = params["name"]
+            description = params["description"]
+            roles = params.get("roles", {})
+            default_role = params.get("default_role", "coder")
+
+            pack = model_packs.create_user_pack(
+                name=name,
+                description=description,
+                roles=roles,
+                default_role=default_role,
+            )
+
+            pack_dict = {
+                "name": pack.name,
+                "description": pack.description,
+                "default_role": pack.default_role,
+                "roles": {
+                    role_name: {
+                        "primary": config.primary,
+                        "fallbacks": config.fallbacks,
+                        "trigger": config.trigger,
+                    }
+                    for role_name, config in pack.roles.items()
+                },
+            }
+
+            return {"status": "ok", "pack": pack_dict}
+        except ValueError as e:
+            return {"status": "error", "error": str(e)}
+        except Exception as e:
+            raise WireMethodError(f"Failed to create pack: {e}", code=-32000)
+
+    async def _handle_model_packs_delete_pack(
+        self, params: dict[str, Any]
+    ) -> dict[str, Any]:
+        """Handle model_packs.delete_pack method (bd-132).
+
+        Args:
+            params: {"name": str}
+
+        Returns:
+            {"status": "ok", "deleted": bool}
+        """
+        try:
+            name = params["name"]
+            deleted = model_packs.delete_user_pack(name)
+
+            return {"status": "ok", "deleted": deleted}
+        except Exception as e:
+            raise WireMethodError(f"Failed to delete pack: {e}", code=-32000)
+
+    async def _handle_model_packs_reload(
+        self, params: dict[str, Any]
+    ) -> dict[str, Any]:
+        """Handle model_packs.reload method (bd-132).
+
+        Returns:
+            {"status": "ok"}
+        """
+        try:
+            model_packs.load_user_packs()
+            return {"status": "ok"}
+        except Exception as e:
+            raise WireMethodError(f"Failed to reload packs: {e}", code=-32000)

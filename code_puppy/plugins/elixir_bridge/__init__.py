@@ -369,6 +369,40 @@ async def call_elixir_agent_manager(
         return {"status": "timeout", "fallback": True}
 
 
+async def call_elixir_model_packs(
+    method: str, params: dict[str, Any], timeout: float = 10.0
+) -> dict[str, Any]:
+    """Call a model packs method on the Elixir control plane (bd-132).
+
+    Specialized wrapper around call_method for model pack operations.
+    Used to delegate model pack management to the Elixir control plane when available.
+    Falls back to local execution on timeout/connection errors.
+
+    Args:
+        method: Model packs method name (e.g., "model_packs.get_pack",
+                "model_packs.list_packs", "model_packs.set_current_pack",
+                "model_packs.get_current_pack", "model_packs.get_model_for_role",
+                "model_packs.get_fallback_chain", "model_packs.create_pack",
+                "model_packs.delete_pack", "model_packs.reload")
+        params: Method parameters dict
+        timeout: Maximum seconds to wait for response
+
+    Returns:
+        Response result dict from Elixir, or fallback result on timeout
+
+    Raises:
+        ConnectionError: If Elixir control plane is not connected (not raised on timeout)
+    """
+    if not is_connected():
+        raise ConnectionError("Elixir control plane not connected")
+
+    try:
+        return await asyncio.to_thread(call_method, method, params, timeout=timeout)
+    except TimeoutError:
+        # Return a fallback result that signals local handling
+        return {"status": "timeout", "fallback": True}
+
+
 def _send_request_to_elixir(request: dict[str, Any]) -> None:
     """Send a JSON-RPC request to the Elixir control plane.
 
@@ -613,4 +647,6 @@ __all__ = [
     "call_elixir_rate_limiter",
     # Agent manager bridge support (bd-102)
     "call_elixir_agent_manager",
+    # Model packs bridge support (bd-132)
+    "call_elixir_model_packs",
 ]
