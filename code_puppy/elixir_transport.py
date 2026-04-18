@@ -259,7 +259,13 @@ class ElixirTransport:
                     if response.get("id") == ping_id and response.get("result", {}).get(
                         "pong"
                     ):
-                        # Success! Update the request counter
+                        # Success! Now drain any leftover stdout before marking ready
+                        drained_count = self._drain_startup_stdout(timeout_sec=0.5)
+                        if drained_count > 0:
+                            logger.warning(
+                                f"Drained {drained_count} stale bytes from stdout during startup"
+                            )
+                        # Update the request counter only after drain completes
                         with self._lock:
                             self._request_id = ping_id
                         return
@@ -274,6 +280,51 @@ class ElixirTransport:
             time.sleep(0.3)
 
         raise ElixirTransportError("Timeout waiting for service to be ready")
+
+    def _drain_startup_stdout(self, timeout_sec: float = 0.5) -> int:
+        """
+        Drain any pending bytes from stdout during startup.
+
+        This is used to clear out stale pongs, late log lines, or other
+        buffered output that arrived before we were ready to read.
+
+        Args:
+            timeout_sec: Maximum time to spend draining
+
+        Returns:
+            Number of bytes/chars drained
+        """
+        if self._process is None or self._process.poll() is not None:
+            return 0
+
+        drained_total = 0
+        start_time = time.time()
+
+        while time.time() - start_time < timeout_sec:
+            # Check if data is available (non-blocking with short timeout)
+            ready, _, _ = select.select([self._process.stdout], [], [], 0.05)
+            if not ready:
+                # No more data available, we're done
+                break
+
+            # Read available data
+            try:
+                line = self._process.stdout.readline()
+                if line:
+                    stripped = line.strip()
+                    drained_total += len(line)
+                    if stripped:
+                        logger.debug(
+                            f"Drained from stdout during startup: {stripped[:200]}"
+                        )
+                else:
+                    # EOF reached
+                    break
+            except Exception as e:
+                logger.debug(f"Error draining stdout: {e}")
+                break
+
+        return drained_total
 
     def stop(self) -> None:
         """Stop the Elixir stdio service."""
