@@ -36,35 +36,76 @@ NIBBLE_STR = "ZPMQVRWSNKTXJBYH"
 _HASHLINE_PREFIX_RE = re.compile(r"^\d+#[A-Z]{2}:(.*)", re.DOTALL)
 
 # ---------------------------------------------------------------------------
-# Elixir routing helpers (bd-88)
+# Elixir routing helpers (bd-88, bd-119)
 # ---------------------------------------------------------------------------
+
+
+def _get_transport():
+    """Get the Elixir transport singleton if available.
+
+    Returns None if transport is not available (Elixir not running).
+    """
+    try:
+        from code_puppy.elixir_transport_helpers import get_transport
+        return get_transport()
+    except Exception:
+        return None
 
 
 def _try_elixir_compute_line_hash(idx: int, line: str) -> str | None:
     """Try Elixir hashline_compute, return None on failure.
 
-    bd-86: Native acceleration layer removed, always returns None.
+    bd-119: Wired to Elixir transport hashline_compute method.
+    Returns hash string on success, None on any exception.
     """
-    # bd-86: Native acceleration removed, always use Python fallback
-    return None
+    transport = _get_transport()
+    if transport is None:
+        return None
+    try:
+        result = transport._send_request("hashline_compute", {
+            "idx": idx,
+            "line": line,
+        })
+        return result.get("hash")
+    except Exception:
+        return None
 
 
 def _try_elixir_format_hashlines(text: str, start_line: int) -> str | None:
     """Try Elixir hashline_format, return None on failure.
 
-    bd-86: Native acceleration layer removed, always returns None.
+    bd-119: Wired to Elixir transport hashline_format method.
+    Returns formatted string on success, None on any exception.
     """
-    # bd-86: Native acceleration removed, always use Python fallback
-    return None
+    transport = _get_transport()
+    if transport is None:
+        return None
+    try:
+        result = transport._send_request("hashline_format", {
+            "text": text,
+            "start_line": start_line,
+        })
+        return result.get("formatted")
+    except Exception:
+        return None
 
 
 def _try_elixir_strip_hashline_prefixes(text: str) -> str | None:
     """Try Elixir hashline_strip, return None on failure.
 
-    bd-86: Native acceleration layer removed, always returns None.
+    bd-119: Wired to Elixir transport hashline_strip method.
+    Returns stripped string on success, None on any exception.
     """
-    # bd-86: Native acceleration removed, always use Python fallback
-    return None
+    transport = _get_transport()
+    if transport is None:
+        return None
+    try:
+        result = transport._send_request("hashline_strip", {
+            "text": text,
+        })
+        return result.get("stripped")
+    except Exception:
+        return None
 
 
 def _try_elixir_validate_hashline_anchor(
@@ -72,10 +113,21 @@ def _try_elixir_validate_hashline_anchor(
 ) -> bool | None:
     """Try Elixir hashline_validate, return None on failure.
 
-    bd-86: Native acceleration layer removed, always returns None.
+    bd-119: Wired to Elixir transport hashline_validate method.
+    Returns bool on success, None on any exception.
     """
-    # bd-86: Native acceleration removed, always use Python fallback
-    return None
+    transport = _get_transport()
+    if transport is None:
+        return None
+    try:
+        result = transport._send_request("hashline_validate", {
+            "idx": idx,
+            "line": line,
+            "expected_hash": expected_hash,
+        })
+        return result.get("valid")
+    except Exception:
+        return None
 
 
 # ---------------------------------------------------------------------------
@@ -232,11 +284,10 @@ def validate_hashline_anchor(idx: int, line: str, expected_hash: str) -> bool:
 def is_using_elixir() -> bool:
     """Return ``True`` if the Elixir acceleration is active for this module.
 
-    bd-86: Native acceleration layer removed, always returns False.
-    The Python backend uses ``zlib.crc32`` and is not cross-compatible
-    with the xxHash32-based Elixir backend.
+    bd-119: Returns True when the Elixir transport is accessible.
+    When True, hashline operations will route to the Elixir/Rust backend
+    which uses xxHash32 (not compatible with Python's zlib.crc32).
 
-    Returns False always - Python fallback is used exclusively.
+    Returns True if transport is available, False otherwise.
     """
-    # bd-86: Native acceleration removed, always use Python
-    return False
+    return _get_transport() is not None
