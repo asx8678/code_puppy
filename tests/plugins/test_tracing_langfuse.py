@@ -105,9 +105,13 @@ def _get_fresh_module_with_mock_client(mock_client=None, env_vars=None):
 # =============================================================================
 
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="env-mutation")
 class TestEnvVarNotSet:
     """Plugin should be silent and have zero overhead when env vars not set."""
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="env-mutation")
     def test_is_plugin_active_returns_false_without_env(self):
         """_is_plugin_active should return False when no keys."""
         # Clear all env vars
@@ -124,6 +128,8 @@ class TestEnvVarNotSet:
 
         assert reg_module._is_plugin_active() is False
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="env-mutation")
     def test_is_plugin_active_returns_false_with_partial_env(self):
         """_is_plugin_active should return False when only one key is set."""
         # Clear all env vars
@@ -150,6 +156,8 @@ class TestEnvVarNotSet:
 
         assert reg_module._is_plugin_active() is False
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="env-mutation")
     def test_callbacks_unchanged_without_env(self):
         """When LangFuse keys are not set, the module should not enable tracing."""
         # Import with no keys (env vars are cleared by helper)
@@ -168,9 +176,13 @@ class TestEnvVarNotSet:
 # =============================================================================
 
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="env-mutation")
 class TestLangfuseNotInstalled:
     """Plugin should gracefully handle missing langfuse package."""
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="env-mutation")
     def test_warn_once_fires_when_package_missing(self):
         """When langfuse package is missing, warn_once should hint at installation."""
         # Clear any existing env vars first
@@ -211,6 +223,8 @@ class TestLangfuseNotInstalled:
         assert warning_messages[0][0] == "langfuse_missing"
         assert "pip install langfuse" in warning_messages[0][1]
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="env-mutation")
     def test_returns_none_when_package_missing(self):
         """_get_langfuse_client should return None when package missing."""
         # Clear any existing env vars first
@@ -234,9 +248,13 @@ class TestLangfuseNotInstalled:
 # =============================================================================
 
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="env-mutation")
 class TestWithMockClient:
     """Test span creation and nesting with a mock LangFuse client."""
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="env-mutation")
     def test_agent_run_start_creates_trace(self, mock_langfuse_client):
         """agent_run_start should create a LangFuse trace."""
         # Clear and set env vars
@@ -266,6 +284,8 @@ class TestWithMockClient:
         mock_trace = mock_langfuse_client.trace.return_value
         assert mock_trace.generation.called
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="env-mutation")
     def test_agent_run_end_updates_trace(self, mock_langfuse_client):
         """agent_run_end should update the LangFuse trace and flush."""
         # Clear and set env vars
@@ -301,6 +321,8 @@ class TestWithMockClient:
         # Verify flush was called
         assert mock_langfuse_client.flush.called
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="env-mutation")
     def test_tool_span_nesting(self, mock_langfuse_client):
         """Tool spans should be nested under agent runs."""
         # Clear and set env vars
@@ -351,6 +373,8 @@ class TestWithMockClient:
             # Verify span end was called
             assert mock_span.end.called
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="env-mutation")
     def test_session_id_correlation(self, mock_langfuse_client):
         """session_id should be used as trace correlation ID."""
         # Clear and set env vars
@@ -375,6 +399,8 @@ class TestWithMockClient:
         assert call_kwargs["id"] == session_id
         assert call_kwargs["session_id"] == session_id
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="env-mutation")
     def test_error_handling_in_agent_run(self, mock_langfuse_client):
         """Errors in agent runs should be captured in trace."""
         # Clear and set env vars
@@ -410,6 +436,8 @@ class TestWithMockClient:
         end_call_kwargs = mock_generation.end.call_args[1]
         assert end_call_kwargs["status"] == "error"
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="env-mutation")
     def test_stream_event_logging(self, mock_langfuse_client):
         """Stream events should be logged to the trace."""
         # Clear and set env vars
@@ -446,9 +474,13 @@ class TestWithMockClient:
 # =============================================================================
 
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="env-mutation")
 class TestEdgeCases:
     """Edge cases and error handling."""
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="env-mutation")
     def test_no_active_trace_for_tool_call(self, mock_langfuse_client):
         """Tool calls without active run context should be gracefully skipped."""
         # Clear and set env vars
@@ -468,6 +500,8 @@ class TestEdgeCases:
             # Should not raise
             asyncio.run(reg_module._on_pre_tool_call("list_files", {"directory": "/tmp"}))
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="env-mutation")
     def test_no_active_trace_for_session(self, mock_langfuse_client):
         """Tool calls with session_id but no active trace should be gracefully skipped."""
         # Clear and set env vars
@@ -491,6 +525,8 @@ class TestEdgeCases:
             # Should not raise even though trace doesn't exist
             asyncio.run(reg_module._on_pre_tool_call("list_files", {"directory": "/tmp"}))
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="env-mutation")
     def test_missing_session_id_handling(self, mock_langfuse_client):
         """Missing session_id should result in generated UUID."""
         # Clear and set env vars
@@ -519,6 +555,8 @@ class TestEdgeCases:
         except ValueError:
             pytest.fail("trace id should be a valid UUID")
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="env-mutation")
     def test_cleanup_on_trace_end(self, mock_langfuse_client):
         """Trace context should be cleaned up after agent_run_end."""
         # Clear and set env vars
@@ -553,9 +591,13 @@ class TestEdgeCases:
 # =============================================================================
 
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="env-mutation")
 class TestZeroOverhead:
     """Verify zero overhead when plugin is disabled."""
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="env-mutation")
     def test_quick_return_without_env(self):
         """Callbacks should return immediately when env vars not set."""
         # Import fresh without env vars (cleared by helper)
@@ -597,9 +639,13 @@ class TestZeroOverhead:
 # =============================================================================
 
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="env-mutation")
 class TestClientExceptionHandling:
     """Test handling when LangFuse client throws exceptions."""
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="env-mutation")
     def test_exception_during_trace_start(self, mock_langfuse_client):
         """Exception during trace start should be caught gracefully."""
         # Make trace throw exception
@@ -622,6 +668,8 @@ class TestClientExceptionHandling:
         # trace was called but exception was caught
         assert mock_langfuse_client.trace.called
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="env-mutation")
     def test_exception_during_trace_end(self, mock_langfuse_client):
         """Exception during trace end should be caught gracefully."""
         mock_trace = MagicMock()
@@ -653,6 +701,8 @@ class TestClientExceptionHandling:
         # update was called but exception was caught
         assert mock_trace.update.called
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="env-mutation")
     def test_exception_during_tool_span(self, mock_langfuse_client):
         """Exception during tool span creation should be caught."""
         mock_trace = MagicMock()
@@ -686,6 +736,8 @@ class TestClientExceptionHandling:
             # Tool call - should not raise
             asyncio.run(reg_module._on_pre_tool_call("list_files", {"directory": "/tmp"}))
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="env-mutation")
     def test_exception_during_flush(self, mock_langfuse_client):
         """Exception during flush should be caught gracefully."""
         mock_langfuse_client.flush.side_effect = Exception("Flush failed")
@@ -716,9 +768,13 @@ class TestClientExceptionHandling:
 # =============================================================================
 
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="env-mutation")
 class TestConcurrentSessions:
     """Test handling of multiple concurrent sessions."""
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="env-mutation")
     def test_multiple_concurrent_sessions(self, mock_langfuse_client):
         """Multiple concurrent sessions should be tracked independently."""
         for key in ["LANGFUSE_PUBLIC_KEY", "LANGFUSE_SECRET_KEY", "LANGFUSE_HOST", "LANGFUSE_PROJECT"]:
@@ -748,6 +804,8 @@ class TestConcurrentSessions:
         # Verify all cleaned up
         assert len(reg_module._active_traces) == 0
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="env-mutation")
     def test_same_session_id_reuse(self, mock_langfuse_client):
         """Reusing same session_id should replace previous trace."""
         for key in ["LANGFUSE_PUBLIC_KEY", "LANGFUSE_SECRET_KEY", "LANGFUSE_HOST", "LANGFUSE_PROJECT"]:
@@ -786,9 +844,13 @@ class TestConcurrentSessions:
 # =============================================================================
 
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="env-mutation")
 class TestEnvironmentVariables:
     """Test environment variable configuration."""
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="env-mutation")
     def test_custom_host(self, mock_langfuse_client):
         """LANGFUSE_HOST should be used as host."""
         # Reimport with custom host - verify host is set at module level
@@ -808,6 +870,8 @@ class TestEnvironmentVariables:
         client = reg_module._get_langfuse_client()
         assert client is mock_langfuse_client
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="env-mutation")
     def test_default_host(self, mock_langfuse_client):
         """Default host should be https://cloud.langfuse.com."""
         # Reimport without setting LANGFUSE_HOST (cleared by helper)
@@ -822,6 +886,8 @@ class TestEnvironmentVariables:
         # Verify default host
         assert reg_module.LANGFUSE_HOST == "https://cloud.langfuse.com"
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="env-mutation")
     def test_custom_project_name_in_metadata(self, mock_langfuse_client):
         """LANGFUSE_PROJECT should be included in trace metadata if set."""
         reg_module = _get_fresh_module_with_mock_client(
@@ -842,9 +908,13 @@ class TestEnvironmentVariables:
 # =============================================================================
 
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="env-mutation")
 class TestDualTracing:
     """Test that LangFuse can run simultaneously with LangSmith."""
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="env-mutation")
     def test_dual_tracing_independent(self, mock_langfuse_client):
         """Both plugins should be able to be active independently."""
         # Clear all env vars including LangSmith ones

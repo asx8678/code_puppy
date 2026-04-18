@@ -19,6 +19,8 @@ pytestmark = pytest.mark.skipif(
 
 
 @pytest.mark.skip(reason="Flaky pexpect timeouts in CI - needs investigation")
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="pty-spawn")
 def test_autosave_resume_roundtrip(
     integration_env: dict[str, str],
 ) -> None:

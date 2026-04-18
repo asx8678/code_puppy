@@ -79,9 +79,13 @@ def sample_token_data():
     }
 
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="network")
 class TestUrlSafeB64Encode:
     """Test URL-safe base64 encoding utilities."""
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="network")
     def test_urlsafe_b64encode_basic(self):
         """Test basic URL-safe base64 encoding."""
         data = b"hello world"
@@ -97,11 +101,15 @@ class TestUrlSafeB64Encode:
         decoded = base64.urlsafe_b64decode(result + ("=" * padding_needed))
         assert decoded == data
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="network")
     def test_urlsafe_b64encode_empty(self):
         """Test URL-safe base64 encoding of empty data."""
         result = _urlsafe_b64encode(b"")
         assert result == ""
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="network")
     def test_urlsafe_b64encode_with_padding_removal(self):
         """Test that padding is properly removed."""
         # Data that would normally have padding
@@ -117,9 +125,13 @@ class TestUrlSafeB64Encode:
         assert decoded == data
 
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="network")
 class TestCodeVerifierGeneration:
     """Test PKCE code verifier generation."""
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="network")
     def test_generate_code_verifier_length(self):
         """Test code verifier has correct length."""
         verifier = _generate_code_verifier()
@@ -130,6 +142,8 @@ class TestCodeVerifierGeneration:
         # Should be valid hex
         int(verifier, 16)  # Should not raise exception
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="network")
     def test_generate_code_verifier_uniqueness(self):
         """Test code verifiers are unique."""
         verifiers = [_generate_code_verifier() for _ in range(10)]
@@ -137,6 +151,8 @@ class TestCodeVerifierGeneration:
         # All should be unique
         assert len(set(verifiers)) == len(verifiers)
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="network")
     def test_generate_code_verifier_randomness(self):
         """Test code verifiers appear random."""
         verifier1 = _generate_code_verifier()
@@ -149,9 +165,13 @@ class TestCodeVerifierGeneration:
         assert not verifier1.startswith(verifier2[:10])
 
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="network")
 class TestCodeChallengeComputation:
     """Test PKCE code challenge computation."""
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="network")
     def test_compute_code_challenge(self):
         """Test code challenge computation from verifier."""
         verifier = "test_verifier"
@@ -169,6 +189,8 @@ class TestCodeChallengeComputation:
         challenge2 = _compute_code_challenge(verifier)
         assert challenge == challenge2
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="network")
     def test_compute_code_challenge_different_verifiers(self):
         """Test different verifiers produce different challenges."""
         verifier1 = "verifier_one"
@@ -179,6 +201,8 @@ class TestCodeChallengeComputation:
 
         assert challenge1 != challenge2
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="network")
     def test_compute_code_challenge_sha256(self):
         """Test that code challenge is based on SHA256."""
         verifier = "test_verifier_fixed"
@@ -193,9 +217,13 @@ class TestCodeChallengeComputation:
         assert challenge == expected_challenge
 
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="network")
 class TestOAuthContext:
     """Test OAuthContext dataclass and methods."""
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="network")
     def test_oauth_context_creation(self):
         """Test OAuthContext creation with required fields."""
         context = OAuthContext(
@@ -212,6 +240,8 @@ class TestOAuthContext:
         assert context.redirect_uri is None
         assert context.expires_at is None
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="network")
     def test_oauth_context_with_optional_fields(self):
         """Test OAuthContext creation with optional fields."""
         context = OAuthContext(
@@ -227,6 +257,8 @@ class TestOAuthContext:
         assert context.expires_at is not None
         assert context.expires_at > context.created_at
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="network")
     def test_is_expired_no_expiration_set(self):
         """Test expiration check when no expiration is set."""
         # Created 6 minutes ago (beyond default 5 minute timeout)
@@ -249,6 +281,8 @@ class TestOAuthContext:
 
         assert new_context.is_expired() is False
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="network")
     def test_is_expired_with_expiration_set(self):
         """Test expiration check when expiration is explicitly set."""
         # Expired 1 minute ago
@@ -274,9 +308,13 @@ class TestOAuthContext:
         assert valid_context.is_expired() is False
 
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="network")
 class TestPrepareOAuthContext:
     """Test OAuth context preparation."""
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="network")
     def test_prepare_oauth_context_structure(self):
         """Test prepared OAuth context has correct structure."""
         context = prepare_oauth_context()
@@ -303,6 +341,8 @@ class TestPrepareOAuthContext:
 
         assert context.redirect_uri is None
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="network")
     def test_prepare_oauth_context_uniqueness(self):
         """Test each prepared context is unique."""
         contexts = [prepare_oauth_context() for _ in range(5)]
@@ -316,6 +356,8 @@ class TestPrepareOAuthContext:
         assert len(set(verifiers)) == len(verifiers)
         assert len(set(challenges)) == len(challenges)
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="network")
     def test_prepare_oauth_context_pkce_relationship(self):
         """Test PKCE verifier/challenge relationship."""
         context = prepare_oauth_context()
@@ -325,9 +367,13 @@ class TestPrepareOAuthContext:
         assert context.code_challenge == expected_challenge
 
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="network")
 class TestAssignRedirectUri:
     """Test redirect URI assignment."""
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="network")
     def test_assign_redirect_uri_success(self):
         """Test successful redirect URI assignment."""
         context = prepare_oauth_context()
@@ -337,6 +383,8 @@ class TestAssignRedirectUri:
         assert uri == "http://localhost:1455/auth/callback"
         assert context.redirect_uri == uri
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="network")
     def test_assign_redirect_uri_wrong_port(self):
         """Test redirect URI assignment fails with wrong port."""
         context = prepare_oauth_context()
@@ -344,6 +392,8 @@ class TestAssignRedirectUri:
         with pytest.raises(RuntimeError, match="OAuth flow must use port 1455"):
             assign_redirect_uri(context, 8080)
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="network")
     def test_assign_redirect_uri_custom_config(self):
         """Test redirect URI with custom configuration."""
         # Temporarily modify config
@@ -363,9 +413,13 @@ class TestAssignRedirectUri:
             CHATGPT_OAUTH_CONFIG.update(original_config)
 
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="network")
 class TestBuildAuthorizationUrl:
     """Test authorization URL building."""
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="network")
     def test_build_authorization_url_success(self):
         """Test successful authorization URL building."""
         context = prepare_oauth_context()
@@ -388,6 +442,8 @@ class TestBuildAuthorizationUrl:
         assert "codex_cli_simplified_flow=true" in url
         assert f"state={context.state}" in url
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="network")
     def test_build_authorization_url_no_redirect_uri(self):
         """Test authorization URL building fails without redirect URI."""
         context = prepare_oauth_context()
@@ -396,6 +452,8 @@ class TestBuildAuthorizationUrl:
         with pytest.raises(RuntimeError, match="Redirect URI has not been assigned"):
             build_authorization_url(context)
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="network")
     def test_build_authorization_url_escaping(self):
         """Test URL parameter escaping in authorization URL."""
         context = prepare_oauth_context()
@@ -409,9 +467,13 @@ class TestBuildAuthorizationUrl:
         assert "%26" in url  # Encoded ampersand
 
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="network")
 class TestParseAuthorizationError:
     """Test OAuth authorization error parsing."""
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="network")
     def test_parse_authorization_error_with_error(self):
         """Test parsing authorization callback with error."""
         url = "http://localhost:1455/auth/callback?error=access_denied&error_description=User%20denied%20access"
@@ -420,6 +482,8 @@ class TestParseAuthorizationError:
 
         assert error == "access_denied: User denied access"
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="network")
     def test_parse_authorization_error_without_description(self):
         """Test parsing authorization error without description."""
         url = "http://localhost:1455/auth/callback?error=invalid_request"
@@ -428,6 +492,8 @@ class TestParseAuthorizationError:
 
         assert error == "invalid_request: Unknown error"
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="network")
     def test_parse_authorization_error_no_error(self):
         """Test parsing callback without error returns None."""
         url = "http://localhost:1455/auth/callback?code=test_code&state=test_state"
@@ -436,6 +502,8 @@ class TestParseAuthorizationError:
 
         assert error is None
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="network")
     def test_parse_authorization_error_invalid_url(self):
         """Test parsing invalid URL returns None."""
         invalid_url = "not a valid url"
@@ -444,6 +512,8 @@ class TestParseAuthorizationError:
 
         assert error is None
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="network")
     def test_parse_authorization_error_malformed_query(self):
         """Test parsing URL with malformed query returns None."""
         url = "http://localhost:1455/auth/callback?invalid"
@@ -453,9 +523,13 @@ class TestParseAuthorizationError:
         assert error is None
 
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="network")
 class TestParseJwtClaims:
     """Test JWT claims parsing."""
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="network")
     def test_parse_jwt_valid_token(self):
         """Test parsing valid JWT token."""
         # Create a simple JWT (header.payload.signature)
@@ -481,6 +555,8 @@ class TestParseJwtClaims:
 
         assert claims == {"sub": "123", "name": "test"}
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="network")
     def test_parse_jwt_with_padding(self):
         """Test parsing JWT that requires padding."""
         # Create payload that needs padding
@@ -495,11 +571,15 @@ class TestParseJwtClaims:
 
         assert claims == payload_data
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="network")
     def test_parse_jwt_empty_token(self):
         """Test parsing empty token returns None."""
         claims = parse_jwt_claims("")
         assert claims is None
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="network")
     def test_parse_jwt_invalid_format(self):
         """Test parsing improperly formatted JWT returns None."""
         invalid_tokens = [
@@ -513,6 +593,8 @@ class TestParseJwtClaims:
             claims = parse_jwt_claims(token)
             assert claims is None
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="network")
     def test_parse_jwt_invalid_base64(self):
         """Test parsing JWT with invalid base64 returns None."""
         token = "header.invalid_payload.signature"
@@ -520,6 +602,8 @@ class TestParseJwtClaims:
         claims = parse_jwt_claims(token)
         assert claims is None
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="network")
     def test_parse_jwt_invalid_json(self):
         """Test parsing JWT with invalid JSON returns None."""
         invalid_payload = (
@@ -531,10 +615,14 @@ class TestParseJwtClaims:
         assert claims is None
 
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="network")
 class TestTokenStorage:
     """Test token storage and retrieval."""
 
     @patch("code_puppy.plugins.chatgpt_oauth.utils.get_token_storage_path")
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="network")
     def test_load_stored_tokens_success(self, mock_get_path, temp_token_file):
         """Test successful loading of stored tokens."""
         mock_get_path.return_value = temp_token_file
@@ -557,6 +645,8 @@ class TestTokenStorage:
         assert result == test_tokens
 
     @patch("code_puppy.plugins.chatgpt_oauth.utils.get_token_storage_path")
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="network")
     def test_load_stored_tokens_file_not_exists(self, mock_get_path):
         """Test loading tokens when file doesn't exist returns None."""
         mock_get_path.return_value = Path("/nonexistent/file.json")
@@ -566,6 +656,8 @@ class TestTokenStorage:
         assert result is None
 
     @patch("code_puppy.plugins.chatgpt_oauth.utils.get_token_storage_path")
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="network")
     def test_load_stored_tokens_invalid_json(self, mock_get_path, temp_token_file):
         """Test loading tokens with invalid JSON returns None."""
         mock_get_path.return_value = temp_token_file
@@ -579,6 +671,8 @@ class TestTokenStorage:
         assert result is None
 
     @patch("code_puppy.plugins.chatgpt_oauth.utils.get_token_storage_path")
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="network")
     def test_load_stored_tokens_permission_error(self, mock_get_path):
         """Test loading tokens with permission error returns None."""
         mock_get_path.return_value = Path("/root/protected.json")
@@ -588,6 +682,8 @@ class TestTokenStorage:
             assert result is None
 
     @patch("code_puppy.plugins.chatgpt_oauth.utils.get_token_storage_path")
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="network")
     def test_save_stored_tokens_success(self, mock_get_path, temp_token_file):
         """Test successful saving of stored tokens."""
         mock_get_path.return_value = temp_token_file
@@ -615,6 +711,8 @@ class TestTokenStorage:
         assert file_stat.st_mode & 0o777 == 0o600
 
     @patch("code_puppy.plugins.chatgpt_oauth.utils.get_token_storage_path")
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="network")
     def test_save_stored_tokens_permission_error(self, mock_get_path):
         """Test saving tokens with permission error returns False."""
         mock_get_path.return_value = Path("/root/protected.json")
@@ -624,6 +722,8 @@ class TestTokenStorage:
             assert result is False
 
     @patch("code_puppy.plugins.chatgpt_oauth.utils.get_token_storage_path")
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="network")
     def test_save_stored_tokens_serialization_error(
         self, mock_get_path, temp_token_file
     ):
@@ -638,10 +738,14 @@ class TestTokenStorage:
         assert result is False
 
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="network")
 class TestModelStorage:
     """Test model configuration storage."""
 
     @patch("code_puppy.plugins.chatgpt_oauth.utils.get_chatgpt_models_path")
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="network")
     def test_load_chatgpt_models_success(self, mock_get_path, temp_models_file):
         """Test successful loading of ChatGPT models configuration."""
         mock_get_path.return_value = temp_models_file
@@ -667,6 +771,8 @@ class TestModelStorage:
         assert result == test_models
 
     @patch("code_puppy.plugins.chatgpt_oauth.utils.get_chatgpt_models_path")
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="network")
     def test_load_chatgpt_models_not_exists(self, mock_get_path):
         """Test loading models when file doesn't exist returns empty dict."""
         mock_get_path.return_value = Path("/nonexistent/models.json")
@@ -676,6 +782,8 @@ class TestModelStorage:
         assert result == {}
 
     @patch("code_puppy.plugins.chatgpt_oauth.utils.get_chatgpt_models_path")
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="network")
     def test_save_chatgpt_models_success(self, mock_get_path, temp_models_file):
         """Test successful saving of ChatGPT models configuration."""
         mock_get_path.return_value = temp_models_file
@@ -699,6 +807,8 @@ class TestModelStorage:
         assert saved_data == test_models
 
     @patch("code_puppy.plugins.chatgpt_oauth.utils.get_chatgpt_models_path")
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="network")
     def test_save_chatgpt_models_error(self, mock_get_path):
         """Test saving models with error returns False."""
         mock_get_path.return_value = Path("/root/protected.json")
@@ -708,10 +818,14 @@ class TestModelStorage:
             assert result is False
 
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="network")
 class TestTokenExchange:
     """Test token exchange functionality."""
 
     @patch("requests.post")
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="network")
     def test_exchange_code_for_tokens_success(self, mock_post):
         """Test successful token exchange."""
         mock_response = Mock()
@@ -749,6 +863,8 @@ class TestTokenExchange:
         assert call_args[1]["data"]["code_verifier"] == context.code_verifier
 
     @patch("requests.post")
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="network")
     def test_exchange_code_for_tokens_http_error(self, mock_post):
         """Test token exchange handles HTTP errors."""
         mock_response = Mock()
@@ -764,6 +880,8 @@ class TestTokenExchange:
         assert result is None
 
     @patch("requests.post")
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="network")
     def test_exchange_code_for_tokens_network_error(self, mock_post):
         """Test token exchange handles network errors."""
         mock_post.side_effect = requests.ConnectionError("Network error")
@@ -776,6 +894,8 @@ class TestTokenExchange:
         assert result is None
 
     @patch("requests.post")
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="network")
     def test_exchange_code_for_tokens_timeout(self, mock_post):
         """Test token exchange handles timeout."""
         mock_post.side_effect = requests.Timeout("Request timed out")
@@ -788,6 +908,8 @@ class TestTokenExchange:
         assert result is None
 
     @patch("requests.post")
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="network")
     def test_exchange_code_for_tokens_json_error_response(self, mock_post):
         """Test token exchange handles JSON error responses."""
         mock_response = Mock()
@@ -805,6 +927,8 @@ class TestTokenExchange:
 
         assert result is None
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="network")
     def test_exchange_code_for_tokens_missing_redirect_uri(self):
         """Test token exchange fails without redirect URI."""
         context = prepare_oauth_context()
@@ -813,6 +937,8 @@ class TestTokenExchange:
         with pytest.raises(RuntimeError, match="Redirect URI missing"):
             exchange_code_for_tokens("test_code", context)
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="network")
     def test_exchange_code_for_tokens_expired_context(self):
         """Test token exchange fails with expired context."""
         context = OAuthContext(
@@ -829,10 +955,14 @@ class TestTokenExchange:
         assert result is None
 
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="network")
 class TestFetchChatGPTModels:
     """Test ChatGPT model fetching functionality."""
 
     @patch("requests.get")
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="network")
     def test_fetch_chatgpt_models_success(self, mock_get):
         """Test successful model fetching."""
         mock_response = Mock()
@@ -867,6 +997,8 @@ class TestFetchChatGPTModels:
         assert call_args[1]["headers"]["ChatGPT-Account-Id"] == "test_account_id"
 
     @patch("requests.get")
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="network")
     def test_fetch_chatgpt_models_deduplication(self, mock_get):
         """Test model deduplication while preserving order."""
         mock_response = Mock()
@@ -892,6 +1024,8 @@ class TestFetchChatGPTModels:
         assert "o1-preview" in result
 
     @patch("requests.get")
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="network")
     def test_fetch_chatgpt_models_filtering(self, mock_get):
         """Test model fetching returns all models from response."""
         mock_response = Mock()
@@ -920,6 +1054,8 @@ class TestFetchChatGPTModels:
             assert m in result
 
     @patch("requests.get")
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="network")
     def test_fetch_chatgpt_models_http_error(self, mock_get):
         """Test model fetching handles HTTP errors by returning default models."""
         mock_response = Mock()
@@ -935,6 +1071,8 @@ class TestFetchChatGPTModels:
         assert result == DEFAULT_CODEX_MODELS
 
     @patch("requests.get")
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="network")
     def test_fetch_chatgpt_models_network_error(self, mock_get):
         """Test model fetching handles network errors by returning default models."""
         mock_get.side_effect = requests.ConnectionError("Network error")
@@ -947,6 +1085,8 @@ class TestFetchChatGPTModels:
         assert result == DEFAULT_CODEX_MODELS
 
     @patch("requests.get")
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="network")
     def test_fetch_chatgpt_models_timeout(self, mock_get):
         """Test model fetching handles timeout by returning default models."""
         mock_get.side_effect = requests.Timeout("Request timed out")
@@ -959,6 +1099,8 @@ class TestFetchChatGPTModels:
         assert result == DEFAULT_CODEX_MODELS
 
     @patch("requests.get")
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="network")
     def test_fetch_chatgpt_models_invalid_json(self, mock_get):
         """Test model fetching handles invalid JSON response by returning default models."""
         mock_response = Mock()
@@ -974,6 +1116,8 @@ class TestFetchChatGPTModels:
         assert result == DEFAULT_CODEX_MODELS
 
     @patch("requests.get")
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="network")
     def test_fetch_chatgpt_models_missing_models_field(self, mock_get):
         """Test model fetching handles missing models field by returning default models."""
         mock_response = Mock()
@@ -989,6 +1133,8 @@ class TestFetchChatGPTModels:
         assert result == DEFAULT_CODEX_MODELS
 
     @patch("requests.get")
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="network")
     def test_fetch_chatgpt_models_invalid_models_type(self, mock_get):
         """Test model fetching handles invalid models field type by returning default models."""
         mock_response = Mock()
@@ -1004,6 +1150,8 @@ class TestFetchChatGPTModels:
         assert result == DEFAULT_CODEX_MODELS
 
     @patch("requests.get")
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="network")
     def test_fetch_chatgpt_models_empty_list(self, mock_get):
         """Test model fetching handles empty model list by returning default models."""
         mock_response = Mock()
@@ -1019,11 +1167,15 @@ class TestFetchChatGPTModels:
         assert result == DEFAULT_CODEX_MODELS
 
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="network")
 class TestAddModelsToConfig:
     """Test adding models to configuration."""
 
     @patch("code_puppy.plugins.chatgpt_oauth.utils.save_chatgpt_models")
     @patch("code_puppy.plugins.chatgpt_oauth.utils.load_chatgpt_models")
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="network")
     def test_add_models_to_extra_config_success(self, mock_load, mock_save):
         """Test successful addition of models to configuration."""
         mock_load.return_value = {
@@ -1073,6 +1225,8 @@ class TestAddModelsToConfig:
 
     @patch("code_puppy.plugins.chatgpt_oauth.utils.save_chatgpt_models")
     @patch("code_puppy.plugins.chatgpt_oauth.utils.load_chatgpt_models")
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="network")
     def test_add_models_to_extra_config_gpt54_supports_xhigh(
         self, mock_load, mock_save
     ):
@@ -1094,6 +1248,8 @@ class TestAddModelsToConfig:
 
     @patch("code_puppy.plugins.chatgpt_oauth.utils.save_chatgpt_models")
     @patch("code_puppy.plugins.chatgpt_oauth.utils.load_chatgpt_models")
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="network")
     def test_add_models_to_extra_config_save_failure(self, mock_load, mock_save):
         """Test model addition fails when save fails."""
         mock_load.return_value = {}
@@ -1105,6 +1261,8 @@ class TestAddModelsToConfig:
 
     @patch("code_puppy.plugins.chatgpt_oauth.utils.save_chatgpt_models")
     @patch("code_puppy.plugins.chatgpt_oauth.utils.load_chatgpt_models")
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="network")
     def test_add_models_to_extra_config_load_failure(self, mock_load, mock_save):
         """Test model addition handles load failure gracefully."""
         mock_load.return_value = {}  # Returns empty dict on failure
@@ -1120,11 +1278,15 @@ class TestAddModelsToConfig:
         assert "chatgpt-gpt-4" in saved_config
 
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="network")
 class TestRemoveChatGPTModels:
     """Test removing ChatGPT models from configuration."""
 
     @patch("code_puppy.plugins.chatgpt_oauth.utils.save_chatgpt_models")
     @patch("code_puppy.plugins.chatgpt_oauth.utils.load_chatgpt_models")
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="network")
     def test_remove_chatgpt_models_success(self, mock_load, mock_save):
         """Test successful removal of ChatGPT models."""
         mock_load.return_value = {
@@ -1158,6 +1320,8 @@ class TestRemoveChatGPTModels:
 
     @patch("code_puppy.plugins.chatgpt_oauth.utils.save_chatgpt_models")
     @patch("code_puppy.plugins.chatgpt_oauth.utils.load_chatgpt_models")
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="network")
     def test_remove_chatgpt_models_no_oauth_models(self, mock_load, mock_save):
         """Test removal when no OAuth models exist."""
         mock_load.return_value = {
@@ -1183,6 +1347,8 @@ class TestRemoveChatGPTModels:
 
     @patch("code_puppy.plugins.chatgpt_oauth.utils.save_chatgpt_models")
     @patch("code_puppy.plugins.chatgpt_oauth.utils.load_chatgpt_models")
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="network")
     def test_remove_chatgpt_models_save_failure(self, mock_load, mock_save):
         """Test model removal fails when save fails."""
         mock_load.return_value = {
@@ -1198,6 +1364,8 @@ class TestRemoveChatGPTModels:
         assert result == 0  # Returns 0 on.failure
 
     @patch("code_puppy.plugins.chatgpt_oauth.utils.load_chatgpt_models")
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="network")
     def test_remove_chatgpt_models_load_failure(self, mock_load):
         """Test model removal handles load failure gracefully."""
         mock_load.return_value = {}  # Returns empty dict on failure
@@ -1207,10 +1375,14 @@ class TestRemoveChatGPTModels:
         assert result == 0
 
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="network")
 class TestErrorHandling:
     """Test comprehensive error handling scenarios."""
 
     @patch("requests.post")
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="network")
     def test_exchange_code_for_tokens_various_http_errors(self, mock_post):
         """Test token exchange handles various HTTP error codes."""
         test_cases = [
@@ -1237,6 +1409,8 @@ class TestErrorHandling:
             assert result is None, f"Should return None for {status_code} error"
 
     @patch("requests.get")
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="network")
     def test_fetch_chatgpt_models_various_http_errors(self, mock_get):
         """Test model fetching handles various HTTP error codes by returning default models."""
         from code_puppy.plugins.chatgpt_oauth.utils import DEFAULT_CODEX_MODELS
@@ -1263,6 +1437,8 @@ class TestErrorHandling:
                 f"Should return default models for {status_code} error"
             )
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="network")
     def test_all_functions_handle_none_inputs_gracefully(self):
         """Test that utility functions handle None inputs gracefully."""
         # Most functions should handle None without crashing
@@ -1276,6 +1452,8 @@ class TestErrorHandling:
         with pytest.raises(RuntimeError):
             assign_redirect_uri(None, 1455)  # type: ignore
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="network")
     def test_model_filtering_edge_cases(self):
         """Test model filtering with edge cases."""
         from code_puppy.plugins.chatgpt_oauth.utils import (

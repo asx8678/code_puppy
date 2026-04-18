@@ -24,6 +24,8 @@ from code_puppy.callbacks import (
 )
 
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="env-mutation")
 class TestTriggerCallbacksSync:
     """Tests for _trigger_callbacks_sync (non-async context)."""
 
@@ -36,15 +38,21 @@ class TestTriggerCallbacksSync:
         """Re-enable plugin loading after each test."""
         os.environ.pop("PUP_DISABLE_CALLBACK_PLUGIN_LOADING", None)
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="env-mutation")
     def test_no_callbacks_returns_empty(self):
         result = _trigger_callbacks_sync("startup")
         assert result == []
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="env-mutation")
     def test_sync_callback_executed(self):
         register_callback("startup", lambda: 42)
         result = _trigger_callbacks_sync("startup")
         assert result == [42]
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="env-mutation")
     def test_multiple_sync_callbacks_executed_in_order(self):
         order = []
         register_callback("startup", lambda: order.append("a"))
@@ -53,6 +61,8 @@ class TestTriggerCallbacksSync:
         _trigger_callbacks_sync("startup")
         assert order == ["a", "b", "c"]
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="env-mutation")
     def test_sync_callback_exception_doesnt_stop_others(self):
         """A failing callback doesn't prevent subsequent callbacks from running."""
         results = []
@@ -77,6 +87,8 @@ class TestTriggerCallbacksSync:
         assert results == ["good1", "good2"]
         assert ret == [1, _CALLBACK_FAILED, 2]
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="env-mutation")
     def test_async_callback_in_sync_context(self):
         """Async callback is awaited via asyncio.run in sync context."""
 
@@ -87,6 +99,8 @@ class TestTriggerCallbacksSync:
         result = _trigger_callbacks_sync("startup")
         assert result == ["async_result"]
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="env-mutation")
     def test_async_callback_in_running_loop_schedules_task(self):
         """async callback in running loop is scheduled via asyncio.ensure_future.
 
@@ -114,6 +128,8 @@ class TestTriggerCallbacksSync:
 
         asyncio.run(run_inside_loop())
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="env-mutation")
     def test_sync_callback_with_args(self):
         captured = {}
         register_callback(
@@ -123,6 +139,8 @@ class TestTriggerCallbacksSync:
         assert captured == {"exc": "test"}
 
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="env-mutation")
 class TestTriggerCallbacksAsync:
     """Tests for _trigger_callbacks (async context)."""
 
@@ -199,6 +217,8 @@ class TestTriggerCallbacksAsync:
         assert captured["kwargs"] == {"key": "val"}
 
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="env-mutation")
 class TestOnStartupShutdown:
     """Test the public on_startup / on_shutdown helpers."""
 

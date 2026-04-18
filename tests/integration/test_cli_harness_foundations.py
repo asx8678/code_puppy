@@ -1,12 +1,15 @@
 """Foundational tests for the CLI harness plumbing."""
 
 import os
+import pytest
 import pathlib
 import time
 
 from tests.integration.cli_expect.harness import CliHarness, SpawnResult
 
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="pty-spawn")
 def test_harness_bootstrap_write_config(
     cli_harness: CliHarness,
     integration_env: dict[str, str],
@@ -22,12 +25,16 @@ def test_harness_bootstrap_write_config(
     cli_harness.cleanup(result)
 
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="pty-spawn")
 def test_integration_env_env(integration_env: dict[str, str]) -> None:
     """Environment used for live integration tests should include required keys or a fake for CI."""
     assert "CEREBRAS_API_KEY" in integration_env
     assert integration_env["CODE_PUPPY_TEST_FAST"] == "1"
 
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="pty-spawn")
 def test_retry_policy_constructs(retry_policy) -> None:
     """RetryPolicy should construct with reasonable defaults."""
     policy = retry_policy
@@ -37,6 +44,8 @@ def test_retry_policy_constructs(retry_policy) -> None:
     assert policy.backoff_factor >= 1.0
 
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="pty-spawn")
 def test_log_dump_path_exists(log_dump, tmp_path: pathlib.Path) -> None:
     """Log dump fixture should yield a path under the shared tmp_path."""
     path = log_dump
@@ -44,6 +53,8 @@ def test_log_dump_path_exists(log_dump, tmp_path: pathlib.Path) -> None:
     assert not path.exists()  # not written until after test
 
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="pty-spawn")
 def test_spawned_cli_is_alive(spawned_cli: SpawnResult) -> None:
     """spawned_cli fixture should hand us a live CLI at the task prompt."""
     assert spawned_cli.child.isalive()
@@ -51,6 +62,8 @@ def test_spawned_cli_is_alive(spawned_cli: SpawnResult) -> None:
     assert "Enter your coding task" in log or log == ""
 
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="pty-spawn")
 def test_send_command_returns_output(spawned_cli: SpawnResult) -> None:
     """send_command should send text and give us back whatever was written."""
     spawned_cli.sendline("/set owner_name 'HarnessTest'\r")
@@ -59,6 +72,8 @@ def test_send_command_returns_output(spawned_cli: SpawnResult) -> None:
     assert "/set owner_name" in log or log == ""
 
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="pty-spawn")
 def test_harness_cleanup_terminates_and_removes_temp_home(
     cli_harness: CliHarness,
     integration_env: dict[str, str],
@@ -83,6 +98,8 @@ def test_harness_cleanup_terminates_and_removes_temp_home(
     assert not result.child.isalive()
 
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="pty-spawn")
 def test_selective_cleanup_only_removes_test_files(
     cli_harness: CliHarness,
     integration_env: dict[str, str],

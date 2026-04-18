@@ -26,12 +26,16 @@ def _clean_state():
     os.environ.pop("PUP_DISABLE_CALLBACK_PLUGIN_LOADING", None)
 
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="env-mutation")
 def test_backlog_buffers_when_no_listeners():
     """Events fired with no listeners should be buffered."""
     _trigger_callbacks_sync("startup")
     assert _backlog.pending_count("startup") == 1
 
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="env-mutation")
 def test_backlog_buffers_args():
     """Buffered events preserve their arguments."""
     _trigger_callbacks_sync("custom_command", "/test", "test")
@@ -42,6 +46,8 @@ def test_backlog_buffers_args():
     assert kwargs == {}
 
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="env-mutation")
 def test_backlog_not_used_when_listeners_exist():
     """Events with active listeners should NOT be buffered."""
     called = []
@@ -51,6 +57,8 @@ def test_backlog_not_used_when_listeners_exist():
     assert called == [True]
 
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="env-mutation")
 def test_drain_replays_buffered_events():
     """drain_backlog() should replay events through the callback."""
     # Fire with no listener — gets buffered
@@ -66,6 +74,8 @@ def test_drain_replays_buffered_events():
     assert _backlog.pending_count("custom_command") == 0
 
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="env-mutation")
 def test_drain_all_backlogs_processes_all_phases():
     """drain_all_backlogs() should process all phases with buffered events."""
     _trigger_callbacks_sync("startup")
@@ -80,6 +90,8 @@ def test_drain_all_backlogs_processes_all_phases():
     assert _backlog.pending_count() == 0
 
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="env-mutation")
 def test_backlog_cap_prevents_memory_leak():
     """Backlog should cap at _MAX_BACKLOG_PER_PHASE entries."""
     for i in range(150):
@@ -87,6 +99,8 @@ def test_backlog_cap_prevents_memory_leak():
     assert _backlog.pending_count("startup") == _backlog._MAX_BACKLOG_PER_PHASE
 
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="env-mutation")
 def test_clear_callbacks_also_clears_backlog():
     """clear_callbacks() should also clear the backlog."""
     _trigger_callbacks_sync("startup")
@@ -95,6 +109,8 @@ def test_clear_callbacks_also_clears_backlog():
     assert _backlog.pending_count("startup") == 0
 
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="env-mutation")
 def test_clear_all_callbacks_clears_all_backlogs():
     """clear_callbacks(None) should clear all backlogs."""
     _trigger_callbacks_sync("startup")

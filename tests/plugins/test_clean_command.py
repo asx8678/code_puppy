@@ -163,7 +163,11 @@ def _import_plugin():
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="dbos")
 class TestCallbackRegistration:
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="dbos")
     def test_custom_help_returns_clean_entry(self):
         _, _custom_help, *_ = _import_plugin()
         result = _custom_help()
@@ -173,19 +177,27 @@ class TestCallbackRegistration:
         assert name == "clean"
         assert "Clean" in desc
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="dbos")
     def test_handler_ignores_other_commands(self):
         handler, *_ = _import_plugin()
         assert handler("/foo", "foo") is None
         assert handler("/bar baz", "bar") is None
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="dbos")
     def test_handler_returns_true_for_clean(self, clean_env):
         handler, *_ = _import_plugin()
         assert handler("/clean", "clean") is True
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="dbos")
     def test_handler_returns_true_for_clean_help(self, clean_env):
         handler, *_ = _import_plugin()
         assert handler("/clean help", "clean") is True
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="dbos")
     def test_handler_returns_true_for_unknown_subcmd(self, clean_env):
         handler, *_ = _import_plugin()
         assert handler("/clean doesnotexist", "clean") is True
@@ -196,12 +208,18 @@ class TestCallbackRegistration:
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="dbos")
 class TestCleanHelp:
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="dbos")
     def test_help_output(self, clean_env, capsys):
         handler, *_ = _import_plugin()
         handler("/clean help", "clean")
         # help is emitted via emit_info — we just confirm no exception
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="dbos")
     def test_bare_clean_shows_help(self, clean_env):
         handler, *_ = _import_plugin()
         assert handler("/clean", "clean") is True
@@ -212,11 +230,17 @@ class TestCleanHelp:
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="dbos")
 class TestCleanStatus:
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="dbos")
     def test_status_empty(self, clean_env):
         handler, *_ = _import_plugin()
         assert handler("/clean status", "clean") is True
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="dbos")
     def test_status_with_data(self, clean_env):
         _populate_all(clean_env)
         handler, *_ = _import_plugin()
@@ -228,7 +252,11 @@ class TestCleanStatus:
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="dbos")
 class TestCleanSessions:
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="dbos")
     def test_clean_sessions(self, clean_env):
         _populate_sessions(clean_env)
         handler, *_ = _import_plugin()
@@ -249,6 +277,8 @@ class TestCleanSessions:
         # Terminal sessions gone
         assert not (clean_env.state / "terminal_sessions.json").exists()
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="dbos")
     def test_clean_sessions_dry_run(self, clean_env):
         _populate_sessions(clean_env)
         handler, *_ = _import_plugin()
@@ -259,6 +289,8 @@ class TestCleanSessions:
         assert (clean_env.autosave / "session_0.pkl").exists()
         assert (clean_env.data / ".session_hmac_key").exists()
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="dbos")
     def test_clean_sessions_empty(self, clean_env):
         handler, *_ = _import_plugin()
         handler("/clean sessions", "clean")  # no crash
@@ -269,7 +301,11 @@ class TestCleanSessions:
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="dbos")
 class TestCleanHistory:
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="dbos")
     def test_clean_history(self, clean_env):
         _populate_history(clean_env)
         handler, *_ = _import_plugin()
@@ -279,6 +315,8 @@ class TestCleanHistory:
         handler("/clean history", "clean")
         assert not hist_file.exists()
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="dbos")
     def test_clean_history_dry_run(self, clean_env):
         _populate_history(clean_env)
         handler, *_ = _import_plugin()
@@ -287,6 +325,8 @@ class TestCleanHistory:
         handler("/clean history --dry-run", "clean")
         assert hist_file.exists()
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="dbos")
     def test_clean_history_missing(self, clean_env):
         handler, *_ = _import_plugin()
         handler("/clean history", "clean")  # no crash
@@ -297,7 +337,11 @@ class TestCleanHistory:
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="dbos")
 class TestCleanLogs:
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="dbos")
     def test_clean_logs(self, clean_env):
         _populate_logs(clean_env)
         handler, *_ = _import_plugin()
@@ -309,6 +353,8 @@ class TestCleanLogs:
         assert logs_dir.is_dir()
         assert list(logs_dir.iterdir()) == []
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="dbos")
     def test_clean_logs_dry_run(self, clean_env):
         _populate_logs(clean_env)
         handler, *_ = _import_plugin()
@@ -322,7 +368,11 @@ class TestCleanLogs:
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="dbos")
 class TestCleanCache:
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="dbos")
     def test_clean_cache(self, clean_env):
         _populate_cache(clean_env)
         handler, *_ = _import_plugin()
@@ -333,6 +383,8 @@ class TestCleanCache:
         assert (clean_env.cache / "browser_profiles").is_dir()
         assert list((clean_env.cache / "browser_profiles").iterdir()) == []
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="dbos")
     def test_clean_cache_dry_run(self, clean_env):
         _populate_cache(clean_env)
         handler, *_ = _import_plugin()
@@ -346,7 +398,11 @@ class TestCleanCache:
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="dbos")
 class TestCleanDb:
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="dbos")
     def test_clean_db(self, clean_env):
         _populate_db(clean_env)
         handler, *_ = _import_plugin()
@@ -359,6 +415,8 @@ class TestCleanDb:
             handler("/clean db", "clean")
         assert not (clean_env.data / "dbos_store.sqlite").exists()
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="dbos")
     def test_clean_db_dry_run(self, clean_env):
         _populate_db(clean_env)
         handler, *_ = _import_plugin()
@@ -366,6 +424,8 @@ class TestCleanDb:
         handler("/clean db --dry-run", "clean")
         assert (clean_env.data / "dbos_store.sqlite").exists()
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="dbos")
     def test_clean_db_calls_destroy_dbos(self, clean_env):
         """Verify that /clean db calls _destroy_dbos before deleting."""
         _populate_db(clean_env)
@@ -378,6 +438,8 @@ class TestCleanDb:
             handler("/clean db", "clean")
             mock_destroy.assert_called_once()
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="dbos")
     def test_clean_db_does_not_call_destroy_on_dry_run(self, clean_env):
         """Dry run should NOT call _destroy_dbos."""
         _populate_db(clean_env)
@@ -390,6 +452,8 @@ class TestCleanDb:
             handler("/clean db --dry-run", "clean")
             mock_destroy.assert_not_called()
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="dbos")
     def test_clean_db_cleans_journal_files(self, clean_env):
         """WAL and SHM journal files should also be cleaned."""
         _populate_db_with_journals(clean_env)
@@ -408,6 +472,8 @@ class TestCleanDb:
         assert not (clean_env.data / "dbos_store.sqlite-wal").exists()
         assert not (clean_env.data / "dbos_store.sqlite-shm").exists()
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="dbos")
     def test_clean_db_handles_destroy_failure(self, clean_env):
         """Should still clean even if DBOS.destroy() fails."""
         _populate_db(clean_env)
@@ -427,7 +493,11 @@ class TestCleanDb:
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="dbos")
 class TestCleanAll:
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="dbos")
     def test_safe_category_keys_excludes_db(self):
         """_SAFE_CATEGORY_KEYS must not include 'db'."""
         *_, _SAFE_CATEGORY_KEYS, _, _ = _import_plugin()
@@ -437,6 +507,8 @@ class TestCleanAll:
         assert "logs" in _SAFE_CATEGORY_KEYS
         assert "cache" in _SAFE_CATEGORY_KEYS
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="dbos")
     def test_clean_all_does_not_delete_db(self, clean_env):
         """'/clean all' must NOT delete dbos_store.sqlite."""
         _populate_all(clean_env)
@@ -456,6 +528,8 @@ class TestCleanAll:
         # DB NOT cleaned — this is the critical assertion!
         assert (clean_env.data / "dbos_store.sqlite").exists()
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="dbos")
     def test_clean_all_dry_run(self, clean_env):
         _populate_all(clean_env)
         handler, *_ = _import_plugin()
@@ -468,6 +542,8 @@ class TestCleanAll:
         assert (clean_env.state / "logs" / "errors.log").exists()
         assert (clean_env.data / "dbos_store.sqlite").exists()
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="dbos")
     def test_clean_all_empty(self, clean_env):
         handler, *_ = _import_plugin()
         handler("/clean all", "clean")  # should not crash
@@ -478,7 +554,11 @@ class TestCleanAll:
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="dbos")
 class TestDryRunPosition:
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="dbos")
     def test_dry_run_before_subcmd(self, clean_env):
         _populate_history(clean_env)
         handler, *_ = _import_plugin()
@@ -486,6 +566,8 @@ class TestDryRunPosition:
         handler("/clean --dry-run history", "clean")
         assert (clean_env.state / "command_history.txt").exists()
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="dbos")
     def test_dry_run_after_subcmd(self, clean_env):
         _populate_history(clean_env)
         handler, *_ = _import_plugin()
@@ -499,22 +581,32 @@ class TestDryRunPosition:
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="dbos")
 class TestHumanSize:
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="dbos")
     def test_bytes(self):
         *_, _human_size, _, _, _, _ = _import_plugin()
         assert _human_size(0) == "0 B"
         assert _human_size(512) == "512 B"
         assert _human_size(1023) == "1023 B"
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="dbos")
     def test_kilobytes(self):
         *_, _human_size, _, _, _, _ = _import_plugin()
         assert _human_size(1024) == "1.0 KB"
         assert _human_size(1536) == "1.5 KB"
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="dbos")
     def test_megabytes(self):
         *_, _human_size, _, _, _, _ = _import_plugin()
         assert _human_size(1024 * 1024) == "1.0 MB"
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="dbos")
     def test_gigabytes(self):
         *_, _human_size, _, _, _, _ = _import_plugin()
         assert _human_size(1024 * 1024 * 1024) == "1.0 GB"
@@ -525,7 +617,11 @@ class TestHumanSize:
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="dbos")
 class TestDestroyDbos:
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="dbos")
     def test_destroy_dbos_success(self):
         """_destroy_dbos returns True when DBOS.destroy() succeeds."""
         *_, _clean_db, _destroy_dbos = _import_plugin()
@@ -536,6 +632,8 @@ class TestDestroyDbos:
             result = _destroy_dbos()
             assert result is True
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="dbos")
     def test_destroy_dbos_import_error(self):
         """_destroy_dbos returns False when dbos is not installed."""
         *_, _clean_db, _destroy_dbos = _import_plugin()
@@ -552,6 +650,8 @@ class TestDestroyDbos:
             result = _destroy_dbos()
             assert result is False
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="dbos")
     def test_destroy_dbos_runtime_error(self):
         """_destroy_dbos returns False on unexpected errors."""
         *_, _clean_db, _destroy_dbos = _import_plugin()
@@ -568,7 +668,11 @@ class TestDestroyDbos:
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="dbos")
 class TestErrorResilience:
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="dbos")
     def test_permission_error_on_file(self, clean_env):
         """Plugin should not crash when a file can't be removed."""
         _populate_history(clean_env)
@@ -578,6 +682,8 @@ class TestErrorResilience:
         with patch.object(Path, "unlink", side_effect=OSError("permission denied")):
             handler("/clean history", "clean")  # should not raise
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="dbos")
     def test_handler_catches_unexpected_errors(self, clean_env):
         """An unexpected error inside a subcommand should be caught."""
         handler, *_ = _import_plugin()
