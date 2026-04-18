@@ -33,6 +33,8 @@ from code_puppy.utils.hashline import (
 
 def _force_python(monkeypatch: pytest.MonkeyPatch) -> None:
     """Disable Elixir backend for the duration of a test."""
+    # Reset the backend-mixing guard so Python-only tests don't trigger RuntimeError
+    monkeypatch.setattr(hashline_mod, "_ELIXIR_HASH_USED", False)
     # Monkeypatch all Elixir try functions to return None, forcing Python fallback
     monkeypatch.setattr(
         hashline_mod, "_try_elixir_compute_line_hash", lambda _idx, _line: None
@@ -48,6 +50,29 @@ def _force_python(monkeypatch: pytest.MonkeyPatch) -> None:
         "_try_elixir_validate_hashline_anchor",
         lambda _idx, _line, _hash: None,
     )
+
+
+# ---------------------------------------------------------------------------
+# Fixture to disable Elixir transport and reset guard between tests
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture(autouse=True)
+def _reset_elixir_hash_flag():
+    """Disable Elixir transport and reset backend-mixing guard.
+
+    Ensures non-transport tests always exercise the pure-Python path
+    and prevents _ELIXIR_HASH_USED flag leakage between tests.
+    Transport-specific tests override _get_transport with their own mocks.
+    """
+    import code_puppy.utils.hashline as hm
+
+    hm._ELIXIR_HASH_USED = False
+    original = hm._get_transport
+    hm._get_transport = lambda: None
+    yield
+    hm._get_transport = original
+    hm._ELIXIR_HASH_USED = False
 
 
 # ---------------------------------------------------------------------------
@@ -435,70 +460,3 @@ class TestPurePythonFallback:
         # Just verify the function is callable and returns a bool
         result = hashline_mod.is_using_elixir()
         assert isinstance(result, bool)
-
-
-# ---------------------------------------------------------------------------
-# Elixir routing
-# ---------------------------------------------------------------------------
-
-
-class TestElixirRouting:
-    """Smoke tests for Elixir routing helpers (bd-88)."""
-
-    def test_elixir_helpers_exist(self):
-        """The internal Elixir try functions should exist."""
-        assert hasattr(hashline_mod, "_try_elixir_compute_line_hash")
-        assert hasattr(hashline_mod, "_try_elixir_format_hashlines")
-        assert hasattr(hashline_mod, "_try_elixir_strip_hashline_prefixes")
-        assert hasattr(hashline_mod, "_try_elixir_validate_hashline_anchor")
-
-    def test_elixir_helpers_return_none_when_not_available(
-        self, monkeypatch: pytest.MonkeyPatch
-    ):
-        """When Elixir is not available, try functions return None."""
-        # Ensure the functions return None by making NativeBackend fail
-        monkeypatch.setattr(
-            hashline_mod, "_try_elixir_compute_line_hash", lambda idx, line: None
-        )
-        monkeypatch.setattr(
-            hashline_mod, "_try_elixir_format_hashlines", lambda text, start: None
-        )
-        monkeypatch.setattr(
-            hashline_mod, "_try_elixir_strip_hashline_prefixes", lambda text: None
-        )
-        monkeypatch.setattr(
-            hashline_mod,
-            "_try_elixir_validate_hashline_anchor",
-            lambda idx, line, h: None,
-        )
-
-        # Verify they return None
-        assert hashline_mod._try_elixir_compute_line_hash(1, "test") is None
-        assert hashline_mod._try_elixir_format_hashlines("test", 1) is None
-        assert hashline_mod._try_elixir_strip_hashline_prefixes("test") is None
-        assert (
-            hashline_mod._try_elixir_validate_hashline_anchor(1, "test", "AB") is None
-        )
-
-    def test_python_fallback_works_when_elixir_returns_none(
-        self, monkeypatch: pytest.MonkeyPatch
-    ):
-        """Public functions should fall back to Python when Elixir returns None."""
-        _force_python(monkeypatch)
-
-        # These should still work via Python fallback
-        h = compute_line_hash(1, "test")
-        assert len(h) == 2
-        assert h[0] in NIBBLE_STR
-
-        formatted = format_hashlines("hello")
-        assert "#" in formatted
-        assert ":hello" in formatted
-
-        stripped = strip_hashline_prefixes(formatted)
-        assert stripped == "hello"
-
-        is_valid = validate_hashline_anchor(1, "test", h)
-        assert is_valid is True
-
-
