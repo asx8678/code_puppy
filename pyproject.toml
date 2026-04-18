@@ -93,7 +93,7 @@ asyncio_mode = "auto"
 markers = [
     "eval: LLM evaluation test (skipped unless RUN_EVALS=1 is set)",
     "slow: marks tests as slow (deselect with '-m \"not slow\"')",
-    "serial: marks tests that must not run in parallel with other tests",
+    "serial: marks tests that must run serially (not parallel-safe)",
 ]
 
 [tool.coverage.run]

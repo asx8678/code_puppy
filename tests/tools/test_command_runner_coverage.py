@@ -50,6 +50,8 @@ from code_puppy.tools.command_runner import (
 )
 
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="real-process")
 class TestRunShellCommandStreaming:
     """Tests for the run_shell_command_streaming function."""
 
@@ -64,6 +66,8 @@ class TestRunShellCommandStreaming:
             _RUNNING_PROCESSES.clear()
         _USER_KILLED_PROCESSES.clear()
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="real-process")
     def test_streaming_simple_command_success(self):
         """Test streaming execution of a simple successful command."""
         # Create a simple subprocess
@@ -87,6 +91,8 @@ class TestRunShellCommandStreaming:
         assert result.exit_code == 0
         assert "hello world" in result.stdout
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="real-process")
     def test_streaming_command_failure(self):
         """Test streaming execution of a failing command."""
         proc = subprocess.Popen(
@@ -108,6 +114,8 @@ class TestRunShellCommandStreaming:
         assert result.success is False
         assert result.exit_code == 1
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="real-process")
     def test_streaming_with_stderr_output(self):
         """Test streaming captures stderr output."""
         proc = subprocess.Popen(
@@ -131,11 +139,15 @@ class TestRunShellCommandStreaming:
     @pytest.mark.skip(
         reason="Slow test - subprocess timeout test works but takes too long"
     )
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="real-process")
     def test_streaming_inactivity_timeout(self):
         """Test that inactivity timeout triggers process cleanup."""
         # This test is skipped because it requires real subprocess which can be slow
         pass
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="real-process")
     def test_streaming_timeout_output_model(self):
         """Test ShellCommandOutput for timeout scenarios."""
         # Test that timeout output model has correct fields
@@ -153,6 +165,8 @@ class TestRunShellCommandStreaming:
         assert output.success is False
         assert output.exit_code == -9
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="real-process")
     def test_streaming_line_truncation(self):
         """Test that very long lines are truncated."""
         long_line = "x" * 500
@@ -177,6 +191,8 @@ class TestRunShellCommandStreaming:
             len(result.stdout.split("\n")[0]) <= MAX_LINE_LENGTH + len(LINE_TRUNCATION_HINT)
         )
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="real-process")
     def test_streaming_silent_mode(self):
         """Test that silent mode suppresses output emission."""
         proc = subprocess.Popen(
@@ -199,6 +215,8 @@ class TestRunShellCommandStreaming:
         mock_emit.assert_not_called()
         assert result.success is True
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="real-process")
     def test_streaming_non_silent_mode(self):
         """Test that non-silent mode emits output."""
         proc = subprocess.Popen(
@@ -222,6 +240,8 @@ class TestRunShellCommandStreaming:
         assert result.success is True
 
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="real-process")
 class TestKeyboardContextManagement:
     """Tests for keyboard context reference counting."""
 
@@ -241,6 +261,8 @@ class TestKeyboardContextManagement:
         command_runner._SHELL_CTRL_X_STOP_EVENT = None
         command_runner._SHELL_CTRL_X_THREAD = None
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="real-process")
     def test_acquire_keyboard_context_increments_refcount(self):
         """Test that acquiring keyboard context increments refcount."""
         initial = command_runner._KEYBOARD_CONTEXT_REFCOUNT
@@ -254,6 +276,8 @@ class TestKeyboardContextManagement:
         with patch.object(command_runner, "_stop_keyboard_listener"):
             _release_keyboard_context()
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="real-process")
     def test_release_keyboard_context_decrements_refcount(self):
         """Test that releasing keyboard context decrements refcount."""
         # First acquire
@@ -272,6 +296,8 @@ class TestKeyboardContextManagement:
         with patch.object(command_runner, "_stop_keyboard_listener"):
             _release_keyboard_context()
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="real-process")
     def test_acquire_starts_listener_on_first_command(self):
         """Test that listener starts only on first command."""
         with patch.object(command_runner, "_start_keyboard_listener") as mock_start:
@@ -286,6 +312,8 @@ class TestKeyboardContextManagement:
             _release_keyboard_context()
             _release_keyboard_context()
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="real-process")
     def test_release_stops_listener_on_last_command(self):
         """Test that listener stops only when last command finishes."""
         with patch.object(command_runner, "_start_keyboard_listener"):
@@ -299,6 +327,8 @@ class TestKeyboardContextManagement:
             _release_keyboard_context()  # Last one
             assert mock_stop.call_count == 1
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="real-process")
     def test_refcount_clamped_to_zero(self):
         """Test that refcount doesn't go negative."""
         with patch.object(command_runner, "_stop_keyboard_listener"):
@@ -309,9 +339,13 @@ class TestKeyboardContextManagement:
         assert command_runner._KEYBOARD_CONTEXT_REFCOUNT == 0
 
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="real-process")
 class TestShellCommandKeyboardContext:
     """Tests for the _shell_command_keyboard_context context manager."""
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="real-process")
     def test_context_manager_sets_up_listener(self):
         """Test that context manager sets up Ctrl-X listener."""
         with patch.object(command_runner, "_spawn_ctrl_x_key_listener") as mock_spawn:
@@ -321,6 +355,8 @@ class TestShellCommandKeyboardContext:
                     # Inside context, stop event should be set
                     assert command_runner._SHELL_CTRL_X_STOP_EVENT is not None
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="real-process")
     def test_context_manager_cleans_up(self):
         """Test that context manager cleans up on exit."""
         with patch.object(command_runner, "_spawn_ctrl_x_key_listener") as mock_spawn:
@@ -334,6 +370,8 @@ class TestShellCommandKeyboardContext:
             assert command_runner._SHELL_CTRL_X_THREAD is None
 
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="real-process")
 class TestHandleCtrlXPress:
     """Tests for _handle_ctrl_x_press function."""
 
@@ -348,6 +386,8 @@ class TestHandleCtrlXPress:
             _RUNNING_PROCESSES.clear()
         _USER_KILLED_PROCESSES.clear()
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="real-process")
     def test_handle_ctrl_x_calls_kill_all(self):
         """Test that Ctrl-X handler calls kill_all_running_shell_processes."""
         with patch.object(
@@ -358,6 +398,8 @@ class TestHandleCtrlXPress:
 
         mock_kill.assert_called_once()
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="real-process")
     def test_shell_sigint_handler_calls_kill_all(self):
         """Test that SIGINT handler calls kill_all_running_shell_processes."""
         with patch.object(
@@ -369,9 +411,13 @@ class TestHandleCtrlXPress:
         mock_kill.assert_called_once()
 
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="real-process")
 class TestKillProcessGroup:
     """Tests for _kill_process_group function."""
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="real-process")
     def test_kill_process_group_terminates_process(self):
         """Test that _kill_process_group handles a mock process."""
         # Use a mock to avoid real subprocess timing issues
@@ -385,6 +431,8 @@ class TestKillProcessGroup:
                     with patch("os.kill"):
                         _kill_process_group(mock_proc)
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="real-process")
     def test_kill_process_group_handles_already_dead(self):
         """Test killing an already dead process doesn't error."""
         proc = subprocess.Popen(
@@ -399,6 +447,8 @@ class TestKillProcessGroup:
             _kill_process_group(proc)
 
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="real-process")
 class TestKillAllRunningShellProcesses:
     """Tests for kill_all_running_shell_processes function."""
 
@@ -417,11 +467,15 @@ class TestKillAllRunningShellProcesses:
         with command_runner._ACTIVE_STOP_EVENTS_LOCK:
             command_runner._ACTIVE_STOP_EVENTS.clear()
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="real-process")
     def test_kill_all_empty_set(self):
         """Test killing when no processes registered."""
         count = kill_all_running_shell_processes()
         assert count == 0
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="real-process")
     def test_kill_all_with_running_process(self):
         """Test killing a registered running process."""
         # Use a mock process to avoid timing issues
@@ -441,6 +495,8 @@ class TestKillAllRunningShellProcesses:
         assert count == 1
         assert mock_proc.pid in _USER_KILLED_PROCESSES
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="real-process")
     def test_kill_all_sets_active_stop_events(self):
         """Test that kill_all sets all active stop events."""
         evt1 = threading.Event()
@@ -454,6 +510,8 @@ class TestKillAllRunningShellProcesses:
         assert evt1.is_set()
         assert evt2.is_set()
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="real-process")
     def test_kill_all_closes_pipes(self):
         """Test that kill_all closes process pipes."""
         # Use a mock process to avoid timing issues
@@ -485,6 +543,8 @@ class TestKillAllRunningShellProcesses:
         mock_stdin.close.assert_called()
 
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="real-process")
 class TestGetRunningShellProcessCount:
     """Tests for get_running_shell_process_count function."""
 
@@ -497,10 +557,14 @@ class TestGetRunningShellProcessCount:
         with _RUNNING_PROCESSES_LOCK:
             _RUNNING_PROCESSES.clear()
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="real-process")
     def test_count_empty(self):
         """Test count with no processes."""
         assert get_running_shell_process_count() == 0
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="real-process")
     def test_count_with_alive_process(self):
         """Test count with a running (mock) process."""
         # Use a mock process to avoid timing issues
@@ -513,6 +577,8 @@ class TestGetRunningShellProcessCount:
 
         _unregister_process(mock_proc)
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="real-process")
     def test_count_removes_stale_processes(self):
         """Test that count removes dead processes from tracking."""
         proc = subprocess.Popen(
@@ -530,9 +596,13 @@ class TestGetRunningShellProcessCount:
             assert proc not in _RUNNING_PROCESSES
 
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="real-process")
 class TestShareYourReasoning:
     """Tests for the share_your_reasoning function."""
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="real-process")
     def test_share_reasoning_returns_success(self):
         """Test that share_your_reasoning returns success."""
         mock_context = MagicMock()
@@ -546,6 +616,8 @@ class TestShareYourReasoning:
         assert isinstance(result, ReasoningOutput)
         assert result.success is True
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="real-process")
     def test_share_reasoning_with_list_steps(self):
         """Test share_your_reasoning with list of next steps."""
         mock_context = MagicMock()
@@ -560,6 +632,8 @@ class TestShareYourReasoning:
 
         assert result.success is True
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="real-process")
     def test_share_reasoning_emits_message(self):
         """Test that share_your_reasoning emits AgentReasoningMessage."""
         mock_context = MagicMock()
@@ -572,6 +646,8 @@ class TestShareYourReasoning:
 
         mock_bus.emit.assert_called_once()
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="real-process")
     def test_share_reasoning_with_none_steps(self):
         """Test share_your_reasoning with None next_steps."""
         mock_context = MagicMock()
@@ -584,6 +660,8 @@ class TestShareYourReasoning:
 
         assert result.success is True
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="real-process")
     def test_share_reasoning_with_empty_steps(self):
         """Test share_your_reasoning with empty string next_steps."""
         mock_context = MagicMock()
@@ -599,23 +677,33 @@ class TestShareYourReasoning:
         assert result.success is True
 
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="real-process")
 class TestReasoningOutput:
     """Tests for the ReasoningOutput model."""
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="real-process")
     def test_reasoning_output_default_success(self):
         """Test that ReasoningOutput defaults to success=True."""
         output = ReasoningOutput()
         assert output.success is True
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="real-process")
     def test_reasoning_output_explicit_success(self):
         """Test ReasoningOutput with explicit success value."""
         output = ReasoningOutput(success=False)
         assert output.success is False
 
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="real-process")
 class TestSpawnCtrlXKeyListener:
     """Tests for _spawn_ctrl_x_key_listener function."""
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="real-process")
     def test_spawn_listener_returns_none_when_not_tty(self):
         """Test that listener returns None when stdin is not a tty."""
         with patch("sys.stdin") as mock_stdin:
@@ -626,6 +714,8 @@ class TestSpawnCtrlXKeyListener:
 
         assert result is None
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="real-process")
     def test_spawn_listener_returns_none_when_stdin_none(self):
         """Test that listener returns None when stdin is None."""
         original_stdin = sys.stdin
@@ -639,6 +729,8 @@ class TestSpawnCtrlXKeyListener:
         finally:
             sys.stdin = original_stdin
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="real-process")
     def test_spawn_listener_handles_isatty_exception(self):
         """Test that listener handles exception from isatty()."""
         with patch("sys.stdin") as mock_stdin:
@@ -650,6 +742,8 @@ class TestSpawnCtrlXKeyListener:
         assert result is None
 
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="real-process")
 class TestStartStopKeyboardListener:
     """Tests for _start_keyboard_listener and _stop_keyboard_listener."""
 
@@ -664,6 +758,8 @@ class TestStartStopKeyboardListener:
         command_runner._SHELL_CTRL_X_THREAD = None
         command_runner._ORIGINAL_SIGINT_HANDLER = None
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="real-process")
     def test_start_keyboard_listener_creates_stop_event(self):
         """Test that _start_keyboard_listener creates stop event."""
         with patch.object(
@@ -675,6 +771,8 @@ class TestStartStopKeyboardListener:
         assert command_runner._SHELL_CTRL_X_STOP_EVENT is not None
         assert isinstance(command_runner._SHELL_CTRL_X_STOP_EVENT, threading.Event)
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="real-process")
     def test_stop_keyboard_listener_sets_stop_event(self):
         """Test that _stop_keyboard_listener sets the stop event."""
         command_runner._SHELL_CTRL_X_STOP_EVENT = threading.Event()
@@ -685,6 +783,8 @@ class TestStartStopKeyboardListener:
         # Check that event was set before cleanup
         # (Note: the function sets the event then clears the reference)
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="real-process")
     def test_stop_keyboard_listener_restores_signal_handler(self):
         """Test that _stop_keyboard_listener restores SIGINT handler."""
         original_handler = signal.getsignal(signal.SIGINT)
@@ -698,9 +798,13 @@ class TestStartStopKeyboardListener:
         assert current_handler == original_handler
 
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="real-process")
 class TestSetAwaitingUserInput:
     """Tests for set_awaiting_user_input function."""
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="real-process")
     def test_set_awaiting_true(self):
         """Test setting awaiting user input to true."""
         with patch("code_puppy.messaging.spinner.pause_all_spinners"):
@@ -708,6 +812,8 @@ class TestSetAwaitingUserInput:
 
         assert is_awaiting_user_input() is True
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="real-process")
     def test_set_awaiting_false(self):
         """Test setting awaiting user input to false."""
         with patch("code_puppy.messaging.spinner.resume_all_spinners"):
@@ -715,6 +821,8 @@ class TestSetAwaitingUserInput:
 
         assert is_awaiting_user_input() is False
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="real-process")
     def test_set_awaiting_handles_import_error(self):
         """Test that set_awaiting_user_input handles ImportError gracefully."""
         # This should not raise even if spinner module is not available
@@ -723,9 +831,13 @@ class TestSetAwaitingUserInput:
             set_awaiting_user_input(False)
 
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="real-process")
 class TestTruncateLine:
     """Additional tests for _truncate_line function."""
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="real-process")
     def test_truncate_line_boundary_cases(self):
         """Test truncation at exact boundaries."""
         # Exactly at limit - should not truncate
@@ -738,6 +850,8 @@ class TestTruncateLine:
         assert len(result) == MAX_LINE_LENGTH + len(LINE_TRUNCATION_HINT) + 1  # +1 for newline
         assert LINE_TRUNCATION_HINT in result
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="real-process")
     def test_truncate_line_unicode(self):
         """Test truncation with unicode characters."""
         unicode_line = "🐺" * 300
@@ -745,6 +859,8 @@ class TestTruncateLine:
         assert LINE_TRUNCATION_HINT in result
 
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="real-process")
 class TestProcessRegistration:
     """Tests for process registration functions."""
 
@@ -757,6 +873,8 @@ class TestProcessRegistration:
         with _RUNNING_PROCESSES_LOCK:
             _RUNNING_PROCESSES.clear()
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="real-process")
     def test_register_unregister_cycle(self):
         """Test complete register/unregister cycle."""
         mock_proc = MagicMock(spec=subprocess.Popen)
@@ -769,6 +887,8 @@ class TestProcessRegistration:
         with _RUNNING_PROCESSES_LOCK:
             assert mock_proc not in _RUNNING_PROCESSES
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="real-process")
     def test_unregister_nonexistent(self):
         """Test unregistering a process that was never registered."""
         mock_proc = MagicMock(spec=subprocess.Popen)
@@ -777,9 +897,13 @@ class TestProcessRegistration:
         _unregister_process(mock_proc)
 
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="real-process")
 class TestShellCommandOutputModel:
     """Additional tests for ShellCommandOutput model."""
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="real-process")
     def test_output_with_all_fields(self):
         """Test ShellCommandOutput with all fields populated."""
         output = ShellCommandOutput(
@@ -802,6 +926,8 @@ class TestShellCommandOutputModel:
         assert output.command == "echo hello"
         assert output.exit_code == 0
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="real-process")
     def test_output_background_mode(self):
         """Test ShellCommandOutput in background mode."""
         output = ShellCommandOutput(
@@ -821,6 +947,8 @@ class TestShellCommandOutputModel:
         assert output.log_file is not None
         assert output.pid == 12345
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="real-process")
     def test_output_with_user_feedback(self):
         """Test ShellCommandOutput with user rejection feedback."""
         output = ShellCommandOutput(
@@ -838,9 +966,13 @@ class TestShellCommandOutputModel:
         assert output.user_feedback == "Too dangerous"
 
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="real-process")
 class TestShellSafetyAssessmentModel:
     """Additional tests for ShellSafetyAssessment model."""
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="real-process")
     def test_all_risk_levels(self):
         """Test all valid risk levels."""
         for risk in ["none", "low", "medium", "high", "critical"]:
@@ -849,11 +981,15 @@ class TestShellSafetyAssessmentModel:
             )
             assert assessment.risk == risk
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="real-process")
     def test_fallback_flag_default(self):
         """Test that is_fallback defaults to False."""
         assessment = ShellSafetyAssessment(risk="none", reasoning="Safe command")
         assert assessment.is_fallback is False
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="real-process")
     def test_fallback_flag_explicit(self):
         """Test setting is_fallback explicitly."""
         assessment = ShellSafetyAssessment(
@@ -862,10 +998,14 @@ class TestShellSafetyAssessmentModel:
         assert assessment.is_fallback is True
 
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="real-process")
 class TestWindowsSpecificCode:
     """Tests for Windows-specific functionality."""
 
     @pytest.mark.skipif(not sys.platform.startswith("win"), reason="Windows only")
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="real-process")
     def test_win32_pipe_has_data_real(self):
         """Test _win32_pipe_has_data on Windows."""
         from code_puppy.tools.command_runner import _win32_pipe_has_data
@@ -882,6 +1022,8 @@ class TestWindowsSpecificCode:
         assert isinstance(has_data, bool)
 
     @pytest.mark.skipif(sys.platform.startswith("win"), reason="POSIX only")
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="real-process")
     def test_win32_pipe_has_data_posix_stub(self):
         """Test that POSIX stub returns False."""
         from code_puppy.tools.command_runner import _win32_pipe_has_data
@@ -891,6 +1033,8 @@ class TestWindowsSpecificCode:
         assert result is False
 
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="real-process")
 class TestStreamingExceptionHandling:
     """Tests for exception handling in streaming execution."""
 
@@ -903,6 +1047,8 @@ class TestStreamingExceptionHandling:
         with _RUNNING_PROCESSES_LOCK:
             _RUNNING_PROCESSES.clear()
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="real-process")
     def test_streaming_handles_exception(self):
         """Test that streaming handles exceptions gracefully."""
         # Create a mock process that raises on readline

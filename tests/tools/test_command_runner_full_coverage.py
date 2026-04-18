@@ -462,6 +462,8 @@ class TestRunShellCommandStreaming:
         assert result.exit_code == 0
         assert "hello" in result.stdout
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="real-process")
     def test_failing_command(self):
         from code_puppy.tools.command_runner import (
             _register_process,
@@ -487,6 +489,8 @@ class TestRunShellCommandStreaming:
         assert result.success is False
         assert result.exit_code == 1
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="real-process")
     def test_silent_mode(self):
         from code_puppy.tools.command_runner import (
             _register_process,

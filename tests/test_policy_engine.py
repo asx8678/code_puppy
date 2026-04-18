@@ -11,23 +11,31 @@ def engine():
     return PolicyEngine(default_decision="ask_user")
 
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="timing")
 def test_default_decision_ask_user(engine):
     result = engine.check("unknown_tool")
     assert isinstance(result, AskUser)
 
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="timing")
 def test_default_decision_allow():
     eng = PolicyEngine(default_decision="allow")
     result = eng.check("anything")
     assert isinstance(result, Allow)
 
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="timing")
 def test_allow_rule_matches(engine):
     engine.add_rule(PolicyRule(tool_name="read_file", decision="allow"))
     result = engine.check("read_file")
     assert isinstance(result, Allow)
 
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="timing")
 def test_deny_rule_matches(engine):
     engine.add_rule(PolicyRule(tool_name="delete_file", decision="deny"))
     result = engine.check("delete_file")
@@ -35,12 +43,16 @@ def test_deny_rule_matches(engine):
     assert "policy" in result.reason.lower()
 
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="timing")
 def test_unmatched_tool_falls_to_default(engine):
     engine.add_rule(PolicyRule(tool_name="read_file", decision="allow"))
     result = engine.check("write_file")
     assert isinstance(result, AskUser)
 
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="timing")
 def test_priority_ordering(engine):
     engine.add_rule(PolicyRule(tool_name="*", decision="deny", priority=10))
     engine.add_rule(PolicyRule(tool_name="*", decision="allow", priority=20))
@@ -48,6 +60,8 @@ def test_priority_ordering(engine):
     assert isinstance(result, Allow)  # priority 20 wins
 
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="timing")
 def test_wildcard_matches_all(engine):
     engine.add_rule(PolicyRule(tool_name="*", decision="allow"))
     assert isinstance(engine.check("read_file"), Allow)
@@ -55,6 +69,8 @@ def test_wildcard_matches_all(engine):
     assert isinstance(engine.check("run_shell_command"), Allow)
 
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="timing")
 def test_command_pattern_matching(engine):
     engine.add_rule(
         PolicyRule(
@@ -80,6 +96,8 @@ def test_command_pattern_matching(engine):
     assert isinstance(engine.check("run_shell_command", {"command": "ls"}), AskUser)
 
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="timing")
 def test_compound_shell_deny_on_any(engine):
     engine.add_rule(
         PolicyRule(
@@ -100,6 +118,8 @@ def test_compound_shell_deny_on_any(engine):
     assert isinstance(result, Deny)
 
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="timing")
 def test_compound_shell_all_allowed(engine):
     engine.add_rule(
         PolicyRule(
@@ -112,6 +132,8 @@ def test_compound_shell_all_allowed(engine):
     assert isinstance(result, Allow)
 
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="timing")
 def test_load_rules_from_file(tmp_path):
     rules_file = tmp_path / "policy.json"
     rules_file.write_text(
@@ -131,6 +153,8 @@ def test_load_rules_from_file(tmp_path):
     assert engine.rules[0].priority == 10  # sorted desc
 
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="timing")
 def test_load_rules_missing_file():
     engine = PolicyEngine()
     from pathlib import Path
@@ -139,6 +163,8 @@ def test_load_rules_missing_file():
     assert count == 0
 
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="timing")
 def test_remove_rules_by_source(engine):
     engine.add_rule(PolicyRule(tool_name="a", decision="allow", source="user"))
     engine.add_rule(PolicyRule(tool_name="b", decision="allow", source="project"))
@@ -147,6 +173,8 @@ def test_remove_rules_by_source(engine):
     assert engine.rules[0].tool_name == "b"
 
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="timing")
 def test_args_pattern_matching(engine):
     engine.add_rule(
         PolicyRule(
@@ -170,12 +198,16 @@ def test_args_pattern_matching(engine):
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="timing")
 def test_check_explicit_returns_none_when_no_rule():
     """check_explicit returns None when no rule matches (no default fallback)."""
     eng = PolicyEngine(default_decision="allow")  # default irrelevant
     assert eng.check_explicit("anything") is None
 
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="timing")
 def test_check_explicit_returns_allow_when_matched():
     eng = PolicyEngine()
     eng.add_rule(PolicyRule(tool_name="read_file", decision="allow"))
@@ -183,6 +215,8 @@ def test_check_explicit_returns_allow_when_matched():
     assert isinstance(result, Allow)
 
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="timing")
 def test_check_explicit_returns_deny_when_matched():
     eng = PolicyEngine()
     eng.add_rule(PolicyRule(tool_name="delete_file", decision="deny"))
@@ -190,12 +224,16 @@ def test_check_explicit_returns_deny_when_matched():
     assert isinstance(result, Deny)
 
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="timing")
 def test_check_explicit_no_match_different_tool():
     eng = PolicyEngine()
     eng.add_rule(PolicyRule(tool_name="read_file", decision="allow"))
     assert eng.check_explicit("write_file") is None
 
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="timing")
 def test_check_explicit_wildcard():
     eng = PolicyEngine()
     eng.add_rule(PolicyRule(tool_name="*", decision="allow"))
@@ -207,12 +245,16 @@ def test_check_explicit_wildcard():
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="timing")
 def test_check_shell_command_explicit_no_rules_returns_none():
     """With no rules, check_shell_command_explicit returns None."""
     eng = PolicyEngine(default_decision="allow")
     assert eng.check_shell_command_explicit("git status") is None
 
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="timing")
 def test_check_shell_command_explicit_allow_rule():
     eng = PolicyEngine()
     eng.add_rule(
@@ -226,6 +268,8 @@ def test_check_shell_command_explicit_allow_rule():
     assert isinstance(result, Allow)
 
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="timing")
 def test_check_shell_command_explicit_deny_rule():
     eng = PolicyEngine()
     eng.add_rule(
@@ -239,6 +283,8 @@ def test_check_shell_command_explicit_deny_rule():
     assert isinstance(result, Deny)
 
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="timing")
 def test_check_shell_command_explicit_compound_deny_one():
     """One sub-command denied → whole compound denied."""
     eng = PolicyEngine()
@@ -260,6 +306,8 @@ def test_check_shell_command_explicit_compound_deny_one():
     assert isinstance(result, Deny)
 
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="timing")
 def test_check_shell_command_explicit_compound_no_match():
     """No rules match any sub-command → returns None."""
     eng = PolicyEngine()
@@ -273,6 +321,8 @@ def test_check_shell_command_explicit_compound_no_match():
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="timing")
 def test_policy_config_load_rules(tmp_path):
     """policy_config.load_policy_rules populates the engine from JSON files."""
     import json
@@ -308,6 +358,8 @@ def test_policy_config_load_rules(tmp_path):
     assert isinstance(eng.check("delete_file"), Deny)
 
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="timing")
 def test_policy_config_missing_files_ok(tmp_path):
     """load_policy_rules silently ignores missing files, returns 0."""
     from code_puppy.policy_config import load_policy_rules
@@ -322,6 +374,8 @@ def test_policy_config_missing_files_ok(tmp_path):
     assert len(eng.rules) == 0
 
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="timing")
 def test_policy_config_project_overrides_user(tmp_path):
     """Project rules (higher priority) win over user rules."""
     import json
@@ -362,6 +416,8 @@ def test_policy_config_project_overrides_user(tmp_path):
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="timing")
 def test_policy_rule_with_regex_pattern_compiles():
     """Regression test: PolicyRule with command_pattern should compile without error."""
     rule = PolicyRule(
@@ -372,6 +428,8 @@ def test_policy_rule_with_regex_pattern_compiles():
     assert rule._compiled_command is not None
 
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="timing")
 def test_policy_rule_with_args_pattern_compiles():
     """Regression test: PolicyRule with args_pattern should compile without error."""
     rule = PolicyRule(
@@ -387,6 +445,8 @@ def test_policy_rule_with_args_pattern_compiles():
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="timing")
 def test_get_policy_engine_singleton_thread_safety(tmp_path, monkeypatch):
     """
     Regression test for code_puppy-68x.4: publication order bug.

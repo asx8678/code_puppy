@@ -150,9 +150,13 @@ def mock_both_clients():
 # =============================================================================
 
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="env-mutation")
 class TestBothPluginsActive:
     """Test both plugins working together without interference."""
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="env-mutation")
     def test_both_create_traces_on_agent_start(self, mock_both_clients):
         """Both plugins should create traces when agent run starts."""
         ls_module, ls_client, lf_module, lf_client = mock_both_clients
@@ -175,6 +179,8 @@ class TestBothPluginsActive:
         assert lf_call["name"] == "test-agent"
         assert lf_call["id"] == session_id
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="env-mutation")
     def test_both_update_traces_on_agent_end(self, mock_both_clients):
         """Both plugins should update traces when agent run ends."""
         ls_module, ls_client, lf_module, lf_client = mock_both_clients
@@ -209,6 +215,8 @@ class TestBothPluginsActive:
         assert mock_trace.update.called
         assert lf_client.flush.called
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="env-mutation")
     def test_session_id_correlation_both_plugins(self, mock_both_clients):
         """Same session_id should correlate traces in both systems."""
         ls_module, ls_client, lf_module, lf_client = mock_both_clients
@@ -227,6 +235,8 @@ class TestBothPluginsActive:
         assert lf_call["session_id"] == session_id
         assert lf_call["id"] == session_id
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="env-mutation")
     def test_tool_spans_nested_both_plugins(self, mock_both_clients):
         """Tool spans should be nested correctly in both plugins."""
         ls_module, ls_client, lf_module, lf_client = mock_both_clients
@@ -266,6 +276,8 @@ class TestBothPluginsActive:
             mock_span = mock_trace.span.return_value
             assert mock_span.end.called
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="env-mutation")
     def test_stream_events_both_plugins(self, mock_both_clients):
         """Stream events should be sent to both plugins."""
         ls_module, ls_client, lf_module, lf_client = mock_both_clients
@@ -295,9 +307,13 @@ class TestBothPluginsActive:
 # =============================================================================
 
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="env-mutation")
 class TestNoInterference:
     """Verify plugins don't interfere with each other's operation."""
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="env-mutation")
     def test_langsmith_failure_doesnt_break_langfuse(self, mock_both_clients):
         """LangSmith failure should not prevent LangFuse from working."""
         ls_module, ls_client, lf_module, lf_client = mock_both_clients
@@ -317,6 +333,8 @@ class TestNoInterference:
         # LangFuse trace should still be created
         assert lf_client.trace.called
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="env-mutation")
     def test_langfuse_failure_doesnt_break_langsmith(self, mock_both_clients):
         """LangFuse failure should not prevent LangSmith from working."""
         ls_module, ls_client, lf_module, lf_client = mock_both_clients
@@ -336,6 +354,8 @@ class TestNoInterference:
         # LangSmith run should still be created
         assert ls_client.create_run.called
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="env-mutation")
     def test_independent_active_states(self):
         """Each plugin should have independent active state."""
         # Clear all env vars
@@ -378,6 +398,8 @@ class TestNoInterference:
         assert ls_disabled._is_plugin_active() is False
         assert lf_only._is_plugin_active() is True
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="env-mutation")
     def test_different_session_ids_no_crosstalk(self, mock_both_clients):
         """Different session IDs should not interfere."""
         ls_module, ls_client, lf_module, lf_client = mock_both_clients
@@ -404,9 +426,13 @@ class TestNoInterference:
 # =============================================================================
 
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="env-mutation")
 class TestGracefulDegradation:
     """Test graceful handling when one plugin fails during a trace."""
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="env-mutation")
     def test_langsmith_mid_trace_failure_langfuse_continues(self, mock_both_clients):
         """LangSmith failing mid-trace shouldn't break LangFuse completion."""
         ls_module, ls_client, lf_module, lf_client = mock_both_clients
@@ -438,6 +464,8 @@ class TestGracefulDegradation:
         mock_trace = lf_client.trace.return_value
         assert mock_trace.update.called
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="env-mutation")
     def test_tool_call_with_one_plugin_failing(self, mock_both_clients):
         """Tool calls should handle one plugin failing gracefully."""
         ls_module, ls_client, lf_module, lf_client = mock_both_clients
@@ -467,6 +495,8 @@ class TestGracefulDegradation:
             mock_trace = lf_client.trace.return_value
             assert mock_trace.span.called
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="env-mutation")
     def test_stream_event_with_partial_failure(self, mock_both_clients):
         """Stream events should not fail completely if one plugin errors."""
         ls_module, ls_client, lf_module, lf_client = mock_both_clients
@@ -499,9 +529,13 @@ class TestGracefulDegradation:
 # =============================================================================
 
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="env-mutation")
 class TestZeroOverheadBothDisabled:
     """Verify zero overhead when both plugins are disabled."""
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="env-mutation")
     def test_both_disabled_quick_return(self):
         """Callbacks should return immediately when both plugins disabled."""
         # Clear all env vars
@@ -541,6 +575,8 @@ class TestZeroOverheadBothDisabled:
             assert result is None
             assert duration < 0.01, f"Callback {callback.__name__} took too long: {duration}s"
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="env-mutation")
     def test_no_client_init_when_disabled(self):
         """No client initialization should occur when both plugins disabled."""
         # Clear all env vars
@@ -570,9 +606,13 @@ class TestZeroOverheadBothDisabled:
 # =============================================================================
 
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="env-mutation")
 class TestConcurrentTracing:
     """Test concurrent agent runs with dual tracing."""
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="env-mutation")
     def test_multiple_concurrent_sessions(self, mock_both_clients):
         """Multiple concurrent sessions should be tracked independently."""
         ls_module, ls_client, lf_module, lf_client = mock_both_clients
@@ -601,6 +641,8 @@ class TestConcurrentTracing:
         assert len(ls_module._active_traces) == 0
         assert len(lf_module._active_traces) == 0
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="env-mutation")
     def test_mixed_success_failure_states(self, mock_both_clients):
         """Mixed success/failure states should be tracked correctly."""
         ls_module, ls_client, lf_module, lf_client = mock_both_clients
@@ -640,9 +682,13 @@ class TestConcurrentTracing:
 # =============================================================================
 
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="env-mutation")
 class TestErrorHandlingAndCleanup:
     """Test error handling and resource cleanup."""
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="env-mutation")
     def test_partial_cleanup_on_failure(self, mock_both_clients):
         """Traces should be cleaned up even when one plugin fails."""
         ls_module, ls_client, lf_module, lf_client = mock_both_clients
@@ -668,6 +714,8 @@ class TestErrorHandlingAndCleanup:
         assert session_id not in ls_module._active_traces
         assert session_id not in lf_module._active_traces
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="env-mutation")
     def test_tool_span_cleanup_when_parent_ends(self, mock_both_clients):
         """Tool spans should be cleaned up when parent trace ends."""
         ls_module, ls_client, lf_module, lf_client = mock_both_clients
@@ -699,6 +747,8 @@ class TestErrorHandlingAndCleanup:
             assert parent_run_id not in ls_module._tool_spans
             assert parent_run_id not in lf_module._tool_spans
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="env-mutation")
     def test_orphaned_tool_span_handling(self, mock_both_clients):
         """Tool spans without active parent should be handled gracefully."""
         ls_module, ls_client, lf_module, lf_client = mock_both_clients
@@ -730,9 +780,13 @@ class TestErrorHandlingAndCleanup:
 # =============================================================================
 
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="env-mutation")
 class TestDifferentConfigurations:
     """Test dual tracing with different configuration combinations."""
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="env-mutation")
     def test_different_custom_hosts(self):
         """Plugins should use their own custom host settings."""
         # Clear all
@@ -774,6 +828,8 @@ class TestDifferentConfigurations:
 
         assert lf_module.LANGFUSE_HOST == "https://custom.langfuse.com"
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="env-mutation")
     def test_different_project_names(self):
         """Plugins should use their own project names."""
         # Clear all

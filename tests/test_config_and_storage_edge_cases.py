@@ -48,9 +48,13 @@ def mock_dbos_installed():
         yield
 
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="env-mutation")
 class TestDBOSConfiguration:
     """Test DBOS (Database Operating System) configuration."""
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="env-mutation")
     def test_get_use_dbos_returns_true_by_default(self, mock_config_paths, mock_dbos_installed):
         """Test that DBOS is enabled by default."""
         mock_cfg_dir, mock_cfg_file, _ = mock_config_paths
@@ -65,6 +69,8 @@ class TestDBOSConfiguration:
         assert result is True
 
     @pytest.mark.parametrize("truthy_value", ["1", "true", "True", "yes", "on"])
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="env-mutation")
     def test_get_use_dbos_returns_true_for_truthy_values(
         self, mock_config_paths, mock_dbos_installed, truthy_value
     ):
@@ -81,6 +87,8 @@ class TestDBOSConfiguration:
         assert result is True, f"Failed for value: {truthy_value}"
 
     @pytest.mark.parametrize("falsy_value", ["0", "false", "no", "off", ""])
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="env-mutation")
     def test_get_use_dbos_returns_false_for_falsy_values(
         self, mock_config_paths, falsy_value
     ):
@@ -97,9 +105,13 @@ class TestDBOSConfiguration:
         assert result is False, f"Failed for value: {falsy_value}"
 
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="env-mutation")
 class TestSubagentVerbose:
     """Test subagent_verbose configuration."""
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="env-mutation")
     def test_get_subagent_verbose_returns_false_by_default(self, mock_config_paths):
         """Test that subagent verbose is disabled by default."""
         mock_cfg_dir, mock_cfg_file, _ = mock_config_paths
@@ -116,6 +128,8 @@ class TestSubagentVerbose:
     @pytest.mark.parametrize(
         "truthy_value", ["1", "true", "True", "yes", "on", "YES", "ON"]
     )
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="env-mutation")
     def test_get_subagent_verbose_returns_true_for_truthy_values(
         self, mock_config_paths, truthy_value
     ):
@@ -132,6 +146,8 @@ class TestSubagentVerbose:
         assert result is True, f"Failed for value: {truthy_value}"
 
     @pytest.mark.parametrize("falsy_value", ["0", "false", "no", "off", ""])
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="env-mutation")
     def test_get_subagent_verbose_returns_false_for_falsy_values(
         self, mock_config_paths, falsy_value
     ):
@@ -148,9 +164,13 @@ class TestSubagentVerbose:
         assert result is False, f"Failed for value: {falsy_value}"
 
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="env-mutation")
 class TestAllowRecursion:
     """Test allow_recursion configuration."""
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="env-mutation")
     def test_get_allow_recursion_defaults_to_true(self, mock_config_paths):
         """Test that allow_recursion defaults to True when not set."""
         mock_cfg_dir, mock_cfg_file, _ = mock_config_paths
@@ -164,6 +184,8 @@ class TestAllowRecursion:
         result = cp_config.get_allow_recursion()
         assert result is True
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="env-mutation")
     def test_get_allow_recursion_respects_explicit_false(self, mock_config_paths):
         """Test that explicit false value is respected."""
         mock_cfg_dir, mock_cfg_file, _ = mock_config_paths
@@ -178,6 +200,8 @@ class TestAllowRecursion:
         assert result is False
 
     @pytest.mark.parametrize("truthy", ["1", "true", "yes", "on"])
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="env-mutation")
     def test_get_allow_recursion_respects_truthy_values(
         self, mock_config_paths, truthy
     ):
@@ -194,9 +218,13 @@ class TestAllowRecursion:
         assert result is True, f"Failed for: {truthy}"
 
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="env-mutation")
 class TestPuppyTokens:
     """Test puppy token configuration."""
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="env-mutation")
     def test_get_puppy_token_returns_value_if_set(self, mock_config_paths):
         """Test getting puppy token when it's set."""
         mock_cfg_dir, mock_cfg_file, _ = mock_config_paths
@@ -210,6 +238,8 @@ class TestPuppyTokens:
         result = cp_config.get_puppy_token()
         assert result == "secret-token-123"
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="env-mutation")
     def test_get_puppy_token_returns_none_if_not_set(self, mock_config_paths):
         """Test getting puppy token when it's not set."""
         mock_cfg_dir, mock_cfg_file, _ = mock_config_paths
@@ -223,6 +253,8 @@ class TestPuppyTokens:
         result = cp_config.get_puppy_token()
         assert result is None
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="env-mutation")
     def test_set_puppy_token_persists_value(self, mock_config_paths):
         """Test setting puppy token."""
         mock_cfg_dir, mock_cfg_file, _ = mock_config_paths
@@ -240,15 +272,21 @@ class TestPuppyTokens:
         assert saved_config["puppy"]["puppy_token"] == "new-token-456"
 
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="env-mutation")
 class TestXDGDirectoryHandling:
     """Test XDG Base Directory support."""
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="env-mutation")
     def test_get_xdg_dir_respects_environment_variable(self):
         """Test that explicit XDG env var is respected."""
         with patch.dict(os.environ, {"XDG_CONFIG_HOME": "/custom/config"}):
             result = cp_config._get_xdg_dir("XDG_CONFIG_HOME", ".config")
             assert result == "/custom/config/code_puppy"
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="env-mutation")
     def test_get_xdg_dir_defaults_to_home_when_no_env_var(self):
         """Test fallback to ~/.code_puppy when env var not set."""
         with patch.dict(os.environ, {}, clear=True):
@@ -258,9 +296,13 @@ class TestXDGDirectoryHandling:
                 assert result == "/home/user/.code_puppy"
 
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="env-mutation")
 class TestConfigKeys:
     """Test config key management."""
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="env-mutation")
     def test_get_config_keys_includes_defaults(self, mock_config_paths):
         """Test that default keys are always included."""
         mock_cfg_dir, mock_cfg_file, _ = mock_config_paths
@@ -284,6 +326,8 @@ class TestConfigKeys:
         for key in expected_keys:
             assert key in result, f"Expected key '{key}' not in config keys"
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="env-mutation")
     def test_get_config_keys_includes_custom_keys(self, mock_config_paths):
         """Test that custom keys from config are included."""
         mock_cfg_dir, mock_cfg_file, _ = mock_config_paths
@@ -303,6 +347,8 @@ class TestConfigKeys:
 # ==================== CALLBACKS TESTS ====================
 
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="env-mutation")
 class TestCallbacksErrorHandling:
     """Test callbacks error handling and edge cases."""
 
@@ -314,6 +360,8 @@ class TestCallbacksErrorHandling:
         """Re-enable plugin loading after each test."""
         os.environ.pop("PUP_DISABLE_CALLBACK_PLUGIN_LOADING", None)
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="env-mutation")
     def test_register_callback_rejects_invalid_phase(self):
         """Test that registering callback with invalid phase raises error."""
 
@@ -323,11 +371,15 @@ class TestCallbacksErrorHandling:
         with pytest.raises(ValueError, match="Unsupported phase"):
             callbacks.register_callback("invalid_phase", dummy_callback)
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="env-mutation")
     def test_register_callback_rejects_non_callable(self):
         """Test that non-callable objects are rejected."""
         with pytest.raises(TypeError, match="Callback must be callable"):
             callbacks.register_callback("startup", "not a function")
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="env-mutation")
     def test_register_callback_prevents_duplicates(self):
         """Test that duplicate registrations are prevented."""
 
@@ -349,6 +401,8 @@ class TestCallbacksErrorHandling:
         # Cleanup
         callbacks.clear_callbacks("startup")
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="env-mutation")
     def test_unregister_callback_returns_false_for_invalid_phase(self):
         """Test unregister returns False for invalid phase."""
 
@@ -358,6 +412,8 @@ class TestCallbacksErrorHandling:
         result = callbacks.unregister_callback("invalid_phase", dummy)
         assert result is False
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="env-mutation")
     def test_unregister_callback_returns_false_when_not_registered(self):
         """Test unregister returns False when callback not registered."""
 
@@ -368,6 +424,8 @@ class TestCallbacksErrorHandling:
         result = callbacks.unregister_callback("startup", unregistered_callback)
         assert result is False
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="env-mutation")
     def test_unregister_callback_returns_true_when_successful(self):
         """Test unregister returns True when successful."""
 
@@ -381,6 +439,8 @@ class TestCallbacksErrorHandling:
         assert result is True
         assert callbacks.count_callbacks("startup") == 0
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="env-mutation")
     def test_clear_callbacks_specific_phase(self):
         """Test clearing callbacks for a specific phase."""
 
@@ -403,6 +463,8 @@ class TestCallbacksErrorHandling:
         # Cleanup
         callbacks.clear_callbacks()
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="env-mutation")
     def test_get_callbacks_returns_copy(self):
         """Test that get_callbacks returns an immutable tuple snapshot."""
 
@@ -428,6 +490,8 @@ class TestCallbacksErrorHandling:
         # Cleanup
         callbacks.clear_callbacks("startup")
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="env-mutation")
     def test_count_callbacks_all_phases(self):
         """Test counting all callbacks across all phases."""
 
@@ -455,9 +519,13 @@ class TestCallbacksErrorHandling:
 # ==================== SESSION STORAGE TESTS ====================
 
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="env-mutation")
 class TestSessionStoragePathManagement:
     """Test session storage path handling."""
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="env-mutation")
     def test_ensure_directory_creates_directory(self, tmp_path):
         """Test that ensure_directory creates missing directories."""
         test_path = tmp_path / "new_dir"
@@ -468,11 +536,15 @@ class TestSessionStoragePathManagement:
         assert test_path.exists()
         assert result == test_path
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="env-mutation")
     def test_ensure_directory_handles_existing_directory(self, tmp_path):
         """Test that ensure_directory handles existing directories gracefully."""
         result = session_storage.ensure_directory(tmp_path)
         assert result == tmp_path
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="env-mutation")
     def test_build_session_paths_creates_correct_paths(self, tmp_path):
         """Test that build_session_paths creates correct pickle and metadata paths."""
         paths = session_storage.build_session_paths(tmp_path, "test_session")
@@ -481,9 +553,13 @@ class TestSessionStoragePathManagement:
         assert paths.metadata_path == tmp_path / "test_session_meta.json"
 
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="env-mutation")
 class TestSessionSaveAndLoad:
     """Test saving and loading sessions."""
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="env-mutation")
     def test_save_session_creates_pickle_and_metadata(self, tmp_path):
         """Test that save_session creates both pickle and metadata files."""
         history = [
@@ -512,6 +588,8 @@ class TestSessionSaveAndLoad:
         assert metadata.message_count == 2
         assert metadata.auto_saved is False
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="env-mutation")
     def test_load_session_retrieves_saved_history(self, tmp_path):
         """Test that load_session correctly retrieves saved history."""
         original_history = [
@@ -536,11 +614,15 @@ class TestSessionSaveAndLoad:
 
         assert loaded_history == original_history
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="env-mutation")
     def test_load_session_raises_for_missing_file(self, tmp_path):
         """Test that load_session raises FileNotFoundError for missing session."""
         with pytest.raises(FileNotFoundError):
             session_storage.load_session("nonexistent", tmp_path)
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="env-mutation")
     def test_session_metadata_serialization(self):
         """Test that SessionMetadata serializes to dict correctly."""
         metadata = session_storage.SessionMetadata(
@@ -562,15 +644,21 @@ class TestSessionSaveAndLoad:
         assert "file_path" in serialized
 
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="env-mutation")
 class TestSessionListingAndCleanup:
     """Test session listing and cleanup operations."""
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="env-mutation")
     def test_list_sessions_returns_empty_for_nonexistent_dir(self, tmp_path):
         """Test that list_sessions returns empty list for nonexistent directory."""
         nonexistent = tmp_path / "nonexistent"
         result = session_storage.list_sessions(nonexistent)
         assert result == []
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="env-mutation")
     def test_list_sessions_returns_all_sessions(self, tmp_path):
         """Test that list_sessions returns all session names."""
 
@@ -594,11 +682,15 @@ class TestSessionListingAndCleanup:
         assert "session_1" in result
         assert "session_2" in result
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="env-mutation")
     def test_cleanup_sessions_does_nothing_for_empty_dir(self, tmp_path):
         """Test that cleanup_sessions handles empty directories gracefully."""
         result = session_storage.cleanup_sessions(tmp_path, max_sessions=5)
         assert result == []
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="env-mutation")
     def test_cleanup_sessions_removes_old_sessions(self, tmp_path):
         """Test that cleanup_sessions removes oldest sessions when limit exceeded."""
 
@@ -624,11 +716,15 @@ class TestSessionListingAndCleanup:
         remaining = session_storage.list_sessions(tmp_path)
         assert len(remaining) <= 3
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="env-mutation")
     def test_cleanup_sessions_with_negative_max(self, tmp_path):
         """Test that cleanup_sessions returns empty list for negative max."""
         result = session_storage.cleanup_sessions(tmp_path, max_sessions=-1)
         assert result == []
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="env-mutation")
     def test_cleanup_sessions_with_zero_max(self, tmp_path):
         """Test that cleanup_sessions returns empty list for zero max."""
         result = session_storage.cleanup_sessions(tmp_path, max_sessions=0)

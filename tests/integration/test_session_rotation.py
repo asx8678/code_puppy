@@ -12,6 +12,8 @@ from tests.integration.cli_expect.fixtures import CliHarness, satisfy_initial_pr
 
 
 @pytest.mark.skip(reason="Flaky pexpect timeouts in CI - needs investigation")
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="pty-spawn")
 def test_session_rotation(
     integration_env: dict[str, str],
 ) -> None:

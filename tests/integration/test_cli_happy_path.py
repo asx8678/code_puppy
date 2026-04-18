@@ -28,6 +28,8 @@ def _assert_contains(log_output: str, needle: str) -> None:
 
 
 @pytest.mark.skip(reason="Flaky pexpect timeouts in CI - needs investigation")
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="pty-spawn")
 def test_cli_happy_path_interactive_flow(
     cli_harness: CliHarness,
     live_cli: SpawnResult,

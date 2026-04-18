@@ -24,6 +24,8 @@ from code_puppy.callbacks import (
 )
 
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="env-mutation")
 class TestCallbacksExtended:
     """Test code_puppy/callbacks.py callback system."""
 

@@ -5,6 +5,8 @@ from unittest.mock import patch
 from fastapi import FastAPI
 
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="network")
 def test_app_module_level():
     """The module-level `app` is a FastAPI instance."""
     from code_puppy.api.main import app
@@ -12,6 +14,8 @@ def test_app_module_level():
     assert isinstance(app, FastAPI)
 
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="network")
 def test_main_calls_uvicorn():
     """main() calls uvicorn.run with correct defaults."""
     with patch("code_puppy.api.main.uvicorn") as mock_uvicorn:
@@ -27,6 +31,8 @@ def test_main_calls_uvicorn():
         )
 
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="network")
 def test_main_custom_host_port():
     """main() passes custom host and port."""
     with patch("code_puppy.api.main.uvicorn") as mock_uvicorn:
@@ -37,6 +43,8 @@ def test_main_custom_host_port():
         assert kwargs.get("host", args[1] if len(args) > 1 else None) == "0.0.0.0"
 
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="network")
 def test_routers_init_imports():
     """Test that routers __init__ exports the expected modules."""
     from code_puppy.api.routers import agents, commands, config, sessions
@@ -47,9 +55,12 @@ def test_routers_init_imports():
     assert sessions is not None
 
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="network")
 def test_main_module_execution():
     """Test that __main__ guard would trigger main()."""
     import types
+import pytest
     
     # Create a mock module with __name__ == "__main__"
     mod = types.ModuleType("test_main_module")

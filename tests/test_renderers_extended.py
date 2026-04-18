@@ -31,6 +31,8 @@ from code_puppy.messaging.renderers import (
 # =============================================================================
 
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="timing")
 class TestInteractiveRendererMessageTypes:
     """Test InteractiveRenderer with all message types."""
 
@@ -151,6 +153,8 @@ class TestInteractiveRendererMessageTypes:
         assert len(output_text) > 0
 
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="timing")
 class TestInteractiveRendererVersionMessages:
     """Test version message special handling."""
 
@@ -185,6 +189,8 @@ class TestInteractiveRendererVersionMessages:
         assert "Latest version" in output_text
 
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="timing")
 class TestInteractiveRendererComplexContent:
     """Test rendering complex Rich objects."""
 
@@ -223,6 +229,8 @@ class TestInteractiveRendererComplexContent:
         assert len(output_text) > 0
 
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="timing")
 class TestInteractiveRendererHumanInput:
     """Test _handle_human_input_request."""
 
@@ -247,6 +255,8 @@ class TestInteractiveRendererHumanInput:
         assert "Please enter your name" in output_text
 
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="timing")
 class TestInteractiveRendererFlush:
     """Test console flush handling."""
 
@@ -294,9 +304,13 @@ class TestInteractiveRendererFlush:
 # =============================================================================
 
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="timing")
 class TestSynchronousInteractiveRendererInit:
     """Test SynchronousInteractiveRenderer initialization."""
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="timing")
     def test_init_with_queue_and_console(self):
         """Test init with custom console."""
         queue = MessageQueue()
@@ -309,6 +323,8 @@ class TestSynchronousInteractiveRendererInit:
         assert renderer.console is console
         assert renderer._running is False
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="timing")
     def test_init_with_default_console(self):
         """Test init with default console."""
         queue = MessageQueue()
@@ -320,9 +336,13 @@ class TestSynchronousInteractiveRendererInit:
         assert isinstance(renderer.console, Console)
 
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="timing")
 class TestSynchronousInteractiveRendererLifecycle:
     """Test start/stop lifecycle."""
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="timing")
     def test_start_activates_listener(self):
         """Test that start registers as a queue listener."""
         queue = MessageQueue()
@@ -338,6 +358,8 @@ class TestSynchronousInteractiveRendererLifecycle:
         finally:
             renderer.stop()
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="timing")
     def test_start_double_start_safe(self):
         """Test that starting twice is safe."""
         queue = MessageQueue()
@@ -354,6 +376,8 @@ class TestSynchronousInteractiveRendererLifecycle:
         finally:
             renderer.stop()
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="timing")
     def test_stop_clears_running_state(self):
         """Test that stop clears running state."""
         queue = MessageQueue()
@@ -369,6 +393,8 @@ class TestSynchronousInteractiveRendererLifecycle:
         assert renderer._running is False
         assert not queue._has_active_renderer
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="timing")
     def test_stop_without_start(self):
         """Test that stop without start is safe."""
         queue = MessageQueue()
@@ -382,9 +408,13 @@ class TestSynchronousInteractiveRendererLifecycle:
         assert renderer._running is False
 
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="timing")
 class TestSynchronousInteractiveRendererMessageTypes:
     """Test _render_message for all message types."""
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="timing")
     def test_render_error_message(self):
         """Test rendering ERROR message (bold red)."""
         queue = MessageQueue()
@@ -398,6 +428,8 @@ class TestSynchronousInteractiveRendererMessageTypes:
 
         assert "Error occurred" in output.getvalue()
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="timing")
     def test_render_warning_message(self):
         """Test rendering WARNING message (yellow)."""
         queue = MessageQueue()
@@ -411,6 +443,8 @@ class TestSynchronousInteractiveRendererMessageTypes:
 
         assert "Warning" in output.getvalue()
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="timing")
     def test_render_success_message(self):
         """Test rendering SUCCESS message (green)."""
         queue = MessageQueue()
@@ -424,6 +458,8 @@ class TestSynchronousInteractiveRendererMessageTypes:
 
         assert "Success" in output.getvalue()
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="timing")
     def test_render_tool_output_message(self):
         """Test rendering TOOL_OUTPUT message (blue)."""
         queue = MessageQueue()
@@ -437,6 +473,8 @@ class TestSynchronousInteractiveRendererMessageTypes:
 
         assert "Tool result" in output.getvalue()
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="timing")
     def test_render_agent_reasoning_message(self):
         """Test rendering AGENT_REASONING message (no style)."""
         queue = MessageQueue()
@@ -452,6 +490,8 @@ class TestSynchronousInteractiveRendererMessageTypes:
 
         assert "Thinking about it" in output.getvalue()
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="timing")
     def test_render_agent_response_as_markdown(self):
         """Test AGENT_RESPONSE renders as markdown."""
         queue = MessageQueue()
@@ -466,6 +506,8 @@ class TestSynchronousInteractiveRendererMessageTypes:
         # Should have output something
         assert len(output.getvalue()) > 0
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="timing")
     def test_render_agent_response_markdown_fallback(self):
         """Test AGENT_RESPONSE falls back on markdown failure."""
         queue = MessageQueue()
@@ -483,6 +525,8 @@ class TestSynchronousInteractiveRendererMessageTypes:
 
         assert "Plain fallback" in output.getvalue()
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="timing")
     def test_render_system_message(self):
         """Test rendering SYSTEM message (dim)."""
         queue = MessageQueue()
@@ -496,6 +540,8 @@ class TestSynchronousInteractiveRendererMessageTypes:
 
         assert "System info" in output.getvalue()
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="timing")
     def test_render_unknown_type(self):
         """Test rendering unknown type (else branch)."""
         queue = MessageQueue()
@@ -510,9 +556,13 @@ class TestSynchronousInteractiveRendererMessageTypes:
         assert len(output.getvalue()) > 0
 
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="timing")
 class TestSynchronousInteractiveRendererVersionMessages:
     """Test version message special handling."""
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="timing")
     def test_current_version_becomes_dim(self):
         """Test 'Current version:' becomes dim."""
         queue = MessageQueue()
@@ -526,6 +576,8 @@ class TestSynchronousInteractiveRendererVersionMessages:
 
         assert "Current version" in output.getvalue()
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="timing")
     def test_latest_version_becomes_dim(self):
         """Test 'Latest version:' becomes dim."""
         queue = MessageQueue()
@@ -540,9 +592,13 @@ class TestSynchronousInteractiveRendererVersionMessages:
         assert "Latest version" in output.getvalue()
 
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="timing")
 class TestSynchronousInteractiveRendererComplexContent:
     """Test rendering complex Rich objects."""
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="timing")
     def test_render_table(self):
         """Test rendering Rich Table."""
         queue = MessageQueue()
@@ -559,6 +615,8 @@ class TestSynchronousInteractiveRendererComplexContent:
 
         assert "Value1" in output.getvalue()
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="timing")
     def test_render_text_object(self):
         """Test rendering Rich Text object."""
         queue = MessageQueue()
@@ -574,9 +632,13 @@ class TestSynchronousInteractiveRendererComplexContent:
         assert "Styled content" in output.getvalue()
 
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="timing")
 class TestSynchronousInteractiveRendererHumanInput:
     """Test _handle_human_input_request."""
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="timing")
     def test_human_input_no_prompt_id(self):
         """Test handling request without prompt_id shows error."""
         queue = MessageQueue()
@@ -594,6 +656,8 @@ class TestSynchronousInteractiveRendererHumanInput:
 
         assert "Error" in output.getvalue() or "Invalid" in output.getvalue()
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="timing")
     def test_human_input_no_metadata(self):
         """Test handling request with None metadata."""
         queue = MessageQueue()
@@ -611,6 +675,8 @@ class TestSynchronousInteractiveRendererHumanInput:
 
         assert "Error" in output.getvalue() or "Invalid" in output.getvalue()
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="timing")
     def test_human_input_with_valid_prompt_id(self):
         """Test handling request with valid prompt_id."""
         queue = MessageQueue()
@@ -635,6 +701,8 @@ class TestSynchronousInteractiveRendererHumanInput:
 
         assert "Enter your name" in output.getvalue()
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="timing")
     def test_human_input_displays_prompt(self):
         """Test that human input request displays the prompt."""
         queue = MessageQueue()
@@ -657,9 +725,13 @@ class TestSynchronousInteractiveRendererHumanInput:
         assert "Please enter something" in output.getvalue()
 
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="timing")
 class TestSynchronousInteractiveRendererListenerDelivery:
     """Test message delivery via listener callback."""
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="timing")
     def test_listener_receives_messages_from_queue(self):
         queue = MessageQueue()
         queue.start()
@@ -676,6 +748,8 @@ class TestSynchronousInteractiveRendererListenerDelivery:
             renderer.stop()
             queue.stop()
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="timing")
     def test_idle_queue_does_not_crash(self):
         queue = MessageQueue()
         queue.start()
@@ -690,9 +764,13 @@ class TestSynchronousInteractiveRendererListenerDelivery:
             queue.stop()
 
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="timing")
 class TestSynchronousInteractiveRendererFlush:
     """Test console flush handling."""
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="timing")
     def test_flush_called_on_render(self):
         """Test that flush is called after rendering."""
         queue = MessageQueue()
@@ -715,6 +793,8 @@ class TestSynchronousInteractiveRendererFlush:
 
         assert flush_called[0] is True
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="timing")
     def test_flush_attribute_check(self):
         """Test that flush is checked via hasattr before calling."""
         queue = MessageQueue()
@@ -729,9 +809,13 @@ class TestSynchronousInteractiveRendererFlush:
         assert "Test flush check" in output.getvalue()
 
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="timing")
 class TestSynchronousInteractiveRendererHumanInputFlush:
     """Test flush in human input handler."""
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="timing")
     def test_human_input_flush(self):
         """Test flush is called in _handle_human_input_request."""
         queue = MessageQueue()
@@ -767,6 +851,8 @@ class TestSynchronousInteractiveRendererHumanInputFlush:
 # =============================================================================
 
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="timing")
 class TestMessageRendererErrorHandling:
     """Test error handling in _consume_messages."""
 
@@ -838,6 +924,8 @@ class TestMessageRendererErrorHandling:
             await renderer.stop()
 
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="timing")
 class TestInteractiveRendererWithStyle:
     """Test InteractiveRenderer with styled content and no style."""
 

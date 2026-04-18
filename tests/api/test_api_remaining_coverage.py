@@ -10,6 +10,8 @@ import pytest
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="network")
 def test_api_main_function():
     from code_puppy.api.main import main
 
@@ -53,6 +55,8 @@ async def test_shutdown_pid_removal_error():
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="network")
 def test_pty_manager_windows_import_branch():
     """Cover the IS_WINDOWS conditional import branch."""
     import code_puppy.api.pty_manager as pm
@@ -68,6 +72,8 @@ def test_pty_manager_windows_import_branch():
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="network")
 def test_pty_manager_create_and_close():
     """Cover create_session, _create_unix_session, close_session."""
     from code_puppy.api.pty_manager import IS_WINDOWS, PTYManager
@@ -109,6 +115,8 @@ def test_pty_manager_create_and_close():
     asyncio.run(_test())
 
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="network")
 def test_pty_manager_duplicate_session():
     """Cover the duplicate session warning path (line 124)."""
     from code_puppy.api.pty_manager import IS_WINDOWS, PTYManager
@@ -127,6 +135,8 @@ def test_pty_manager_duplicate_session():
     asyncio.run(_test())
 
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="network")
 def test_pty_manager_close_all():
     """Cover close_all."""
     from code_puppy.api.pty_manager import IS_WINDOWS, PTYManager
@@ -145,6 +155,8 @@ def test_pty_manager_close_all():
     asyncio.run(_test())
 
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="network")
 def test_pty_manager_list_sessions():
     """Cover list_sessions."""
     from code_puppy.api.pty_manager import IS_WINDOWS, PTYManager
@@ -163,6 +175,8 @@ def test_pty_manager_list_sessions():
     asyncio.run(_test())
 
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="network")
 def test_read_unix_pty_blocking_and_eof():
     """Cover _read_unix_pty branches: BlockingIOError and OSError."""
     from code_puppy.api.pty_manager import PTYManager
@@ -178,6 +192,8 @@ def test_read_unix_pty_blocking_and_eof():
         assert manager._read_unix_pty(999) == b""
 
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="network")
 def test_unix_reader_loop_error():
     """Cover _unix_reader_loop exception handling."""
     from code_puppy.api.pty_manager import IS_WINDOWS, PTYManager, PTYSession
@@ -198,6 +214,8 @@ def test_unix_reader_loop_error():
     asyncio.run(_test())
 
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="network")
 def test_unix_reader_loop_eof():
     """Cover EOF branch in _unix_reader_loop."""
     from code_puppy.api.pty_manager import IS_WINDOWS, PTYManager, PTYSession
@@ -225,6 +243,8 @@ def test_unix_reader_loop_eof():
     asyncio.run(_test())
 
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="network")
 def test_unix_reader_loop_with_output():
     """Cover output callback branch in _unix_reader_loop."""
     from code_puppy.api.pty_manager import IS_WINDOWS, PTYManager, PTYSession
@@ -259,6 +279,8 @@ def test_unix_reader_loop_with_output():
     asyncio.run(_test())
 
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="network")
 def test_windows_reader_loop():
     """Cover _windows_reader_loop."""
     from code_puppy.api.pty_manager import PTYManager, PTYSession
@@ -292,6 +314,8 @@ def test_windows_reader_loop():
     asyncio.run(_test())
 
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="network")
 def test_windows_reader_loop_error():
     """Cover _windows_reader_loop exception branch."""
     from code_puppy.api.pty_manager import PTYManager, PTYSession
@@ -310,6 +334,8 @@ def test_windows_reader_loop_error():
     asyncio.run(_test())
 
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="network")
 def test_create_windows_session():
     """Cover _create_windows_session."""
     from code_puppy.api.pty_manager import PTYManager
@@ -332,6 +358,8 @@ def test_create_windows_session():
     asyncio.run(_test())
 
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="network")
 def test_write_nonexistent_session():
     """Cover write to nonexistent session."""
     from code_puppy.api.pty_manager import PTYManager
@@ -345,6 +373,8 @@ def test_write_nonexistent_session():
     asyncio.run(_test())
 
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="network")
 def test_resize_nonexistent():
     """Cover resize nonexistent session."""
     from code_puppy.api.pty_manager import PTYManager
@@ -363,6 +393,8 @@ def test_resize_nonexistent():
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="network")
 def test_websocket_register_routes_exists():
     """Verify websocket module has setup_websocket_routes."""
     import code_puppy.api.websocket as ws
@@ -372,6 +404,8 @@ def test_websocket_register_routes_exists():
     assert len(funcs) >= 0  # Module loaded OK
 
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="network")
 def test_websocket_on_output_error():
     """Cover on_output error branch (line 79-80)."""
     import code_puppy.api.websocket as ws

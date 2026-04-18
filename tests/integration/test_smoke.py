@@ -3,10 +3,13 @@
 import time
 
 import pexpect
+import pytest
 
 # No pytestmark - run in all environments but handle timing gracefully
 
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="pty-spawn")
 def test_version_smoke() -> None:
     child = pexpect.spawn("code-puppy --version", encoding="utf-8")
     child.expect(pexpect.EOF, timeout=10)
@@ -15,6 +18,8 @@ def test_version_smoke() -> None:
     print("\n[SMOKE] version output:", output)
 
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="pty-spawn")
 def test_help_smoke() -> None:
     child = pexpect.spawn("code-puppy --help", encoding="utf-8")
     child.expect("--version", timeout=10)
@@ -24,6 +29,8 @@ def test_help_smoke() -> None:
     print("\n[SMOKE] help output seen")
 
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="pty-spawn")
 def test_interactive_smoke() -> None:
     """Test that the CLI can enter interactive mode and respond to quit.
 

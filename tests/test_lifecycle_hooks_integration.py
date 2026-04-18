@@ -26,6 +26,8 @@ from code_puppy.callbacks import (
 from code_puppy.run_context import RunContext
 
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="env-mutation")
 class TestLifecycleHooksIntegration:
     """Integration tests that verify real callback dispatch."""
 
