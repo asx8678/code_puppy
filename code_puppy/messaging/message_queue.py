@@ -310,6 +310,22 @@ def get_global_queue() -> MessageQueue:
     return _global_queue
 
 
+def reset_global_queue_for_tests() -> None:
+    """Reset the global message queue singleton for test isolation.
+    
+    Stops the existing queue (if any) and clears the singleton so the next
+    get_global_queue() call creates a fresh instance.
+    """
+    global _global_queue
+    with _queue_lock:
+        if _global_queue is not None:
+            try:
+                _global_queue.stop()
+            except Exception:
+                pass  # Best effort cleanup
+            _global_queue = None
+
+
 def get_buffered_startup_messages():
     """Get any messages that were buffered before renderers started."""
     queue = get_global_queue()

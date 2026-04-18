@@ -14,6 +14,12 @@ from code_puppy.plugins.repo_compass.register_callbacks import _inject_repo_cont
 @pytest.fixture
 def isolated_prompt_callbacks():
     """Temporarily isolate prompt-related callback phases for integration tests."""
+    import os
+
+    # Disable plugin auto-loading to prevent callbacks from being re-registered
+    old_env = os.environ.get("PUP_DISABLE_CALLBACK_PLUGIN_LOADING")
+    os.environ["PUP_DISABLE_CALLBACK_PLUGIN_LOADING"] = "1"
+
     saved_load = callbacks.get_callbacks("load_prompt")
     saved_model = callbacks.get_callbacks("get_model_system_prompt")
     callbacks.clear_callbacks("load_prompt")
@@ -27,6 +33,12 @@ def isolated_prompt_callbacks():
             callbacks.register_callback("load_prompt", callback)
         for callback in saved_model:
             callbacks.register_callback("get_model_system_prompt", callback)
+
+        # Restore environment
+        if old_env is None:
+            os.environ.pop("PUP_DISABLE_CALLBACK_PLUGIN_LOADING", None)
+        else:
+            os.environ["PUP_DISABLE_CALLBACK_PLUGIN_LOADING"] = old_env
 
 
 def _assemble_system_prompt(base_prompt: str) -> str:

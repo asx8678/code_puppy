@@ -116,6 +116,13 @@ def isolate_config_between_tests(tmp_path_factory):
     except Exception:
         pass  # Module may not be loaded in all test contexts
 
+    # Reset global message queue
+    try:
+        from code_puppy.messaging.message_queue import reset_global_queue_for_tests
+        reset_global_queue_for_tests()
+    except Exception:
+        pass  # Module may not be loaded in all test contexts
+
     # Reset callback registrations to prevent cross-test pollution
     try:
         from code_puppy.callbacks import _reset_for_tests
@@ -156,6 +163,13 @@ def isolate_config_between_tests(tmp_path_factory):
     try:
         from code_puppy.plugins.pack_parallelism.run_limiter import reset_run_limiter_for_tests
         reset_run_limiter_for_tests()
+    except Exception:
+        pass  # Module may not be loaded in all test contexts
+
+    # Reset global message queue
+    try:
+        from code_puppy.messaging.message_queue import reset_global_queue_for_tests
+        reset_global_queue_for_tests()
     except Exception:
         pass  # Module may not be loaded in all test contexts
 
