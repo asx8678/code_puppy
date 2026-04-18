@@ -369,6 +369,7 @@ async def call_elixir_agent_manager(
         return {"status": "timeout", "fallback": True}
 
 
+<<<<<<< HEAD
 async def call_elixir_round_robin(
     method: str, params: dict[str, Any], timeout: float = 10.0
 ) -> dict[str, Any]:
@@ -382,6 +383,23 @@ async def call_elixir_round_robin(
         method: Round-robin method name (e.g., "round_robin.get_next",
                 "round_robin.get_current", "round_robin.reset",
                 "round_robin.get_state", "round_robin.configure")
+=======
+async def call_elixir_model_packs(
+    method: str, params: dict[str, Any], timeout: float = 10.0
+) -> dict[str, Any]:
+    """Call a model packs method on the Elixir control plane (bd-132).
+
+    Specialized wrapper around call_method for model pack operations.
+    Used to delegate model pack management to the Elixir control plane when available.
+    Falls back to local execution on timeout/connection errors.
+
+    Args:
+        method: Model packs method name (e.g., "model_packs.get_pack",
+                "model_packs.list_packs", "model_packs.set_current_pack",
+                "model_packs.get_current_pack", "model_packs.get_model_for_role",
+                "model_packs.get_fallback_chain", "model_packs.create_pack",
+                "model_packs.delete_pack", "model_packs.reload")
+>>>>>>> feature/bd-132-model-packs-elixir
         params: Method parameters dict
         timeout: Maximum seconds to wait for response
 
@@ -647,4 +665,6 @@ __all__ = [
     "call_elixir_agent_manager",
     # Round-robin bridge support (bd-134)
     "call_elixir_round_robin",
+    # Model packs bridge support (bd-132)
+    "call_elixir_model_packs",
 ]

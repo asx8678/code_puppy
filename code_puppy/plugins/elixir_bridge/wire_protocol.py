@@ -1394,6 +1394,56 @@ def from_wire_params(method: str, params: dict[str, Any]) -> dict[str, Any]:
             )
         return {"agent_name": str(params["agent_name"])}
 
+    # Model packs methods (bd-132)
+    elif normalized_method == "model_packs.get_pack":
+        return {"name": str(params.get("name", ""))} if params else {}
+
+    elif normalized_method == "model_packs.list_packs":
+        return {}  # No params needed
+
+    elif normalized_method == "model_packs.set_current_pack":
+        if "name" not in params:
+            raise WireMethodError(
+                "model_packs.set_current_pack requires 'name' param", INVALID_PARAMS
+            )
+        return {"name": str(params["name"])}
+
+    elif normalized_method == "model_packs.get_current_pack":
+        return {}  # No params needed
+
+    elif normalized_method == "model_packs.get_model_for_role":
+        return {"role": str(params.get("role", ""))} if params else {}
+
+    elif normalized_method == "model_packs.get_fallback_chain":
+        return {"role": str(params.get("role", ""))} if params else {}
+
+    elif normalized_method == "model_packs.create_pack":
+        if "name" not in params:
+            raise WireMethodError(
+                "model_packs.create_pack requires 'name' param", INVALID_PARAMS
+            )
+        if "description" not in params:
+            raise WireMethodError(
+                "model_packs.create_pack requires 'description' param", INVALID_PARAMS
+            )
+        result: dict[str, Any] = {
+            "name": str(params["name"]),
+            "description": str(params["description"]),
+            "roles": dict(params.get("roles", {})),
+            "default_role": str(params.get("default_role", "coder")),
+        }
+        return result
+
+    elif normalized_method == "model_packs.delete_pack":
+        if "name" not in params:
+            raise WireMethodError(
+                "model_packs.delete_pack requires 'name' param", INVALID_PARAMS
+            )
+        return {"name": str(params["name"])}
+
+    elif normalized_method == "model_packs.reload":
+        return {}  # No params needed
+
     else:
         raise WireMethodError(f"Unknown method: {method}", METHOD_NOT_FOUND)
 
