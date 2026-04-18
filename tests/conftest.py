@@ -184,6 +184,7 @@ def pytest_sessionfinish(session, exitstatus):
         ("code_puppy.async_utils", "_executor"),
         ("code_puppy.summarization_agent", "_thread_pool"),
         ("code_puppy.session_storage", "_autosave_executor"),
+        ("code_puppy.api.routers.sessions", "_executor"),
     ]:
         try:
             mod = importlib.import_module(module_path)
