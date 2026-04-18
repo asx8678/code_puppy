@@ -168,6 +168,10 @@ class ElixirTransport:
         logger.debug(f"Working directory: {self.project_path}")
 
         try:
+            # Disable Erlang BREAK handler and isolate from terminal signals
+            # so Ctrl+C in the Python terminal doesn't corrupt the JSON-RPC stream
+            env = os.environ.copy()
+            env["ERL_AFLAGS"] = "+B"  # Disable interactive BREAK handler
             self._process = subprocess.Popen(
                 cmd,
                 stdin=subprocess.PIPE,
@@ -176,6 +180,8 @@ class ElixirTransport:
                 text=True,
                 bufsize=1,  # Line buffered
                 cwd=self.project_path,
+                start_new_session=True,  # Isolate from terminal SIGINT
+                env=env,
             )
         except OSError as e:
             raise ElixirTransportError(f"Failed to start Elixir service: {e}")
