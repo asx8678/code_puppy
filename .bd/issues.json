@@ -2203,7 +2203,20 @@
       "created_at": "2026-04-18T01:27:52.588369",
       "updated_at": "2026-04-18T01:27:54.692342",
       "comments": []
+    },
+    "bd-117": {
+      "id": "bd-117",
+      "title": "Fix test_list_files_performance.py import error",
+      "description": "Test imports _list_files and MAX_LIST_FILES_ENTRIES from file_operations but these were removed/renamed during Elixir migration.",
+      "status": "open",
+      "priority": 1,
+      "type": "task",
+      "labels": [],
+      "dependencies": {},
+      "created_at": "2026-04-18T09:38:17.455671",
+      "updated_at": "2026-04-18T09:38:17.455679",
+      "comments": []
     }
   },
-  "counter": 116
+  "counter": 117
 }
