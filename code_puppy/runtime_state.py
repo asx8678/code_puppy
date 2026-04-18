@@ -43,6 +43,8 @@ _CURRENT_AUTOSAVE_ID: str | None = None
 _SESSION_MODEL: str | None = None
 
 
+_ElixirTransportFailure = object()
+
 # =============================================================================
 # Elixir Routing Helpers (bd-117)
 # =============================================================================
@@ -51,27 +53,36 @@ _SESSION_MODEL: str | None = None
 def _get_transport() -> "ElixirTransport":  # type: ignore # noqa: F821
     """Get the shared transport singleton from elixir_transport_helpers."""
     from code_puppy.elixir_transport_helpers import get_transport
+
     return get_transport()
 
 
-def _try_elixir_get_autosave_id() -> str | None:
-    """Try to get autosave ID from Elixir, return None on failure."""
+def _try_elixir_get_autosave_id() -> tuple[bool, str | None]:
+    """Try to get autosave ID from Elixir.
+
+    Returns:
+        (True, autosave_id) on success, (False, None) on transport failure.
+    """
     try:
         transport = _get_transport()
         result = transport._send_request("runtime_get_autosave_id", {})
-        return result.get("autosave_id")
+        return True, result.get("autosave_id")
     except Exception:
-        return None  # Fall back to Python
+        return False, None  # Fall back to Python
 
 
-def _try_elixir_get_autosave_session_name() -> str | None:
-    """Try to get autosave session name from Elixir, return None on failure."""
+def _try_elixir_get_autosave_session_name() -> tuple[bool, str | None]:
+    """Try to get autosave session name from Elixir.
+
+    Returns:
+        (True, session_name) on success, (False, None) on transport failure.
+    """
     try:
         transport = _get_transport()
         result = transport._send_request("runtime_get_autosave_session_name", {})
-        return result.get("session_name")
+        return True, result.get("session_name")
     except Exception:
-        return None  # Fall back to Python
+        return False, None  # Fall back to Python
 
 
 def _try_elixir_rotate_autosave_id() -> str | None:
@@ -93,8 +104,7 @@ def _try_elixir_set_autosave_from_session(session_name: str) -> str | None:
     try:
         transport = _get_transport()
         result = transport._send_request(
-            "runtime_set_autosave_from_session",
-            {"session_name": session_name}
+            "runtime_set_autosave_from_session", {"session_name": session_name}
         )
         autosave_id = result.get("autosave_id")
         # Update Python cache to stay in sync
@@ -118,14 +128,18 @@ def _try_elixir_reset_autosave_id() -> bool | None:
         return None  # Fall back to Python
 
 
-def _try_elixir_get_session_model() -> str | None:
-    """Try to get session model from Elixir, return None on failure."""
+def _try_elixir_get_session_model() -> tuple[bool, str | None]:
+    """Try to get session model from Elixir.
+
+    Returns:
+        (True, model) on success (including model=None), (False, None) on transport failure.
+    """
     try:
         transport = _get_transport()
         result = transport._send_request("runtime_get_session_model", {})
-        return result.get("session_model")
+        return True, result.get("session_model")
     except Exception:
-        return None  # Fall back to Python
+        return False, None  # Fall back to Python
 
 
 def _try_elixir_set_session_model(model: str | None) -> bool | None:
@@ -154,23 +168,28 @@ def _try_elixir_reset_session_model() -> bool | None:
         return None  # Fall back to Python
 
 
-def _try_elixir_get_state() -> dict[str, Any] | None:
-    """Try to get full runtime state from Elixir, return None on failure."""
+def _try_elixir_get_state() -> tuple[bool, dict[str, Any] | None]:
+    """Try to get full runtime state from Elixir.
+
+    Returns:
+        (True, state_dict) on success, (False, None) on transport failure.
+    """
     try:
         transport = _get_transport()
         result = transport._send_request("runtime_get_state", {})
-        return {
+        return True, {
             "autosave_id": result.get("autosave_id"),
             "session_model": result.get("session_model"),
             "session_start_time": result.get("session_start_time"),
         }
     except Exception:
-        return None  # Fall back to Python
+        return False, None  # Fall back to Python
 
 
 # =============================================================================
 # Autosave Session State
 # =============================================================================
+
 
 def get_current_autosave_id() -> str:
     """Get or create the current autosave session ID for this process.
@@ -180,13 +199,15 @@ def get_current_autosave_id() -> str:
 
     Routing priority (bd-117): Elixir → Python
     """
+    global _CURRENT_AUTOSAVE_ID
     # Try Elixir first
-    elixir_result = _try_elixir_get_autosave_id()
-    if elixir_result is not None:
-        return elixir_result
+    elixir_success, elixir_value = _try_elixir_get_autosave_id()
+    if elixir_success:
+        # Sync Python cache so fallback uses last known good state
+        _CURRENT_AUTOSAVE_ID = elixir_value
+        return elixir_value
 
     # Fall back to Python
-    global _CURRENT_AUTOSAVE_ID
     if not _CURRENT_AUTOSAVE_ID:
         # Use a full timestamp so tests and UX can predict the name if needed
         _CURRENT_AUTOSAVE_ID = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -218,9 +239,9 @@ def get_current_autosave_session_name() -> str:
     Routing priority (bd-117): Elixir → Python
     """
     # Try Elixir first
-    elixir_result = _try_elixir_get_autosave_session_name()
-    if elixir_result is not None:
-        return elixir_result
+    elixir_success, elixir_value = _try_elixir_get_autosave_session_name()
+    if elixir_success:
+        return elixir_value
 
     # Fall back to Python
     return f"auto_session_{get_current_autosave_id()}"
@@ -271,6 +292,7 @@ def reset_autosave_id() -> None:
 # Session Model State
 # =============================================================================
 
+
 def get_session_model() -> str | None:
     """Get the cached session model name.
 
@@ -279,13 +301,15 @@ def get_session_model() -> str | None:
 
     Routing priority (bd-117): Elixir → Python
     """
+    global _SESSION_MODEL
     # Try Elixir first
-    elixir_result = _try_elixir_get_session_model()
-    if elixir_result is not None:
-        return elixir_result
+    elixir_success, elixir_value = _try_elixir_get_session_model()
+    if elixir_success:
+        # Sync Python cache so fallback uses last known good state
+        _SESSION_MODEL = elixir_value
+        return elixir_value
 
     # Fall back to Python
-    global _SESSION_MODEL
     return _SESSION_MODEL
 
 
@@ -333,6 +357,7 @@ def reset_session_model() -> None:
 # Utility Functions
 # =============================================================================
 
+
 def finalize_autosave_session() -> str:
     """Persist the current autosave snapshot and rotate to a fresh session.
 
@@ -363,9 +388,13 @@ def get_state() -> dict[str, Any]:
         Dict with runtime state information
     """
     # Try Elixir first
-    elixir_result = _try_elixir_get_state()
-    if elixir_result is not None:
-        return elixir_result
+    elixir_success, elixir_value = _try_elixir_get_state()
+    if elixir_success and elixir_value is not None:
+        # Sync Python cache so fallback uses last known good state
+        global _CURRENT_AUTOSAVE_ID, _SESSION_MODEL
+        _CURRENT_AUTOSAVE_ID = elixir_value.get("autosave_id")
+        _SESSION_MODEL = elixir_value.get("session_model")
+        return elixir_value
 
     # Fall back to Python
     return {
@@ -378,6 +407,7 @@ def get_state() -> dict[str, Any]:
 # =============================================================================
 # Diagnostics
 # =============================================================================
+
 
 def is_using_elixir() -> bool:
     """Check if the Elixir backend is currently connected.

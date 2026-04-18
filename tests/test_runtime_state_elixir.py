@@ -7,7 +7,7 @@ ensuring:
 3. Existing behavior remains unchanged when transport is unavailable
 """
 
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 import pytest
 
@@ -35,7 +35,9 @@ class MockTransport:
         # Default responses for common methods
         defaults = {
             "runtime_get_autosave_id": {"autosave_id": "20250115_120000"},
-            "runtime_get_autosave_session_name": {"session_name": "auto_session_20250115_120000"},
+            "runtime_get_autosave_session_name": {
+                "session_name": "auto_session_20250115_120000"
+            },
             "runtime_rotate_autosave_id": {"autosave_id": "20250115_120001"},
             "runtime_set_autosave_from_session": {"autosave_id": "extracted_id"},
             "runtime_reset_autosave_id": {"reset": True},
@@ -71,7 +73,7 @@ class TestElixirPath:
         """Test get_current_autosave_id uses Elixir when available."""
         mock = MockTransport()
 
-        with patch.object(runtime_state, '_get_transport', return_value=mock):
+        with patch.object(runtime_state, "_get_transport", return_value=mock):
             result = runtime_state.get_current_autosave_id()
 
         assert result == "20250115_120000"
@@ -81,7 +83,7 @@ class TestElixirPath:
         """Test get_current_autosave_session_name uses Elixir when available."""
         mock = MockTransport()
 
-        with patch.object(runtime_state, '_get_transport', return_value=mock):
+        with patch.object(runtime_state, "_get_transport", return_value=mock):
             result = runtime_state.get_current_autosave_session_name()
 
         assert result == "auto_session_20250115_120000"
@@ -91,7 +93,7 @@ class TestElixirPath:
         """Test rotate_autosave_id uses Elixir when available."""
         mock = MockTransport()
 
-        with patch.object(runtime_state, '_get_transport', return_value=mock):
+        with patch.object(runtime_state, "_get_transport", return_value=mock):
             result = runtime_state.rotate_autosave_id()
 
         assert result == "20250115_120001"
@@ -103,13 +105,16 @@ class TestElixirPath:
         """Test set_current_autosave_from_session_name uses Elixir when available."""
         mock = MockTransport()
 
-        with patch.object(runtime_state, '_get_transport', return_value=mock):
+        with patch.object(runtime_state, "_get_transport", return_value=mock):
             result = runtime_state.set_current_autosave_from_session_name(
                 "auto_session_20250115_120000"
             )
 
         assert result == "extracted_id"
-        assert ("runtime_set_autosave_from_session", {"session_name": "auto_session_20250115_120000"}) in mock.call_history
+        assert (
+            "runtime_set_autosave_from_session",
+            {"session_name": "auto_session_20250115_120000"},
+        ) in mock.call_history
         # Should update Python cache to stay in sync
         assert runtime_state._CURRENT_AUTOSAVE_ID == "extracted_id"
 
@@ -118,7 +123,7 @@ class TestElixirPath:
         runtime_state._CURRENT_AUTOSAVE_ID = "some_id"
         mock = MockTransport()
 
-        with patch.object(runtime_state, '_get_transport', return_value=mock):
+        with patch.object(runtime_state, "_get_transport", return_value=mock):
             runtime_state.reset_autosave_id()
 
         assert ("runtime_reset_autosave_id", {}) in mock.call_history
@@ -129,7 +134,7 @@ class TestElixirPath:
         """Test get_session_model uses Elixir when available."""
         mock = MockTransport()
 
-        with patch.object(runtime_state, '_get_transport', return_value=mock):
+        with patch.object(runtime_state, "_get_transport", return_value=mock):
             result = runtime_state.get_session_model()
 
         assert result == "claude-3-5-sonnet"
@@ -139,10 +144,13 @@ class TestElixirPath:
         """Test set_session_model uses Elixir when available."""
         mock = MockTransport()
 
-        with patch.object(runtime_state, '_get_transport', return_value=mock):
+        with patch.object(runtime_state, "_get_transport", return_value=mock):
             runtime_state.set_session_model("claude-3-5-sonnet")
 
-        assert ("runtime_set_session_model", {"model": "claude-3-5-sonnet"}) in mock.call_history
+        assert (
+            "runtime_set_session_model",
+            {"model": "claude-3-5-sonnet"},
+        ) in mock.call_history
         # Should update Python cache to stay in sync
         assert runtime_state._SESSION_MODEL == "claude-3-5-sonnet"
 
@@ -150,7 +158,7 @@ class TestElixirPath:
         """Test set_session_model with None uses Elixir when available."""
         mock = MockTransport()
 
-        with patch.object(runtime_state, '_get_transport', return_value=mock):
+        with patch.object(runtime_state, "_get_transport", return_value=mock):
             runtime_state.set_session_model(None)
 
         assert ("runtime_set_session_model", {"model": None}) in mock.call_history
@@ -161,7 +169,7 @@ class TestElixirPath:
         runtime_state._SESSION_MODEL = "some_model"
         mock = MockTransport()
 
-        with patch.object(runtime_state, '_get_transport', return_value=mock):
+        with patch.object(runtime_state, "_get_transport", return_value=mock):
             runtime_state.reset_session_model()
 
         assert ("runtime_reset_session_model", {}) in mock.call_history
@@ -172,7 +180,7 @@ class TestElixirPath:
         """Test get_state uses Elixir when available."""
         mock = MockTransport()
 
-        with patch.object(runtime_state, '_get_transport', return_value=mock):
+        with patch.object(runtime_state, "_get_transport", return_value=mock):
             result = runtime_state.get_state()
 
         assert result["autosave_id"] == "20250115_120000"
@@ -184,7 +192,7 @@ class TestElixirPath:
         """Test is_using_elixir returns True when transport works."""
         mock = MockTransport()
 
-        with patch.object(runtime_state, '_get_transport', return_value=mock):
+        with patch.object(runtime_state, "_get_transport", return_value=mock):
             result = runtime_state.is_using_elixir()
 
         assert result is True
@@ -197,7 +205,7 @@ class TestPythonFallback:
         """Test get_current_autosave_id falls back to Python on transport error."""
         mock = MockTransport(raise_on_call=True)
 
-        with patch.object(runtime_state, '_get_transport', return_value=mock):
+        with patch.object(runtime_state, "_get_transport", return_value=mock):
             result = runtime_state.get_current_autosave_id()
 
         # Should return a timestamp-based ID (Python fallback)
@@ -209,7 +217,7 @@ class TestPythonFallback:
         mock = MockTransport(raise_on_call=True)
         runtime_state._CURRENT_AUTOSAVE_ID = "20250115_120000"
 
-        with patch.object(runtime_state, '_get_transport', return_value=mock):
+        with patch.object(runtime_state, "_get_transport", return_value=mock):
             result = runtime_state.get_current_autosave_session_name()
 
         assert result == "auto_session_20250115_120000"
@@ -219,7 +227,7 @@ class TestPythonFallback:
         mock = MockTransport(raise_on_call=True)
         old_id = runtime_state._CURRENT_AUTOSAVE_ID = "old_id"
 
-        with patch.object(runtime_state, '_get_transport', return_value=mock):
+        with patch.object(runtime_state, "_get_transport", return_value=mock):
             result = runtime_state.rotate_autosave_id()
 
         # Should return a new timestamp-based ID
@@ -230,7 +238,7 @@ class TestPythonFallback:
         """Test set_current_autosave_from_session_name falls back to Python."""
         mock = MockTransport(raise_on_call=True)
 
-        with patch.object(runtime_state, '_get_transport', return_value=mock):
+        with patch.object(runtime_state, "_get_transport", return_value=mock):
             result = runtime_state.set_current_autosave_from_session_name(
                 "auto_session_20250115_120000"
             )
@@ -242,7 +250,7 @@ class TestPythonFallback:
         """Test set_current_autosave_from_session_name with non-standard name."""
         mock = MockTransport(raise_on_call=True)
 
-        with patch.object(runtime_state, '_get_transport', return_value=mock):
+        with patch.object(runtime_state, "_get_transport", return_value=mock):
             result = runtime_state.set_current_autosave_from_session_name(
                 "custom_session_name"
             )
@@ -256,7 +264,7 @@ class TestPythonFallback:
         mock = MockTransport(raise_on_call=True)
         runtime_state._CURRENT_AUTOSAVE_ID = "some_id"
 
-        with patch.object(runtime_state, '_get_transport', return_value=mock):
+        with patch.object(runtime_state, "_get_transport", return_value=mock):
             runtime_state.reset_autosave_id()
 
         assert runtime_state._CURRENT_AUTOSAVE_ID is None
@@ -266,7 +274,7 @@ class TestPythonFallback:
         mock = MockTransport(raise_on_call=True)
         runtime_state._SESSION_MODEL = "cached-model"
 
-        with patch.object(runtime_state, '_get_transport', return_value=mock):
+        with patch.object(runtime_state, "_get_transport", return_value=mock):
             result = runtime_state.get_session_model()
 
         assert result == "cached-model"
@@ -275,7 +283,7 @@ class TestPythonFallback:
         """Test set_session_model falls back to Python on transport error."""
         mock = MockTransport(raise_on_call=True)
 
-        with patch.object(runtime_state, '_get_transport', return_value=mock):
+        with patch.object(runtime_state, "_get_transport", return_value=mock):
             runtime_state.set_session_model("new-model")
 
         assert runtime_state._SESSION_MODEL == "new-model"
@@ -285,7 +293,7 @@ class TestPythonFallback:
         mock = MockTransport(raise_on_call=True)
         runtime_state._SESSION_MODEL = "old-model"
 
-        with patch.object(runtime_state, '_get_transport', return_value=mock):
+        with patch.object(runtime_state, "_get_transport", return_value=mock):
             runtime_state.reset_session_model()
 
         assert runtime_state._SESSION_MODEL is None
@@ -296,7 +304,7 @@ class TestPythonFallback:
         runtime_state._CURRENT_AUTOSAVE_ID = "test_id"
         runtime_state._SESSION_MODEL = "test_model"
 
-        with patch.object(runtime_state, '_get_transport', return_value=mock):
+        with patch.object(runtime_state, "_get_transport", return_value=mock):
             result = runtime_state.get_state()
 
         assert result["autosave_id"] == "test_id"
@@ -307,7 +315,7 @@ class TestPythonFallback:
         """Test is_using_elixir returns False when transport fails."""
         mock = MockTransport(raise_on_call=True)
 
-        with patch.object(runtime_state, '_get_transport', return_value=mock):
+        with patch.object(runtime_state, "_get_transport", return_value=mock):
             result = runtime_state.is_using_elixir()
 
         assert result is False
@@ -383,7 +391,7 @@ class TestIntegration:
         """
         mock = MockTransport()
 
-        with patch.object(runtime_state, '_get_transport', return_value=mock):
+        with patch.object(runtime_state, "_get_transport", return_value=mock):
             # Rotate via Elixir updates the cache
             elixir_id = runtime_state.rotate_autosave_id()
             assert elixir_id == "20250115_120001"
@@ -400,7 +408,7 @@ class TestIntegration:
         mock = MockTransport()
         runtime_state._CURRENT_AUTOSAVE_ID = "old_id"
 
-        with patch.object(runtime_state, '_get_transport', return_value=mock):
+        with patch.object(runtime_state, "_get_transport", return_value=mock):
             new_id = runtime_state.rotate_autosave_id()
 
         # Cache should be updated
@@ -411,8 +419,88 @@ class TestIntegration:
         """Test that set_session_model via Elixir updates Python cache."""
         mock = MockTransport()
 
-        with patch.object(runtime_state, '_get_transport', return_value=mock):
+        with patch.object(runtime_state, "_get_transport", return_value=mock):
             runtime_state.set_session_model("new-model")
 
         # Cache should be updated
         assert runtime_state._SESSION_MODEL == "new-model"
+
+
+class TestRegression:
+    """Regression tests for shepherd review feedback (bd-117)."""
+
+    def test_elixir_returns_none_session_model_does_not_fall_back_to_stale_cache(
+        self, reset_state
+    ):
+        """Elixir returning {"session_model": None} should sync cache to None,
+        not fall back to a stale Python cache value."""
+        runtime_state._SESSION_MODEL = "stale-cached-model"
+        mock = MockTransport(
+            responses={"runtime_get_session_model": {"session_model": None}}
+        )
+        with patch.object(runtime_state, "_get_transport", return_value=mock):
+            result = runtime_state.get_session_model()
+        assert result is None
+        assert runtime_state._SESSION_MODEL is None
+
+    def test_elixir_returns_none_autosave_id_does_not_fall_back_to_stale_cache(
+        self, reset_state
+    ):
+        """Elixir returning {"autosave_id": None} should sync cache to None,
+        not fall back to a stale Python cache value."""
+        runtime_state._CURRENT_AUTOSAVE_ID = "stale_id"
+        mock = MockTransport(
+            responses={"runtime_get_autosave_id": {"autosave_id": None}}
+        )
+        with patch.object(runtime_state, "_get_transport", return_value=mock):
+            result = runtime_state.get_current_autosave_id()
+        assert result is None
+        assert runtime_state._CURRENT_AUTOSAVE_ID is None
+
+    def test_successful_elixir_read_then_transport_failure_uses_cached_state(
+        self, reset_state
+    ):
+        """After a successful Elixir read, transport failure should fall back
+        to the last known good state synced from Elixir."""
+        mock = MockTransport()
+        with patch.object(runtime_state, "_get_transport", return_value=mock):
+            result1 = runtime_state.get_session_model()
+            assert result1 == "claude-3-5-sonnet"
+            assert runtime_state._SESSION_MODEL == "claude-3-5-sonnet"
+            mock.raise_on_call = True
+            result2 = runtime_state.get_session_model()
+        assert result2 == "claude-3-5-sonnet"
+
+    def test_successful_elixir_read_then_transport_failure_uses_cached_autosave_id(
+        self, reset_state
+    ):
+        """After a successful Elixir read, transport failure should fall back
+        to the last known good autosave ID synced from Elixir."""
+        mock = MockTransport()
+        with patch.object(runtime_state, "_get_transport", return_value=mock):
+            result1 = runtime_state.get_current_autosave_id()
+            assert result1 == "20250115_120000"
+            assert runtime_state._CURRENT_AUTOSAVE_ID == "20250115_120000"
+            mock.raise_on_call = True
+            result2 = runtime_state.get_current_autosave_id()
+        assert result2 == "20250115_120000"
+
+    def test_get_state_syncs_cache_on_success(self, reset_state):
+        """Successful get_state via Elixir should sync both cache fields."""
+        mock = MockTransport()
+        with patch.object(runtime_state, "_get_transport", return_value=mock):
+            result = runtime_state.get_state()
+        assert result["autosave_id"] == "20250115_120000"
+        assert result["session_model"] == "claude-3-5-sonnet"
+        assert runtime_state._CURRENT_AUTOSAVE_ID == "20250115_120000"
+        assert runtime_state._SESSION_MODEL == "claude-3-5-sonnet"
+
+    def test_get_state_then_transport_failure_uses_cached_state(self, reset_state):
+        """After successful get_state, transport failure falls back to synced cache."""
+        mock = MockTransport()
+        with patch.object(runtime_state, "_get_transport", return_value=mock):
+            runtime_state.get_state()
+            mock.raise_on_call = True
+            result = runtime_state.get_state()
+        assert result["autosave_id"] == "20250115_120000"
+        assert result["session_model"] == "claude-3-5-sonnet"
