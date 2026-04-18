@@ -85,14 +85,18 @@ defmodule Mix.Tasks.CodePuppy.StdioService do
 
   @impl true
   def run(_args) do
+    # Silence Mix output to keep stdout clean for JSON-RPC messages
+    # This must happen before any app startup that might emit to stdout
+    Mix.shell(Mix.Shell.Quiet)
+
+    # Redirect all logging to stderr BEFORE starting any applications
+    # All logging must go to stderr for JSON-RPC protocol compliance
+    Logger.configure_backend(:console, device: :stderr)
+    Logger.put_application_level(:code_puppy_control, :none)
+
     # Start required applications without the full Phoenix stack
     Application.ensure_all_started(:logger)
     Application.ensure_all_started(:jason)
-
-    # Suppress application logs during stdio service operation
-    # All logging must go to stderr, or be suppressed for JSON-RPC protocol compliance
-    Logger.configure_backend(:console, device: :stderr)
-    Logger.put_application_level(:code_puppy_control, :none)
 
     # Ensure the required modules are available
     Code.ensure_loaded(CodePuppyControl.FileOps)
@@ -106,9 +110,6 @@ defmodule Mix.Tasks.CodePuppy.StdioService do
     {:ok, _} = CodePuppyControl.ModelRegistry.start_link([])
     {:ok, _} = CodePuppyControl.ModelAvailability.start_link([])
     {:ok, _} = CodePuppyControl.ModelPacks.start_link([])
-
-    # Give the service a moment to suppress any startup output
-    Process.sleep(100)
 
     # Run the stdio service (blocks until EOF)
     CodePuppyControl.Transport.StdioService.run()
