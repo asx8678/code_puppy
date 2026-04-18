@@ -346,10 +346,17 @@ class ElixirTransport:
 
             # Read response (skip non-JSON lines that may be warnings/startup messages)
             max_non_json_reads: int = 50
+            max_wait_seconds: float = 5.0
+            start_time = time.time()
             response_line: str = ""
             response: dict[str, Any] | None = None
 
             for _ in range(max_non_json_reads):
+                # Time budget check before blocking readline()
+                if time.time() - start_time > max_wait_seconds:
+                    raise ElixirTransportError(
+                        f"Timed out after {max_wait_seconds}s waiting for valid JSON response with id={request_id}"
+                    )
                 line = self._process.stdout.readline()
                 if not line:
                     raise ElixirTransportError(
@@ -367,7 +374,9 @@ class ElixirTransport:
                         break
                     else:
                         # Valid JSON but wrong id - could be a stray response
-                        logger.warning(f"Discarding response with mismatched id: {line[:100]}")
+                        logger.warning(
+                            f"Discarding response with mismatched id: {line[:100]}"
+                        )
                         response = None
                 except json.JSONDecodeError:
                     # Not valid JSON - log and continue searching
