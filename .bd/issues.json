@@ -2208,15 +2208,30 @@
       "id": "bd-117",
       "title": "Fix test_list_files_performance.py import error",
       "description": "Test imports _list_files and MAX_LIST_FILES_ENTRIES from file_operations but these were removed/renamed during Elixir migration.",
-      "status": "open",
+      "status": "closed",
       "priority": 1,
       "type": "task",
       "labels": [],
       "dependencies": {},
       "created_at": "2026-04-18T09:38:17.455671",
-      "updated_at": "2026-04-18T09:38:17.455679",
+      "updated_at": "2026-04-18T09:38:43.948348",
+      "comments": []
+    },
+    "bd-118": {
+      "id": "bd-118",
+      "title": "Fix broken test imports after Elixir migration",
+      "description": "Multiple test files import _read_file, _list_files, _grep_search which were removed during bd-66 Elixir migration. Need to update or remove: test_read_file_validation.py, test_code_context.py, test_constants.py, test_proactive_guidance*.py, test_security.py, etc.",
+      "status": "open",
+      "priority": 1,
+      "type": "task",
+      "labels": [
+        "bug,tests"
+      ],
+      "dependencies": {},
+      "created_at": "2026-04-18T09:39:12.419216",
+      "updated_at": "2026-04-18T09:39:12.419225",
       "comments": []
     }
   },
-  "counter": 117
+  "counter": 118
 }
