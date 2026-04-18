@@ -4,6 +4,9 @@ This module centralises the JSON + metadata handling that used to live in
 both the CLI command handler and the auto-save feature. Keeping it here helps
 us avoid duplication while staying inside the Zen-of-Python sweet spot: simple
 is better than complex, nested side effects are worse than deliberate helpers.
+
+bd-137: Migrated to Elixir/Ecto with SQLite backend. File-based storage is
+retained as fallback when Elixir transport is unavailable.
 """
 
 from __future__ import annotations
@@ -16,6 +19,9 @@ import json
 import os
 import logging
 from concurrent.futures import ThreadPoolExecutor
+
+# bd-137: Import Elixir bridge (lazy-loaded)
+_use_elixir_storage: bool = os.environ.get("PUP_SESSION_USE_SQLITE", "1") == "1"
 
 # SECURITY FIX #zvx9: Pickle has been completely removed to prevent RCE attacks.
 # Session files now use only secure JSON serialization with HMAC integrity.
@@ -354,6 +360,47 @@ def save_session(
     compacted_hashes: list | None = None,
     precomputed_total: int | None = None,
 ) -> SessionMetadata:
+    # bd-137: Try Elixir SQLite storage first
+    if _use_elixir_for_session():
+        try:
+            from code_puppy import session_storage_bridge
+
+            # Convert history to serializable format
+            try:
+                from pydantic_ai.messages import ModelMessagesTypeAdapter
+                serializable_history = ModelMessagesTypeAdapter.dump_python(history, mode="json")
+            except Exception:
+                serializable_history = history
+
+            total_tokens = (
+                precomputed_total
+                if (precomputed_total is not None and precomputed_total >= 0)
+                else sum(token_estimator(message) for message in history)
+            )
+
+            result = session_storage_bridge.save_session(
+                name=session_name,
+                history=serializable_history,
+                compacted_hashes=compacted_hashes,
+                total_tokens=total_tokens,
+                auto_saved=auto_saved,
+                timestamp=timestamp,
+            )
+
+            # Return metadata in expected format (without file paths for SQLite mode)
+            return SessionMetadata(
+                session_name=result.get("name", session_name),
+                timestamp=timestamp,
+                message_count=result.get("message_count", len(history)),
+                total_tokens=result.get("total_tokens", total_tokens),
+                pickle_path=Path(),  # Not applicable in SQLite mode
+                metadata_path=Path(),  # Not applicable in SQLite mode
+                auto_saved=auto_saved,
+            )
+        except Exception as exc:
+            logger.debug("Elixir session save failed, falling back to file: %s", exc)
+
+    # Legacy file-based storage
     ensure_directory(base_dir)
     paths = build_session_paths(base_dir, session_name)
 
@@ -452,15 +499,32 @@ def _parse_session_payload(data: Any) -> tuple[SessionHistory]:
 
 
 def load_session(
-    session_name: str, base_dir: Path, *, allow_legacy: bool = False
+    session_name: str, base_dir: Path | None = None, *, allow_legacy: bool = False
 ) -> SessionHistory:
     """Load message history from a session file.
 
     Returns only the message list.  Use :func:`load_session_with_hashes` when
     you also need the persisted compacted-message hashes.
+
+    bd-137: Prefers Elixir SQLite storage when available, falls back to file-based.
     """
     # Kept for API compatibility; legacy loading is always supported now.
     _ = allow_legacy
+
+    # Try Elixir bridge first (bd-137)
+    if _use_elixir_for_session():
+        try:
+            from code_puppy import session_storage_bridge
+            result = session_storage_bridge.load_session(name=session_name)
+            history = result.get("history", [])
+            return _deserialize_messages(history)
+        except Exception as exc:
+            logger.debug("Elixir session load failed, falling back: %s", exc)
+
+    # Legacy file-based fallback
+    if base_dir is None:
+        from code_puppy import config
+        base_dir = Path(config.DATA_DIR) / "subagent_sessions"
 
     paths = build_session_paths(base_dir, session_name)
     if not paths.pickle_path.exists():
@@ -473,8 +537,8 @@ def load_session(
 
 
 def load_session_with_hashes(
-    session_name: str, base_dir: Path
-) -> tuple[SessionHistory]:
+    session_name: str, base_dir: Path | None = None
+) -> tuple[SessionHistory, list]:
     """Load message history *and* compacted-message hashes from a session file.
 
     Returns:
@@ -484,7 +548,25 @@ def load_session_with_hashes(
     On corruption or deserialisation errors a user-visible warning is emitted
     (via ``code_puppy.messaging.emit_warning``) and ``([], [])`` is returned
     so callers get an empty session rather than an unhandled exception.
+
+    bd-137: Prefers Elixir SQLite storage when available, falls back to file-based.
     """
+    # Try Elixir bridge first (bd-137)
+    if _use_elixir_for_session():
+        try:
+            from code_puppy import session_storage_bridge
+            result = session_storage_bridge.load_session(name=session_name)
+            history = _deserialize_messages(result.get("history", []))
+            hashes = result.get("compacted_hashes", [])
+            return history, hashes
+        except Exception as exc:
+            logger.debug("Elixir session load_with_hashes failed, falling back: %s", exc)
+
+    # Legacy file-based fallback
+    if base_dir is None:
+        from code_puppy import config
+        base_dir = Path(config.DATA_DIR) / "subagent_sessions"
+
     paths = build_session_paths(base_dir, session_name)
     if not paths.pickle_path.exists():
         raise FileNotFoundError(paths.pickle_path)
@@ -543,15 +625,61 @@ def load_session_with_hashes(
         return [], []
 
 
-def list_sessions(base_dir: Path) -> list[str]:
+def _use_elixir_for_session() -> bool:
+    """Check if we should use Elixir storage (bd-137)."""
+    global _use_elixir_storage
+    if not _use_elixir_storage:
+        return False
+    try:
+        from code_puppy import session_storage_bridge
+        return session_storage_bridge.is_available()
+    except Exception:
+        return False
+
+
+def list_sessions(base_dir: Path | None = None) -> list[str]:
+    """List all session names.
+
+    bd-137: Prefers Elixir SQLite storage when available, falls back to file-based.
+    """
+    # Try Elixir bridge first (bd-137)
+    if _use_elixir_for_session():
+        try:
+            from code_puppy import session_storage_bridge
+            return session_storage_bridge.list_sessions()
+        except Exception as exc:
+            logger.debug("Elixir session list failed, falling back: %s", exc)
+
+    # Legacy file-based fallback
+    if base_dir is None:
+        from code_puppy import config
+        base_dir = Path(config.DATA_DIR) / "subagent_sessions"
+
     if not base_dir.exists():
         return []
     return sorted(path.stem for path in base_dir.glob("*.pkl"))
 
 
-def cleanup_sessions(base_dir: Path, max_sessions: int) -> list[str]:
+def cleanup_sessions(base_dir: Path | None = None, max_sessions: int = 10) -> list[str]:
+    """Clean up old sessions, keeping only the most recent N.
+
+    bd-137: Prefers Elixir SQLite storage when available, falls back to file-based.
+    """
     if max_sessions <= 0:
         return []
+
+    # Try Elixir bridge first (bd-137)
+    if _use_elixir_for_session():
+        try:
+            from code_puppy import session_storage_bridge
+            return session_storage_bridge.cleanup_sessions(max_sessions)
+        except Exception as exc:
+            logger.debug("Elixir session cleanup failed, falling back: %s", exc)
+
+    # Legacy file-based fallback
+    if base_dir is None:
+        from code_puppy import config
+        base_dir = Path(config.DATA_DIR) / "subagent_sessions"
 
     if not base_dir.exists():
         return []

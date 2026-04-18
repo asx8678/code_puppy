@@ -539,6 +539,152 @@ class ElixirTransport:
         return result.get("matches", [])
 
     # ============================================================================
+    # Session Storage API (bd-137: Ecto/SQLite backed)
+    # ============================================================================
+
+    def session_save(
+        self,
+        name: str,
+        history: list[dict[str, Any]],
+        compacted_hashes: list[str] | None = None,
+        total_tokens: int = 0,
+        auto_saved: bool = False,
+        timestamp: str | None = None,
+    ) -> dict[str, Any]:
+        """
+        Save a chat session to the database.
+
+        Args:
+            name: Session identifier
+            history: List of message dicts
+            compacted_hashes: List of hash strings for compacted messages
+            total_tokens: Total token count
+            auto_saved: Whether this was auto-saved
+            timestamp: ISO8601 timestamp (defaults to now)
+
+        Returns:
+            Dict with success, name, message_count, total_tokens fields
+
+        Raises:
+            ElixirTransportError: If the save fails
+        """
+        params: dict[str, Any] = {
+            "name": name,
+            "history": history,
+            "compacted_hashes": compacted_hashes or [],
+            "total_tokens": total_tokens,
+            "auto_saved": auto_saved,
+        }
+        if timestamp:
+            params["timestamp"] = timestamp
+
+        return self._send_request("session_save", params)
+
+    def session_load(self, name: str) -> dict[str, Any]:
+        """
+        Load a session by name.
+
+        Args:
+            name: Session identifier
+
+        Returns:
+            Dict with history and compacted_hashes fields
+
+        Raises:
+            ElixirTransportError: If the session doesn't exist or load fails
+        """
+        return self._send_request("session_load", {"name": name})
+
+    def session_load_full(self, name: str) -> dict[str, Any]:
+        """
+        Load a session with full metadata.
+
+        Args:
+            name: Session identifier
+
+        Returns:
+            Dict with full session details including name, history,
+            compacted_hashes, message_count, total_tokens,
+            auto_saved, timestamp, created_at, updated_at
+
+        Raises:
+            ElixirTransportError: If the session doesn't exist or load fails
+        """
+        return self._send_request("session_load_full", {"name": name})
+
+    def session_list(self) -> list[str]:
+        """
+        List all session names.
+
+        Returns:
+            Sorted list of session names
+        """
+        result = self._send_request("session_list", {})
+        return result.get("sessions", [])
+
+    def session_list_with_metadata(self) -> list[dict[str, Any]]:
+        """
+        List all sessions with metadata.
+
+        Returns:
+            List of session dicts sorted by timestamp (newest first)
+        """
+        result = self._send_request("session_list_with_metadata", {})
+        return result.get("sessions", [])
+
+    def session_delete(self, name: str) -> bool:
+        """
+        Delete a session by name.
+
+        Args:
+            name: Session identifier
+
+        Returns:
+            True if deleted (or didn't exist)
+
+        Raises:
+            ElixirTransportError: If deletion fails
+        """
+        result = self._send_request("session_delete", {"name": name})
+        return result.get("deleted", False)
+
+    def session_cleanup(self, max_sessions: int = 10) -> list[str]:
+        """
+        Clean up old sessions, keeping only the most recent N.
+
+        Args:
+            max_sessions: Maximum number of sessions to keep
+
+        Returns:
+            List of deleted session names
+        """
+        result = self._send_request("session_cleanup", {"max_sessions": max_sessions})
+        return result.get("deleted", [])
+
+    def session_exists(self, name: str) -> bool:
+        """
+        Check if a session exists.
+
+        Args:
+            name: Session identifier
+
+        Returns:
+            True if the session exists
+        """
+        result = self._send_request("session_exists", {"name": name})
+        return result.get("exists", False)
+
+    def session_count(self) -> int:
+        """
+        Get the total count of sessions.
+
+        Returns:
+            Total number of sessions
+        """
+        result = self._send_request("session_count", {})
+        return result.get("count", 0)
+
+    # ============================================================================
     # Context Manager Support
     # ============================================================================
 

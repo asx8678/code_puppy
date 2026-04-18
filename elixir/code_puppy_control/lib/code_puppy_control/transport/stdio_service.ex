@@ -52,10 +52,21 @@ defmodule CodePuppyControl.Transport.StdioService do
   - `agent_pinning.list` - List all agent-to-model pins
 
   ### Agent Session Operations (bd-65)
-  - `agent.session.save` - Save session history with metadata
-  - `agent.session.load` - Load session history from storage
+  - `agent.session.save` - Save session history with metadata (filesystem)
+  - `agent.session.load` - Load session history from storage (filesystem)
   - `agent.session.validate_id` - Validate session ID format (kebab-case)
   - `agent.session.sanitize_id` - Sanitize arbitrary string to valid session ID
+
+  ### Session Storage (bd-137) - SQLite/Ecto Backend
+  - `session_save` - Save session to SQLite database
+  - `session_load` - Load session from database (history + hashes)
+  - `session_load_full` - Load session with full metadata
+  - `session_list` - List all session names
+  - `session_list_with_metadata` - List sessions with metadata
+  - `session_delete` - Delete a session by name
+  - `session_cleanup` - Clean up old sessions keeping N most recent
+  - `session_exists` - Check if session exists
+  - `session_count` - Get total session count
   - `agent.list` - List all available agents
   - `agent.get_info` - Get info about a specific agent
   - `agent.context.filter` - Filter context for sub-agent (remove parent-specific keys)
@@ -2176,7 +2187,128 @@ defmodule CodePuppyControl.Transport.StdioService do
     end
   end
 
-  # Method not found handler
+  
+  # bd-137: Session Storage API (SQLite/Ecto backed)
+
+  defp handle_request("session_save", params, id) do
+    name = params["name"]
+    history = params["history"] || []
+    opts = [
+      compacted_hashes: params["compacted_hashes"] || [],
+      total_tokens: params["total_tokens"] || 0,
+      auto_saved: params["auto_saved"] || false,
+      timestamp: params["timestamp"]
+    ]
+
+    case CodePuppyControl.Sessions.save_session(name, history, opts) do
+      {:ok, session} ->
+        Protocol.encode_response(%{
+          "success" => true,
+          "name" => session.name,
+          "message_count" => session.message_count,
+          "total_tokens" => session.total_tokens
+        }, id)
+
+      {:error, changeset} ->
+        errors = traverse_changeset_errors(changeset)
+        Protocol.encode_error(-32000, "Session save failed: #{inspect(errors)}", nil, id)
+    end
+  end
+
+  defp handle_request("session_load", params, id) do
+    name = params["name"]
+
+    case CodePuppyControl.Sessions.load_session(name) do
+      {:ok, %{history: history, compacted_hashes: hashes}} ->
+        Protocol.encode_response(%{
+          "history" => history,
+          "compacted_hashes" => hashes
+        }, id)
+
+      {:error, :not_found} ->
+        Protocol.encode_error(-32000, "Session not found: #{name}", nil, id)
+
+      {:error, reason} ->
+        Protocol.encode_error(-32000, "Session load failed: #{inspect(reason)}", nil, id)
+    end
+  end
+
+  defp handle_request("session_load_full", params, id) do
+    name = params["name"]
+
+    case CodePuppyControl.Sessions.load_session_full(name) do
+      {:ok, session} ->
+        Protocol.encode_response(%{
+          "name" => session.name,
+          "history" => session.history || [],
+          "compacted_hashes" => session.compacted_hashes || [],
+          "message_count" => session.message_count,
+          "total_tokens" => session.total_tokens,
+          "auto_saved" => session.auto_saved,
+          "timestamp" => session.timestamp,
+          "created_at" => if(session.inserted_at, do: DateTime.to_iso8601(session.inserted_at)),
+          "updated_at" => if(session.updated_at, do: DateTime.to_iso8601(session.updated_at))
+        }, id)
+
+      {:error, :not_found} ->
+        Protocol.encode_error(-32000, "Session not found: #{name}", nil, id)
+
+      {:error, reason} ->
+        Protocol.encode_error(-32000, "Session load failed: #{inspect(reason)}", nil, id)
+    end
+  end
+
+  defp handle_request("session_list", _params, id) do
+    case CodePuppyControl.Sessions.list_sessions() do
+      {:ok, names} ->
+        Protocol.encode_response(%{"sessions" => names}, id)
+
+      {:error, reason} ->
+        Protocol.encode_error(-32000, "Session list failed: #{inspect(reason)}", nil, id)
+    end
+  end
+
+  defp handle_request("session_list_with_metadata", _params, id) do
+    case CodePuppyControl.Sessions.list_sessions_with_metadata() do
+      {:ok, sessions} ->
+        Protocol.encode_response(%{"sessions" => sessions}, id)
+
+      {:error, reason} ->
+        Protocol.encode_error(-32000, "Session list failed: #{inspect(reason)}", nil, id)
+    end
+  end
+
+  defp handle_request("session_delete", params, id) do
+    name = params["name"]
+    :ok = CodePuppyControl.Sessions.delete_session(name)
+    Protocol.encode_response(%{"deleted" => true, "name" => name}, id)
+  end
+
+  defp handle_request("session_cleanup", params, id) do
+    max_sessions = params["max_sessions"] || 10
+    {:ok, deleted} = CodePuppyControl.Sessions.cleanup_sessions(max_sessions)
+    Protocol.encode_response(%{"deleted" => deleted, "count" => length(deleted)}, id)
+  end
+
+  defp handle_request("session_exists", params, id) do
+    name = params["name"]
+    exists = CodePuppyControl.Sessions.session_exists?(name)
+    Protocol.encode_response(%{"exists" => exists}, id)
+  end
+
+  defp handle_request("session_count", _params, id) do
+    count = CodePuppyControl.Sessions.count_sessions()
+    Protocol.encode_response(%{"count" => count}, id)
+  end
+
+  defp traverse_changeset_errors(changeset) do
+    Ecto.Changeset.traverse_errors(changeset, fn {msg, opts} ->
+      Enum.reduce(opts, msg, fn {key, value}, acc ->
+        String.replace(acc, "%{\#{key}}", to_string(value))
+      end)
+    end)
+  end
+# Method not found handler
   defp handle_request(method, _params, id) do
     Protocol.encode_error(
       -32601,
