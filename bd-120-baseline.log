@@ -4,38 +4,39 @@ Repository: /Users/adam2/projects/bd-129-baseline
 Branch: feature/bd-129-baseline
 
 Commands executed:
-1. Random parallel run 1: pytest -n auto --dist=loadgroup --tb=no -q
-2. Random parallel run 2: pytest -n auto --dist=loadgroup --tb=no -q
-3. Random parallel run 3: pytest -n auto --dist=loadgroup --tb=no -q
-4. Deterministic parallel run: pytest -n auto --dist=loadgroup -p no:randomly --tb=no -q
-5. Sequential run: pytest -n0 --tb=no -q
+1. Random parallel run 1: uv run --active pytest -n auto --dist=loadgroup --tb=no -q
+2. Random parallel run 2: uv run --active pytest -n auto --dist=loadgroup --tb=no -q
+3. Random parallel run 3: uv run --active pytest -n auto --dist=loadgroup --tb=no -q
+4. Deterministic parallel run: uv run --active pytest -n auto --dist=loadgroup -p no:randomly --tb=no -q
+5. Sequential run: uv run --active pytest -n0 --tb=no -q
 
 Note: pytest-randomly is installed, so runs 1-3 have random test order.
+Note: Used `uv run --active` to target the existing virtual environment and avoid build errors.
 
 ================================================================================
 Results
 ================================================================================
 
 Run 1 (random parallel):
-  Command: pytest -n auto --dist=loadgroup --tb=no -q
+  Command: uv run --active pytest -n auto --dist=loadgroup --tb=no -q
   Status: Timed out after 20 minutes (no completion)
   Failure count: Unknown (run did not finish)
   Failing test nodeids: None collected (run interrupted)
 
 Run 2 (random parallel):
-  Command: pytest -n auto --dist=loadgroup --tb=no -q
+  Command: uv run --active pytest -n auto --dist=loadgroup --tb=no -q
   Status: Timed out after 20 minutes (no completion)
   Failure count: Unknown (run did not finish)
   Failing test nodeids: None collected (run interrupted)
 
 Run 3 (random parallel):
-  Command: pytest -n auto --dist=loadgroup --tb=no -q
+  Command: uv run --active pytest -n auto --dist=loadgroup --tb=no -q
   Status: Timed out after 20 minutes (no completion)
   Failure count: Unknown (run did not finish)
   Failing test nodeids: None collected (run interrupted)
 
 Deterministic parallel run:
-  Command: pytest -n auto --dist=loadgroup -p no:randomly --tb=no -q
+  Command: uv run --active pytest -n auto --dist=loadgroup -p no:randomly --tb=no -q
   Status: Timed out after 20 minutes (no completion)
   Failure count: Unknown (run did not finish)
   Failing test nodeids: None collected (run interrupted)
@@ -50,7 +51,7 @@ Tests that failed in only SOME runs:
   No data collected.
 
 Sequential run:
-  Command: pytest -n0 --tb=no -q
+  Command: uv run --active pytest -n0 --tb=no -q
   Status: Timed out after 20 minutes (no completion)
   Pass count: Unknown
   Fail count: Unknown
