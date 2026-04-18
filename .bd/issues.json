@@ -2221,7 +2221,7 @@
       "id": "bd-118",
       "title": "Fix broken test imports after Elixir migration",
       "description": "Multiple test files import _read_file, _list_files, _grep_search which were removed during bd-66 Elixir migration. Need to update or remove: test_read_file_validation.py, test_code_context.py, test_constants.py, test_proactive_guidance*.py, test_security.py, etc.",
-      "status": "open",
+      "status": "closed",
       "priority": 1,
       "type": "task",
       "labels": [
@@ -2229,14 +2229,14 @@
       ],
       "dependencies": {},
       "created_at": "2026-04-18T09:39:12.419216",
-      "updated_at": "2026-04-18T09:39:12.419225",
+      "updated_at": "2026-04-18T09:47:05.115180",
       "comments": []
     },
     "bd-119": {
       "id": "bd-119",
       "title": "Fix test_force_reset_cancels_waiters_no_over_credit test - uses user config",
       "description": "Test assumes effective_limit is 2 by default, but reads user's ~/.code_puppy/pack_parallelism.toml which has max_parallelism=12. Need to explicitly set limit for test isolation.",
-      "status": "open",
+      "status": "closed",
       "priority": 1,
       "type": "task",
       "labels": [
@@ -2244,9 +2244,26 @@
       ],
       "dependencies": {},
       "created_at": "2026-04-18T09:43:50.040108",
-      "updated_at": "2026-04-18T09:43:50.040117",
+      "updated_at": "2026-04-18T09:47:05.146402",
       "comments": []
+    },
+    "bd-120": {
+      "id": "bd-120",
+      "title": "Investigate parallel test isolation failures",
+      "description": "Many tests fail when run with pytest-xdist but pass when run sequentially (-n0). Likely due to shared singleton state (run_limiter, security boundary, etc). Need to audit test fixtures for proper isolation.",
+      "status": "open",
+      "priority": 2,
+      "type": "task",
+      "labels": [
+        "tests,tech-debt"
+      ],
+      "dependencies": {},
+      "created_at": "2026-04-18T09:47:12.215052",
+      "updated_at": "2026-04-18T09:49:14.682178",
+      "comments": [
+        "Analysis: 200+ tests fail in parallel but pass sequentially. Root causes appear to be:\n1. Shared singletons not being reset between tests (run_limiter, policy_engine, security_boundary)\n2. Callback registrations persisting across tests\n3. Config file reads during tests (e.g., pack_parallelism.toml)\n\nFix approaches:\n- Add autouse fixtures that reset singletons before each test\n- Use pytest marks to force certain tests to run in isolation\n- Mock config file reads in affected tests\n\nPriority: Medium - tests pass when run with -n0"
+      ]
     }
   },
-  "counter": 119
+  "counter": 120
 }
