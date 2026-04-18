@@ -162,6 +162,7 @@ defmodule CodePuppyControl.ModelRegistryTest do
         "zai_coding",
         "zai_api",
         "cerebras",
+        "claude_code",
         "openrouter",
         "round_robin",
         "gemini",
@@ -567,6 +568,52 @@ defmodule CodePuppyControl.ModelRegistryTest do
       after
         System.put_env("HOME", old_home || "~")
         # Reload to restore original state
+        ModelRegistry.reload()
+      end
+    end
+
+    @tag :tmp_dir
+    test "loads claude_code models from claude_models.json overlay", %{tmp_dir: tmp_dir} do
+      code_puppy_dir = Path.join(tmp_dir, ".code_puppy")
+      File.mkdir_p!(code_puppy_dir)
+
+      claude_overlay =
+        Jason.encode!(%{
+          "claude-code-claude-opus-4-7" => %{
+            "type" => "claude_code",
+            "name" => "claude-opus-4-7",
+            "custom_endpoint" => %{
+              "url" => "https://api.anthropic.com",
+              "api_key" => "test-key"
+            },
+            "context_length" => 200_000,
+            "oauth_source" => "claude-code-plugin",
+            "supported_settings" => ["temperature", "extended_thinking"]
+          }
+        })
+
+      File.write!(Path.join(code_puppy_dir, "claude_models.json"), claude_overlay)
+
+      old_home = System.get_env("HOME")
+      System.put_env("HOME", tmp_dir)
+
+      try do
+        assert :ok = ModelRegistry.reload()
+
+        config = ModelRegistry.get_config("claude-code-claude-opus-4-7")
+        assert is_map(config)
+        assert config["type"] == "claude_code"
+        assert config["name"] == "claude-opus-4-7"
+        assert config["context_length"] == 200_000
+        assert config["oauth_source"] == "claude-code-plugin"
+        assert config["supported_settings"] == ["temperature", "extended_thinking"]
+
+        # Verify custom_endpoint structure
+        assert is_map(config["custom_endpoint"])
+        assert config["custom_endpoint"]["url"] == "https://api.anthropic.com"
+        assert config["custom_endpoint"]["api_key"] == "test-key"
+      after
+        System.put_env("HOME", old_home || "~")
         ModelRegistry.reload()
       end
     end
