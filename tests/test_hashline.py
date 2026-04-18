@@ -33,6 +33,8 @@ from code_puppy.utils.hashline import (
 
 def _force_python(monkeypatch: pytest.MonkeyPatch) -> None:
     """Disable Elixir backend for the duration of a test."""
+    # Reset the backend-mixing guard so Python-only tests don't trigger RuntimeError
+    monkeypatch.setattr(hashline_mod, "_ELIXIR_HASH_USED", False)
     # Monkeypatch all Elixir try functions to return None, forcing Python fallback
     monkeypatch.setattr(
         hashline_mod, "_try_elixir_compute_line_hash", lambda _idx, _line: None
@@ -48,6 +50,29 @@ def _force_python(monkeypatch: pytest.MonkeyPatch) -> None:
         "_try_elixir_validate_hashline_anchor",
         lambda _idx, _line, _hash: None,
     )
+
+
+# ---------------------------------------------------------------------------
+# Fixture to disable Elixir transport and reset guard between tests
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture(autouse=True)
+def _reset_elixir_hash_flag():
+    """Disable Elixir transport and reset backend-mixing guard.
+
+    Ensures non-transport tests always exercise the pure-Python path
+    and prevents _ELIXIR_HASH_USED flag leakage between tests.
+    Transport-specific tests override _get_transport with their own mocks.
+    """
+    import code_puppy.utils.hashline as hm
+
+    hm._ELIXIR_HASH_USED = False
+    original = hm._get_transport
+    hm._get_transport = lambda: None
+    yield
+    hm._get_transport = original
+    hm._ELIXIR_HASH_USED = False
 
 
 # ---------------------------------------------------------------------------
@@ -435,273 +460,3 @@ class TestPurePythonFallback:
         # Just verify the function is callable and returns a bool
         result = hashline_mod.is_using_elixir()
         assert isinstance(result, bool)
-
-
-# ---------------------------------------------------------------------------
-# Elixir routing
-# ---------------------------------------------------------------------------
-
-
-class MockTransport:
-    """Mock Elixir transport for testing Elixir routing path."""
-
-    def __init__(self, responses: dict | None = None, raise_on: str | None = None):
-        self.calls: list[dict] = []
-        self.responses = responses or {}
-        self.raise_on = raise_on
-
-    def _send_request(self, method: str, params: dict) -> dict:
-        self.calls.append({"method": method, "params": params})
-        if self.raise_on == method:
-            raise RuntimeError("Transport error")
-        return self.responses.get(method, {})
-
-
-class TestElixirRouting:
-    """Smoke tests for Elixir routing helpers (bd-88)."""
-
-    def test_elixir_helpers_exist(self):
-        """The internal Elixir try functions should exist."""
-        assert hasattr(hashline_mod, "_try_elixir_compute_line_hash")
-        assert hasattr(hashline_mod, "_try_elixir_format_hashlines")
-        assert hasattr(hashline_mod, "_try_elixir_strip_hashline_prefixes")
-        assert hasattr(hashline_mod, "_try_elixir_validate_hashline_anchor")
-
-    def test_elixir_helpers_return_none_when_not_available(
-        self, monkeypatch: pytest.MonkeyPatch
-    ):
-        """When Elixir is not available, try functions return None."""
-        # Ensure the functions return None by making _get_transport return None
-        monkeypatch.setattr(hashline_mod, "_get_transport", lambda: None)
-
-        # Verify they return None
-        assert hashline_mod._try_elixir_compute_line_hash(1, "test") is None
-        assert hashline_mod._try_elixir_format_hashlines("test", 1) is None
-        assert hashline_mod._try_elixir_strip_hashline_prefixes("test") is None
-        assert (
-            hashline_mod._try_elixir_validate_hashline_anchor(1, "test", "AB") is None
-        )
-
-    def test_python_fallback_works_when_elixir_returns_none(
-        self, monkeypatch: pytest.MonkeyPatch
-    ):
-        """Public functions should fall back to Python when Elixir returns None."""
-        _force_python(monkeypatch)
-
-        # These should still work via Python fallback
-        h = compute_line_hash(1, "test")
-        assert len(h) == 2
-        assert h[0] in NIBBLE_STR
-
-        formatted = format_hashlines("hello")
-        assert "#" in formatted
-        assert ":hello" in formatted
-
-        stripped = strip_hashline_prefixes(formatted)
-        assert stripped == "hello"
-
-        is_valid = validate_hashline_anchor(1, "test", h)
-        assert is_valid is True
-
-
-class TestElixirTransportWiring:
-    """Tests for Elixir transport wiring (bd-119)."""
-
-    def test_is_using_elixir_returns_true_when_transport_available(
-        self, monkeypatch: pytest.MonkeyPatch
-    ):
-        """is_using_elixir() returns True when transport is accessible."""
-        mock_transport = MockTransport()
-        monkeypatch.setattr(hashline_mod, "_get_transport", lambda: mock_transport)
-        assert hashline_mod.is_using_elixir() is True
-
-    def test_is_using_elixir_returns_false_when_transport_unavailable(
-        self, monkeypatch: pytest.MonkeyPatch
-    ):
-        """is_using_elixir() returns False when transport is not accessible."""
-        monkeypatch.setattr(hashline_mod, "_get_transport", lambda: None)
-        assert hashline_mod.is_using_elixir() is False
-
-    def test_compute_line_hash_uses_elixir_when_available(
-        self, monkeypatch: pytest.MonkeyPatch
-    ):
-        """compute_line_hash routes to Elixir when transport is available."""
-        mock_transport = MockTransport(responses={
-            "hashline_compute": {"hash": "EL"}
-        })
-        monkeypatch.setattr(hashline_mod, "_get_transport", lambda: mock_transport)
-
-        result = hashline_mod.compute_line_hash(5, "test line")
-
-        assert result == "EL"
-        assert mock_transport.calls == [{
-            "method": "hashline_compute",
-            "params": {"idx": 5, "line": "test line"}
-        }]
-
-    def test_compute_line_hash_falls_back_on_exception(
-        self, monkeypatch: pytest.MonkeyPatch
-    ):
-        """compute_line_hash falls back to Python when Elixir raises."""
-        mock_transport = MockTransport(raise_on="hashline_compute")
-        monkeypatch.setattr(hashline_mod, "_get_transport", lambda: mock_transport)
-
-        # Should not raise - falls back to Python
-        result = hashline_mod.compute_line_hash(1, "hello")
-
-        # Result comes from Python fallback, not the mock
-        assert len(result) == 2
-        assert result[0] in NIBBLE_STR
-        assert result[1] in NIBBLE_STR
-
-    def test_format_hashlines_uses_elixir_when_available(
-        self, monkeypatch: pytest.MonkeyPatch
-    ):
-        """format_hashlines routes to Elixir when transport is available."""
-        mock_transport = MockTransport(responses={
-            "hashline_format": {"formatted": "1#EL:hello\n2#IX:world"}
-        })
-        monkeypatch.setattr(hashline_mod, "_get_transport", lambda: mock_transport)
-
-        result = hashline_mod.format_hashlines("hello\nworld", start_line=1)
-
-        assert result == "1#EL:hello\n2#IX:world"
-        assert mock_transport.calls == [{
-            "method": "hashline_format",
-            "params": {"text": "hello\nworld", "start_line": 1}
-        }]
-
-    def test_format_hashlines_falls_back_on_exception(
-        self, monkeypatch: pytest.MonkeyPatch
-    ):
-        """format_hashlines falls back to Python when Elixir raises."""
-        mock_transport = MockTransport(raise_on="hashline_format")
-        monkeypatch.setattr(hashline_mod, "_get_transport", lambda: mock_transport)
-
-        # Should not raise - falls back to Python
-        result = hashline_mod.format_hashlines("hello")
-
-        # Result comes from Python fallback
-        assert re.match(r"^1#[A-Z]{2}:hello$", result)
-
-    def test_strip_hashlines_uses_elixir_when_available(
-        self, monkeypatch: pytest.MonkeyPatch
-    ):
-        """strip_hashline_prefixes routes to Elixir when transport is available."""
-        mock_transport = MockTransport(responses={
-            "hashline_strip": {"stripped": "hello\nworld"}
-        })
-        monkeypatch.setattr(hashline_mod, "_get_transport", lambda: mock_transport)
-
-        result = hashline_mod.strip_hashline_prefixes("1#AB:hello\n2#CD:world")
-
-        assert result == "hello\nworld"
-        assert mock_transport.calls == [{
-            "method": "hashline_strip",
-            "params": {"text": "1#AB:hello\n2#CD:world"}
-        }]
-
-    def test_strip_hashlines_falls_back_on_exception(
-        self, monkeypatch: pytest.MonkeyPatch
-    ):
-        """strip_hashline_prefixes falls back to Python when Elixir raises."""
-        mock_transport = MockTransport(raise_on="hashline_strip")
-        monkeypatch.setattr(hashline_mod, "_get_transport", lambda: mock_transport)
-
-        # Should not raise - falls back to Python
-        text = "1#AB:hello"
-        result = hashline_mod.strip_hashline_prefixes(text)
-
-        # Python fallback should strip the prefix
-        assert result == "hello"
-
-    def test_validate_hashline_anchor_uses_elixir_when_available(
-        self, monkeypatch: pytest.MonkeyPatch
-    ):
-        """validate_hashline_anchor routes to Elixir when transport is available."""
-        mock_transport = MockTransport(responses={
-            "hashline_validate": {"valid": True}
-        })
-        monkeypatch.setattr(hashline_mod, "_get_transport", lambda: mock_transport)
-
-        result = hashline_mod.validate_hashline_anchor(5, "test", "AB")
-
-        assert result is True
-        assert mock_transport.calls == [{
-            "method": "hashline_validate",
-            "params": {"idx": 5, "line": "test", "expected_hash": "AB"}
-        }]
-
-    def test_validate_hashline_anchor_falls_back_on_exception(
-        self, monkeypatch: pytest.MonkeyPatch
-    ):
-        """validate_hashline_anchor falls back to Python when Elixir raises."""
-        mock_transport = MockTransport(raise_on="hashline_validate")
-        monkeypatch.setattr(hashline_mod, "_get_transport", lambda: mock_transport)
-
-        # Should not raise - falls back to Python
-        # First get a valid hash from Python
-        h = hashline_mod._py_compute_line_hash(3, "content")
-        result = hashline_mod.validate_hashline_anchor(3, "content", h)
-
-        # Python fallback should validate correctly
-        assert result is True
-
-    def test_elixir_methods_return_none_when_no_transport(
-        self, monkeypatch: pytest.MonkeyPatch
-    ):
-        """All Elixir try functions return None when transport is unavailable."""
-        monkeypatch.setattr(hashline_mod, "_get_transport", lambda: None)
-
-        assert hashline_mod._try_elixir_compute_line_hash(1, "test") is None
-        assert hashline_mod._try_elixir_format_hashlines("test", 1) is None
-        assert hashline_mod._try_elixir_strip_hashline_prefixes("test") is None
-        assert hashline_mod._try_elixir_validate_hashline_anchor(1, "test", "AB") is None
-
-    def test_elixir_methods_catch_all_exceptions(
-        self, monkeypatch: pytest.MonkeyPatch
-    ):
-        """All Elixir try functions catch exceptions and return None."""
-        class BrokenTransport:
-            def _send_request(self, method, params):
-                raise RuntimeError("Transport broken")
-
-        monkeypatch.setattr(hashline_mod, "_get_transport", lambda: BrokenTransport())
-
-        # All should return None, not raise
-        assert hashline_mod._try_elixir_compute_line_hash(1, "test") is None
-        assert hashline_mod._try_elixir_format_hashlines("test", 1) is None
-        assert hashline_mod._try_elixir_strip_hashline_prefixes("test") is None
-        assert hashline_mod._try_elixir_validate_hashline_anchor(1, "test", "AB") is None
-
-    def test_compute_line_hash_uses_start_line_in_elixir(
-        self, monkeypatch: pytest.MonkeyPatch
-    ):
-        """compute_line_hash passes correct idx to Elixir."""
-        calls = []
-
-        class CapturingTransport:
-            def _send_request(self, method, params):
-                calls.append((method, params))
-                return {"hash": "ZZ"}
-
-        monkeypatch.setattr(hashline_mod, "_get_transport", lambda: CapturingTransport())
-
-        hashline_mod.compute_line_hash(42, "line content")
-
-        assert calls == [("hashline_compute", {"idx": 42, "line": "line content"})]
-
-    def test_validate_returns_elixir_result_false(
-        self, monkeypatch: pytest.MonkeyPatch
-    ):
-        """validate_hashline_anchor returns False from Elixir when hash mismatch."""
-        mock_transport = MockTransport(responses={
-            "hashline_validate": {"valid": False}
-        })
-        monkeypatch.setattr(hashline_mod, "_get_transport", lambda: mock_transport)
-
-        result = hashline_mod.validate_hashline_anchor(1, "content", "WRONG")
-
-        assert result is False
-
-

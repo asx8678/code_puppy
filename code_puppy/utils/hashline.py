@@ -10,7 +10,7 @@ Example: ``42#RK:    def foo(self):``
 Uses Elixir acceleration when available (via HashlineNif through JSON-RPC),
 falls back to a pure Python implementation that uses ``zlib.crc32``.
 
-Routing priority (bd-88): Elixir → Python
+Routing priority (bd-88): Elixir -> Python
 
 .. warning::
     The Python fallback uses ``zlib.crc32`` rather than ``xxHash32``,
@@ -20,8 +20,11 @@ Routing priority (bd-88): Elixir → Python
     one backend with a validator running the other backend.
 """
 
+from __future__ import annotations
+
 import re
 import zlib
+from typing import Any
 
 # ---------------------------------------------------------------------------
 # Constants
@@ -36,17 +39,28 @@ NIBBLE_STR = "ZPMQVRWSNKTXJBYH"
 _HASHLINE_PREFIX_RE = re.compile(r"^\d+#[A-Z]{2}:(.*)", re.DOTALL)
 
 # ---------------------------------------------------------------------------
+# Backend-mixing guard (shepherd review MUST-FIX #1)
+# ---------------------------------------------------------------------------
+
+# Tracks whether any Elixir hash operation has ever succeeded in this process.
+# Once True, validate_hashline_anchor MUST use Elixir (or raise) -- falling
+# back to Python would silently produce wrong results because the hash
+# algorithms (xxHash32 vs zlib.crc32) are incompatible.
+_ELIXIR_HASH_USED: bool = False
+
+# ---------------------------------------------------------------------------
 # Elixir routing helpers (bd-88, bd-119)
 # ---------------------------------------------------------------------------
 
 
-def _get_transport():
+def _get_transport() -> Any | None:
     """Get the Elixir transport singleton if available.
 
     Returns None if transport is not available (Elixir not running).
     """
     try:
         from code_puppy.elixir_transport_helpers import get_transport
+
         return get_transport()
     except Exception:
         return None
@@ -58,14 +72,19 @@ def _try_elixir_compute_line_hash(idx: int, line: str) -> str | None:
     bd-119: Wired to Elixir transport hashline_compute method.
     Returns hash string on success, None on any exception.
     """
+    global _ELIXIR_HASH_USED
     transport = _get_transport()
     if transport is None:
         return None
     try:
-        result = transport._send_request("hashline_compute", {
-            "idx": idx,
-            "line": line,
-        })
+        result = transport._send_request(
+            "hashline_compute",
+            {
+                "idx": idx,
+                "line": line,
+            },
+        )
+        _ELIXIR_HASH_USED = True
         return result.get("hash")
     except Exception:
         return None
@@ -77,14 +96,19 @@ def _try_elixir_format_hashlines(text: str, start_line: int) -> str | None:
     bd-119: Wired to Elixir transport hashline_format method.
     Returns formatted string on success, None on any exception.
     """
+    global _ELIXIR_HASH_USED
     transport = _get_transport()
     if transport is None:
         return None
     try:
-        result = transport._send_request("hashline_format", {
-            "text": text,
-            "start_line": start_line,
-        })
+        result = transport._send_request(
+            "hashline_format",
+            {
+                "text": text,
+                "start_line": start_line,
+            },
+        )
+        _ELIXIR_HASH_USED = True
         return result.get("formatted")
     except Exception:
         return None
@@ -95,14 +119,20 @@ def _try_elixir_strip_hashline_prefixes(text: str) -> str | None:
 
     bd-119: Wired to Elixir transport hashline_strip method.
     Returns stripped string on success, None on any exception.
+
+    NOTE: strip_hashline_prefixes does NOT set _ELIXIR_HASH_USED because
+    stripping is a pure string operation with no hash compatibility concern.
     """
     transport = _get_transport()
     if transport is None:
         return None
     try:
-        result = transport._send_request("hashline_strip", {
-            "text": text,
-        })
+        result = transport._send_request(
+            "hashline_strip",
+            {
+                "text": text,
+            },
+        )
         return result.get("stripped")
     except Exception:
         return None
@@ -116,15 +146,20 @@ def _try_elixir_validate_hashline_anchor(
     bd-119: Wired to Elixir transport hashline_validate method.
     Returns bool on success, None on any exception.
     """
+    global _ELIXIR_HASH_USED
     transport = _get_transport()
     if transport is None:
         return None
     try:
-        result = transport._send_request("hashline_validate", {
-            "idx": idx,
-            "line": line,
-            "expected_hash": expected_hash,
-        })
+        result = transport._send_request(
+            "hashline_validate",
+            {
+                "idx": idx,
+                "line": line,
+                "expected_hash": expected_hash,
+            },
+        )
+        _ELIXIR_HASH_USED = True
         return result.get("valid")
     except Exception:
         return None
@@ -141,7 +176,7 @@ def _py_compute_line_hash(idx: int, line: str) -> str:
     The algorithm mirrors the Elixir/Rust NIF version except the hash primitive:
     - Strip trailing whitespace / ``\\r``
     - If no alphanumeric characters: seed = idx, else seed = 0
-    - ``zlib.crc32(bytes, seed) & 0xFF`` → encode low byte via NIBBLE_STR
+    - ``zlib.crc32(bytes, seed) & 0xFF`` -> encode low byte via NIBBLE_STR
 
     .. note::
         Hash values produced here are NOT compatible with those from the
@@ -198,7 +233,7 @@ def compute_line_hash(idx: int, line: str) -> str:
     The returned string consists of two uppercase characters drawn from
     :data:`NIBBLE_STR`.
 
-    Routing priority (bd-88): Elixir → Python
+    Routing priority (bd-88): Elixir -> Python
 
     Args:
         idx:  1-based line number used as the hash seed for
@@ -220,7 +255,7 @@ def format_hashlines(text: str, start_line: int = 1) -> str:
 
     Each line becomes ``{line_number}#{hash}:{original_line}``.
 
-    Routing priority (bd-88): Elixir → Python
+    Routing priority (bd-88): Elixir -> Python
 
     Args:
         text:       Multi-line string to annotate.
@@ -242,7 +277,7 @@ def strip_hashline_prefixes(text: str) -> str:
     Lines that do NOT match the ``^\\d+#[A-Z]{2}:`` pattern pass through
     unchanged, so it is safe to call this on partially-annotated text.
 
-    Routing priority (bd-88): Elixir → Python
+    Routing priority (bd-88): Elixir -> Python
 
     Args:
         text: Text that may contain hashline-prefixed lines.
@@ -263,7 +298,7 @@ def validate_hashline_anchor(idx: int, line: str, expected_hash: str) -> bool:
     Returns ``True`` if the content is unchanged; ``False`` if the line
     has been modified since the anchor was recorded (staleness detected).
 
-    Routing priority (bd-88): Elixir → Python
+    Routing priority (bd-88): Elixir -> Python
 
     Args:
         idx:           1-based line number (same value used when the
@@ -273,11 +308,26 @@ def validate_hashline_anchor(idx: int, line: str, expected_hash: str) -> bool:
 
     Returns:
         ``True`` if the hashes agree, ``False`` otherwise.
+
+    Raises:
+        RuntimeError: If Elixir hashes were used previously but the Elixir
+                      backend is now unavailable.  Falling back to Python
+                      in this case would silently produce wrong results
+                      because xxHash32 != zlib.crc32.
     """
     # bd-88: Try Elixir first
     elixir_result = _try_elixir_validate_hashline_anchor(idx, line, expected_hash)
     if elixir_result is not None:
         return elixir_result
+
+    # Shepherd review MUST-FIX #1: If Elixir was used for hashing but is now
+    # unavailable, we MUST NOT fall back to Python (incompatible algorithms).
+    if _ELIXIR_HASH_USED:
+        raise RuntimeError(
+            "Elixir backend was used for hashing but is now unavailable. "
+            "Cannot validate because Python (zlib.crc32) and Elixir (xxHash32) "
+            "produce incompatible hash values."
+        )
     return _py_validate_hashline_anchor(idx, line, expected_hash)
 
 
