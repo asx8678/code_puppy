@@ -12,19 +12,9 @@ defmodule CodePuppyControl.ModelRegistryTest do
   - Concurrent read access
   """
 
-  use ExUnit.Case, async: false
+  use CodePuppyControl.StatefulCase
 
   alias CodePuppyControl.ModelRegistry
-
-  # ============================================================================
-  # Setup
-  # ============================================================================
-
-  setup do
-    # ModelRegistry is started as part of the application supervision tree,
-    # so we don't need to start it manually here. Just ensure it's available.
-    :ok
-  end
 
   # ============================================================================
   # Startup Tests

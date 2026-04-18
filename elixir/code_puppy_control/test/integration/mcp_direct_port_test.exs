@@ -19,7 +19,7 @@ defmodule CodePuppyControl.Integration.MCPDirectPortTest do
       mix test test/integration/mcp_direct_port_test.exs --include integration
   """
 
-  use ExUnit.Case, async: false
+  use CodePuppyControl.StatefulCase
 
   @moduletag :integration
   @moduletag timeout: 60_000

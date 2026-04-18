@@ -11,6 +11,7 @@ defmodule CodePuppyControl.Parsing.Parsers do
   # List of built-in parser modules
   @parser_modules [
     CodePuppyControl.Parsing.Parsers.ElixirParser,
+    CodePuppyControl.Parsing.Parsers.ErlangParser,
     CodePuppyControl.Parsing.Parsers.PythonParser,
     CodePuppyControl.Parsing.Parsers.JavaScriptParser,
     CodePuppyControl.Parsing.Parsers.TypeScriptParser,

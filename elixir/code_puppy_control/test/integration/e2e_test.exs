@@ -29,7 +29,7 @@ defmodule CodePuppyControl.E2ETest do
     * `:skip` - Temporarily disabled
   """
 
-  use ExUnit.Case, async: false
+  use CodePuppyControl.StatefulCase
 
   @moduletag :e2e
   @moduletag timeout: 120_000

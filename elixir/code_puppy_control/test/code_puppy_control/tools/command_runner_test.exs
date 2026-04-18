@@ -9,7 +9,7 @@ defmodule CodePuppyControl.Tools.CommandRunnerTest do
   - Output truncation
   """
 
-  use ExUnit.Case, async: false
+  use CodePuppyControl.StatefulCase
 
   alias CodePuppyControl.Tools.CommandRunner
   alias CodePuppyControl.Tools.CommandRunner.Validator

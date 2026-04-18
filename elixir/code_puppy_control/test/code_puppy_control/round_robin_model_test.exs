@@ -11,14 +11,13 @@ defmodule CodePuppyControl.RoundRobinModelTest do
   - Concurrent access
   """
 
-  use ExUnit.Case, async: false
+  use CodePuppyControl.StatefulCase
 
   alias CodePuppyControl.RoundRobinModel
 
   setup do
-    # Reset to known state before each test
+    # Configure specific test fixtures before each test
     RoundRobinModel.configure(models: ["model-a", "model-b", "model-c"])
-    RoundRobinModel.reset()
     :ok
   end
 

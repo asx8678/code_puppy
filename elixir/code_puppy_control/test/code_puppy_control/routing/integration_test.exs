@@ -9,19 +9,12 @@ defmodule CodePuppyControl.Routing.IntegrationTest do
   - Strategy chaining and fallbacks
   """
 
-  use ExUnit.Case, async: false
+  use CodePuppyControl.StatefulCase
 
   alias CodePuppyControl.Routing
   alias CodePuppyControl.Routing.Router
   alias CodePuppyControl.Routing.Strategies.FallbackChain
   alias CodePuppyControl.Routing.Strategies.LastResort
-  alias CodePuppyControl.ModelAvailability
-
-  setup do
-    # Reset ModelAvailability state before each test
-    ModelAvailability.reset_all()
-    :ok
-  end
 
   describe "complete routing workflow" do
     test "primary strategy succeeds, no fallback needed" do

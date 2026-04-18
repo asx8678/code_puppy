@@ -13,14 +13,14 @@ defmodule CodePuppyControl.ModelPacksTest do
   - RoleConfig and ModelPack struct operations
   """
 
-  use ExUnit.Case, async: false
+  use CodePuppyControl.StatefulCase
 
   alias CodePuppyControl.ModelPacks
   alias CodePuppyControl.ModelPacks.RoleConfig
   alias CodePuppyControl.ModelPacks.ModelPack
 
   setup do
-    # Start the GenServer if not already running
+    # Ensure ModelPacks GenServer is running
     case Process.whereis(ModelPacks) do
       nil ->
         start_supervised!(ModelPacks)
@@ -28,9 +28,6 @@ defmodule CodePuppyControl.ModelPacksTest do
       _pid ->
         :ok
     end
-
-    # Reset to single pack before each test for isolation
-    ModelPacks.set_current_pack("single")
 
     # Clean up any test user packs
     for pack <- ModelPacks.list_packs() do

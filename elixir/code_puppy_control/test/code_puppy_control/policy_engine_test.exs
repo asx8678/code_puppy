@@ -3,22 +3,11 @@ defmodule CodePuppyControl.PolicyEngineTest do
   Tests for the PolicyEngine.
   """
 
-  use ExUnit.Case, async: false
+  use CodePuppyControl.StatefulCase
 
   alias CodePuppyControl.PolicyEngine
   alias CodePuppyControl.PolicyEngine.PolicyRule
   alias CodePuppyControl.PolicyEngine.PolicyRule.{Allow, Deny, AskUser}
-
-  setup do
-    # Reset and start fresh engine for each test
-    if PolicyEngine.running?() do
-      PolicyEngine.reset()
-    else
-      PolicyEngine.start_link()
-    end
-
-    :ok
-  end
 
   describe "start_link/0" do
     test "starts the PolicyEngine GenServer" do

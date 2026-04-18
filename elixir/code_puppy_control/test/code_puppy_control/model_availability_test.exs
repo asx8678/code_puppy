@@ -15,15 +15,19 @@ defmodule CodePuppyControl.ModelAvailabilityTest do
   - Concurrent access safety
   """
 
-  use ExUnit.Case, async: false
+  use CodePuppyControl.StatefulCase
 
   alias CodePuppyControl.ModelAvailability
 
   setup do
-    # Reset to known state before each test
-    ModelAvailability.reset_all()
     # Clear last-resort table directly (no public API for full clear)
-    :ets.delete_all_objects(:model_last_resort)
+    # Wrapped in try/rescue as table may not exist if GenServer isn't running
+    try do
+      :ets.delete_all_objects(:model_last_resort)
+    rescue
+      ArgumentError -> :ok
+    end
+
     :ok
   end
 

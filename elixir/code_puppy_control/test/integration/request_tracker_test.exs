@@ -11,6 +11,8 @@ defmodule CodePuppyControl.RequestTrackerTest do
 
   use ExUnit.Case, async: true
 
+  @moduletag :integration
+
   alias CodePuppyControl.RequestTracker
 
   # Start a fresh RequestTracker for each test to avoid interference

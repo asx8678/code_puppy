@@ -6,7 +6,7 @@ defmodule CodePuppyControl.Tools.SchedulerToolsTest do
   and returns formatted string responses.
   """
 
-  use ExUnit.Case, async: false
+  use CodePuppyControl.StatefulCase
 
   alias CodePuppyControl.Tools.SchedulerTools
   alias CodePuppyControl.Scheduler

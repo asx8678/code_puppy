@@ -3,18 +3,11 @@ defmodule CodePuppyControl.Routing.RouterTest do
   Tests for the Router module.
   """
 
-  use ExUnit.Case, async: false
+  use CodePuppyControl.StatefulCase
 
   alias CodePuppyControl.Routing.Router
   alias CodePuppyControl.Routing.Strategies.FallbackChain
   alias CodePuppyControl.Routing.Strategies.LastResort
-  alias CodePuppyControl.ModelAvailability
-
-  setup do
-    # Reset ModelAvailability state before each test
-    ModelAvailability.reset_all()
-    :ok
-  end
 
   describe "route/1 with single strategy" do
     test "selects model from fallback chain" do

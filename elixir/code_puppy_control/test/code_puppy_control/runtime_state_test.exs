@@ -3,16 +3,9 @@ defmodule CodePuppyControl.RuntimeStateTest do
   Tests for the RuntimeState GenServer.
   """
 
-  use ExUnit.Case, async: false
+  use CodePuppyControl.StatefulCase
 
   alias CodePuppyControl.RuntimeState
-
-  setup do
-    # Reset state before each test for isolation
-    RuntimeState.reset_autosave_id()
-    RuntimeState.reset_session_model()
-    :ok
-  end
 
   describe "autosave_id" do
     test "get_current_autosave_id/0 returns a valid timestamp-based ID" do

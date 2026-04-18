@@ -3,7 +3,7 @@ defmodule CodePuppyControl.CodeContextTest do
   Tests for the CodeContext module.
   """
 
-  use ExUnit.Case, async: false
+  use CodePuppyControl.StatefulCase
 
   alias CodePuppyControl.CodeContext
 

@@ -3,21 +3,10 @@ defmodule CodePuppyControl.PolicyConfigTest do
   Tests for the PolicyConfig module.
   """
 
-  use ExUnit.Case, async: false
+  use CodePuppyControl.StatefulCase
 
   alias CodePuppyControl.{PolicyConfig, PolicyEngine}
   alias CodePuppyControl.PolicyEngine.PolicyRule.Allow
-
-  setup do
-    # Ensure engine is running and reset
-    if PolicyEngine.running?() do
-      PolicyEngine.reset()
-    else
-      PolicyEngine.start_link()
-    end
-
-    :ok
-  end
 
   describe "user_policy_path/0" do
     test "returns path in home directory" do

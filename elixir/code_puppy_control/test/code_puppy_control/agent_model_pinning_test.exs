@@ -10,18 +10,9 @@ defmodule CodePuppyControl.AgentModelPinningTest do
   - (unpin) marker handling
   """
 
-  use ExUnit.Case, async: false
+  use CodePuppyControl.StatefulCase
 
   alias CodePuppyControl.AgentModelPinning
-
-  setup do
-    # Clear all pins before each test for isolation
-    AgentModelPinning.list_pins()
-    |> Map.keys()
-    |> Enum.each(&AgentModelPinning.clear_pinned_model/1)
-
-    :ok
-  end
 
   describe "get_pinned_model/1" do
     test "returns nil when agent has no pin" do

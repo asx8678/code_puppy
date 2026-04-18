@@ -1,5 +1,5 @@
 defmodule CodePuppyControl.MCP.ServerTest do
-  use ExUnit.Case, async: false
+  use CodePuppyControl.StatefulCase
 
   alias CodePuppyControl.Protocol
 

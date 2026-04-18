@@ -3,7 +3,7 @@ defmodule CodePuppyControl.Tools.UniversalConstructor.RegistryTest do
   Tests for the Universal Constructor Registry module.
   """
 
-  use ExUnit.Case, async: false
+  use CodePuppyControl.StatefulCase
 
   alias CodePuppyControl.Tools.UniversalConstructor.Registry
 

@@ -8,7 +8,7 @@ defmodule CodePuppyControl.Routing.RegressionTest do
   3. RoundRobin with global mode actually rotates between models
   """
 
-  use ExUnit.Case, async: false
+  use CodePuppyControl.StatefulCase
 
   alias CodePuppyControl.Routing.Strategy
   alias CodePuppyControl.Routing.Strategies.FallbackChain
@@ -119,7 +119,6 @@ defmodule CodePuppyControl.Routing.RegressionTest do
     setup do
       # Configure the global RoundRobinModel for these tests
       RoundRobinModel.configure(models: ["model-a", "model-b", "model-c"])
-      RoundRobinModel.reset()
       :ok
     end
 

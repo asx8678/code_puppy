@@ -1,5 +1,5 @@
 defmodule CodePuppyControl.Concurrency.LimiterTest do
-  use ExUnit.Case, async: false
+  use CodePuppyControl.StatefulCase
 
   alias CodePuppyControl.Concurrency.Limiter
 

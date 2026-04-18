@@ -3,16 +3,9 @@ defmodule CodePuppyControl.Routing.LastResortTest do
   Tests for the LastResort strategy and functions.
   """
 
-  use ExUnit.Case, async: false
+  use CodePuppyControl.StatefulCase
 
   alias CodePuppyControl.Routing.Strategies.LastResort
-  alias CodePuppyControl.ModelAvailability
-
-  setup do
-    # Reset ModelAvailability state before each test
-    ModelAvailability.reset_all()
-    :ok
-  end
 
   describe "LastResort.new/0" do
     test "creates strategy with default models" do
