@@ -780,6 +780,41 @@ def reset_message_bus() -> None:
     with _bus_lock:
         _global_bus = None
 
+def reset_global_bus_for_tests() -> None:
+    """Reset the global MessageBus singleton for test isolation.
+
+    Properly clears all pending requests and queues before releasing
+    the singleton reference. This ensures tests start with a clean state.
+
+    Acquires the bus lock to ensure thread-safe reset.
+    """
+    global _global_bus
+
+    with _bus_lock:
+        if _global_bus is not None:
+            # Clear pending requests and their futures
+            with _global_bus._lock:
+                _global_bus._pending_requests.clear()
+                # Drain outgoing queue
+                while not _global_bus._outgoing.empty():
+                    try:
+                        _global_bus._outgoing.get_nowait()
+                    except asyncio.QueueEmpty:
+                        break
+                # Drain incoming queue
+                while not _global_bus._incoming.empty():
+                    try:
+                        _global_bus._incoming.get_nowait()
+                    except asyncio.QueueEmpty:
+                        break
+                # Clear startup buffer
+                _global_bus._startup_buffer.clear()
+                # Reset renderer state
+                _global_bus._has_active_renderer = False
+                _global_bus._renderer_event.clear()
+                # Clear session context
+                _global_bus._current_session_id = None
+        _global_bus = None
 
 # =============================================================================
 # Convenience Functions
@@ -841,6 +876,7 @@ __all__ = [
     # Singleton access
     "get_message_bus",
     "reset_message_bus",
+    "reset_global_bus_for_tests",
     # Convenience functions
     "emit",
     "emit_info",

@@ -198,6 +198,18 @@ def get_explorer_instance() -> CodeExplorer:
     return _global_explorer
 
 
+def reset_explorer_for_tests() -> None:
+    """Reset the global CodeExplorer singleton for test isolation.
+
+    Clears the instance so the next get_explorer_instance() call re-initializes.
+    Acquires the explorer lock to ensure thread-safe reset.
+    """
+    global _global_explorer
+
+    with _explorer_lock:
+        _global_explorer = None
+
+
 __all__ = [
     "CodeContext",
     "CodeExplorer",
@@ -209,4 +221,5 @@ __all__ = [
     "get_code_context",
     "get_explorer_instance",
     "get_file_outline",
+    "reset_explorer_for_tests",
 ]

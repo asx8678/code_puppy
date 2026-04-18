@@ -413,6 +413,22 @@ def reload_concurrency_config() -> None:
     logger.info("Concurrency configuration reloaded")
 
 
+def reset_semaphores_for_tests() -> None:
+    """Reset the global semaphores for test isolation.
+
+    Clears all semaphore instances and cached config so the next
+    call to any semaphore getter re-initializes with fresh state.
+    Acquires the semaphore init lock to ensure thread-safe reset.
+    """
+    global _file_ops_semaphore, _api_calls_semaphore, _tool_calls_semaphore, _cached_config
+
+    with _semaphore_init_lock:
+        _file_ops_semaphore = None
+        _api_calls_semaphore = None
+        _tool_calls_semaphore = None
+        _cached_config = None
+
+
 def create_default_config() -> str:
     """Create default configuration file content."""
     return """# Code Puppy Concurrency Configuration

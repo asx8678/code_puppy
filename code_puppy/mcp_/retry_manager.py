@@ -313,6 +313,18 @@ def get_retry_manager() -> RetryManager:
     return _retry_manager_instance
 
 
+def reset_retry_manager_for_tests() -> None:
+    """Reset the global RetryManager singleton for test isolation.
+
+    Clears the instance so the next get_retry_manager() call re-initializes.
+    Acquires the retry manager lock to ensure thread-safe reset.
+    """
+    global _retry_manager_instance
+
+    with _retry_manager_lock:
+        _retry_manager_instance = None
+
+
 # Convenience function for common retry patterns
 async def retry_mcp_call(
     func: Callable,

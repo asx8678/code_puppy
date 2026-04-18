@@ -960,3 +960,19 @@ def get_mcp_manager() -> MCPManager:
             if _manager_instance is None:
                 _manager_instance = MCPManager()
     return _manager_instance
+
+
+def reset_manager_for_tests() -> None:
+    """Reset the global MCPManager singleton for test isolation.
+
+    Clears the instance so the next get_mcp_manager() call re-initializes.
+    Acquires the manager lock to ensure thread-safe reset.
+    """
+    global _manager_instance
+
+    with _manager_lock:
+        if _manager_instance is not None:
+            # Clear pending tasks before releasing
+            _manager_instance._pending_start_tasks.clear()
+            _manager_instance._pending_stop_tasks.clear()
+        _manager_instance = None

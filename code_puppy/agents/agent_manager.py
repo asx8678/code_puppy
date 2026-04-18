@@ -535,6 +535,22 @@ def _invalidate_agent_registry() -> None:
         _state.registry_populated = False
 
 
+
+def reset_state_for_tests() -> None:
+    """Reset the agent manager state for test isolation.
+
+    Clears all mutable state including registry, histories, current agent,
+    and session cache. Acquires both registry and session locks to ensure
+    thread-safe reset.
+    """
+    global _state
+
+    # Acquire both locks to ensure thread-safe reset
+    with _REGISTRY_LOCK:
+        with _SESSION_LOCK:
+            # Reset the state object to a fresh instance
+            _state = AgentManagerState()
+
 def get_available_agents() -> dict[str, str]:
     """Get a dictionary of available agents with their display names.
 

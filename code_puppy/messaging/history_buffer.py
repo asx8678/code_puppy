@@ -286,6 +286,21 @@ def reset_history_buffer() -> None:
         _global_buffer = None
 
 
+def reset_global_buffer_for_tests() -> None:
+    """Reset the global history buffer singleton for test isolation.
+
+    Clears the instance so the next get_history_buffer() call re-initializes.
+    Acquires the buffer lock to ensure thread-safe reset.
+    """
+    global _global_buffer
+
+    with _buffer_lock:
+        if _global_buffer is not None:
+            # Clear all session data before releasing
+            _global_buffer.clear_all()
+        _global_buffer = None
+
+
 # =============================================================================
 # Export
 # =============================================================================
@@ -294,4 +309,5 @@ __all__ = [
     "SessionHistoryBuffer",
     "get_history_buffer",
     "reset_history_buffer",
+    "reset_global_buffer_for_tests",
 ]

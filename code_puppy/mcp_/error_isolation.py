@@ -419,3 +419,18 @@ def get_error_isolator() -> MCPErrorIsolator:
             if _isolator_instance is None:
                 _isolator_instance = MCPErrorIsolator()
     return _isolator_instance
+
+
+def reset_isolator_for_tests() -> None:
+    """Reset the global MCPErrorIsolator singleton for test isolation.
+
+    Clears the instance so the next get_error_isolator() call re-initializes.
+    Acquires the isolator lock to ensure thread-safe reset.
+    """
+    global _isolator_instance
+
+    with _isolator_lock:
+        if _isolator_instance is not None:
+            # Clear server stats before releasing
+            _isolator_instance.server_stats.clear()
+        _isolator_instance = None
