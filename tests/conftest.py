@@ -91,7 +91,13 @@ def isolate_config_between_tests(tmp_path_factory):
     # Clear model cache to ensure fresh state
     cp_config.clear_model_cache()
     # Clear session-local model cache (required for /model session sticky behavior)
-    cp_config.reset_session_model()
+    # NOTE(bd-133): When Elixir routing is enabled, this requires the transport.
+    # Gracefully skip if Elixir is unavailable to allow tests to run without the
+    # full Elixir backend during unit testing.
+    try:
+        cp_config.reset_session_model()
+    except Exception:
+        pass  # Elixir transport unavailable, skip runtime state cleanup
 
     # Reset the policy engine singleton so each test gets a fresh engine
     # built from the test's (isolated) config, not from a prior test's config.
@@ -141,8 +147,11 @@ def isolate_config_between_tests(tmp_path_factory):
 
     # Clear cache again after test
     cp_config.clear_model_cache()
-    # Clear session-local model cache
-    cp_config.reset_session_model()
+    # Clear session-local model cache (gracefully skip if Elixir unavailable)
+    try:
+        cp_config.reset_session_model()
+    except Exception:
+        pass
 
     # Reset policy engine after test too
     try:
