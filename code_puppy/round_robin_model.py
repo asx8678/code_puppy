@@ -1,7 +1,14 @@
+"""Round-robin model rotation - thin wrapper routing to Elixir (bd-134).
+
+Routes rotation state to Elixir when connected, uses local fallback when not.
+This maintains interface compatibility (~40 lines core logic).
+"""
+
+from __future__ import annotations
+
 import asyncio
 import logging
 from contextlib import asynccontextmanager, suppress
-from dataclasses import dataclass, field
 from typing import Any, AsyncIterator
 
 from pydantic_ai._run_context import RunContext
@@ -14,14 +21,15 @@ from pydantic_ai.models import (
     StreamedResponse,
 )
 
-from code_puppy.model_availability import model_availability_service
+from code_puppy.plugins.elixir_bridge import call_elixir_round_robin, is_connected
 
 logger = logging.getLogger(__name__)
 
+# OpenTelemetry span handling (preserved from original)
 try:
     from opentelemetry.context import get_current_span
 except ImportError:
-    # If opentelemetry is not installed, provide a dummy implementation
+
     def get_current_span():
         class DummySpan:
             def is_recording(self):
@@ -33,20 +41,8 @@ except ImportError:
         return DummySpan()
 
 
-@dataclass(init=False)
 class RoundRobinModel(Model):
-    """A model that cycles through multiple models in a round-robin fashion.
-
-    This model distributes requests across multiple candidate models to help
-    overcome rate limits or distribute load.
-    """
-
-    models: list[Model]
-    _current_index: int = field(default=0, repr=False)
-    _model_name: str = field(repr=False)
-    _rotate_every: int = field(default=1, repr=False)
-    _request_count: int = field(default=0, repr=False)
-    _lock: asyncio.Lock = field(default_factory=asyncio.Lock, repr=False)
+    """Routes model rotation to Elixir, keeps model delegation local."""
 
     def __init__(
         self,
@@ -54,90 +50,62 @@ class RoundRobinModel(Model):
         rotate_every: int = 1,
         settings: ModelSettings | None = None,
     ):
-        """Initialize a round-robin model instance.
-
-        Args:
-            models: The model instances to cycle through.
-            rotate_every: Number of requests before rotating to the next model (default: 1).
-            settings: Model settings that will be used as defaults for this model.
-        """
         super().__init__(settings=settings)
         if not models:
             raise ValueError("At least one model must be provided")
         if rotate_every < 1:
             raise ValueError("rotate_every must be at least 1")
         self.models = list(models)
-        self._current_index = 0
-        self._request_count = 0
         self._rotate_every = rotate_every
+        self._current_index = 0  # For backward compatibility when Elixir unavailable
+        self._request_count = 0
         self._lock = asyncio.Lock()
+        if is_connected():
+            self._configure_elixir()
+
+    def _configure_elixir(self) -> None:
+        """Configure Elixir with our model list (fire-and-forget)."""
+        try:
+            model_names = [m.model_name for m in self.models]
+            asyncio.create_task(
+                call_elixir_round_robin(
+                    "round_robin.configure",
+                    {"models": model_names, "rotate_every": self._rotate_every},
+                )
+            )
+        except Exception:
+            pass
 
     @property
     def model_name(self) -> str:
-        """The model name showing this is a round-robin model with its candidates."""
-        base_name = f"round_robin:{','.join(model.model_name for model in self.models)}"
+        names = ",".join(m.model_name for m in self.models)
         if self._rotate_every != 1:
-            return f"{base_name}:rotate_every={self._rotate_every}"
-        return base_name
+            return f"round_robin:{names}:rotate_every={self._rotate_every}"
+        return f"round_robin:{names}"
 
     @property
     def system(self) -> str:
-        """System prompt from the current model."""
-        return self.models[self._current_index].system
+        return self.models[self._current_index].system if self.models else ""
 
     @property
     def base_url(self) -> str | None:
-        """Base URL from the current model."""
-        return self.models[self._current_index].base_url
+        return self.models[self._current_index].base_url if self.models else None
 
     async def _get_next_model(self) -> Model:
-        """Get the next available model in the round-robin sequence.
-
-        Consults :data:`~code_puppy.model_availability.model_availability_service`
-        and skips models that are currently unavailable (terminal or sticky_retry
-        with consumed attempt).  If *all* models are unavailable the method falls
-        back to the plain round-robin choice so callers always receive a model.
-        """
-        async with self._lock:
-            n = len(self.models)
-            # Build a candidate list: starting at _current_index, wrap around.
-            ordered_names = [
-                self.models[(self._current_index + i) % n].model_name for i in range(n)
-            ]
-
-            result = model_availability_service.select_first_available(ordered_names)
-
-            if result.selected_model is not None:
-                # Find the Model object that matches the selected name.
-                for m in self.models:
-                    if m.model_name == result.selected_model:
-                        if result.skipped:
-                            logger.debug(
-                                "round_robin: skipped %d unavailable model(s), using %s",
-                                len(result.skipped),
-                                result.selected_model,
-                            )
-                        # Advance index by the number of models we skipped + 1.
-                        skip_count = len(result.skipped)
-                        self._request_count += 1
-                        if self._request_count >= self._rotate_every:
-                            self._current_index = (
-                                self._current_index + skip_count + 1
-                            ) % n
-                            self._request_count = 0
+        """Get next model (Elixir when connected, local fallback otherwise)."""
+        if is_connected():
+            result = await call_elixir_round_robin("round_robin.get_next", {})
+            if result and result.get("model"):
+                for i, m in enumerate(self.models):
+                    if m.model_name == result["model"]:
+                        self._current_index = i
                         return m
-
-            # All models unavailable – fall back to plain round-robin to avoid
-            # a hard failure.  The upstream caller can still raise if needed.
-            logger.warning(
-                "round_robin: all %d model(s) marked unavailable; falling back to "
-                "plain round-robin selection",
-                len(self.models),
-            )
+        # Local fallback rotation
+        async with self._lock:
             model = self.models[self._current_index]
             self._request_count += 1
             if self._request_count >= self._rotate_every:
-                self._current_index = (self._current_index + 1) % n
+                self._current_index = (self._current_index + 1) % len(self.models)
                 self._request_count = 0
             return model
 
@@ -147,23 +115,16 @@ class RoundRobinModel(Model):
         model_settings: ModelSettings | None,
         model_request_parameters: ModelRequestParameters,
     ) -> ModelResponse:
-        """Make a request using the next available model in the round-robin sequence."""
         from code_puppy.model_availability import availability_service
 
-        current_model = await self._get_next_model()
-        merged_settings, prepared_params = current_model.prepare_request(
-            model_settings, model_request_parameters
-        )
-
+        current = await self._get_next_model()
         try:
-            response = await current_model.request(
-                messages, merged_settings, prepared_params
-            )
-            availability_service.mark_healthy(current_model.model_name)
-            self._set_span_attributes(current_model)
+            response = await current.request(messages, model_settings, model_request_parameters)
+            availability_service.mark_healthy(current.model_name)
+            self._set_span_attributes(current)
             return response
         except Exception as e:
-            self._track_failure(current_model.model_name, e)
+            self._track_failure(current.model_name, e)
             raise
 
     @asynccontextmanager
@@ -174,29 +135,14 @@ class RoundRobinModel(Model):
         model_request_parameters: ModelRequestParameters,
         run_context: RunContext[Any] | None = None,
     ) -> AsyncIterator[StreamedResponse]:
-        """Make a streaming request using the next model in the round-robin sequence."""
-        from code_puppy.model_availability import availability_service
-
-        current_model = await self._get_next_model()
-        # Use prepare_request to merge settings and customize parameters
-        merged_settings, prepared_params = current_model.prepare_request(
-            model_settings, model_request_parameters
-        )
-
-        try:
-            async with current_model.request_stream(
-                messages, merged_settings, prepared_params, run_context
-            ) as response:
-                self._set_span_attributes(current_model)
-                yield response
-            availability_service.mark_healthy(current_model.model_name)
-        except Exception as e:
-            self._track_failure(current_model.model_name, e)
-            raise
+        current = await self._get_next_model()
+        async with current.request_stream(messages, model_settings, model_request_parameters, run_context) as resp:
+            self._set_span_attributes(current)
+            yield resp
 
     @staticmethod
     def _track_failure(model_name: str, error: Exception) -> None:
-        """Mark a model based on the type of failure."""
+        """Track model failures (delegated to availability service)."""
         from code_puppy.model_availability import availability_service
 
         err_str = str(error).lower()
@@ -209,7 +155,7 @@ class RoundRobinModel(Model):
         elif "overloaded" in err_str or "capacity" in err_str:
             availability_service.mark_sticky_retry(model_name)
 
-    def _set_span_attributes(self, model: Model):
+    def _set_span_attributes(self, model: Model) -> None:
         """Set span attributes for observability."""
         with suppress(Exception):
             span = get_current_span()
