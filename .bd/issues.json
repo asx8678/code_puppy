@@ -2190,7 +2190,20 @@
       "created_at": "2026-04-18T00:41:39.187862",
       "updated_at": "2026-04-18T00:42:35.607118",
       "comments": []
+    },
+    "bd-116": {
+      "id": "bd-116",
+      "title": "Wire Elixir transport stubs in hashline.py (bd-86 regression fix)",
+      "description": "Wire the 4 _try_elixir_* stub functions in hashline.py to call Elixir transport methods. The Elixir service now has real handlers for hashline_compute, hashline_format, hashline_strip, and hashline_validate. Update is_using_elixir() to return True when transport is accessible. Add tests for Elixir routing path.",
+      "status": "closed",
+      "priority": 2,
+      "type": "task",
+      "labels": [],
+      "dependencies": {},
+      "created_at": "2026-04-18T01:27:52.588369",
+      "updated_at": "2026-04-18T01:27:54.692342",
+      "comments": []
     }
   },
-  "counter": 115
+  "counter": 116
 }
