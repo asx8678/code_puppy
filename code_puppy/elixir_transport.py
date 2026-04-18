@@ -44,6 +44,8 @@ transport.stop()
 
 - `PUP_ELIXIR_PATH` - Path to elixir/mix executable directory (default: auto-detect)
 - `PUP_ELIXIR_SERVICE_CMD` - Override the command to start the service
+- `PUP_ELIXIR_BUILD_ARTIFACT` - Path to build artifact directory for --no-compile check
+  (default: _build/dev/lib/code_puppy_control)
 - `PUP_LOG_LEVEL` - Set Elixir service log level (debug, info, warn, error)
 
 TODO(bd-10): Add connection pooling for multiple concurrent transports
@@ -197,6 +199,16 @@ class ElixirTransport:
         mix_exe = os.path.join(self.elixir_path, "mix")
         if not os.path.exists(mix_exe):
             mix_exe = "mix"  # Assume it's in PATH
+
+        # Check for build artifact to use --no-compile
+        # Get configurable path or use default
+        default_build_path = Path(self.project_path) / "_build" / "dev" / "lib" / "code_puppy_control"
+        build_artifact_path = os.environ.get("PUP_ELIXIR_BUILD_ARTIFACT")
+        artifact_check_path = Path(build_artifact_path) if build_artifact_path else default_build_path
+
+        if artifact_check_path.exists():
+            logger.debug(f"Build artifact found at {artifact_check_path}, using --no-compile")
+            return [mix_exe, "--no-compile", "code_puppy.stdio_service"]
 
         return [mix_exe, "code_puppy.stdio_service"]
 

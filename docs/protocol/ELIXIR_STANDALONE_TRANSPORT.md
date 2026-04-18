@@ -349,6 +349,7 @@ See `CodePuppyControl.FileOps.sensitive_path?/1` for the complete list of blocke
 |----------|-------------|---------|
 | `PUP_ELIXIR_PATH` | Path to elixir/mix executables | Auto-detected |
 | `PUP_ELIXIR_SERVICE_CMD` | Override service command | `mix code_puppy.stdio_service` |
+| `PUP_ELIXIR_BUILD_ARTIFACT` | Path to build artifact for --no-compile check | `_build/dev/lib/code_puppy_control` |
 | `PUP_LOG_LEVEL` | Elixir service log level | `info` |
 
 ### Elixir Application Config
