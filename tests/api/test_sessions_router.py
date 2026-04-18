@@ -9,11 +9,14 @@ from httpx import ASGITransport, AsyncClient
 from code_puppy.api.app import create_app
 from code_puppy.api.routers.sessions import _serialize_message
 
+# Skip entire module if msgpack is not available (used for legacy format tests)
+msgpack = pytest.importorskip("msgpack")
+
 
 @pytest.fixture
 def sessions_dir(tmp_path):
     """Create a temporary sessions directory with test data."""
-    import msgpack
+    # msgpack already imported at module level
 
     d = tmp_path / "subagent_sessions"
     d.mkdir()
@@ -101,7 +104,7 @@ async def test_get_session_not_found(client: AsyncClient) -> None:
 @pytest.mark.asyncio
 async def test_get_session_messages(client: AsyncClient, sessions_dir) -> None:
     """Test getting session messages - msgpack format is validated by pydantic-ai."""
-    import msgpack
+    # msgpack already imported at module level
 
     # Create a valid msgpack with proper pydantic-ai message structure
     # Use simple dict format that the serializer can handle

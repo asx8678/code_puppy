@@ -95,7 +95,7 @@ class TestLoadRawBytes:
 
     def test_legacy_msgpack_format(self, tmp_path):
         """Loading legacy msgpack format still works for backward compat."""
-        import msgpack
+        msgpack = pytest.importorskip("msgpack")
         payload = {"messages": [{"kind": "request", "content": "hi"}]}
         msgpack_data = msgpack.packb(payload, use_bin_type=True)
         hmac_sig = _compute_hmac(_get_hmac_key(), msgpack_data)

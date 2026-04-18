@@ -1691,7 +1691,9 @@ class TestForceReset:
         After the fix, waiters are cancelled, preventing both hanging and over-crediting.
         """
         limiter = get_run_limiter()
-        limit = limiter.effective_limit  # Should be 2 by default
+        # Explicitly set a known limit for test isolation (don't rely on user config)
+        update_run_limiter_config(max_concurrent_runs=2)
+        limit = 2  # Use fixed limit for test
 
         # Fill the limiter to capacity with holder tasks
         holder1_acquired = asyncio.Event()
