@@ -4,6 +4,8 @@ from unittest.mock import patch
 
 from fastapi import FastAPI
 
+import pytest
+
 
 @pytest.mark.serial
 @pytest.mark.xdist_group(name="network")
@@ -60,7 +62,6 @@ def test_routers_init_imports():
 def test_main_module_execution():
     """Test that __main__ guard would trigger main()."""
     import types
-import pytest
     
     # Create a mock module with __name__ == "__main__"
     mod = types.ModuleType("test_main_module")
