@@ -66,6 +66,8 @@ class TestRunShellCommandStreaming:
             _RUNNING_PROCESSES.clear()
         _USER_KILLED_PROCESSES.clear()
 
+    @pytest.mark.serial
+    @pytest.mark.xdist_group(name="real-process")
     def test_streaming_simple_command_success(self):
         """Test streaming execution of a simple successful command."""
         # Create a simple subprocess
@@ -89,6 +91,8 @@ class TestRunShellCommandStreaming:
         assert result.exit_code == 0
         assert "hello world" in result.stdout
 
+    @pytest.mark.serial
+    @pytest.mark.xdist_group(name="real-process")
     def test_streaming_command_failure(self):
         """Test streaming execution of a failing command."""
         proc = subprocess.Popen(
@@ -110,6 +114,8 @@ class TestRunShellCommandStreaming:
         assert result.success is False
         assert result.exit_code == 1
 
+    @pytest.mark.serial
+    @pytest.mark.xdist_group(name="real-process")
     def test_streaming_with_stderr_output(self):
         """Test streaming captures stderr output."""
         proc = subprocess.Popen(
@@ -155,6 +161,8 @@ class TestRunShellCommandStreaming:
         assert output.success is False
         assert output.exit_code == -9
 
+    @pytest.mark.serial
+    @pytest.mark.xdist_group(name="real-process")
     def test_streaming_line_truncation(self):
         """Test that very long lines are truncated."""
         long_line = "x" * 500
@@ -179,6 +187,8 @@ class TestRunShellCommandStreaming:
             len(result.stdout.split("\n")[0]) <= MAX_LINE_LENGTH + len(LINE_TRUNCATION_HINT)
         )
 
+    @pytest.mark.serial
+    @pytest.mark.xdist_group(name="real-process")
     def test_streaming_silent_mode(self):
         """Test that silent mode suppresses output emission."""
         proc = subprocess.Popen(
@@ -201,6 +211,8 @@ class TestRunShellCommandStreaming:
         mock_emit.assert_not_called()
         assert result.success is True
 
+    @pytest.mark.serial
+    @pytest.mark.xdist_group(name="real-process")
     def test_streaming_non_silent_mode(self):
         """Test that non-silent mode emits output."""
         proc = subprocess.Popen(

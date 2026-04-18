@@ -4,6 +4,9 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+# Mark all tests as serial due to environment variable mutation
+pytestmark = [pytest.mark.serial, pytest.mark.xdist_group(name="env-mutation")]
+
 from code_puppy import callbacks
 from code_puppy.model_utils import get_claude_code_instructions, prepare_prompt_for_model
 from code_puppy.plugins.agent_skills.register_callbacks import _inject_skills_into_prompt

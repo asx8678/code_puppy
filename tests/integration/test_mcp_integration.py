@@ -11,6 +11,7 @@ import re
 import time
 
 import pexpect
+import pytest
 
 from tests.integration.cli_expect.fixtures import (
     CliHarness,

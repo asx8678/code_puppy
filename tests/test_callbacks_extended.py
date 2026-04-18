@@ -330,6 +330,8 @@ class TestCallbacksExtended:
         assert len(get_callbacks("startup")) == 1
 
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="env-mutation")
 class TestPreToolCallCallback:
     """Test on_pre_tool_call callback hook."""
 
@@ -435,6 +437,8 @@ class TestPreToolCallCallback:
         assert received_context == [None]
 
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="env-mutation")
 class TestPostToolCallCallback:
     """Test on_post_tool_call callback hook."""
 
@@ -568,6 +572,8 @@ class TestPostToolCallCallback:
         assert captured_results[0] == error_result
 
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="env-mutation")
 class TestStreamEventCallback:
     """Test on_stream_event callback hook."""
 
@@ -692,6 +698,8 @@ class TestStreamEventCallback:
             mock_logger.error.assert_called_once()
 
 
+@pytest.mark.serial
+@pytest.mark.xdist_group(name="env-mutation")
 class TestNewConcurrentAndEnsureFuture:
     """Test new concurrent execution and ensure_future behaviors."""
 

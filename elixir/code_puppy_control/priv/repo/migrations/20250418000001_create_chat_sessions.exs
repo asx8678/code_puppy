@@ -19,7 +19,7 @@ defmodule CodePuppyControl.Repo.Migrations.CreateChatSessions do
       message_count INTEGER DEFAULT 0,
       auto_saved INTEGER DEFAULT 0,
       timestamp TEXT,
-      created_at TEXT DEFAULT (datetime('now')),
+      inserted_at TEXT DEFAULT (datetime('now')),
       updated_at TEXT DEFAULT (datetime('now'))
     )
     """)
