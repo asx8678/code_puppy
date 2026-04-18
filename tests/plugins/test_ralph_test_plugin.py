@@ -47,15 +47,11 @@ class TestRegisterToolsCallback:
         clear_callbacks("register_tools")
         os.environ.pop("PUP_DISABLE_CALLBACK_PLUGIN_LOADING", None)
 
-@pytest.mark.serial
-@pytest.mark.xdist_group(name="env-mutation")
     def test_register_tools_callback_returns_empty_list_when_no_callbacks(self):
         """Test that on_register_tools returns empty list when no callbacks registered."""
         result = on_register_tools()
         assert result == []
 
-@pytest.mark.serial
-@pytest.mark.xdist_group(name="env-mutation")
     def test_register_tools_callback_collects_tool_definitions(self):
         """Test that on_register_tools collects tool definitions from callbacks."""
 
@@ -72,8 +68,6 @@ class TestRegisterToolsCallback:
         assert results[0][0]["name"] == "test_tool"
         assert results[0][0]["register_func"] == mock_register_func
 
-@pytest.mark.serial
-@pytest.mark.xdist_group(name="env-mutation")
     def test_register_tools_callback_handles_multiple_providers(self):
         """Test that multiple tool providers can register."""
 
@@ -89,8 +83,6 @@ class TestRegisterToolsCallback:
         results = on_register_tools()
         assert len(results) == 2
 
-@pytest.mark.serial
-@pytest.mark.xdist_group(name="env-mutation")
     def test_register_tools_callback_handles_none_return(self):
         """Test that callbacks returning None don't break collection."""
 
@@ -120,16 +112,12 @@ class TestRegisterAgentsCallback:
         clear_callbacks("register_agents")
         os.environ.pop("PUP_DISABLE_CALLBACK_PLUGIN_LOADING", None)
 
-@pytest.mark.serial
-@pytest.mark.xdist_group(name="env-mutation")
     def test_register_agents_callback_returns_empty_list_when_no_callbacks(self):
         """Test that on_register_agents returns empty list when no callbacks registered."""
         result = on_register_agents()
         assert result == []
 
     @pytest.mark.skipif(not HAS_BASE_AGENT, reason="BaseAgent requires MCP")
-@pytest.mark.serial
-@pytest.mark.xdist_group(name="env-mutation")
     def test_register_agents_callback_collects_class_based_agents(self):
         """Test registering agents via class."""
 
@@ -162,8 +150,6 @@ class TestRegisterAgentsCallback:
         assert results[0][0]["name"] == "mock-agent"
         assert results[0][0]["class"] == MockAgent
 
-@pytest.mark.serial
-@pytest.mark.xdist_group(name="env-mutation")
     def test_register_agents_callback_collects_json_path_agents(self):
         """Test registering agents via JSON path."""
 
@@ -320,8 +306,6 @@ class TestAgentRunEndCallback:
 class TestRalphTestPluginIntegration:
     """Integration tests for the ralph_test plugin."""
 
-@pytest.mark.serial
-@pytest.mark.xdist_group(name="env-mutation")
     def test_ralph_test_plugin_loads_successfully(self):
         """Test that the ralph_test plugin loads without errors."""
         # Import should trigger callback registration
@@ -346,8 +330,6 @@ class TestRalphTestPluginIntegration:
             for cb in complete_callbacks
         )
 
-@pytest.mark.serial
-@pytest.mark.xdist_group(name="env-mutation")
     def test_ralph_test_plugin_provides_dummy_tool(self):
         """Test that the plugin provides the dummy echo tool."""
         from code_puppy.plugins.ralph_test.register_callbacks import _provide_tools
@@ -357,8 +339,6 @@ class TestRalphTestPluginIntegration:
         assert tools[0]["name"] == "ralph_test_echo"
         assert callable(tools[0]["register_func"])
 
-@pytest.mark.serial
-@pytest.mark.xdist_group(name="env-mutation")
     def test_ralph_test_plugin_provides_dummy_agent(self):
         """Test that the plugin provides the dummy agent."""
         from code_puppy.plugins.ralph_test.register_callbacks import (
@@ -371,8 +351,6 @@ class TestRalphTestPluginIntegration:
         assert agents[0]["name"] == "ralph-test-dummy"
         assert agents[0]["class"] == DummyRalphTestAgent
 
-@pytest.mark.serial
-@pytest.mark.xdist_group(name="env-mutation")
     def test_dummy_agent_has_correct_properties(self):
         """Test that the dummy agent is properly configured."""
         from code_puppy.plugins.ralph_test.register_callbacks import DummyRalphTestAgent

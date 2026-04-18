@@ -30,8 +30,6 @@ from code_puppy.messaging.messages import (
 class TestMessageBusInitialization:
     """Test MessageBus initialization and basic setup."""
 
-@pytest.mark.serial
-@pytest.mark.xdist_group(name="timing")
     def test_initialization_default(self):
         """Test default initialization."""
         bus = MessageBus()
@@ -43,15 +41,11 @@ class TestMessageBusInitialization:
         assert isinstance(bus._startup_buffer, deque)
         assert len(bus._startup_buffer) == 0
 
-@pytest.mark.serial
-@pytest.mark.xdist_group(name="timing")
     def test_initialization_custom_maxsize(self):
         """Test initialization with custom maxsize."""
         bus = MessageBus(maxsize=500)
         assert bus._maxsize == 500
 
-@pytest.mark.serial
-@pytest.mark.xdist_group(name="timing")
     def test_initialization_queues_are_independent(self):
         """Test that outgoing and incoming queues are separate."""
         bus = MessageBus()
@@ -65,8 +59,6 @@ class TestMessageBusInitialization:
 class TestMessageBusEmission:
     """Test message emission functionality."""
 
-@pytest.mark.serial
-@pytest.mark.xdist_group(name="timing")
     def test_emit_text_message(self):
         """Test emitting a text message."""
         bus = MessageBus()
@@ -77,8 +69,6 @@ class TestMessageBusEmission:
         emitted = bus._outgoing.get_nowait()
         assert emitted.text == "Hello"
 
-@pytest.mark.serial
-@pytest.mark.xdist_group(name="timing")
     def test_emit_buffers_without_renderer(self):
         """Test that messages are buffered when no renderer is active."""
         bus = MessageBus()
@@ -89,8 +79,6 @@ class TestMessageBusEmission:
         assert len(bus._startup_buffer) == 1
         assert bus._startup_buffer[0].text == "Test"
 
-@pytest.mark.serial
-@pytest.mark.xdist_group(name="timing")
     def test_emit_info(self):
         """Test emit_info helper method."""
         bus = MessageBus()
@@ -101,8 +89,6 @@ class TestMessageBusEmission:
         assert msg.level == MessageLevel.INFO
         assert msg.text == "Info message"
 
-@pytest.mark.serial
-@pytest.mark.xdist_group(name="timing")
     def test_emit_warning(self):
         """Test emit_warning helper method."""
         bus = MessageBus()
@@ -111,8 +97,6 @@ class TestMessageBusEmission:
         msg = bus._outgoing.get_nowait()
         assert msg.level == MessageLevel.WARNING
 
-@pytest.mark.serial
-@pytest.mark.xdist_group(name="timing")
     def test_emit_error(self):
         """Test emit_error helper method."""
         bus = MessageBus()
@@ -121,8 +105,6 @@ class TestMessageBusEmission:
         msg = bus._outgoing.get_nowait()
         assert msg.level == MessageLevel.ERROR
 
-@pytest.mark.serial
-@pytest.mark.xdist_group(name="timing")
     def test_emit_success(self):
         """Test emit_success helper method."""
         bus = MessageBus()
@@ -131,8 +113,6 @@ class TestMessageBusEmission:
         msg = bus._outgoing.get_nowait()
         assert msg.level == MessageLevel.SUCCESS
 
-@pytest.mark.serial
-@pytest.mark.xdist_group(name="timing")
     def test_emit_debug(self):
         """Test emit_debug helper method."""
         bus = MessageBus()
@@ -141,8 +121,6 @@ class TestMessageBusEmission:
         msg = bus._outgoing.get_nowait()
         assert msg.level == MessageLevel.DEBUG
 
-@pytest.mark.serial
-@pytest.mark.xdist_group(name="timing")
     def test_emit_text_with_level_and_category(self):
         """Test emit_text with custom level and category."""
         bus = MessageBus()
@@ -156,8 +134,6 @@ class TestMessageBusEmission:
         assert msg.level == MessageLevel.ERROR
         assert msg.category == MessageCategory.AGENT
 
-@pytest.mark.serial
-@pytest.mark.xdist_group(name="timing")
     def test_emit_auto_tags_with_session_id(self):
         """Test that emit auto-tags messages with session_id."""
         bus = MessageBus()
@@ -168,8 +144,6 @@ class TestMessageBusEmission:
         emitted = bus._outgoing.get_nowait()
         assert emitted.session_id == "session-123"
 
-@pytest.mark.serial
-@pytest.mark.xdist_group(name="timing")
     def test_emit_respects_existing_session_id(self):
         """Test that emit respects existing session_id."""
         bus = MessageBus()
@@ -182,8 +156,6 @@ class TestMessageBusEmission:
         emitted = bus._outgoing.get_nowait()
         assert emitted.session_id == "custom-id"
 
-@pytest.mark.serial
-@pytest.mark.xdist_group(name="timing")
     def test_emit_queue_full_drops_oldest(self):
         """Test that full queue drops oldest message."""
         bus = MessageBus(maxsize=2)
@@ -204,16 +176,12 @@ class TestMessageBusEmission:
 class TestSessionContext:
     """Test session context management."""
 
-@pytest.mark.serial
-@pytest.mark.xdist_group(name="timing")
     def test_set_session_context(self):
         """Test setting session context."""
         bus = MessageBus()
         bus.set_session_context("session-1")
         assert bus.get_session_context() == "session-1"
 
-@pytest.mark.serial
-@pytest.mark.xdist_group(name="timing")
     def test_clear_session_context(self):
         """Test clearing session context."""
         bus = MessageBus()
@@ -221,8 +189,6 @@ class TestSessionContext:
         bus.set_session_context(None)
         assert bus.get_session_context() is None
 
-@pytest.mark.serial
-@pytest.mark.xdist_group(name="timing")
     def test_session_context_thread_safe(self):
         """Test that session context is thread-safe."""
         bus = MessageBus()
@@ -478,8 +444,6 @@ class TestSelectionRequest:
 class TestProvideResponse:
     """Test response handling from UI."""
 
-@pytest.mark.serial
-@pytest.mark.xdist_group(name="timing")
     def test_provide_response_puts_in_queue(self):
         """Test that non-response commands go into incoming queue."""
         from code_puppy.messaging.commands import CancelAgentCommand
@@ -492,8 +456,6 @@ class TestProvideResponse:
         retrieved = bus._incoming.get_nowait()
         assert retrieved is command
 
-@pytest.mark.serial
-@pytest.mark.xdist_group(name="timing")
     def test_provide_response_unknown_request_ignored(self):
         """Test providing response for unknown request is safe."""
         bus = MessageBus()
@@ -512,8 +474,6 @@ class TestProvideResponse:
 class TestQueueAccess:
     """Test queue access methods."""
 
-@pytest.mark.serial
-@pytest.mark.xdist_group(name="timing")
     def test_get_message_nowait(self):
         """Test non-blocking message retrieval."""
         bus = MessageBus()
@@ -525,8 +485,6 @@ class TestQueueAccess:
         assert retrieved is not None
         assert retrieved.text == "test"
 
-@pytest.mark.serial
-@pytest.mark.xdist_group(name="timing")
     def test_get_message_nowait_empty(self):
         """Test non-blocking message retrieval on empty queue."""
         bus = MessageBus()
@@ -535,8 +493,6 @@ class TestQueueAccess:
         retrieved = bus.get_message_nowait()
         assert retrieved is None
 
-@pytest.mark.serial
-@pytest.mark.xdist_group(name="timing")
     def test_command_queue_direct_put(self):
         """Test putting commands directly in queue."""
         bus = MessageBus()
@@ -554,15 +510,11 @@ class TestQueueAccess:
 class TestBufferedMessages:
     """Test message buffering functionality."""
 
-@pytest.mark.serial
-@pytest.mark.xdist_group(name="timing")
     def test_get_buffered_messages_empty(self):
         """Test getting buffered messages when none exist."""
         bus = MessageBus()
         assert len(bus.get_buffered_messages()) == 0
 
-@pytest.mark.serial
-@pytest.mark.xdist_group(name="timing")
     def test_get_buffered_messages(self):
         """Test getting buffered messages."""
         bus = MessageBus()
@@ -576,8 +528,6 @@ class TestBufferedMessages:
         assert buffered[0].text == "msg1"
         assert buffered[1].text == "msg2"
 
-@pytest.mark.serial
-@pytest.mark.xdist_group(name="timing")
     def test_get_buffered_messages_swap_and_clear(self):
         """get_buffered_messages() atomically drains the startup buffer."""
         bus = MessageBus()
@@ -589,8 +539,6 @@ class TestBufferedMessages:
         # Subsequent call sees an empty buffer
         assert len(bus.get_buffered_messages()) == 0
 
-@pytest.mark.serial
-@pytest.mark.xdist_group(name="timing")
     def test_activate_renderer_flushes_buffer(self):
         """Test that activating renderer allows buffered messages to flush."""
         bus = MessageBus()
@@ -618,8 +566,6 @@ class TestBufferedMessages:
 class TestThreadSafety:
     """Test thread-safety of MessageBus operations."""
 
-@pytest.mark.serial
-@pytest.mark.xdist_group(name="timing")
     def test_concurrent_emit(self):
         """Test concurrent message emission."""
         bus = MessageBus()
@@ -645,8 +591,6 @@ class TestThreadSafety:
         assert len(results) == 30
         assert bus._outgoing.qsize() == 30
 
-@pytest.mark.serial
-@pytest.mark.xdist_group(name="timing")
     def test_concurrent_session_context(self):
         """Test concurrent session context updates."""
         bus = MessageBus()

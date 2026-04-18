@@ -51,8 +51,6 @@ class TestConcurrentPluginDiscoveryNoRace:
     - No crashes (thread-safety issues)
     """
 
-@pytest.mark.serial
-@pytest.mark.xdist_group(name="timing")
     def test_concurrent_skill_discovery_thread_safety(self, tmp_path):
         """Test that concurrent skill discovery from multiple threads is safe."""
         from code_puppy.plugins.agent_skills.discovery import discover_skills
@@ -88,8 +86,6 @@ class TestConcurrentPluginDiscoveryNoRace:
         # All should see the same 5 skills
         assert all(r == 5 for r in results), f"Inconsistent results: {results}"
 
-@pytest.mark.serial
-@pytest.mark.xdist_group(name="timing")
     def test_concurrent_discovery_no_duplicate_plugins(self, tmp_path):
         """Test that concurrent discovery does not create duplicate plugin entries."""
         from code_puppy.plugins.agent_skills.discovery import discover_skills
@@ -119,8 +115,6 @@ class TestConcurrentPluginDiscoveryNoRace:
         # If there were races, we might see duplicates within a single result
         # (This would indicate map corruption during the deduplication phase)
 
-@pytest.mark.serial
-@pytest.mark.xdist_group(name="timing")
     def test_plugin_registry_concurrent_access(self):
         """Test that the plugin registry handles concurrent callback registration."""
         from code_puppy.callbacks import (
@@ -171,8 +165,6 @@ class TestStagedChangesRaceConditions:
     We verify this protection works under adversarial concurrent access.
     """
 
-@pytest.mark.serial
-@pytest.mark.xdist_group(name="timing")
     def test_concurrent_add_change_no_corruption(self):
         """Test that concurrent adds don't corrupt the changes dict."""
         from code_puppy.staged_changes import StagedChangesSandbox
@@ -200,8 +192,6 @@ class TestStagedChangesRaceConditions:
         assert sandbox.count() == 50, f"Expected 50 changes, got {sandbox.count()}"
         assert len(errors) == 0, f"Errors during concurrent adds: {errors}"
 
-@pytest.mark.serial
-@pytest.mark.xdist_group(name="timing")
     def test_concurrent_add_and_remove_race(self):
         """Test that adds and removes during concurrent access don't crash."""
         from code_puppy.staged_changes import StagedChangesSandbox
@@ -241,8 +231,6 @@ class TestStagedChangesRaceConditions:
         # No errors should occur
         assert len(errors) == 0, f"Errors during add/remove race: {errors}"
 
-@pytest.mark.serial
-@pytest.mark.xdist_group(name="timing")
     def test_save_during_modification_race(self, tmp_path):
         """Test saving while changes are being added doesn't corrupt the file."""
         from code_puppy.staged_changes import StagedChangesSandbox
@@ -300,8 +288,6 @@ class TestShellSafetyBypass:
     - Encoding-based evasion
     """
 
-@pytest.mark.serial
-@pytest.mark.xdist_group(name="timing")
     def test_shell_injection_via_args_rejected(self):
         """Test that shell injection in command args is detected."""
 
@@ -322,8 +308,6 @@ class TestShellSafetyBypass:
                 f"Pattern '{pattern}' should be high risk, got {risk}"
             )
 
-@pytest.mark.serial
-@pytest.mark.xdist_group(name="timing")
     def test_oauth_bypass_removed(self):
         """Test that OAuth model bypass has been removed for security."""
         from code_puppy.plugins.shell_safety.register_callbacks import is_oauth_model
@@ -336,8 +320,6 @@ class TestShellSafetyBypass:
         assert is_oauth_model(None) is False
         assert is_oauth_model("regular-model") is False
 
-@pytest.mark.serial
-@pytest.mark.xdist_group(name="timing")
     def test_safety_callback_blocks_when_assessment_fails(self):
         """Test that commands are blocked if safety assessment errors."""
         from code_puppy.plugins.shell_safety.register_callbacks import (
@@ -357,8 +339,6 @@ class TestShellSafetyBypass:
             assert result.get("blocked") is True, "Should return blocked=True"
             assert "risk" in result, "Should include risk level"
 
-@pytest.mark.serial
-@pytest.mark.xdist_group(name="timing")
     def test_yolo_mode_respects_threshold(self):
         """Test that yolo_mode still respects risk thresholds."""
         from code_puppy.plugins.shell_safety.register_callbacks import (
@@ -372,8 +352,6 @@ class TestShellSafetyBypass:
             compare_risk_levels("critical", "critical") is False
         )  # 4 == 4 (at threshold)
 
-@pytest.mark.serial
-@pytest.mark.xdist_group(name="timing")
     def test_compound_command_max_risk_taken(self):
         """Test that compound commands use max risk, not average."""
         from code_puppy.plugins.shell_safety.register_callbacks import (
@@ -405,8 +383,6 @@ class TestSensitivePathAccess:
     techniques cannot bypass the sensitive path protection.
     """
 
-@pytest.mark.serial
-@pytest.mark.xdist_group(name="timing")
     def test_ssh_key_access_blocked(self):
         """Test that SSH key access is blocked."""
         from code_puppy.tools.file_operations import _is_sensitive_path
@@ -417,8 +393,6 @@ class TestSensitivePathAccess:
         assert _is_sensitive_path(f"{home}/.ssh/authorized_keys") is True
         assert _is_sensitive_path(f"{home}/.ssh/config") is True
 
-@pytest.mark.serial
-@pytest.mark.xdist_group(name="timing")
     def test_aws_credentials_blocked(self):
         """Test that AWS credential access is blocked."""
         from code_puppy.tools.file_operations import _is_sensitive_path
@@ -427,8 +401,6 @@ class TestSensitivePathAccess:
         assert _is_sensitive_path(f"{home}/.aws/credentials") is True
         assert _is_sensitive_path(f"{home}/.aws/config") is True
 
-@pytest.mark.serial
-@pytest.mark.xdist_group(name="timing")
     def test_path_traversal_to_sensitive_blocked(self):
         """Test that path traversal to sensitive paths is blocked."""
         from code_puppy.tools.file_operations import _is_sensitive_path
@@ -438,8 +410,6 @@ class TestSensitivePathAccess:
         assert _is_sensitive_path(f"{home}/.ssh/id_rsa") is True
         assert _is_sensitive_path(f"{home}/.aws/credentials") is True
 
-@pytest.mark.serial
-@pytest.mark.xdist_group(name="timing")
     def test_symlink_to_sensitive_blocked(self):
         """Test that symlinks pointing to sensitive paths are blocked."""
 
@@ -447,8 +417,6 @@ class TestSensitivePathAccess:
         # Note: This test requires an actual symlink to verify
         # The function uses os.path.realpath() which resolves symlinks
 
-@pytest.mark.serial
-@pytest.mark.xdist_group(name="timing")
     def test_case_variations_blocked(self, tmp_path):
         """Test that case variations of sensitive paths are handled."""
         from code_puppy.tools.file_operations import _is_sensitive_path
@@ -470,8 +438,6 @@ class TestSensitivePathAccess:
             # On case-sensitive FS this might be False, which is a gap
             # but we document it here for awareness
 
-@pytest.mark.serial
-@pytest.mark.xdist_group(name="timing")
     def test_null_byte_injection_blocked(self):
         """Test that null byte injection in paths is handled."""
         from code_puppy.tools.file_operations import validate_file_path
@@ -480,8 +446,6 @@ class TestSensitivePathAccess:
         assert is_valid is False, "Null byte should invalidate path"
         assert "null" in error.lower()
 
-@pytest.mark.serial
-@pytest.mark.xdist_group(name="chdir")
     def test_relative_path_to_sensitive_blocked(self):
         """Test that relative paths to sensitive dirs are blocked."""
         from code_puppy.tools.file_operations import _is_sensitive_path
@@ -512,8 +476,6 @@ class TestMalformedSessionHandling:
     files do not cause crashes or security issues.
     """
 
-@pytest.mark.serial
-@pytest.mark.xdist_group(name="timing")
     def test_corrupted_session_file_rejected(self, tmp_path):
         """Test that corrupted session files are rejected gracefully."""
         # Create a corrupted session file
@@ -527,8 +489,6 @@ class TestMalformedSessionHandling:
         assert messages == [], "Should return empty list on corruption"
         assert hashes == [], "Should return empty hashes on corruption"
 
-@pytest.mark.serial
-@pytest.mark.xdist_group(name="timing")
     def test_tampered_hmac_rejected(self, tmp_path):
         """Test that tampered HMAC causes rejection."""
         # Create a valid session with HMAC (JSON format)
@@ -552,8 +512,6 @@ class TestMalformedSessionHandling:
         messages, hashes = load_session_with_hashes("tampered", session_dir)
         assert messages == [], "Should return empty on HMAC failure"
 
-@pytest.mark.serial
-@pytest.mark.xdist_group(name="timing")
     def test_pickle_format_rejected(self, tmp_path):
         """Test that legacy pickle format is rejected (RCE protection)."""
         session_dir = tmp_path / "sessions"
@@ -570,8 +528,6 @@ class TestMalformedSessionHandling:
         assert messages == [], "Should return empty list on pickle format"
         assert hashes == [], "Should return empty hashes on pickle format"
 
-@pytest.mark.serial
-@pytest.mark.xdist_group(name="timing")
     def test_session_with_invalid_json_metadata(self, tmp_path):
         """Test that invalid JSON metadata is handled gracefully."""
         session_dir = tmp_path / "sessions"
@@ -594,8 +550,6 @@ class TestMalformedSessionHandling:
         messages, hashes = load_session_with_hashes("test", session_dir)
         # This might succeed or fail gracefully depending on implementation
 
-@pytest.mark.serial
-@pytest.mark.xdist_group(name="timing")
     def test_very_large_session_file(self, tmp_path):
         """Test that extremely large session files are handled."""
         session_dir = tmp_path / "sessions"
@@ -633,8 +587,6 @@ class TestMaliciousRegexPatterns:
     attacks and other regex-based attacks are mitigated.
     """
 
-@pytest.mark.serial
-@pytest.mark.xdist_group(name="timing")
     def test_redos_catastrophic_backtracking(self):
         """Test that catastrophic backtracking patterns don't hang."""
         from code_puppy.hook_engine.matcher import matches
@@ -660,8 +612,6 @@ class TestMaliciousRegexPatterns:
                     "Regex evaluation timed out - potential ReDoS vulnerability"
                 )
 
-@pytest.mark.serial
-@pytest.mark.xdist_group(name="timing")
     def test_nested_quantifiers_handled(self):
         """Test that nested quantifier patterns are handled."""
         from code_puppy.hook_engine.matcher import matches
@@ -682,8 +632,6 @@ class TestMaliciousRegexPatterns:
             except Exception:
                 pass  # Error is fine, hang is not
 
-@pytest.mark.serial
-@pytest.mark.xdist_group(name="timing")
     def test_regex_error_handling(self):
         """Test that invalid regex patterns are handled gracefully."""
         from code_puppy.hook_engine.matcher import matches
@@ -705,8 +653,6 @@ class TestMaliciousRegexPatterns:
                 # Should be a handled error
                 assert isinstance(e, (re.error, ValueError))
 
-@pytest.mark.serial
-@pytest.mark.xdist_group(name="timing")
     def test_unicode_regex_handling(self):
         """Test that unicode in regex patterns is handled."""
         from code_puppy.hook_engine.matcher import matches
@@ -724,8 +670,6 @@ class TestMaliciousRegexPatterns:
             except Exception:
                 pass  # Should not crash
 
-@pytest.mark.serial
-@pytest.mark.xdist_group(name="timing")
     def test_very_long_pattern_handled(self):
         """Test that very long regex patterns are handled."""
         from code_puppy.hook_engine.matcher import matches
@@ -754,8 +698,6 @@ class TestMCPStdioConfigSecurity:
     before they can be used to execute arbitrary commands.
     """
 
-@pytest.mark.serial
-@pytest.mark.xdist_group(name="timing")
     def test_command_injection_in_args_rejected(self):
         """Test that command injection in args is rejected."""
         from code_puppy.mcp_.mcp_security import (
@@ -776,8 +718,6 @@ class TestMCPStdioConfigSecurity:
             or "unsafe" in str(exc_info.value).lower()
         )
 
-@pytest.mark.serial
-@pytest.mark.xdist_group(name="timing")
     def test_shell_metacharacters_in_command_rejected(self):
         """Test that shell metacharacters in command are rejected."""
         from code_puppy.mcp_.mcp_security import (
@@ -799,8 +739,6 @@ class TestMCPStdioConfigSecurity:
             with pytest.raises((CommandNotAllowedError, CommandInjectionError)):
                 validate_command_whitelist(cmd)
 
-@pytest.mark.serial
-@pytest.mark.xdist_group(name="timing")
     def test_path_traversal_in_cwd_rejected(self):
         """Test that path traversal in cwd is rejected."""
         from code_puppy.mcp_.mcp_security import (
@@ -817,8 +755,6 @@ class TestMCPStdioConfigSecurity:
         with pytest.raises(PathTraversalError):
             validate_stdio_config(config)
 
-@pytest.mark.serial
-@pytest.mark.xdist_group(name="timing")
     def test_env_injection_in_variables_rejected(self):
         """Test that environment variable injection is rejected."""
         from code_puppy.mcp_.mcp_security import (
@@ -834,8 +770,6 @@ class TestMCPStdioConfigSecurity:
         with pytest.raises(InvalidArgumentError):
             validate_environment_variables(env)
 
-@pytest.mark.serial
-@pytest.mark.xdist_group(name="timing")
     def test_command_whitelist_enforced(self):
         """Test that only whitelisted commands are allowed."""
         from code_puppy.mcp_.mcp_security import (
@@ -854,8 +788,6 @@ class TestMCPStdioConfigSecurity:
             with pytest.raises(CommandNotAllowedError):
                 validate_command_whitelist(cmd)
 
-@pytest.mark.serial
-@pytest.mark.xdist_group(name="timing")
     def test_config_must_be_dict(self):
         """Test that non-dict configs are rejected."""
         from code_puppy.mcp_.mcp_security import validate_stdio_config, MCPSecurityError
@@ -866,8 +798,6 @@ class TestMCPStdioConfigSecurity:
         with pytest.raises(MCPSecurityError):
             validate_stdio_config(["list", "not", "dict"])
 
-@pytest.mark.serial
-@pytest.mark.xdist_group(name="timing")
     def test_deeply_nested_config_handled(self):
         """Test that deeply nested configs don't cause recursion issues."""
         from code_puppy.mcp_.mcp_security import validate_stdio_config
@@ -908,8 +838,6 @@ def _assess_risk_for_test(pattern: str) -> str | None:
 class TestSecurityIntegrationScenarios:
     """Integration tests combining multiple security scenarios."""
 
-@pytest.mark.serial
-@pytest.mark.xdist_group(name="timing")
     def test_concurrent_file_ops_with_sensitive_paths(self, tmp_path):
         """Test concurrent file operations with sensitive path attempts."""
         from code_puppy.tools.file_operations import validate_file_path
@@ -950,8 +878,6 @@ class TestSecurityIntegrationScenarios:
             if not expected:  # Should be sensitive
                 assert is_valid is False, f"Sensitive path {path} was allowed!"
 
-@pytest.mark.serial
-@pytest.mark.xdist_group(name="timing")
     def test_shell_safety_with_compound_commands(self):
         """Test shell safety with complex compound commands."""
         from code_puppy.plugins.shell_safety.register_callbacks import (
@@ -965,8 +891,6 @@ class TestSecurityIntegrationScenarios:
         # cd is usually low risk, others are none
         assert max_risk in ["low", "none"]
 
-@pytest.mark.serial
-@pytest.mark.xdist_group(name="timing")
     def test_session_storage_under_memory_pressure(self, tmp_path):
         """Test that session storage handles memory-constrained scenarios."""
         session_dir = tmp_path / "sessions"

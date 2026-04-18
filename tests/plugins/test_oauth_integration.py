@@ -98,8 +98,6 @@ class TestOAuthFlowIntegration:
 
     @patch("requests.post")
     @patch("webbrowser.open")
-@pytest.mark.serial
-@pytest.mark.xdist_group(name="network")
     def test_complete_chatgpt_oauth_flow(
         self, mock_browser, mock_post, mock_token_storage
     ):
@@ -155,8 +153,6 @@ class TestOAuthFlowIntegration:
 
     @patch("requests.get")
     @patch("requests.post")
-@pytest.mark.serial
-@pytest.mark.xdist_group(name="network")
     def test_chatgpt_model_registration_flow(
         self, mock_post, mock_get, mock_token_storage, mock_models_storage
     ):
@@ -244,8 +240,6 @@ class TestOAuthFlowIntegration:
 
     @patch("requests.get")
     @patch("requests.post")
-@pytest.mark.serial
-@pytest.mark.xdist_group(name="network")
     def test_claude_complete_oauth_flow(self, mock_post, mock_get, tmp_path):
         """Test complete Claude OAuth flow from tokens to models."""
         token_path = tmp_path / "claude_tokens.json"
@@ -322,8 +316,6 @@ class TestOAuthFlowIntegration:
 class TestOAuthSecurityScenarios:
     """Security-focused integration tests."""
 
-@pytest.mark.serial
-@pytest.mark.xdist_group(name="network")
     def test_csrf_state_validation_integration(self):
         """Test that CSRF state validation works in OAuth flow."""
         context1 = prepare_oauth_context()
@@ -361,8 +353,6 @@ class TestOAuthSecurityScenarios:
         assert params1["state"][0] == context1.state
         assert params2["state"][0] == context2.state
 
-@pytest.mark.serial
-@pytest.mark.xdist_group(name="network")
     def test_pkce_security_integration(self):
         """Test PKCE (Proof Key for Code Exchange) security integration."""
         context = prepare_oauth_context()
@@ -388,8 +378,6 @@ class TestOAuthSecurityScenarios:
         assert context.code_challenge != context2.code_challenge
 
     @patch("requests.post")
-@pytest.mark.serial
-@pytest.mark.xdist_group(name="network")
     def test_expired_context_token_exchange(self, mock_post):
         """Test that expired OAuth contexts cannot exchange tokens."""
         # Create an expired context
@@ -411,8 +399,6 @@ class TestOAuthSecurityScenarios:
         mock_post.assert_not_called()
 
     @patch("requests.post")
-@pytest.mark.serial
-@pytest.mark.xdist_group(name="network")
     def test_malformed_token_response_handling(self, mock_post):
         """Test handling of malformed or unexpected token responses."""
         context = prepare_oauth_context()
@@ -447,8 +433,6 @@ class TestOAuthSecurityScenarios:
             # Should handle gracefully (return None or partial data)
             assert result is None or isinstance(result, dict)
 
-@pytest.mark.serial
-@pytest.mark.xdist_group(name="network")
     def test_token_storage_security(self, mock_token_storage):
         """Test that token storage follows security best practices."""
         test_tokens = {
@@ -479,8 +463,6 @@ class TestOAuthSecurityScenarios:
             assert not (file_stat.st_mode & 0o040)  # No read for group
 
     @patch("requests.get")
-@pytest.mark.serial
-@pytest.mark.xdist_group(name="network")
     def test_api_key_isolation_between_providers(self, mock_get):
         """Test that API keys from different providers are properly isolated."""
 
@@ -527,8 +509,6 @@ class TestOAuthErrorRecovery:
     """Test error recovery and resilience scenarios."""
 
     @patch("requests.post")
-@pytest.mark.serial
-@pytest.mark.xdist_group(name="network")
     def test_network_failure_recovery_flow(self, mock_post):
         """Test OAuth flow behavior under network failures."""
         context = prepare_oauth_context()
@@ -550,8 +530,6 @@ class TestOAuthErrorRecovery:
             assert result is None
 
     @patch("requests.get")
-@pytest.mark.serial
-@pytest.mark.xdist_group(name="network")
     def test_model_fetching_fallback_behavior(self, mock_get):
         """Test model fetching behavior under various failure conditions."""
         failure_cases = [
@@ -579,8 +557,6 @@ class TestOAuthErrorRecovery:
             assert openai_result == DEFAULT_CODEX_MODELS
             assert claude_result is None
 
-@pytest.mark.serial
-@pytest.mark.xdist_group(name="network")
     def test_partial_token_storage_recovery(self, mock_token_storage):
         """Test recovery scenarios with partial or corrupted token storage."""
         # Create corrupted token file
@@ -605,8 +581,6 @@ class TestOAuthErrorRecovery:
             assert recovered == new_tokens
 
     @patch("requests.post")
-@pytest.mark.serial
-@pytest.mark.xdist_group(name="network")
     def test_token_refresh_flow_simulation(self, mock_post):
         """Test simulated token refresh flow (if implemented)."""
         # Note: This is a placeholder for potential refresh token functionality
@@ -642,8 +616,6 @@ class TestOAuthConcurrencyAndThreading:
     to avoid parallel test conflicts.
     """
 
-@pytest.mark.serial
-@pytest.mark.xdist_group(name="network")
     def test_concurrent_oauth_context_generation(self):
         """Test that OAuth context generation is thread-safe."""
         contexts = []
@@ -672,8 +644,6 @@ class TestOAuthConcurrencyAndThreading:
         assert len(contexts) == 10
 
     @patch("requests.post")
-@pytest.mark.serial
-@pytest.mark.xdist_group(name="network")
     def test_concurrent_token_exchange(self, mock_post):
         """Test concurrent token exchange requests."""
         mock_response = Mock()
@@ -715,8 +685,6 @@ class TestOAuthConcurrencyAndThreading:
 class TestOAuthConfigurationIntegration:
     """Test OAuth configuration and feature integration."""
 
-@pytest.mark.serial
-@pytest.mark.xdist_group(name="network")
     def test_chatgpt_config_validation(self):
         """Test that ChatGPT OAuth configuration is complete and valid."""
         config = CHATGPT_OAUTH_CONFIG
@@ -757,8 +725,6 @@ class TestOAuthConfigurationIntegration:
         # Timeout should be reasonable
         assert 30 <= config["callback_timeout"] <= 600
 
-@pytest.mark.serial
-@pytest.mark.xdist_group(name="network")
     def test_claude_config_validation(self):
         """Test that Claude OAuth configuration is complete and valid."""
         config = CLAUDE_CODE_OAUTH_CONFIG
@@ -796,8 +762,6 @@ class TestOAuthConfigurationIntegration:
         assert config["token_url"].startswith("https://")
         assert config["api_base_url"].startswith("https://")
 
-@pytest.mark.serial
-@pytest.mark.xdist_group(name="network")
     def test_path_configuration_resolves_correctly(self, tmp_path):
         """Test that paths resolve correctly in testing environment."""
         # Test ChatGPT paths
@@ -826,8 +790,6 @@ class TestOAuthConfigurationIntegration:
 class TestOAuthDataIntegrity:
     """Test data integrity across OAuth operations."""
 
-@pytest.mark.serial
-@pytest.mark.xdist_group(name="network")
     def test_token_data_integrity_roundtrip(
         self, mock_token_storage, sample_oauth_tokens
     ):
@@ -853,8 +815,6 @@ class TestOAuthDataIntegrity:
             assert loaded_tokens["description"] == special_tokens["description"]
             assert loaded_tokens["metadata"] == special_tokens["metadata"]
 
-@pytest.mark.serial
-@pytest.mark.xdist_group(name="network")
     def test_model_config_data_integrity(self, mock_models_storage):
         """Test model configuration data integrity."""
         model_config = {
@@ -895,8 +855,6 @@ class TestOAuthDataIntegrity:
                 "coding",
             ]
 
-@pytest.mark.serial
-@pytest.mark.xdist_group(name="network")
     def test_concurrent_file_access_safety(self, mock_token_storage):
         """Test file access safety under concurrent operations."""
         errors = []
@@ -943,8 +901,6 @@ class TestOAuthDataIntegrity:
 class TestOAuthPerformanceAndLimits:
     """Test OAuth performance characteristics and limits."""
 
-@pytest.mark.serial
-@pytest.mark.xdist_group(name="network")
     def test_oauth_context_generation_performance(self):
         """Test OAuth context generation performance."""
         import time
@@ -965,8 +921,6 @@ class TestOAuthPerformanceAndLimits:
         states = [ctx.state for ctx in contexts]
         assert len(set(states)) == 100
 
-@pytest.mark.serial
-@pytest.mark.xdist_group(name="network")
     def test_token_storage_performance(self, mock_token_storage):
         """Test token storage and loading performance."""
         large_token_data = {
@@ -998,8 +952,6 @@ class TestOAuthPerformanceAndLimits:
             assert loaded_tokens == large_token_data
             assert load_time < 0.1, f"Token load too slow: {load_time}s"
 
-@pytest.mark.serial
-@pytest.mark.xdist_group(name="network")
     def test_model_list_handling_limits(self):
         """Test handling of large model lists."""
         from code_puppy.plugins.claude_code_oauth.utils import (

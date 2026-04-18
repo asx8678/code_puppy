@@ -142,8 +142,6 @@ def test_dir():
 class TestBasicProtocol:
     """Tests for basic JSON-RPC protocol compliance."""
 
-@pytest.mark.serial
-@pytest.mark.xdist_group(name="real-process")
     def test_ping(self, stdio_service):
         """Test that ping returns pong."""
         request = {"jsonrpc": "2.0", "id": 1, "method": "ping", "params": {}}
@@ -158,8 +156,6 @@ class TestBasicProtocol:
         assert response["result"]["pong"] is True
         assert "timestamp" in response["result"]
 
-@pytest.mark.serial
-@pytest.mark.xdist_group(name="real-process")
     def test_health_check(self, stdio_service):
         """Test health check returns service information."""
         request = {"jsonrpc": "2.0", "id": 2, "method": "health_check", "params": {}}
@@ -176,8 +172,6 @@ class TestBasicProtocol:
         assert "elixir_version" in response["result"]
         assert "otp_version" in response["result"]
 
-@pytest.mark.serial
-@pytest.mark.xdist_group(name="real-process")
     def test_method_not_found(self, stdio_service):
         """Test that unknown methods return proper error."""
         request = {"jsonrpc": "2.0", "id": 3, "method": "unknown_method", "params": {}}
@@ -193,8 +187,6 @@ class TestBasicProtocol:
         assert response["error"]["code"] == -32601
         assert "Method not found" in response["error"]["message"]
 
-@pytest.mark.serial
-@pytest.mark.xdist_group(name="real-process")
     def test_invalid_json(self, stdio_service):
         """Test that invalid JSON returns parse error."""
         stdio_service.stdin.write("not valid json\n")
@@ -214,8 +206,6 @@ class TestBasicProtocol:
 class TestFileOperations:
     """Tests for file operation methods."""
 
-@pytest.mark.serial
-@pytest.mark.xdist_group(name="real-process")
     def test_file_list(self, stdio_service, test_dir):
         """Test listing files in a directory."""
         request = {
@@ -242,8 +232,6 @@ class TestFileOperations:
         assert "file2.py" in paths
         assert "subdir" in paths
 
-@pytest.mark.serial
-@pytest.mark.xdist_group(name="real-process")
     def test_file_list_recursive(self, stdio_service, test_dir):
         """Test recursive file listing."""
         request = {
@@ -264,8 +252,6 @@ class TestFileOperations:
         assert "file1.txt" in paths
         assert "subdir/nested.txt" in paths
 
-@pytest.mark.serial
-@pytest.mark.xdist_group(name="real-process")
     def test_file_read(self, stdio_service, test_dir):
         """Test reading a file."""
         file_path = os.path.join(test_dir, "file1.txt")
@@ -292,8 +278,6 @@ class TestFileOperations:
         assert result["truncated"] is False
         assert result["error"] is None
 
-@pytest.mark.serial
-@pytest.mark.xdist_group(name="real-process")
     def test_file_read_with_line_range(self, stdio_service, test_dir):
         """Test reading specific line range."""
         file_path = os.path.join(test_dir, "file1.txt")
@@ -314,8 +298,6 @@ class TestFileOperations:
         assert result["content"] == "Line 2"
         assert result["truncated"] is True
 
-@pytest.mark.serial
-@pytest.mark.xdist_group(name="real-process")
     def test_file_read_nonexistent(self, stdio_service, test_dir):
         """Test reading a non-existent file returns error."""
         file_path = os.path.join(test_dir, "nonexistent.txt")
@@ -335,8 +317,6 @@ class TestFileOperations:
         assert "error" in response
         assert response["error"]["code"] == -32000
 
-@pytest.mark.serial
-@pytest.mark.xdist_group(name="real-process")
     def test_file_read_missing_path_param(self, stdio_service):
         """Test that missing path parameter returns proper error."""
         request = {"jsonrpc": "2.0", "id": 15, "method": "file_read", "params": {}}
@@ -356,8 +336,6 @@ class TestFileOperations:
 class TestBatchOperations:
     """Tests for batch file operations."""
 
-@pytest.mark.serial
-@pytest.mark.xdist_group(name="real-process")
     def test_file_read_batch(self, stdio_service, test_dir):
         """Test reading multiple files in batch."""
         paths = [
@@ -386,8 +364,6 @@ class TestBatchOperations:
         # Both should be readable
         assert all(f["error"] is None for f in files)
 
-@pytest.mark.serial
-@pytest.mark.xdist_group(name="real-process")
     def test_file_read_batch_partial_failure(self, stdio_service, test_dir):
         """Test batch read handles partial failures gracefully."""
         paths = [
@@ -416,8 +392,6 @@ class TestBatchOperations:
         errors = [f for f in files if f["error"] is not None]
         assert len(errors) >= 1
 
-@pytest.mark.serial
-@pytest.mark.xdist_group(name="real-process")
     def test_file_read_batch_empty_paths(self, stdio_service):
         """Test batch read with empty paths returns error."""
         request = {
@@ -441,8 +415,6 @@ class TestBatchOperations:
 class TestGrep:
     """Tests for grep search functionality."""
 
-@pytest.mark.serial
-@pytest.mark.xdist_group(name="real-process")
     def test_grep_find_pattern(self, stdio_service, test_dir):
         """Test finding a pattern in files."""
         request = {
@@ -470,8 +442,6 @@ class TestGrep:
         assert "line_content" in match
         assert "def " in match["line_content"]
 
-@pytest.mark.serial
-@pytest.mark.xdist_group(name="real-process")
     def test_grep_case_sensitive(self, stdio_service, test_dir):
         """Test that grep is case sensitive by default."""
         request = {
@@ -490,8 +460,6 @@ class TestGrep:
         # Should be empty (case sensitive)
         assert len(matches) == 0
 
-@pytest.mark.serial
-@pytest.mark.xdist_group(name="real-process")
     def test_grep_case_insensitive(self, stdio_service, test_dir):
         """Test case insensitive grep."""
         request = {
@@ -514,8 +482,6 @@ class TestGrep:
         # Should find the match now
         assert len(matches) >= 1
 
-@pytest.mark.serial
-@pytest.mark.xdist_group(name="real-process")
     def test_grep_invalid_pattern(self, stdio_service, test_dir):
         """Test that invalid regex patterns return proper error."""
         request = {
@@ -539,8 +505,6 @@ class TestGrep:
 class TestSecurity:
     """Tests for security validations."""
 
-@pytest.mark.serial
-@pytest.mark.xdist_group(name="real-process")
     def test_file_read_blocked_sensitive_path(self, stdio_service):
         """Test that sensitive paths are blocked."""
         home = os.path.expanduser("~")
@@ -561,8 +525,6 @@ class TestSecurity:
         assert "error" in response
         assert "sensitive path blocked" in response["error"]["message"]
 
-@pytest.mark.serial
-@pytest.mark.xdist_group(name="real-process")
     def test_list_files_blocked_sensitive_directory(self, stdio_service):
         """Test that sensitive directories are blocked."""
         request = {
@@ -586,8 +548,6 @@ class TestSecurity:
 class TestPythonClientAdapter:
     """Tests for the Python client adapter."""
 
-@pytest.mark.serial
-@pytest.mark.xdist_group(name="real-process")
     def test_transport_context_manager(self, elixir_project_path):
         """Test that the transport works as a context manager."""
         try:
@@ -608,8 +568,6 @@ class TestPythonClientAdapter:
                 result = transport.read_file(os.path.join(tmpdir, "test.txt"))
                 assert result["content"] == "Hello, World!"
 
-@pytest.mark.serial
-@pytest.mark.xdist_group(name="real-process")
     def test_transport_ping(self, elixir_project_path):
         """Test transport ping method."""
         try:
@@ -625,8 +583,6 @@ class TestPythonClientAdapter:
         finally:
             transport.stop()
 
-@pytest.mark.serial
-@pytest.mark.xdist_group(name="real-process")
     def test_transport_health_check(self, elixir_project_path):
         """Test transport health check."""
         try:
