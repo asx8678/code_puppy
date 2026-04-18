@@ -2259,12 +2259,12 @@
       ],
       "dependencies": {},
       "created_at": "2026-04-18T09:47:12.215052",
-      "updated_at": "2026-04-18T17:44:47.627568",
+      "updated_at": "2026-04-18T17:01:07.182206",
       "comments": [
         "Analysis: 200+ tests fail in parallel but pass sequentially. Root causes appear to be:\n1. Shared singletons not being reset between tests (run_limiter, policy_engine, security_boundary)\n2. Callback registrations persisting across tests\n3. Config file reads during tests (e.g., pack_parallelism.toml)\n\nFix approaches:\n- Add autouse fixtures that reset singletons before each test\n- Use pytest marks to force certain tests to run in isolation\n- Mock config file reads in affected tests\n\nPriority: Medium - tests pass when run with -n0",
         "Added singleton resets to conftest.py:\n- security boundary reset\n- run limiter reset\n- callbacks reset\n\nThis improved some tests but ~291 tests still fail in parallel. The core issues:\n- Random test order with pytest-randomly causes different test failures each run\n- More singletons exist that need reset (MCP manager, retry manager, etc.)\n- Some tests may be inherently non-thread-safe\n\nTests pass when run individually or in small batches. For CI, recommend using -n0 (sequential) until all isolation issues are fixed.",
         "Claimed by pack-leader-019d9f - Starting systematic singleton audit",
-        "New epic filed for remaining parallel test isolation work: bd-125 (Epic: Parallel test isolation \u2014 remaining work). Children: bd-126 (diagnose hang), bd-127 (extract helper), bd-128 (wire resets), bd-129 (serial markers), bd-130 (verification)."
+        "Filed scoped sibling epic bd-122 to tackle the singleton reset + serial marker angle of this issue. Will coordinate to avoid overlap with the ongoing systematic audit. Scope: 9 un-resettable singletons, conftest wiring, @pytest.mark.serial for inherent non-parallel-safe tests. See epic for full plan."
       ]
     },
     "bd-121": {
@@ -2284,45 +2284,70 @@
     },
     "bd-122": {
       "id": "bd-122",
-      "title": "Capture baseline of parallel test failures",
-      "description": "Run parallel pytest 3 times with random order and once without. Capture failure count and patterns. Save as bd-120-baseline.log. Run sequential pytest to confirm pass count. This is the before snapshot. Part of epic bd-122.",
-      "status": "closed",
+      "title": "Fix parallel test isolation: singleton reset helpers + serial markers",
+      "description": "Systematic attack on bd-120's ~291 parallel test failures.",
+      "status": "open",
       "priority": 2,
-      "type": "task",
-      "labels": [
-        "tests",
-        "bd-120"
-      ],
-      "dependencies": {},
-      "created_at": "2026-04-18T17:40:22.005585",
-      "updated_at": "2026-04-18T17:40:27.189471",
-      "comments": [
-        "DELIVERED: bd-120-baseline.log capturing 5 pytest runs (3 random parallel, 1 deterministic parallel, 1 sequential). Key finding: ALL runs timed out after 20 minutes, including sequential. The test suite has fundamental hanging issues beyond just parallel isolation. This baseline is critical for bd-128 verification work. Merged to main in commit f76cca4c. Unblocks bd-128."
-      ]
-    },
-    "bd-123": {
-      "id": "bd-123",
-      "title": "Add reset_*_for_tests helpers to singleton modules",
-      "description": "Add reset helpers to 9 singleton modules that lack them. Follow the pattern of reset_run_limiter_for_tests() in run_limiter.py. Modules: messaging/bus.py, messaging/history_buffer.py, code_context/__init__.py, agents/agent_manager.py, mcp_/manager.py, mcp_/retry_manager.py, mcp_/error_isolation.py, adaptive_rate_limiter.py, concurrency_limits.py.",
-      "status": "closed",
-      "priority": 2,
-      "type": "task",
+      "type": "epic",
       "labels": [
         "tests",
         "tech-debt",
         "bd-120"
       ],
+      "dependencies": {
+        "discovered-from": [
+          "bd-120"
+        ]
+      },
+      "created_at": "2026-04-18T16:58:20.475062",
+      "updated_at": "2026-04-18T16:59:17.494907",
+      "comments": []
+    },
+    "bd-123": {
+      "id": "bd-123",
+      "title": "Add reset_*_for_tests helpers to singleton modules",
+      "description": "Add reset helpers to the 9 singleton modules listed in the epic that lack them. Follow the exact pattern of reset_run_limiter_for_tests() in code_puppy/plugins/pack_parallelism/run_limiter.py: acquire module lock, stop/cancel any resources (threads, asyncio tasks, queues), set instance to None. Add one unit test per helper verifying reset \u2192 get \u2192 fresh instance.\\n\\nFiles: messaging/bus.py, messaging/history_buffer.py, code_context/__init__.py, agents/agent_manager.py, mcp_/manager.py, mcp_/retry_manager.py, mcp_/error_isolation.py, adaptive_rate_limiter.py, concurrency_limits.py.\\n\\nPart of epic bd-122.",
+      "status": "open",
+      "priority": 2,
+      "type": "task",
+      "labels": [
+        "tests",
+        "tech-debt",
+        "bd-120",
+        "claimed:pack-leader-019da1"
+      ],
       "dependencies": {},
-      "created_at": "2026-04-18T17:40:30.470625",
-      "updated_at": "2026-04-18T17:40:36.650285",
+      "created_at": "2026-04-18T16:59:46.333923",
+      "updated_at": "2026-04-18T17:04:04.539184",
       "comments": [
-        "DELIVERED: All 9 reset helpers implemented with proper lock acquisition and thread-safe cleanup. Tests in tests/test_singleton_resets.py (9 tests, all passing). Merged to main. Unblocks bd-124 and bd-126."
+        "Starting parallel execution under epic bd-122, coordinated by planning-agent-019da1. Worker: python-programmer. Branch: feature/bd-123-reset-helpers."
       ]
     },
     "bd-124": {
       "id": "bd-124",
+      "title": "Extract conftest reset cascade to tests/_helpers/singleton_reset.py",
+      "description": "conftest.py's isolate_config_between_tests fixture is already ~240 lines with duplicated reset logic (pre-yield and post-yield). Extract into tests/_helpers/singleton_reset.py with a single reset_all_singletons() function. Reset order matters: message_queue \u2192 bus \u2192 history_buffer \u2192 subagent_console (consumers before producers). Document ordering constraints inline.\\n\\nPart of epic bd-122.",
+      "status": "open",
+      "priority": 2,
+      "type": "task",
+      "labels": [
+        "tests",
+        "refactor",
+        "bd-120"
+      ],
+      "dependencies": {
+        "blocks": [
+          "bd-123"
+        ]
+      },
+      "created_at": "2026-04-18T16:59:46.341421",
+      "updated_at": "2026-04-18T17:01:04.931701",
+      "comments": []
+    },
+    "bd-125": {
+      "id": "bd-125",
       "title": "Identify tests that are inherently non-parallel-safe",
-      "description": "Scan test suite for tests that cannot run in parallel even with perfect singleton isolation. Candidates: tests spawning real processes/PTY, tests using cli_harness, tests mutating os.environ, tests touching real config dirs, DBOS integration tests, hardcoded ports.",
+      "description": "Scan test suite for tests that cannot run in parallel even with perfect singleton isolation. Candidates: tests spawning real processes/PTY (test_cli_runner*, integration/*), tests mutating real config dirs, tests using pexpect, tests touching os.environ without monkeypatch, DBOS integration tests. Produce a list with file path + line range + justification. Use code-scout agent for efficient scanning.\\n\\nPart of epic bd-122.",
       "status": "closed",
       "priority": 2,
       "type": "task",
@@ -2332,71 +2357,56 @@
         "bd-120"
       ],
       "dependencies": {},
-      "created_at": "2026-04-18T17:40:40.407378",
-      "updated_at": "2026-04-18T17:40:45.933954",
+      "created_at": "2026-04-18T16:59:46.345974",
+      "updated_at": "2026-04-18T17:37:23.833776",
       "comments": [
-        "DELIVERED: bd-125-serial-candidates.md with ~45 tests classified across 8 categories (PTY spawning, subprocess, env mutation, chdir, network ports, time races, DBOS, threading). Recommended serial groups: integration-cli, oauth-server, api-fixed-port, elixir-stdio. Merged to main. Unblocks bd-127."
+        "Starting parallel execution under epic bd-122, coordinated by planning-agent-019da1. Worker: code-scout. Branch: feature/bd-125-serial-scan."
       ]
     },
-    "bd-125": {
-      "id": "bd-125",
-      "title": "Epic: Parallel test isolation \u2014 remaining work (conftest wiring, serial markers, verification)",
-      "description": "Refiled epic after bd-122 got repurposed during a stash/pop conflict. The original bd-122 epic from planning-agent-019da1 had 7 children; 3 were completed (baseline, reset helpers, serial scan \u2014 closed as bd-122/123/124). The remaining 4 follow-ups are refiled under this epic.\n\n## Completed (reference, not children of this epic)\n\n- bd-122 (CLOSED): Captured parallel test failure baseline \u2192 bd-120-baseline.log\n  - CRITICAL FINDING: ALL 5 pytest runs timed out after 20 minutes, including -n0 sequential. The test suite has fundamental hangs that must be diagnosed BEFORE any of the remaining work can be verified.\n- bd-123 (CLOSED): Added 9 reset_*_for_tests helpers to singleton modules, with 9 unit tests in tests/test_singleton_resets.py.\n- bd-124 (CLOSED): Classified ~45 tests as non-parallel-safe \u2192 bd-125-serial-candidates.md\n\n## This Epic's Children\n\n1. Diagnose the test-suite hang (NEW \u2014 unblocked, urgent)\n2. Extract reset cascade to tests/_helpers/singleton_reset.py\n3. Wire all singleton resets into tests/conftest.py\n4. Apply @pytest.mark.serial + xdist_group to non-parallel-safe tests\n5. Verify fix and triage remaining failures\n\n## References\n\n- bd-120 (parent \u2014 parallel test isolation investigation)\n- bd-120-baseline.log (in repo root \u2014 shows the hang)\n- bd-125-serial-candidates.md (in repo root \u2014 classifies ~45 tests)\n- tests/test_singleton_resets.py (9 passing unit tests)\n- Planning session: planning-agent-019da1",
+    "bd-126": {
+      "id": "bd-126",
+      "title": "Wire all singleton resets into conftest.py",
+      "description": "Extend isolate_config_between_tests in tests/conftest.py to call the new reset_all_singletons() helper, both pre-yield and post-yield. Keep each reset in its own try/except so one module failing doesn't nuke the whole test session.\\n\\nPart of epic bd-122.",
       "status": "open",
       "priority": 2,
       "type": "task",
       "labels": [
         "tests",
-        "tech-debt",
-        "bd-120",
-        "epic"
+        "bd-120"
       ],
       "dependencies": {
-        "related-to": [
-          "bd-120"
+        "blocks": [
+          "bd-124"
         ]
       },
-      "created_at": "2026-04-18T17:44:24.338729",
-      "updated_at": "2026-04-18T17:44:47.621923",
-      "comments": []
-    },
-    "bd-126": {
-      "id": "bd-126",
-      "title": "Diagnose test-suite hang \u2014 all pytest runs time out at 20 minutes",
-      "description": "bd-122 baseline capture found that ALL 5 pytest runs time out after 20 minutes, including sequential (-n0). This contradicts the original bd-120 premise that 'tests pass sequentially, fail in parallel.' Either:\n\n(a) The suite regressed between the audit and now, OR\n(b) The hang is specific to the current worktree's environment, OR\n(c) A test added since the audit introduced a deadlock, OR\n(d) One of the recent changes (e.g., bd-123's reset helpers) broke something\n\n## Acceptance Criteria\n\n- Identify the specific test(s) causing the hang\n- Reproduce consistently with a minimal subset\n- Document root cause (deadlock, infinite loop, blocked I/O, etc.)\n- Propose fix (mark as skip, add timeout, fix root cause)\n\n## Investigation Starting Points\n\n- Run pytest --collect-only to confirm collection completes (it does \u2014 14895 tests)\n- Run pytest -x --timeout=60 to find the first hanging test\n- Check tests using pexpect, PTY manager, or real subprocess (flagged in bd-125-serial-candidates.md)\n- Check tests that touch asyncio queues or long-running background threads\n- Check if the reset helpers from bd-123 are stopping threads cleanly\n- Consider pytest-timeout plugin if not already installed\n\n## Deliverable\n\nbd-hang-diagnosis.md at repo root with: root cause, reproduction recipe, proposed fix.",
-      "status": "open",
-      "priority": 1,
-      "type": "task",
-      "labels": [
-        "bug",
-        "bd-120",
-        "blocker"
-      ],
-      "dependencies": {},
-      "created_at": "2026-04-18T17:44:29.363793",
-      "updated_at": "2026-04-18T17:44:33.209384",
+      "created_at": "2026-04-18T16:59:46.347584",
+      "updated_at": "2026-04-18T17:01:04.963540",
       "comments": []
     },
     "bd-127": {
       "id": "bd-127",
-      "title": "Extract conftest reset cascade to tests/_helpers/singleton_reset.py",
-      "description": "tests/conftest.py's isolate_config_between_tests fixture is already ~240 lines with duplicated reset logic (pre-yield and post-yield). Now that bd-123 added 9 new reset_*_for_tests helpers, the duplication will get worse if we just wire them in directly.\n\nExtract the reset cascade into tests/_helpers/singleton_reset.py with a single reset_all_singletons() function that imports + calls every reset helper with proper try/except.\n\n## Reset Order (Consumers Before Producers)\n\n1. message_queue (consumers)\n2. bus\n3. history_buffer\n4. subagent_console\n5. Everything else (order doesn't matter)\n6. policy_engine\n7. security_boundary\n8. puppy_config\n\n## Files\n\n- NEW: tests/_helpers/singleton_reset.py (single reset_all_singletons() function)\n- Update: tests/conftest.py (replace inline resets with helper call)\n\n## Acceptance\n\n- conftest.py shrinks by >100 lines\n- All existing tests still pass (pytest -n0 -k 'not slow')\n- New helper is importable: from tests._helpers.singleton_reset import reset_all_singletons",
-      "status": "closed",
+      "title": "Apply @pytest.mark.serial + xdist_group to non-parallel-safe tests",
+      "description": "Apply @pytest.mark.serial and @pytest.mark.xdist_group(name=\"serial\") to tests identified in the \"Identify tests that are inherently non-parallel-safe\" task. With --dist=loadgroup (already in pyproject.toml), shared group names run on the same worker, giving true serialization. Update pyproject.toml marker docstring to document how serial is enforced.\\n\\nPart of epic bd-122.",
+      "status": "open",
       "priority": 2,
       "type": "task",
       "labels": [
-        "refactor",
+        "tests",
         "bd-120"
       ],
-      "dependencies": {},
-      "created_at": "2026-04-18T17:44:33.120005",
-      "updated_at": "2026-04-18T18:20:09.419638",
+      "dependencies": {
+        "blocks": [
+          "bd-125"
+        ]
+      },
+      "created_at": "2026-04-18T16:59:46.355915",
+      "updated_at": "2026-04-18T17:01:04.993172",
       "comments": []
     },
     "bd-128": {
       "id": "bd-128",
-      "title": "Wire all singleton resets into tests/conftest.py",
-      "description": "After Issue 3 extracts the reset cascade, ensure tests/conftest.py's autouse fixture calls reset_all_singletons() both pre-yield and post-yield. Include all 9 new helpers from bd-123 plus the 2 that existed but were never wired:\n\n- reset_global_request_cache (code_puppy/request_cache.py \u2014 helper exists, not wired)\n- SubAgentConsoleManager.reset_instance (messaging/subagent_console.py \u2014 exists, not wired)\n\n## Acceptance\n\n- All 14 reset helpers called both pre-yield and post-yield\n- Each wrapped in its own try/except (one failing module doesn't nuke the session)\n- Unit test verifies the cascade calls every expected reset",
+      "title": "Verify parallel test isolation fix and triage remaining failures",
+      "description": "Run parallel suite 3\u00d7 with random order to detect flakes; run -n0 once to confirm no sequential regression. Compare against baseline from \"Capture baseline of parallel test failures\" task. Produce bd-120-verification.md with before/after numbers. Triage remaining failures: pre-existing real bugs (file separate BD issues) vs isolation issues still to fix. QA review via qa-expert agent.\\n\\nPart of epic bd-122.",
       "status": "open",
       "priority": 2,
       "type": "task",
@@ -2406,50 +2416,25 @@
       ],
       "dependencies": {
         "blocks": [
+          "bd-123",
+          "bd-126",
           "bd-127"
         ]
       },
-      "created_at": "2026-04-18T17:44:35.661013",
-      "updated_at": "2026-04-18T17:44:39.080738",
+      "created_at": "2026-04-18T16:59:46.358937",
+      "updated_at": "2026-04-18T17:01:05.083001",
       "comments": []
     },
     "bd-129": {
       "id": "bd-129",
-      "title": "Apply @pytest.mark.serial + xdist_group to non-parallel-safe tests",
-      "description": "bd-124 classified ~45 tests as non-parallel-safe (see bd-125-serial-candidates.md). Apply @pytest.mark.serial + @pytest.mark.xdist_group(name=\"serial\") to each. With --dist=loadgroup (already in pyproject.toml), tests in the same xdist_group run on the same worker, giving true serialization.\n\n## Acceptance\n\n- All ~45 tests from bd-125-serial-candidates.md marked\n- pyproject.toml markers.serial docstring updated to explain how serial is enforced\n- Grouping matches the 'suggested_group_name' column in bd-125-serial-candidates.md (some tests may need different groups, e.g. 'pty', 'dbos', 'port_9999')\n- pytest -n0 still passes\n- pytest -n auto passes for the serially-marked subset: pytest -m serial -n auto",
-      "status": "open",
-      "priority": 2,
-      "type": "task",
-      "labels": [
-        "bd-120"
-      ],
-      "dependencies": {},
-      "created_at": "2026-04-18T17:44:39.051291",
-      "updated_at": "2026-04-18T17:44:43.749274",
-      "comments": []
-    },
-    "bd-130": {
-      "id": "bd-130",
-      "title": "Verify parallel test isolation fix and triage remaining failures",
-      "description": "After the hang is fixed (Issue 2), resets are wired (Issue 4), and serial markers applied (Issue 5), re-run the full verification suite and compare against baseline.\n\n## Commands\n\n- uv run --active pytest -n auto --dist=loadgroup --tb=no -q \u00d7 3 (random order)\n- uv run --active pytest -n auto --dist=loadgroup -p no:randomly --tb=no -q \u00d7 1\n- uv run --active pytest -n0 --tb=no -q \u00d7 1\n\n## Deliverable\n\nbd-120-verification.md at repo root with:\n- Failure count: before (from bd-120-baseline.log once hang is fixed) vs after\n- Tests that went from FAIL \u2192 PASS\n- Tests still failing in ALL 3 random runs (likely real bugs \u2014 file separate BD issues)\n- Tests still failing in SOME runs (still has isolation issues \u2014 needs further work)\n\n## Acceptance\n\n- Parallel failures drop from baseline to <20\n- 3 consecutive random runs agree on remaining failures (no flakes from ordering)\n- pytest -n0 remains clean\n- Each remaining real bug has its own BD issue filed",
+      "title": "Capture baseline of parallel test failures",
+      "description": "Run parallel pytest 3 times with random order and once without. Capture failure count and patterns. Save as bd-120-baseline.log. Run sequential pytest to confirm pass count. This is the before snapshot. Part of epic bd-122.",
       "status": "open",
       "priority": 2,
       "type": "task",
       "labels": [
         "tests",
-        "bd-120"
+        "bd-120",
+        "claimed-by-pack-leader"
       ],
-      "dependencies": {
-        "blocks": [
-          "bd-126",
-          "bd-128",
-          "bd-129"
-        ]
-      },
-      "created_at": "2026-04-18T17:44:43.715869",
-      "updated_at": "2026-04-18T17:44:47.652456",
-      "comments": []
-    }
-  },
-  "counter": 130
-}
+      "dependencies": {},

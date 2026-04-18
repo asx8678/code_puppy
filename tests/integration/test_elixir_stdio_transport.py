@@ -22,7 +22,7 @@ from pathlib import Path
 import pytest
 
 # Mark all tests in this module as integration tests
-pytestmark = pytest.mark.integration
+pytestmark = [pytest.mark.integration, pytest.mark.serial, pytest.mark.xdist_group(name="real-process")]
 
 # Skip if Elixir is not available
 elixir_available = shutil.which("elixir") is not None

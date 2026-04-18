@@ -98,6 +98,21 @@ defmodule Mix.Tasks.CodePuppy.StdioService do
     Application.ensure_all_started(:logger)
     Application.ensure_all_started(:jason)
 
+    # Start Ecto/SQLite and PubSub for session persistence and event bus
+    Application.ensure_all_started(:ecto)
+    Application.ensure_all_started(:ecto_sql)
+    Application.ensure_all_started(:ecto_sqlite3)
+    Application.ensure_all_started(:phoenix_pubsub)
+
+    # Start the Ecto repo (SQLite) - required for session save/load
+    {:ok, _} = CodePuppyControl.Repo.start_link([])
+
+    # Run pending migrations (creates chat_sessions table, etc.)
+    Ecto.Migrator.run(CodePuppyControl.Repo, :up, all: true)
+
+    # Start PubSub for event distribution
+    {:ok, _} = Supervisor.start_link([Phoenix.PubSub.child_spec(name: CodePuppyControl.PubSub)], strategy: :one_for_one)
+
     # Ensure the required modules are available
     Code.ensure_loaded(CodePuppyControl.FileOps)
     Code.ensure_loaded(CodePuppyControl.Protocol)

@@ -3,6 +3,9 @@
 import os
 
 import pytest
+
+# Mark all tests as serial due to environment variable mutation
+pytestmark = [pytest.mark.serial, pytest.mark.xdist_group(name="env-mutation")]
 from code_puppy import _backlog
 from code_puppy.callbacks import (
     clear_callbacks,

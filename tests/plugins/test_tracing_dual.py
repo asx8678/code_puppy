@@ -17,6 +17,9 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+# Mark all tests as serial due to environment variable mutation
+pytestmark = [pytest.mark.serial, pytest.mark.xdist_group(name="env-mutation")]
+
 
 # =============================================================================
 # Helper Functions
