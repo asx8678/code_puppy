@@ -55,8 +55,6 @@ class TestHandleCdCommand:
         ):
             assert handle_cd_command("/cd") is True
 
-@pytest.mark.serial
-@pytest.mark.xdist_group(name="chdir")
     def test_cd_valid_dir(self, tmp_path):
         from code_puppy.command_line.core_commands import handle_cd_command
 
