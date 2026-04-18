@@ -110,6 +110,12 @@ defmodule Mix.Tasks.CodePuppy.StdioService do
     # Give the service a moment to suppress any startup output
     Process.sleep(100)
 
+    # Emit startup handshake banner (bd-133)
+    # This JSON-RPC notification signals that the service is ready to accept requests.
+    # Clients should drop all output before this line to avoid processing startup noise.
+    handshake = %{"jsonrpc" => "2.0", "method" => "_ready", "params" => %{}}
+    IO.puts(:stdio, Jason.encode!(handshake))
+
     # Run the stdio service (blocks until EOF)
     CodePuppyControl.Transport.StdioService.run()
 

@@ -201,13 +201,20 @@ class ElixirTransport:
         return [mix_exe, "code_puppy.stdio_service"]
 
     def _wait_for_ready(self, timeout_sec: float = 10.0) -> None:
-        """Wait for the service to be ready by sending a ping."""
+        """Wait for the service to be ready by consuming handshake and sending a ping."""
         if self._process is None or self._process.poll() is not None:
             raise ElixirTransportError("Service process not running")
 
-        # Give the service time to fully start
-        time.sleep(0.5)
+        # Phase 1: Wait for handshake banner (bd-133)
+        # The Elixir service emits: {"jsonrpc":"2.0","method":"_ready","params":{}}
+        # We consume all output until we see this handshake, then proceed.
+        handshake_seen = self._wait_for_handshake(timeout_sec=3.0)
 
+        if not handshake_seen:
+            # Backward compatibility: proceed anyway if no handshake seen
+            logger.debug("No handshake banner seen, proceeding with backward-compatible mode")
+
+        # Phase 2: Send ping to verify service is responsive
         start_time = time.time()
         ping_id = 0
 
@@ -274,6 +281,64 @@ class ElixirTransport:
             time.sleep(0.3)
 
         raise ElixirTransportError("Timeout waiting for service to be ready")
+
+    def _wait_for_handshake(self, timeout_sec: float = 3.0) -> bool:
+        """
+        Wait for the startup handshake banner from the Elixir service.
+
+        The handshake is a JSON-RPC notification:
+            {"jsonrpc":"2.0","method":"_ready","params":{}}
+
+        All output before this line is considered startup noise and is dropped.
+
+        Args:
+            timeout_sec: Maximum time to wait for handshake
+
+        Returns:
+            True if handshake was seen, False if timeout (backward compatible)
+        """
+        start_time = time.time()
+        handshake = {"jsonrpc": "2.0", "method": "_ready", "params": {}}
+        handshake_json = json.dumps(handshake)
+
+        while time.time() - start_time < timeout_sec:
+            # Check if process died
+            if self._process.poll() is not None:
+                return False
+
+            try:
+                # Use select to check if data is available (non-blocking)
+                ready, _, _ = select.select([self._process.stdout], [], [], 0.1)
+                if ready:
+                    line = self._process.stdout.readline()
+                    if not line:
+                        continue
+
+                    stripped = line.strip()
+                    if not stripped:
+                        continue
+
+                    try:
+                        data = json.loads(stripped)
+                        # Check if this is the handshake notification (no 'id' field)
+                        if (
+                            data.get("jsonrpc") == "2.0"
+                            and data.get("method") == "_ready"
+                            and "id" not in data
+                        ):
+                            logger.debug("Received startup handshake banner")
+                            return True
+                    except json.JSONDecodeError:
+                        # Not valid JSON, drop it as startup noise
+                        logger.debug(f"Dropping startup noise: {stripped[:100]}")
+                        pass
+
+            except Exception as e:
+                logger.debug(f"Handshake wait error: {e}")
+
+            time.sleep(0.05)
+
+        return False  # Timeout - backward compatible, proceed anyway
 
     def stop(self) -> None:
         """Stop the Elixir stdio service."""

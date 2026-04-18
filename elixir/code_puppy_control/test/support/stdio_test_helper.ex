@@ -51,10 +51,19 @@ defmodule CodePuppyControl.Support.StdioTestHelper do
           )
 
         if exit_code == 0 do
-          # Find first JSON line (skip non-JSON logs like "Compiling...")
+          # Find first JSON-RPC response line, skipping:
+          # 1. Non-JSON logs (like "Compiling...")
+          # 2. The handshake notification: {"jsonrpc":"2.0","method":"_ready","params":{}}
           output
           |> String.split("\n")
-          |> Enum.find(&(String.starts_with?(&1, "{") and &1 != ""))
+          |> Enum.reject(fn line ->
+            line == "" or not String.starts_with?(line, "{")
+          end)
+          |> Enum.reject(fn line ->
+            # Skip handshake notification (no "id" field, method is "_ready")
+            String.contains?(line, "\"method\":\"_ready\"")
+          end)
+          |> List.first()
           |> case do
             nil -> "{}"
             line -> line
