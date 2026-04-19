@@ -1,0 +1,55 @@
+name: Python Freeze Policy Check (bd-187)
+
+# This workflow is a lightweight guard to remind contributors of the Python freeze policy
+# during the Elixir migration. It does not block merges but provides automated reminders.
+
+on:
+  pull_request:
+    paths:
+      - "code_puppy/**/*.py"
+      - "puppy.cfg"
+      - "*.json"
+
+jobs:
+  python-freeze-check:
+    name: bd-187 Python freeze policy reminder
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check PR labels
+        id: labels
+        uses: actions/labeler@v5
+        if: github.event.action == "opened" || github.event.action == "synchronize"
+
+      - name: Verify freeze policy compliance
+        run: |
+          echo "::warning::PR touches frozen Python code (code_puppy/**/*.py)"
+          echo ""
+          echo "Please confirm this PR is one of the following:"
+          echo "  - A critical bug fix (crash / data loss / security)"
+          echo "  - A deprecation warning guiding users to pup-ex"
+          echo "  - A docs-only change (README, comments, etc.)"
+          echo ""
+          echo "If this is a new feature or refactor, please:"
+          echo "  1. Close this PR"
+          echo "  2. Open a new PR against the Elixir codebase (elixir/code_puppy_control/)"
+          echo ""
+          echo "See CONTRIBUTING.md for the full Python Freeze Policy (bd-187)."
+
+      - name: Check for required labels
+        run: |
+          LABELS="${{ toJson(github.event.pull_request.labels.*.name) }}"
+          echo "PR Labels: $LABELS"
+          
+          if echo "$LABELS" | grep -q "bug-fix"; then
+            echo "✓ bug-fix label found - freeze policy compliance accepted"
+          elif echo "$LABELS" | grep -q "docs"; then
+            echo "✓ docs label found - freeze policy compliance accepted"
+          elif echo "$LABELS" | grep -q "deprecation"; then
+            echo "✓ deprecation label found - freeze policy compliance accepted"
+          else
+            echo "::notice::No freeze policy label found (bug-fix, docs, or deprecation)"
+            echo "Reviewers: Please verify this change is allowed under bd-187"
+          fi
