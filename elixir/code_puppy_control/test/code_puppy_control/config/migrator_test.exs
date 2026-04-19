@@ -37,6 +37,7 @@ defmodule CodePuppyControl.Config.MigratorTest do
     test "stamps schema_version=1 when starting from v0" do
       File.write!(@test_cfg, "[puppy]\nmodel = test\n")
       Loader.load(@test_cfg)
+      ensure_writer_started()
 
       assert Migrator.current_version() == 0
 
@@ -50,6 +51,7 @@ defmodule CodePuppyControl.Config.MigratorTest do
     test "is idempotent when already at latest" do
       File.write!(@test_cfg, "[puppy]\nschema_version = 1\n")
       Loader.load(@test_cfg)
+      ensure_writer_started()
 
       {:ok, version} = Migrator.migrate()
       assert version == 1
@@ -107,6 +109,17 @@ defmodule CodePuppyControl.Config.MigratorTest do
   describe "latest_version/0" do
     test "returns a positive integer" do
       assert Migrator.latest_version() >= 1
+    end
+  end
+
+  defp ensure_writer_started do
+    case GenServer.whereis(Writer) do
+      nil ->
+        {:ok, _} = Writer.start_link()
+        :ok
+
+      _pid ->
+        :ok
     end
   end
 end
