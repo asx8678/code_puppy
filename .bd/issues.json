@@ -3884,8 +3884,10 @@
         ]
       },
       "created_at": "2026-04-19T10:58:56.571204",
-      "updated_at": "2026-04-19T10:59:13.686217",
-      "comments": []
+      "updated_at": "2026-04-19T21:35:25.656130",
+      "comments": [
+        "pack-leader-019da7: Worktree created at /Users/adam2/projects/bd-193 (feature/bd-193-isolation-fix off main). Sub-agent hit request limit before starting work. Next session: read docs/adr/ADR-003-dual-home-config-isolation.md and code_puppy/config/paths.py to find _is_pup_ex() bypass holes."
+      ]
     },
     "bd-194": {
       "id": "bd-194",
@@ -3966,20 +3968,22 @@
         ]
       },
       "created_at": "2026-04-19T12:23:29.909151",
-      "updated_at": "2026-04-19T12:23:40.564330",
-      "comments": []
+      "updated_at": "2026-04-19T21:35:25.626909",
+      "comments": [
+        "pack-leader-019da7: Analyzed reconciliation scope. 136 files changed on both sides from merge base d01edba3. 75+ Elixir files conflict including config/*.ex, callbacks/*.ex, stream/*.ex, tool/registry.ex, tools/*.ex. Worktrees ready: bd-193 at /Users/adam2/projects/bd-193, bd-197 worktree branch feature/bd-197-reconcile-bd164 at /Users/adam2/projects/code_puppy (reset to main head). Recommend: fresh agent session with elixir-dev to do the reconciliation file-by-file, preferring bd-164 versions for config/* (shepherd+watchdog approved, 145/145 tests)."
+      ]
     },
     "bd-198": {
       "id": "bd-198",
       "title": "fix: graceful handling of dead Elixir transport during autosave rotation and wiggum loop",
       "description": "Shutdown/wiggum crash: `rotate_autosave_id()` raises `ElixirTransportError` when the Elixir control-plane subprocess has died, taking down the whole CLI. Root causes: (a) bd-133 left `rotate_autosave_id` / `get_current_autosave_session_name` / `set_current_autosave_from_session_name` / `reset_autosave_id` without the degraded-mode fallback that `get_current_autosave_id` / `get_session_model` received; (b) the wiggum loop in `interactive_loop.py` has no transport-liveness gate and no per-iteration exception wall, so a single transport failure terminates the session. This epic makes autosave rotation crash-proof and wiggum resilient to a dead control plane.\n\nRelates to: bd-133 (pure Elixir routing migration), bd-192 (degraded-mode env var).",
-      "status": "open",
+      "status": "closed",
       "priority": 1,
       "type": "epic",
       "labels": [],
       "dependencies": {},
       "created_at": "2026-04-19T18:59:24.761173",
-      "updated_at": "2026-04-19T18:59:24.761184",
+      "updated_at": "2026-04-19T21:34:45.063471",
       "comments": []
     },
     "bd-199": {
@@ -4063,13 +4067,13 @@
       "id": "bd-203",
       "title": "Regression test for wiggum loop against dead transport",
       "description": "File: new `tests/test_wiggum_transport_failure.py`\n\nCase: with wiggum active and transport mocked to raise `ElixirTransportError`, the loop stops cleanly \u2014 no exception escapes, `stop_wiggum()` was called.",
-      "status": "open",
+      "status": "closed",
       "priority": 2,
       "type": "task",
       "labels": [],
       "dependencies": {},
       "created_at": "2026-04-19T18:59:36.352777",
-      "updated_at": "2026-04-19T18:59:36.352792",
+      "updated_at": "2026-04-19T21:34:14.352445",
       "comments": []
     },
     "bd-204": {
@@ -4093,7 +4097,7 @@
       "id": "bd-205",
       "title": "Regression tests for degraded-mode autosave rotation",
       "description": "Files: extend `tests/test_runtime_state_elixir.py` or add `tests/test_runtime_state_degraded.py`\n\nCases: rotate raises without env var when transport dead; rotate returns a new ID with `PUP_ALLOW_ELIXIR_DEGRADED=1`; `finalize_autosave_session` never raises even when underlying transport raises arbitrary `Exception`.",
-      "status": "open",
+      "status": "closed",
       "priority": 2,
       "type": "task",
       "labels": [],
@@ -4103,14 +4107,14 @@
         ]
       },
       "created_at": "2026-04-19T19:00:00.370164",
-      "updated_at": "2026-04-19T19:00:08.251109",
+      "updated_at": "2026-04-19T21:34:14.385367",
       "comments": []
     },
     "bd-206": {
       "id": "bd-206",
       "title": "ElixirTransport: BEAM dies between eager startup probe and first runtime_state request",
       "description": "## Symptom\n\nCode Puppy crashes during interactive prompt rendering with:\n\n    File \"code_puppy/runtime_state.py\", line 122, in get_session_model\n        result = transport._send_request(\"runtime_get_session_model\", {})\n    File \"code_puppy/elixir_transport.py\", line 379, in _send_request\n        raise ElixirTransportError(\"Transport not started or process died\")\n\nThe eager probe at app_runner.py:393 (\"get_transport()\") succeeded \u2014 no\n\"Elixir control-plane failed to start\" banner was emitted \u2014 so the BEAM\ncame up healthy. It died sometime between that probe and the first real\nrequest from runtime_state.\n\n## Environment\n\n- Platform: macOS 26.4 arm64\n- Python: cpython-3.14.3+freethreaded (3.14t / no-GIL)\n- Elixir: 1.19.5 / OTP 28 (erts-16.3.1)\n- Working dir: /Users/adam2/projects/code_puppy\n\n## Phase 0 Triage Evidence (already gathered)\n\n1. \u2705 \"mix code_puppy.stdio_service\" boots cleanly standalone, emits\n   \"_ready\" handshake, idles waiting for stdin. Compiler warnings only,\n   no fatal errors.\n2. \u2705 Toolchain healthy: \"mix deps.get\" no-op, \"mix compile\" clean.\n3. \u26a0\ufe0f Could not capture BEAM stderr from a real crash session \u2014 sub-agent\n   triage ran code-puppy without a TTY, hit unrelated prompt_toolkit\n   kqueue/fd=0 crash before stressing the transport. Real-terminal capture\n   still needed.\n4. RuntimeState handler for \"runtime_get_session_model\" is trivial\n   (returns \"state.session_model\", accepts nil) \u2014 no obvious pattern-match\n   failure.\n\n## Suspect Window\n\nRecent commits touching transport / singleton:\n- c64f3886 \u2014 WIP: Elixir control layer progress and Python agent updates\n- 183dc4f4 \u2014 fix(elixir-transport): thread-safe singleton + degraded mode\n              + preflight (bd-192)\n\nbd-192's double-checked-locking singleton in\n\"elixir_transport_helpers.get_transport()\" may interact poorly with no-GIL\nPython 3.14t, but this is unverified.\n\n## Hypotheses (ranked)\n\n1. Plugin startup callback (between eager probe and prompt render) sends\n   a request that crashes the BEAM; next caller sees a dead pipe.\n2. No-GIL race in transport singleton publishes a partially-initialized\n   transport whose subprocess pipe gets closed by a concurrent path.\n3. SIGPIPE / EPIPE from a stdin-closer somewhere; BEAM exits cleanly but\n   Python doesn't notice until next request.\n4. Watchdog or signal handler kills BEAM (start_new_session=True is set,\n   but something else might be reaching it).\n\n## Reproducer\n\n    cd /Users/adam2/projects/code_puppy\n    unset PUP_ALLOW_ELIXIR_DEGRADED\n    PUP_LOG_LEVEL=debug code-puppy 2>/tmp/cp-beam-stderr.log\n    # crash, then:\n    tail -80 /tmp/cp-beam-stderr.log\n\n## Workaround\n\n    export PUP_ALLOW_ELIXIR_DEGRADED=1\n\nroutes get_session_model() through a Python-local fallback. Note: not all\nruntime_state functions have degraded fallbacks (get_current_autosave_id,\nrotate_autosave_id) \u2014 those will still crash if invoked.\n\n## Next Steps (acceptance criteria)\n\n- [ ] Capture BEAM stderr from real-terminal reproducer (Action B above)\n- [ ] Identify exact root cause from stderr\n- [ ] Land targeted fix (likely in elixir_transport.py or\n      elixir_transport_helpers.py, or in the plugin path that triggers\n      the crash)\n- [ ] Add regression test that simulates BEAM dying between requests\n- [ ] (Stretch) \"_send_request\" should distinguish \"never started\" vs\n      \"died after start\" in its error message \u2014 current ambiguity slowed\n      triage. One-line fix.\n- [ ] (Stretch) \"runtime_state.get_current_autosave_id()\" and\n      \"rotate_autosave_id()\" should honor \"_degraded()\" symmetrically\n      with the rest of runtime_state \u2014 current asymmetric coverage is a\n      footgun.\n- [ ] (Stretch) Process-death detection should capture last N bytes of\n      BEAM stderr on death and include in the error.\n\n## Tangentially related (do NOT bundle, file separately if interested)\n\nUser's original request was to fix a FileNotFoundError when agents\ninvoke_agent(\"light-coder\", ...) \u2014 there's no JSON config for light-coder\neven though two builtin agent prompts (code-puppy, python-programmer)\nreference it. That fix is blocked behind this transport bug. If desired,\nfile a separate issue: \"Ship light-coder agent config (referenced by\nbuiltin prompts but missing from default install)\".",
-      "status": "open",
+      "status": "closed",
       "priority": 1,
       "type": "bug",
       "labels": [
@@ -4119,7 +4123,7 @@
       ],
       "dependencies": {},
       "created_at": "2026-04-19T19:02:34.123282",
-      "updated_at": "2026-04-19T19:25:44.250248",
+      "updated_at": "2026-04-19T21:34:14.418282",
       "comments": [
         "## Headless Reproducer Results (2026-04-19)\n\n**Environment:** macOS, no TTY (stdin-piped via echo), code-puppy 0.0.455\n\n### Action A \u2014 Degraded mode boot (PUP_ALLOW_ELIXIR_DEGRADED=1)\n- Exit code: 0 (clean)\n- Prompt rendered successfully, /exit processed, clean shutdown\n- Stderr: only `Warning: Input is not a terminal (fd=0).`\n- **Result: No ElixirTransportError.** Degraded mode appears to bypass the transport crash.\n\n### Action B \u2014 Non-degraded boot (no PUP_ALLOW_ELIXIR_DEGRADED)\n- Exit code: 0 (clean)\n- Same clean boot/shutdown as Action A\n- Stderr: `Drained 90 stale bytes from stdout during startup` + `Warning: Input is not a terminal (fd=0).`\n- BEAM crash signature grep: no matches (no CRASH REPORT, no GenServer EXIT, no EPIPE)\n- **Result: ElixirTransportError did NOT reproduce** even without degraded mode.\n\n### Action C \u2014 Light-coder smoke test\n- The prompt text was echoed but code-puppy exited on stdin EOF before executing it\n- **Result: INCONCLUSIVE.** Stdin-piped input cannot drive interactive agent sessions \u2014 the agent reads the text as display output, then hits EOF and exits. This cannot verify whether light-coder.json loading works.\n\n### Assessment\n- The ElixirTransportError is **not reproducible headless** \u2014 it either requires a real TTY (prompt_toolkit init codepath differs), or was intermittent/transient.\n- The previously-seen kqueue crash (`OSError: [Errno 22]`) did NOT occur in these runs \u2014 the  or EOF was processed before prompt_toolkit tried to poll fd=0.\n- Degraded mode boot works as designed (clean exit, no transport errors).\n- **Still needs a real TTY test** to definitively confirm whether the original crash persists or was already fixed by recent changes.",
         "PTY smoke test results (2026-04-19):\n\n## PTY Tooling\n- Tool used: macOS script(1) + expect(1) \u2014 both worked\n- script proof: /dev/ttys000 allocated, code-puppy booted to prompt\n- expect proof: Full interactive session with prompt_toolkit rendering\n\n## Task 1: Degraded boot under PTY \u2014 PASS\n- code-puppy booted with PUP_ALLOW_ELIXIR_DEGRADED=1\n- Full banner displayed, prompt reached\n- No ElixirTransportError in stderr\n- No BEAM crash signatures\n\n## Task 2: Non-degraded boot under PTY \u2014 PASS (bug NOT reproduced)\n- code-puppy booted WITHOUT PUP_ALLOW_ELIXIR_DEGRADED\n- Full banner displayed, prompt reached  \n- No ElixirTransportError in stderr\n- No BEAM crash signatures\n- Only benign message: 'Drained 90 stale bytes from stdout during startup'\n- First run had stale .pyc SyntaxError (interactive_loop.py:583) \u2014 cleared cache, second run clean\n\n## Task 3: light-coder smoke test \u2014 PARTIAL (expect)\n- expect drove code-puppy interactively via PTY\n- Prompt received and processed: 'Code-Puppy is thinking...'\n- Agent Trace showed 2 active agents (invoke_agent triggered)\n- Agent correctly identified our test prompt as potential prompt injection\n- Triggered cp_ask_user_question clarify flow, blocked waiting for interactive input\n- light-coder was invoked but clarify step prevented completion\n- NOT a bug \u2014 proper security behavior\n\n## Assessment\n- Original ElixirTransportError bug does NOT reproduce under real TTY\n- Both degraded and non-degraded modes boot cleanly\n- Bug appears to be environment-specific (likely non-TTY / pipe-only invocation paths)\n- Recommend closing bd-206 as 'cannot reproduce' or 'environment-specific'"
