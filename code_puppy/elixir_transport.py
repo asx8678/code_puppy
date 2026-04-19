@@ -361,6 +361,10 @@ class ElixirTransport:
             logger.info("Elixir stdio service stopped")
             self._process = None
 
+    def is_alive(self) -> bool:
+        """Check whether the Elixir subprocess is still running."""
+        return self._process is not None and self._process.poll() is None
+
     def _send_request(self, method: str, params: dict[str, Any]) -> dict[str, Any]:
         """
         Send a JSON-RPC request and wait for response.
@@ -375,8 +379,17 @@ class ElixirTransport:
         Raises:
             ElixirTransportError: If the request fails
         """
-        if self._process is None or self._process.poll() is not None:
-            raise ElixirTransportError("Transport not started or process died")
+        if self._process is None:
+            raise ElixirTransportError(
+                "Transport was never started. "
+                "Call start() before sending requests."
+            )
+        if self._process.poll() is not None:
+            raise ElixirTransportError(
+                f"Elixir process died (exit code {self._process.returncode}). "
+                "This usually means the BEAM VM crashed between startup and the "
+                "first request. Check plugin startup callbacks for errors."
+            )
 
         # Lock protects the entire send+receive cycle to ensure request/response
         # matching and prevent interleaving of concurrent requests

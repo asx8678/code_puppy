@@ -10,6 +10,7 @@ Migration Note (bd-133):
   for backward compatibility but are no longer functionally used
 """
 
+import os
 from unittest.mock import patch
 
 import pytest
@@ -230,6 +231,78 @@ class TestTransportFailureBehavior:
         with patch.object(runtime_state, "_get_transport", return_value=mock):
             with pytest.raises(RuntimeError, match="Transport unavailable"):
                 runtime_state.get_session_model()
+
+
+class TestDegradedModeSymmetry:
+    """Tests for _degraded() fallback symmetry across all runtime_state functions (bd-206).
+
+    Every function that talks to the Elixir transport should either:
+    - Have a _degraded() fallback that runs when PUP_ALLOW_ELIXIR_DEGRADED=1
+    - Or explicitly document why it doesn't need one
+    """
+
+    def test_reset_session_model_degraded_fallback(self, reset_state):
+        """reset_session_model should use degraded fallback when transport is dead."""
+        from code_puppy.elixir_transport import ElixirTransportError
+
+        mock = MockTransport()
+        mock._send_request = lambda m, p: (_ for _ in ()).throw(
+            ElixirTransportError("Elixir process died (exit code 1)")
+        )
+
+        with patch.object(runtime_state, "_get_transport", return_value=mock), \
+             patch.dict(os.environ, {"PUP_ALLOW_ELIXIR_DEGRADED": "1"}):
+            # Should not raise — should fall back to Python-local reset
+            runtime_state.reset_session_model()
+
+        # _SESSION_MODEL should be None after reset
+        assert runtime_state._SESSION_MODEL is None
+
+    def test_reset_session_model_raises_without_degraded(self, reset_state):
+        """reset_session_model should raise when transport is dead and degraded is off."""
+        from code_puppy.elixir_transport import ElixirTransportError
+
+        mock = MockTransport()
+        mock._send_request = lambda m, p: (_ for _ in ()).throw(
+            ElixirTransportError("Elixir process died (exit code 1)")
+        )
+
+        with patch.object(runtime_state, "_get_transport", return_value=mock), \
+             patch.dict(os.environ, {}, clear=True):
+            with pytest.raises(ElixirTransportError, match="process died"):
+                runtime_state.reset_session_model()
+
+    def test_get_state_degraded_fallback(self, reset_state):
+        """get_state should use degraded fallback when transport is dead."""
+        from code_puppy.elixir_transport import ElixirTransportError
+
+        mock = MockTransport()
+        mock._send_request = lambda m, p: (_ for _ in ()).throw(
+            ElixirTransportError("Elixir process died (exit code 1)")
+        )
+
+        with patch.object(runtime_state, "_get_transport", return_value=mock), \
+             patch.dict(os.environ, {"PUP_ALLOW_ELIXIR_DEGRADED": "1"}):
+            result = runtime_state.get_state()
+
+        # Should return a dict with the expected keys
+        assert "autosave_id" in result
+        assert "session_model" in result
+        assert "session_start_time" in result
+
+    def test_get_state_raises_without_degraded(self, reset_state):
+        """get_state should raise when transport is dead and degraded is off."""
+        from code_puppy.elixir_transport import ElixirTransportError
+
+        mock = MockTransport()
+        mock._send_request = lambda m, p: (_ for _ in ()).throw(
+            ElixirTransportError("Elixir process died (exit code 1)")
+        )
+
+        with patch.object(runtime_state, "_get_transport", return_value=mock), \
+             patch.dict(os.environ, {}, clear=True):
+            with pytest.raises(ElixirTransportError, match="process died"):
+                runtime_state.get_state()
 
 
 class TestBackwardCompatibility:
