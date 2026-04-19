@@ -1,0 +1,55 @@
+name: Elixir Isolation Gates (bd-186)
+
+on:
+  pull_request:
+    paths:
+      - 'elixir/code_puppy_control/lib/code_puppy_control/config/**'
+      - 'elixir/code_puppy_control/lib/mix/tasks/pup_ex/**'
+      - 'elixir/code_puppy_control/test/code_puppy_control/config/**'
+      - '.github/workflows/elixir-isolation-gates.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'elixir/code_puppy_control/lib/code_puppy_control/config/**'
+      - 'elixir/code_puppy_control/lib/mix/tasks/pup_ex/**'
+      - 'elixir/code_puppy_control/test/code_puppy_control/config/**'
+
+jobs:
+  isolation-gates:
+    name: bd-186 isolation gates
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: elixir/code_puppy_control
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: erlef/setup-beam@v1
+        with:
+          elixir-version: '1.15'
+          otp-version: '26'
+
+      - name: Restore deps cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            elixir/code_puppy_control/deps
+            elixir/code_puppy_control/_build
+          key: ${{ runner.os }}-mix-${{ hashFiles('elixir/code_puppy_control/mix.lock') }}
+          restore-keys: ${{ runner.os }}-mix-
+
+      - name: Install dependencies
+        run: mix deps.get
+
+      - name: Compile
+        run: mix compile
+
+      - name: Run isolation gates
+        run: MIX_ENV=test mix gates.isolation
+
+      - name: Run full config test suite (GATE-1 no-leak verification)
+        run: MIX_ENV=test mix test test/code_puppy_control/config/
+        env:
+          # Force PUP_EX_HOME to a known-clean path so no test leaks to real HOME
+          PUP_EX_HOME: /tmp/pup_ex_ci_home
