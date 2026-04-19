@@ -161,5 +161,19 @@ defmodule CodePuppyControl.Config.DebugTest do
     test "runs without error" do
       assert Debug.load_api_keys_to_environment() == :ok
     end
+
+    test "promotes wafer_api_key from config to WAFER_API_KEY env" do
+      # Ensure env is clean
+      System.delete_env("WAFER_API_KEY")
+
+      File.write!(@test_cfg, "[puppy]\nwafer_api_key = wfr_test_value_123\n")
+      Loader.load(@test_cfg)
+
+      assert :ok = Debug.load_api_keys_to_environment()
+      assert System.get_env("WAFER_API_KEY") == "wfr_test_value_123"
+
+      # Cleanup
+      System.delete_env("WAFER_API_KEY")
+    end
   end
 end

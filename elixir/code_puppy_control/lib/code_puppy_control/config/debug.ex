@@ -199,7 +199,8 @@ defmodule CodePuppyControl.Config.Debug do
     "AZURE_OPENAI_API_KEY",
     "AZURE_OPENAI_ENDPOINT",
     "OPENROUTER_API_KEY",
-    "ZAI_API_KEY"
+    "ZAI_API_KEY",
+    "WAFER_API_KEY"
   ]
 
   @doc """
@@ -212,7 +213,10 @@ defmodule CodePuppyControl.Config.Debug do
   def load_api_keys_to_environment do
     Enum.each(@api_key_names, fn key ->
       if is_nil(System.get_env(key)) or System.get_env(key) == "" do
-        case Loader.get_value(key) do
+        # Config keys are lowercase (e.g., "wafer_api_key")
+        config_key = String.downcase(key)
+
+        case Loader.get_value(config_key) do
           nil -> :ok
           "" -> :ok
           value -> System.put_env(key, value)
