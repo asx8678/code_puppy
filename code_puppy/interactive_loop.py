@@ -557,91 +557,111 @@ async def interactive_mode(message_renderer, initial_command: str = None) -> Non
                     stop_wiggum()
                     break
 
-                wiggum_prompt = get_wiggum_prompt()
-                if not wiggum_prompt:
+                # bd-201: Don't re-loop into a dead Elixir control-plane.
+                # is_using_elixir() pings the transport; if it's down and we're not in
+                # degraded mode, the next finalize_autosave_session would crash the REPL.
+                import os
+                from code_puppy.runtime_state import is_using_elixir
+
+                if not is_using_elixir() and os.environ.get('PUP_ALLOW_ELIXIR_DEGRADED') != '1':
+                    from code_puppy.messaging import emit_error
+                    emit_error(
+                        'Wiggum stopping: Elixir control-plane is unreachable. '
+                        'Set PUP_ALLOW_ELIXIR_DEGRADED=1 to continue in degraded mode.'
+                    )
                     stop_wiggum()
                     break
 
-                # Increment and show debug message
-                loop_num = increment_wiggum_count()
-                from code_puppy.messaging import emit_system_message, emit_warning, emit_info
-
-                emit_warning(f"\n🍩 WIGGUM RELOOPING! (Loop #{loop_num})")
-                emit_system_message(f"Re-running prompt: {wiggum_prompt}")
-
-                # Reset context/history for fresh start
-                new_session_id = finalize_autosave_session()
-                current_agent.clear_message_history()
-
-                # Clear token ledger for fresh cost tracking per wiggum loop
-                # (design fix: each wiggum iteration should have independent accounting)
-                current_agent._state.get_token_ledger().clear()
-                emit_info(f"💰 Token ledger reset for wiggum loop #{loop_num}")
-
-                emit_system_message(
-                    f"Context cleared. Session rotated to: {new_session_id}"
-                )
-
-                # Small delay to let user see the debug message
-
-                await asyncio.sleep(0.5)
-
                 try:
-                    # Re-run the wiggum prompt
-                    result, current_agent_task = await run_prompt_with_attachments(
-                        current_agent,
-                        wiggum_prompt,
-                        spinner_console=message_renderer.console,
-                    )
-
-                    if result is None:
-                        # Cancelled - stop wiggum mode
-                        emit_warning("Wiggum loop cancelled by user")
+                    wiggum_prompt = get_wiggum_prompt()
+                    if not wiggum_prompt:
                         stop_wiggum()
                         break
 
-                    # Get the structured response
-                    agent_response = result.output
+                    # Increment and show debug message
+                    loop_num = increment_wiggum_count()
+                    from code_puppy.messaging import emit_system_message, emit_warning, emit_info
 
-                    # Emit structured message for proper markdown rendering
-                    from code_puppy.agents.event_stream_handler import get_stream_state
+                    emit_warning(f"\n🍩 WIGGUM RELOOPING! (Loop #{loop_num})")
+                    emit_system_message(f"Re-running prompt: {wiggum_prompt}")
 
-                    did_stream, line_count = get_stream_state()
-                    response_msg = AgentResponseMessage(
-                        content=agent_response,
-                        is_markdown=True,
-                        was_streamed=did_stream,
-                        streamed_line_count=line_count,
+                    # Reset context/history for fresh start
+                    new_session_id = finalize_autosave_session()
+                    current_agent.clear_message_history()
+
+                    # Clear token ledger for fresh cost tracking per wiggum loop
+                    # (design fix: each wiggum iteration should have independent accounting)
+                    current_agent._state.get_token_ledger().clear()
+                    emit_info(f"💰 Token ledger reset for wiggum loop #{loop_num}")
+
+                    emit_system_message(
+                    f"Context cleared. Session rotated to: {new_session_id}"
                     )
-                    get_message_bus().emit(response_msg)
 
-                    # Update message history
-                    _sync_history_from_result(current_agent, result)
+                    # Small delay to let user see the debug message
 
-                    # Flush console
-                    if hasattr(display_console.file, "flush"):
-                        display_console.file.flush()
+                    await asyncio.sleep(0.5)
 
-                    # Wait for messages to render using condition variable
-                    # instead of polling with asyncio.sleep(0.1)
-                    await wait_for_messages_rendered(timeout=0.5)
+                    try:
+                        # Re-run the wiggum prompt
+                        result, current_agent_task = await run_prompt_with_attachments(
+                            current_agent,
+                            wiggum_prompt,
+                            spinner_console=message_renderer.console,
+                        )
+    
+                        if result is None:
+                            # Cancelled - stop wiggum mode
+                            emit_warning("Wiggum loop cancelled by user")
+                            stop_wiggum()
+                            break
+    
+                        # Get the structured response
+                        agent_response = result.output
+    
+                        # Emit structured message for proper markdown rendering
+                        from code_puppy.agents.event_stream_handler import get_stream_state
+    
+                        did_stream, line_count = get_stream_state()
+                        response_msg = AgentResponseMessage(
+                            content=agent_response,
+                            is_markdown=True,
+                            was_streamed=did_stream,
+                            streamed_line_count=line_count,
+                        )
+                        get_message_bus().emit(response_msg)
+    
+                        # Update message history
+                        _sync_history_from_result(current_agent, result)
+    
+                        # Flush console
+                        if hasattr(display_console.file, "flush"):
+                            display_console.file.flush()
+    
+                        # Wait for messages to render using condition variable
+                        # instead of polling with asyncio.sleep(0.1)
+                        await wait_for_messages_rendered(timeout=0.5)
+    
+                        # Auto-save
+                        auto_save_session_if_enabled()
+    
+                    except KeyboardInterrupt:
+                        emit_warning("\n🍩 Wiggum loop interrupted by Ctrl+C")
+                        stop_wiggum()
+                        break
 
-                    # Auto-save
-                    auto_save_session_if_enabled()
-
-                except KeyboardInterrupt:
-                    emit_warning("\n🍩 Wiggum loop interrupted by Ctrl+C")
-                    stop_wiggum()
-                    break
                 except asyncio.CancelledError:
-                    raise  # Let cancellation propagate properly
-                except Exception as e:
-                    from code_puppy.messaging import emit_error
+                    # Re-raise so the outer loop's cancellation handling fires.
+                    raise
+                except Exception as exc:
+                    from code_puppy.error_logging import log_error as _log_error
+                    from code_puppy.messaging import emit_error as _emit_error
 
-                    emit_error(f"Wiggum loop error: {e}")
-                    from code_puppy.error_logging import log_error
-
-                    log_error(e, context="Wiggum loop error")
+                    _log_error(exc, context="wiggum loop iteration")
+                    _emit_error(
+                        f"Wiggum stopping due to error in loop iteration: "
+                        f"{type(exc).__name__}: {exc}"
+                    )
                     stop_wiggum()
                     break
 
