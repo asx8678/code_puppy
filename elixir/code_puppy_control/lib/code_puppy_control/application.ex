@@ -65,6 +65,10 @@ defmodule CodePuppyControl.Application do
       # MCP Server supervision
       {Registry, keys: :unique, name: CodePuppyControl.MCP.Registry},
       CodePuppyControl.MCP.Supervisor,
+      # MCP Client supervision (bd-155)
+      {Registry, keys: :unique, name: CodePuppyControl.MCP.ClientRegistry},
+      CodePuppyControl.MCP.ToolIndex,
+      CodePuppyControl.MCP.ClientSupervisor,
       # Concurrency limiter (ETS-backed semaphores for file_ops, api_calls, tool_calls)
       CodePuppyControl.Concurrency.Supervisor,
       # Adaptive rate limiter with circuit breaker (bd-151)
