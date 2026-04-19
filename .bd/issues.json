@@ -3905,7 +3905,24 @@
       "created_at": "2026-04-19T12:21:53.956195",
       "updated_at": "2026-04-19T12:21:57.493794",
       "comments": []
+    },
+    "bd-196": {
+      "id": "bd-196",
+      "title": "Add direct unit tests for new Elixir stub modules",
+      "description": "During bd-164 completion, four stub modules were introduced to the Elixir codebase to unblock compilation from bd-152: CodePuppyControl.Tool, CodePuppyControl.Tool.Registry, CodePuppyControl.Stream.Event, CodePuppyControl.Stream.Normalizer. Watchdog review found no direct unit tests for any of them \u2014 they are only exercised indirectly via integration paths. File direct unit tests covering: Tool behaviour contract, Tool.Registry GenServer start/register/lookup semantics, Stream.Event struct validation, Stream.Normalizer.normalize/1 identity + any future transformations",
+      "status": "open",
+      "priority": 2,
+      "type": "task",
+      "labels": [],
+      "dependencies": {
+        "discovered-from": [
+          "bd-164"
+        ]
+      },
+      "created_at": "2026-04-19T12:22:13.303563",
+      "updated_at": "2026-04-19T12:22:15.806044",
+      "comments": []
     }
   },
-  "counter": 195
+  "counter": 196
 }
