@@ -211,8 +211,22 @@ def set_session_model(model: str | None) -> None:
 
 def reset_session_model() -> None:
     """Reset the session-local model cache (primarily for testing)."""
-    transport = _get_transport()
-    transport._send_request("runtime_reset_session_model", {})
+    try:
+        transport = _get_transport()
+        transport._send_request("runtime_reset_session_model", {})
+    except (ElixirTransportError, OSError, BrokenPipeError, ConnectionError, TimeoutError) as exc:
+        if _degraded():
+            import logging
+            logging.getLogger(__name__).warning(
+                "Elixir transport unavailable during reset_session_model; "
+                "resetting Python-local session model: %s",
+                exc,
+            )
+            with _DEGRADED_STATE_LOCK:
+                global _SESSION_MODEL
+                _SESSION_MODEL = None
+            return
+        raise
 
 
 # =============================================================================
@@ -256,13 +270,30 @@ def get_state() -> dict[str, Any]:
     - session_model: The cached session model name
     - session_start_time: ISO8601 timestamp of when the state was queried
     """
-    transport = _get_transport()
-    result = transport._send_request("runtime_get_state", {})
-    return {
-        "autosave_id": result["autosave_id"],
-        "session_model": result["session_model"],
-        "session_start_time": result["session_start_time"],
-    }
+    try:
+        transport = _get_transport()
+        result = transport._send_request("runtime_get_state", {})
+        return {
+            "autosave_id": result["autosave_id"],
+            "session_model": result["session_model"],
+            "session_start_time": result["session_start_time"],
+        }
+    except (ElixirTransportError, OSError, BrokenPipeError, ConnectionError, TimeoutError) as exc:
+        if _degraded():
+            import logging
+            from datetime import datetime
+            logging.getLogger(__name__).warning(
+                "Elixir transport unavailable during get_state; "
+                "returning degraded Python-local state: %s",
+                exc,
+            )
+            with _DEGRADED_STATE_LOCK:
+                return {
+                    "autosave_id": _CURRENT_AUTOSAVE_ID or datetime.now().strftime("%Y%m%d_%H%M%S"),
+                    "session_model": _SESSION_MODEL,
+                    "session_start_time": datetime.now().isoformat() + "Z",
+                }
+        raise
 
 
 # =============================================================================

@@ -39,8 +39,11 @@ with ElixirTransport() as transport:
 - `PUP_LOG_LEVEL` - Set Elixir service log level (debug, info, warn, error)
 """
 
+import logging
 import threading
 from typing import Any
+
+logger = logging.getLogger(__name__)
 
 
 # Module-level singleton for simple use cases
@@ -56,8 +59,28 @@ def _get_transport() -> "ElixirTransport":  # type: ignore # noqa: F821
     return get_transport()
 
 
+def _transport_is_alive(transport) -> bool:
+    """Check whether a cached transport's BEAM process is still running.
+
+    Returns False if transport is None, its process was never started,
+    or the process has exited.  Safe to call from any thread without
+    holding _module_transport_lock (Popen.poll() is thread-safe).
+    """
+    if transport is None:
+        return False
+    try:
+        return transport.is_alive()
+    except Exception:
+        # Defensive: if is_alive() itself fails, treat as dead
+        return False
+
+
 def get_transport() -> "ElixirTransport":  # type: ignore # noqa: F821
     """Get or create the module-level transport singleton.
+
+    If the previously cached transport's BEAM process has died, this function
+    logs a warning, discards the dead singleton, and attempts to start a fresh
+    one (bd-206).
 
     Thread-safe under free-threaded Python (3.13+ with GIL disabled):
     only a fully-started transport is ever published to the module-level
@@ -65,14 +88,27 @@ def get_transport() -> "ElixirTransport":  # type: ignore # noqa: F821
     transport is cached.
     """
     global _module_transport
-    # Fast path: already initialized
-    if _module_transport is not None:
+
+    # Fast path: cached transport exists and is alive
+    if _module_transport is not None and _transport_is_alive(_module_transport):
         return _module_transport
 
     with _module_transport_lock:
         # Re-check under lock (double-checked locking)
         if _module_transport is not None:
-            return _module_transport
+            if _transport_is_alive(_module_transport):
+                return _module_transport
+
+            # Transport died between the probe and now — discard and restart
+            logger.warning(
+                "Elixir transport process died; discarding stale singleton "
+                "and attempting restart (bd-206)"
+            )
+            try:
+                _module_transport.stop()
+            except Exception:
+                pass
+            _module_transport = None
 
         from code_puppy.elixir_transport import ElixirTransport
 

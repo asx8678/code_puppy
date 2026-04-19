@@ -23,6 +23,7 @@ class MockProcess:
     def __init__(self, stdout_lines=None, poll_result=None):
         self.stdout_lines = stdout_lines or []
         self._poll_result = poll_result
+        self.returncode = poll_result  # Popen sets this when poll() returns non-None
         self.stdin = MagicMock()
         self.stdout = StringIO("\n".join(self.stdout_lines) + "\n")
         self._closed = False
@@ -275,3 +276,56 @@ class TestSendRequestProcessDead:
             transport._send_request("test_method", {})
 
         assert "Failed to send request" in str(exc_info.value)
+
+
+class TestSendRequestDistinguishableErrors:
+    """Tests for distinguishable error messages (bd-206).
+
+    _send_request should tell the caller whether the transport was never
+    started or whether the BEAM process died after a successful start.
+    """
+
+    def test_never_started_error_message(self):
+        """When _process is None, error says 'never started'."""
+        transport = _create_transport(request_id=0)
+        transport._process = None  # Never started
+
+        with pytest.raises(ElixirTransportError) as exc_info:
+            transport._send_request("test_method", {})
+
+        msg = str(exc_info.value).lower()
+        assert "never started" in msg
+
+    def test_process_died_error_message(self):
+        """When _process has exited, error says 'died' with exit code."""
+        transport = _create_transport(request_id=0)
+        transport._process = MockProcess(poll_result=42)  # Exited with code 42
+
+        with pytest.raises(ElixirTransportError) as exc_info:
+            transport._send_request("test_method", {})
+
+        msg = str(exc_info.value).lower()
+        assert "died" in msg
+        assert "42" in msg  # Exit code included
+
+
+class TestIsAlive:
+    """Tests for the is_alive() convenience method (bd-206)."""
+
+    def test_alive_when_process_running(self):
+        """is_alive() returns True when process is running."""
+        transport = _create_transport(request_id=0)
+        transport._process = MockProcess(poll_result=None)  # Still running
+        assert transport.is_alive() is True
+
+    def test_not_alive_when_process_dead(self):
+        """is_alive() returns False when process has exited."""
+        transport = _create_transport(request_id=0)
+        transport._process = MockProcess(poll_result=1)
+        assert transport.is_alive() is False
+
+    def test_not_alive_when_never_started(self):
+        """is_alive() returns False when _process is None."""
+        transport = _create_transport(request_id=0)
+        transport._process = None
+        assert transport.is_alive() is False
