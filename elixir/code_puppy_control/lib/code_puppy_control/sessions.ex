@@ -195,7 +195,7 @@ defmodule CodePuppyControl.Sessions do
   """
   @spec session_exists?(session_name()) :: boolean()
   def session_exists?(name) do
-    Repo.exists?(from s in ChatSession, where: s.name == ^name)
+    Repo.exists?(from(s in ChatSession, where: s.name == ^name))
   end
 
   @doc """

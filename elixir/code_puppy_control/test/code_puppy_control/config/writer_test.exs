@@ -1,7 +1,7 @@
 defmodule CodePuppyControl.Config.WriterTest do
   use ExUnit.Case, async: false
 
-  alias CodePuppyControl.Config.{Loader, Writer, Paths}
+  alias CodePuppyControl.Config.{Loader, Writer}
 
   @tmp_dir System.tmp_dir!()
   @test_cfg_dir Path.join(@tmp_dir, "writer_test_#{:erlang.unique_integer([:positive])}")
@@ -25,6 +25,8 @@ defmodule CodePuppyControl.Config.WriterTest do
 
   describe "atomic_write/2 via serialize" do
     test "writes config map to INI file", %{cfg_path: cfg_path} do
+      ensure_writer_started()
+
       config = %{
         "puppy" => %{"model" => "gpt-5", "yolo_mode" => "false"},
         "other" => %{"key" => "val"}
@@ -59,12 +61,12 @@ defmodule CodePuppyControl.Config.WriterTest do
   end
 
   describe "set_values/1" do
-    test "updates multiple keys atomically", %{cfg_path: _cfg_path} do
+    test "updates multiple keys atomically", %{cfg_path: cfg_path} do
       ensure_writer_started()
 
       Writer.set_values(%{"alpha" => "1", "beta" => "2"})
 
-      Loader.load(_cfg_path)
+      Loader.load(cfg_path)
       assert Loader.get_value("alpha") == "1"
       assert Loader.get_value("beta") == "2"
     end

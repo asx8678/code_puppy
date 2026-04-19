@@ -76,7 +76,7 @@ defmodule CodePuppyControl.Config.Models do
   Set the global temperature. Pass `nil` to clear.
   """
   @spec set_temperature(float() | nil) :: :ok
-  def set_temperature(nil), do: CodePuppyControl.Config.Writer.set_value("temperature", "")
+  def set_temperature(nil), do: CodePuppyControl.Config.Writer.delete_value("temperature")
 
   def set_temperature(value) when is_float(value) or is_integer(value) do
     clamped = max(0.0, min(2.0, value * 1.0))
@@ -153,7 +153,7 @@ defmodule CodePuppyControl.Config.Models do
   """
   @spec clear_agent_pinned_model(String.t()) :: :ok
   def clear_agent_pinned_model(agent_name) do
-    CodePuppyControl.Config.Writer.set_value("agent_model_#{agent_name}", "")
+    CodePuppyControl.Config.Writer.delete_value("agent_model_#{agent_name}")
   end
 
   @doc """

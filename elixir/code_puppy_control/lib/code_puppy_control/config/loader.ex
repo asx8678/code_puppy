@@ -29,6 +29,7 @@ defmodule CodePuppyControl.Config.Loader do
   require Logger
 
   @persistent_term_key {:code_puppy_control, :puppy_cfg}
+  @config_path_key {:code_puppy_control, :puppy_cfg_path}
   @default_section "puppy"
 
   @type config :: %{String.t() => %{String.t() => String.t()}}
@@ -50,6 +51,7 @@ defmodule CodePuppyControl.Config.Loader do
       |> merge_env_overrides()
 
     :persistent_term.put(@persistent_term_key, config)
+    :persistent_term.put(@config_path_key, path)
     config
   end
 
@@ -261,8 +263,21 @@ defmodule CodePuppyControl.Config.Loader do
   Invalidate the cached config, forcing next read to reload from disk.
   """
   @spec invalidate() :: :ok
+  @doc """
+  Return the path of the last-loaded config file.
+  Falls back to `Paths.config_file()` if no explicit load has occurred.
+  """
+  @spec loaded_path() :: String.t()
+  def loaded_path do
+    case :persistent_term.get(@config_path_key, :not_set) do
+      :not_set -> CodePuppyControl.Config.Paths.config_file()
+      path -> path
+    end
+  end
+
   def invalidate do
     :persistent_term.erase(@persistent_term_key)
+    # Keep config_path_key so Writer knows where to write
     :ok
   end
 end

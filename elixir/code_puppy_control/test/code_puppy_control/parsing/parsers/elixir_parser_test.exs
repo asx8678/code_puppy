@@ -173,14 +173,14 @@ defmodule CodePuppyControl.Parsing.Parsers.ElixirParserTest do
       assert length(result.symbols) == 3
 
       # Find module
-      module = Enum.find(result.symbols, & &1.kind == :module)
+      module = Enum.find(result.symbols, &(&1.kind == :module))
       assert module.name == "MyModule"
       assert module.kind == :module
       # Children are now flattened, so module.children is empty
       assert module.children == []
 
       # Find functions with parent reference
-      functions = Enum.filter(result.symbols, & &1.kind == :function)
+      functions = Enum.filter(result.symbols, &(&1.kind == :function))
       assert length(functions) == 2
 
       child_names = Enum.map(functions, & &1.name)
@@ -379,7 +379,7 @@ defmodule CodePuppyControl.Parsing.Parsers.ElixirParserTest do
 
       # Check macrocallback has parent reference (use Access behavior)
       # Note: callback name extraction returns "::" for type specs
-      callback = Enum.find(result.symbols, & &1.kind == :type)
+      callback = Enum.find(result.symbols, &(&1.kind == :type))
       assert callback[:parent] == "MyBehaviour"
     end
   end
@@ -520,7 +520,7 @@ defmodule CodePuppyControl.Parsing.Parsers.ElixirParserTest do
       # Flattened: 1 module + use + spec + 3 defs = 6 symbols
       assert length(result.symbols) == 6
 
-      module = Enum.find(result.symbols, & &1.kind == :module)
+      module = Enum.find(result.symbols, &(&1.kind == :module))
       assert module.name == "MyApp.Worker"
       assert module.kind == :module
       assert module.doc == "A GenServer worker"
@@ -528,7 +528,7 @@ defmodule CodePuppyControl.Parsing.Parsers.ElixirParserTest do
       assert module.children == []
 
       # Verify nested items are at top level with parent (use Access behavior)
-      children_with_parent = Enum.filter(result.symbols, & &1[:parent] == "MyApp.Worker")
+      children_with_parent = Enum.filter(result.symbols, &(&1[:parent] == "MyApp.Worker"))
       assert length(children_with_parent) >= 4
     end
 
@@ -561,14 +561,14 @@ defmodule CodePuppyControl.Parsing.Parsers.ElixirParserTest do
       assert result.success == true
 
       # Flattened structure: find module in the list
-      module = Enum.find(result.symbols, & &1.kind == :module)
+      module = Enum.find(result.symbols, &(&1.kind == :module))
       assert module.name == "Math"
       assert module.doc == "Math utilities"
       # Children are now flattened
       assert module.children == []
 
       # Verify nested items are at top level with parent (use Access behavior)
-      children_with_parent = Enum.filter(result.symbols, & &1[:parent] == "Math")
+      children_with_parent = Enum.filter(result.symbols, &(&1[:parent] == "Math"))
       assert length(children_with_parent) >= 5
     end
 
@@ -593,24 +593,24 @@ defmodule CodePuppyControl.Parsing.Parsers.ElixirParserTest do
       assert length(result.symbols) == 4
 
       # Both modules at top level
-      modules = Enum.filter(result.symbols, & &1.kind == :module)
+      modules = Enum.filter(result.symbols, &(&1.kind == :module))
       assert length(modules) == 2
 
-      outer = Enum.find(modules, & &1.name == "Outer")
+      outer = Enum.find(modules, &(&1.name == "Outer"))
       assert outer.kind == :module
       assert outer.children == []
 
-      inner = Enum.find(modules, & String.ends_with?(&1.name, "Inner"))
+      inner = Enum.find(modules, &String.ends_with?(&1.name, "Inner"))
       assert inner.kind == :module
       assert inner.children == []
       assert inner[:parent] == "Outer"
 
       # Functions have correct parent (use Access behavior)
       # Note: nested module children get outer module as parent
-      outer_func = Enum.find(result.symbols, & &1.name == "outer_func")
+      outer_func = Enum.find(result.symbols, &(&1.name == "outer_func"))
       assert outer_func[:parent] == "Outer"
 
-      inner_func = Enum.find(result.symbols, & &1.name == "inner_func")
+      inner_func = Enum.find(result.symbols, &(&1.name == "inner_func"))
       # The nested module function gets Outer as parent (flattened extraction)
       assert inner_func[:parent] == "Outer"
     end

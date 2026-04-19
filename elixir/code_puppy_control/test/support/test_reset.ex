@@ -513,7 +513,8 @@ defmodule CodePuppyControl.TestSupport.Reset do
             write_concurrency: true
           ])
         rescue
-          ArgumentError -> :ok  # Table was created by another process
+          # Table was created by another process
+          ArgumentError -> :ok
         end
       end
 

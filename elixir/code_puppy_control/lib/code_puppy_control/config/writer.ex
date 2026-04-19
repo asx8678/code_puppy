@@ -31,7 +31,7 @@ defmodule CodePuppyControl.Config.Writer do
 
   require Logger
 
-  alias CodePuppyControl.Config.{Loader, Paths}
+  alias CodePuppyControl.Config.Loader
 
   # ── Client API ──────────────────────────────────────────────────────────
 
@@ -144,7 +144,7 @@ defmodule CodePuppyControl.Config.Writer do
 
   @spec do_write(Loader.config()) :: :ok
   defp do_write(config) do
-    path = Paths.config_file()
+    path = Loader.loaded_path()
     content = serialize(config)
     atomic_write(path, content)
     Loader.invalidate()
