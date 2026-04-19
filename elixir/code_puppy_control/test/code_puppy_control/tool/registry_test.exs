@@ -236,4 +236,63 @@ defmodule CodePuppyControl.Tool.RegistryTest do
       assert TestToolGamma in modules
     end
   end
+
+  describe "start_link/1" do
+    test "returns already_started when the registry is already supervised" do
+      existing = Process.whereis(Registry)
+
+      assert {:error, {:already_started, ^existing}} = Registry.start_link()
+    end
+  end
+
+  describe "ToolEntry.from_module/1" do
+    test "produces expected struct from TestToolAlpha" do
+      entry = Registry.ToolEntry.from_module(TestToolAlpha)
+
+      assert entry.name == :test_tool_alpha
+      assert entry.module == TestToolAlpha
+      assert entry.description == "A test tool for registry testing (alpha)"
+      assert is_map(entry.parameters)
+      assert entry.parameters["type"] == "object"
+    end
+
+    test "produces expected struct with all four fields correctly populated" do
+      entry = Registry.ToolEntry.from_module(TestToolBeta)
+
+      # Verify all four enforced fields are present
+      assert %Registry.ToolEntry{
+               name: :test_tool_beta,
+               module: TestToolBeta,
+               description: "A test tool for registry testing (beta)",
+               parameters: params
+             } = entry
+
+      assert is_map(params)
+    end
+  end
+
+  describe "handle_info/2" do
+    test "handles unexpected messages without crashing" do
+      registry_pid = Process.whereis(Registry)
+      ref = Process.monitor(registry_pid)
+
+      send(registry_pid, :random_msg)
+
+      # Synchronization point: waits for the server to handle prior messages
+      assert %{table: _} = :sys.get_state(registry_pid)
+      refute_receive {:DOWN, ^ref, :process, ^registry_pid, _}, 50
+    end
+
+    test "handles multiple unexpected messages without crashing" do
+      registry_pid = Process.whereis(Registry)
+      ref = Process.monitor(registry_pid)
+
+      send(registry_pid, :msg_one)
+      send(registry_pid, :msg_two)
+      send(registry_pid, {:tuple_msg, "data"})
+
+      assert %{table: _} = :sys.get_state(registry_pid)
+      refute_receive {:DOWN, ^ref, :process, ^registry_pid, _}, 50
+    end
+  end
 end

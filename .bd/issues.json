@@ -3914,15 +3914,19 @@
       "status": "open",
       "priority": 2,
       "type": "task",
-      "labels": [],
+      "labels": [
+        "claimed-by-planning-agent-019da7"
+      ],
       "dependencies": {
         "discovered-from": [
           "bd-164"
         ]
       },
       "created_at": "2026-04-19T12:22:13.303563",
-      "updated_at": "2026-04-19T12:22:15.806044",
-      "comments": []
+      "updated_at": "2026-04-19T19:58:11.287691",
+      "comments": [
+        "Claimed by planning-agent-019da7. Scope: ExUnit tests only, test/ directory only. Zero changes to lib/, config/, or user config."
+      ]
     },
     "bd-197": {
       "id": "bd-197",

@@ -190,6 +190,68 @@ defmodule CodePuppyControl.Stream.NormalizerTest do
     end
   end
 
+  describe "normalize/1 - contract" do
+    test "raises FunctionClauseError when given a non-function" do
+      assert_raise FunctionClauseError, fn ->
+        Normalizer.normalize("not a function")
+      end
+
+      assert_raise FunctionClauseError, fn ->
+        Normalizer.normalize(:atom)
+      end
+
+      assert_raise FunctionClauseError, fn ->
+        Normalizer.normalize(123)
+      end
+    end
+
+    test "raises FunctionClauseError when given a function of wrong arity" do
+      # Function with arity 2 instead of required arity 1
+      assert_raise FunctionClauseError, fn ->
+        Normalizer.normalize(fn _arg1, _arg2 -> :ok end)
+      end
+
+      # Function with arity 0 instead of required arity 1
+      assert_raise FunctionClauseError, fn ->
+        Normalizer.normalize(fn -> :ok end)
+      end
+    end
+
+    test "passes through already-wrapped {:stream, event} tuples unchanged" do
+      # Create an already-wrapped event tuple
+      wrapped = {:stream, %Event.TextDelta{index: 0, text: "already wrapped"}}
+
+      events =
+        collect_normalized(fn callback ->
+          normalized = Normalizer.normalize(callback)
+          # This should pass through unchanged (identity on wrapped events)
+          normalized.(wrapped)
+        end)
+
+      # Should receive the wrapped tuple unchanged
+      assert [^wrapped] = events
+    end
+
+    test "passes through wrapped ToolCallEnd unchanged" do
+      wrapped =
+        {:stream,
+         %Event.ToolCallEnd{
+           index: 1,
+           id: "tc-2",
+           name: "test_tool",
+           arguments: "{}"
+         }}
+
+      events =
+        collect_normalized(fn callback ->
+          normalized = Normalizer.normalize(callback)
+          normalized.(wrapped)
+        end)
+
+      assert [^wrapped] = events
+    end
+  end
+
   # Helper to collect events from a callback
   defp collect_normalized(build_fn) do
     test_pid = self()
