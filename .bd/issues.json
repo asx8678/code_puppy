@@ -3244,11 +3244,12 @@
         ]
       },
       "created_at": "2026-04-18T19:48:17.126393",
-      "updated_at": "2026-04-19T09:43:02.780428",
+      "updated_at": "2026-04-19T11:33:38.483075",
       "comments": [
         "Partial commit as 1930f9a2. 10-module split implemented (loader/writer/paths/models/agents/tui/cache/limits/debug/migrator). 145 tests with 9 failures in write-path (Writer/Models/Migrator). MIGRATION_MAP.md also landed.\n\nRemaining work (stays OPEN):\n1. Verify all Python config.py accessors are mapped function-by-function\n2. Fix 9 write-path persistence bugs\n3. Implement dynamic reload (file watcher)\n4. Back-compat audit across existing call sites\n\nReady for follow-up code-puppy dispatch.",
         "\n## \u26a0\ufe0f Isolation Requirement (added per bd-186)\n\nThis task MUST:\n- Write only to ~/.code_puppy_ex/ (never ~/.code_puppy/)\n- Pass the bd-186 CI gates (no-writes-to-python-home, fresh-install-works, existing-install-untouched)\n- Run all tests against temp directories, never the user's real home\n- Respect the Python freeze policy (bd-187) \u2014 do not modify code_puppy/**/*.py\n\nDependency: bd-186 now blocks this issue.",
-        "bd-186 isolation infrastructure has landed. This issue's implementation MUST:\n\n1. Write only to ~/.code_puppy_ex/ via Paths.* helpers\n   (never hardcode ~/.code_puppy/ paths)\n2. Use Isolation.safe_write! / safe_mkdir_p! / safe_rm! / safe_rm_rf!\n   for ALL filesystem mutations on user-home paths\n3. Use Isolation.read_only_legacy/1 if reading from ~/.code_puppy/\n   during one-time migration imports (and only then)\n\nRelevant commits:\n- 86b05f29 \u2014 Config.Paths extension + Config.Isolation guard module\n- 2ea04ea9 \u2014 8 hardcoded callsites routed through Paths\n- 438685ac \u2014 FirstRun + pup_ex.import/doctor/auth.login CLI\n- b692dfdb \u2014 5 ADR CI gates + GitHub Actions workflow\n\nADR-003 is the canonical design doc:\ndocs/adr/ADR-003-dual-home-config-isolation.md\n\nAny PR touching config, session, OAuth, secrets, or compat tests will\nhave to pass `mix gates.isolation` in CI. Start there."
+        "bd-186 isolation infrastructure has landed. This issue's implementation MUST:\n\n1. Write only to ~/.code_puppy_ex/ via Paths.* helpers\n   (never hardcode ~/.code_puppy/ paths)\n2. Use Isolation.safe_write! / safe_mkdir_p! / safe_rm! / safe_rm_rf!\n   for ALL filesystem mutations on user-home paths\n3. Use Isolation.read_only_legacy/1 if reading from ~/.code_puppy/\n   during one-time migration imports (and only then)\n\nRelevant commits:\n- 86b05f29 \u2014 Config.Paths extension + Config.Isolation guard module\n- 2ea04ea9 \u2014 8 hardcoded callsites routed through Paths\n- 438685ac \u2014 FirstRun + pup_ex.import/doctor/auth.login CLI\n- b692dfdb \u2014 5 ADR CI gates + GitHub Actions workflow\n\nADR-003 is the canonical design doc:\ndocs/adr/ADR-003-dual-home-config-isolation.md\n\nAny PR touching config, session, OAuth, secrets, or compat tests will\nhave to pass `mix gates.isolation` in CI. Start there.",
+        "pack-leader-019da5 claiming. Resuming partial work in existing worktree ../bd-164 (branch feature/bd-164-config-completion, commit 1930f9a2). Focus: fix 9 failing tests in Writer/Models/Migrator modules."
       ]
     },
     "bd-165": {
@@ -3364,8 +3365,10 @@
         ]
       },
       "created_at": "2026-04-18T19:48:21.561567",
-      "updated_at": "2026-04-19T00:56:31.589342",
-      "comments": []
+      "updated_at": "2026-04-19T11:33:38.475200",
+      "comments": [
+        "pack-leader-019da5 claiming. Worktree: ../bd-169, branch feature/bd-169-browser-strategy. Deliverable: strategy decision doc evaluating Wallaby vs ChromicPDF vs Python Port vs drop-tools. No code changes to Python tree (bd-187 freeze policy)."
+      ]
     },
     "bd-170": {
       "id": "bd-170",
@@ -3772,8 +3775,10 @@
       ],
       "dependencies": {},
       "created_at": "2026-04-19T02:09:26.576664",
-      "updated_at": "2026-04-19T02:09:29.967619",
-      "comments": []
+      "updated_at": "2026-04-19T11:33:38.477986",
+      "comments": [
+        "pack-leader-019da5 claiming. Worktree: ../bd-187, branch feature/bd-187-python-freeze-policy. Deliverable: CONTRIBUTING.md update + bd template checkbox + CI guard hint. Pure policy doc work."
+      ]
     },
     "bd-188": {
       "id": "bd-188",
@@ -3874,13 +3879,13 @@
       "id": "bd-194",
       "title": "Wiggum auto-stops when bd ready queue is empty",
       "description": "",
-      "status": "open",
+      "status": "closed",
       "priority": 2,
       "type": "feature",
       "labels": [],
       "dependencies": {},
       "created_at": "2026-04-19T11:27:55.901759",
-      "updated_at": "2026-04-19T11:27:55.901769",
+      "updated_at": "2026-04-19T11:29:49.461599",
       "comments": []
     }
   },
