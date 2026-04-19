@@ -71,6 +71,49 @@ mix phx.server
 | `DATABASE_PATH` | SQLite database path | Production |
 | `PYTHON_WORKER_SCRIPT` | Path to Python worker | Production |
 
+### Dual-Home Config Isolation
+
+Elixir pup-ex uses a **separate home directory** from Python pup to prevent config
+corruption during the migration. See [ADR-003](../../docs/adr/ADR-003-dual-home-config-isolation.md)
+for full design.
+
+| Runtime | Home directory | Status |
+|---------|---------------|--------|
+| Elixir pup-ex | `~/.code_puppy_ex/` (or `PUP_EX_HOME`) | ✅ Read + write |
+| Python pup | `~/.code_puppy/` (legacy) | 📖 Read-only via explicit import |
+
+**Runtime enforcement:** All filesystem writes go through `CodePuppyControl.Config.Isolation`.
+Any attempt to write under `~/.code_puppy/` raises `IsolationViolation` — no exceptions.
+
+#### First-time setup
+
+If you're a user with an existing `~/.code_puppy/` from Python pup:
+
+```bash
+# Copy non-sensitive settings over (dry-run by default)
+mix pup_ex.import              # shows what WOULD be copied
+mix pup_ex.import --confirm    # actually copies
+
+# Verify isolation health
+mix pup_ex.doctor              # reports ✅ ISOLATED on healthy setup
+```
+
+The importer copies an **allowlist** of non-sensitive files only:
+- `extra_models.json`, user additions in `models.json`
+- `[ui]` section of `puppy.cfg`
+- `agents/` and `skills/` directories
+
+**Never copied:** OAuth tokens, sessions, API keys, `dbos_store.sqlite`, command history.
+Re-authenticate with `mix pup_ex.auth.login` (OAuth scaffolding; full flow in bd-166).
+
+#### Relevant environment variables
+
+| Variable | Purpose | Default |
+|----------|---------|--------|
+| `PUP_EX_HOME` | Override Elixir home directory | `~/.code_puppy_ex/` |
+| `PUP_HOME` | **Deprecated** — logs a warning; use `PUP_EX_HOME` | — |
+| `PUPPY_HOME` | **Legacy** — logs a warning; use `PUP_EX_HOME` | — |
+
 ## Development
 
 ### IEx Session
@@ -99,6 +142,18 @@ Content-Length: 47\r\n
 ```
 
 See `lib/code_puppy_control/protocol.ex` for encoding/decoding functions.
+
+### Running Isolation Gates
+
+The 5 CI gates from ADR-003 are consolidated in a dedicated test file:
+
+```bash
+mix gates.isolation
+```
+
+This runs the 8 gate tests (GATE-1 through GATE-5) in under a second. The gates
+also run automatically on every PR that touches config, pup_ex tasks, or the
+workflow itself (see `.github/workflows/elixir-isolation-gates.yml`).
 
 ## License
 
