@@ -4322,7 +4322,7 @@
       "id": "bd-217",
       "title": "bd-168 Wave 4: PTY manager GenServer (Port.open or erlexec)",
       "description": "Wave 4 of bd-168. Port code_puppy/api/pty_manager.py to Elixir. Key decision: Port.open/2 vs erlexec dep. Must handle OS-portable PTY (macOS BSD + Linux openpty), stream stdout/stderr, handle resize. Most OS-intensive wave. See docs/decisions/bd-168-phoenix-server-plan.md.",
-      "status": "open",
+      "status": "closed",
       "priority": 2,
       "type": "task",
       "labels": [
@@ -4330,8 +4330,10 @@
       ],
       "dependencies": {},
       "created_at": "2026-04-19T20:47:39.001488",
-      "updated_at": "2026-04-19T20:47:39.001502",
-      "comments": []
+      "updated_at": "2026-04-19T23:20:51.704305",
+      "comments": [
+        "Implemented PtyManager GenServer using erlexec. Port.open creates pipes not PTYs, so erlexec is required. 7 unit + 12 integration tests all pass. Commit: c69193d5"
+      ]
     },
     "bd-218": {
       "id": "bd-218",
