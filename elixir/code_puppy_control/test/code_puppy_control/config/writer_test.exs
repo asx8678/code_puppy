@@ -1,7 +1,7 @@
 defmodule CodePuppyControl.Config.WriterTest do
   use ExUnit.Case, async: false
 
-  alias CodePuppyControl.Config.{Loader, Writer, Paths}
+  alias CodePuppyControl.Config.{Loader, Writer}
 
   @tmp_dir System.tmp_dir!()
   @test_cfg_dir Path.join(@tmp_dir, "writer_test_#{:erlang.unique_integer([:positive])}")
@@ -25,6 +25,8 @@ defmodule CodePuppyControl.Config.WriterTest do
 
   describe "atomic_write/2 via serialize" do
     test "writes config map to INI file", %{cfg_path: cfg_path} do
+      ensure_writer_started()
+
       config = %{
         "puppy" => %{"model" => "gpt-5", "yolo_mode" => "false"},
         "other" => %{"key" => "val"}
@@ -59,12 +61,12 @@ defmodule CodePuppyControl.Config.WriterTest do
   end
 
   describe "set_values/1" do
-    test "updates multiple keys atomically", %{cfg_path: _cfg_path} do
+    test "updates multiple keys atomically", %{cfg_path: cfg_path} do
       ensure_writer_started()
 
       Writer.set_values(%{"alpha" => "1", "beta" => "2"})
 
-      Loader.load(_cfg_path)
+      Loader.load(cfg_path)
       assert Loader.get_value("alpha") == "1"
       assert Loader.get_value("beta") == "2"
     end
@@ -81,6 +83,35 @@ defmodule CodePuppyControl.Config.WriterTest do
       Writer.delete_value("temp_key")
       Loader.load(cfg_path)
       assert Loader.get_value("temp_key") == nil
+    end
+  end
+
+  describe "bd-197 regression: consecutive writes without explicit reload" do
+    test "consecutive writes stay in the originally loaded file", %{cfg_path: cfg_path} do
+      ensure_writer_started()
+
+      # First write
+      assert :ok = Writer.set_value("model", "first_write")
+      # Second write WITHOUT calling Loader.load/1 in between
+      assert :ok = Writer.set_value("timeout", "42")
+
+      # Both writes should be in the originally loaded file
+      content = File.read!(cfg_path)
+      assert content =~ "first_write", "Expected first_write in #{cfg_path}"
+      assert content =~ "42", "Expected timeout=42 in #{cfg_path}"
+
+      # Default config file should NOT contain our test values
+      default_path = CodePuppyControl.Config.Paths.config_file()
+
+      if File.exists?(default_path) do
+        default_content = File.read!(default_path)
+
+        refute default_content =~ "first_write",
+               "Test value leaked into default config at #{default_path}"
+
+        refute default_content =~ "42",
+               "Test value leaked into default config at #{default_path}"
+      end
     end
   end
 

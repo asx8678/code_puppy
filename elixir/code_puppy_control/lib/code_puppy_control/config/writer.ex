@@ -31,7 +31,7 @@ defmodule CodePuppyControl.Config.Writer do
 
   require Logger
 
-  alias CodePuppyControl.Config.{Loader, Paths}
+  alias CodePuppyControl.Config.Loader
 
   # ── Client API ──────────────────────────────────────────────────────────
 
@@ -40,7 +40,7 @@ defmodule CodePuppyControl.Config.Writer do
   """
   @spec start_link(keyword()) :: GenServer.on_start()
   def start_link(opts \\ []) do
-    name = Keyword.get(opts, __MODULE__, __MODULE__)
+    name = Keyword.get(opts, :name, __MODULE__)
     GenServer.start_link(__MODULE__, [], name: name)
   end
 
@@ -144,7 +144,7 @@ defmodule CodePuppyControl.Config.Writer do
 
   @spec do_write(Loader.config()) :: :ok
   defp do_write(config) do
-    path = Paths.config_file()
+    path = Loader.loaded_path()
     content = serialize(config)
     atomic_write(path, content)
     Loader.invalidate()
