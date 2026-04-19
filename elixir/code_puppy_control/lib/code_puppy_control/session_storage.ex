@@ -1,5 +1,5 @@
 defmodule CodePuppyControl.SessionStorage do
-  @doc """
+  @moduledoc """
   File-based session CRUD, search, and export for Code Puppy.
 
   All sessions stored as JSON under `~/.code_puppy_ex/sessions/` (bd-165).
@@ -49,10 +49,13 @@ defmodule CodePuppyControl.SessionStorage do
   """
   @spec base_dir :: Path.t()
   def base_dir do
-    case System.get_env("PUP_SESSION_DIR") do
-      nil -> Path.expand("~/.code_puppy_ex/sessions")
-      dir -> Path.expand(dir)
-    end
+    raw =
+      case System.get_env("PUP_SESSION_DIR") do
+        nil -> "~/.code_puppy_ex/sessions"
+        dir -> dir
+      end
+
+    raw |> Path.expand() |> validate_storage_dir!()
   end
 
   @doc """
@@ -107,16 +110,26 @@ defmodule CodePuppyControl.SessionStorage do
         "metadata" => metadata
       }
 
-      with :ok <- atomic_write_json(paths.session_path, session_data),
-           :ok <- atomic_write_json(paths.metadata_path, metadata) do
-        {:ok,
-         %{
-           session_name: name,
-           timestamp: timestamp,
-           message_count: message_count,
-           total_tokens: total_tokens,
-           auto_saved: auto_saved
-         }}
+      with {:ok, session_tmp} <- write_tmp(paths.session_path, session_data),
+           {:ok, meta_tmp} <- write_tmp(paths.metadata_path, metadata) do
+        case rename_both(session_tmp, paths.session_path, meta_tmp, paths.metadata_path) do
+          :ok ->
+            {:ok,
+             %{
+               session_name: name,
+               timestamp: timestamp,
+               message_count: message_count,
+               total_tokens: total_tokens,
+               auto_saved: auto_saved
+             }}
+
+          {:error, reason} ->
+            _ = File.rm(session_tmp)
+            _ = File.rm(meta_tmp)
+            {:error, reason}
+        end
+      else
+        {:error, reason} -> {:error, reason}
       end
     end
   end
@@ -200,9 +213,19 @@ defmodule CodePuppyControl.SessionStorage do
 
         paths = Format.build_paths(dir, normalized)
 
-        with :ok <- atomic_write_json(paths.session_path, updated_data),
-             :ok <- atomic_write_json(paths.metadata_path, updated_metadata) do
-          {:ok, map_to_metadata(updated_metadata)}
+        with {:ok, session_tmp} <- write_tmp(paths.session_path, updated_data),
+             {:ok, meta_tmp} <- write_tmp(paths.metadata_path, updated_metadata) do
+          case rename_both(session_tmp, paths.session_path, meta_tmp, paths.metadata_path) do
+            :ok ->
+              {:ok, map_to_metadata(updated_metadata)}
+
+            {:error, reason} ->
+              _ = File.rm(session_tmp)
+              _ = File.rm(meta_tmp)
+              {:error, reason}
+          end
+        else
+          {:error, reason} -> {:error, reason}
         end
 
       {:error, :not_found} ->
@@ -270,7 +293,8 @@ defmodule CodePuppyControl.SessionStorage do
           |> Enum.filter(&match?({:ok, _}, &1))
           |> Enum.map(fn {:ok, meta} -> meta end)
           |> Enum.sort_by(& &1.timestamp, :desc)
-          # newest first
+
+        # newest first
 
         {:ok, sessions}
 
@@ -320,7 +344,8 @@ defmodule CodePuppyControl.SessionStorage do
   # ---------------------------------------------------------------------------
 
   @doc "Cleans up old sessions, keeping only the most recent N. Options: `:base_dir`.\n"
-  @spec cleanup_sessions(non_neg_integer(), keyword()) :: {:ok, [session_name()]} | {:error, term()}
+  @spec cleanup_sessions(non_neg_integer(), keyword()) ::
+          {:ok, [session_name()]} | {:error, term()}
   def cleanup_sessions(max_sessions, _opts \\ [])
 
   def cleanup_sessions(max_sessions, _opts) when max_sessions <= 0, do: {:ok, []}
@@ -410,9 +435,49 @@ defmodule CodePuppyControl.SessionStorage do
     DateTime.utc_now() |> DateTime.to_iso8601()
   end
 
+  defp validate_storage_dir!(dir) do
+    canonical = Path.expand(dir)
+    ex_home = Path.expand("~/.code_puppy_ex")
+
+    unless String.starts_with?(canonical, ex_home) do
+      raise ArgumentError,
+            "Storage dir #{inspect(dir)} is outside ~/.code_puppy_ex/"
+    end
+
+    canonical
+  end
+
+  defp write_tmp(path, data) do
+    json = Jason.encode!(data, pretty: true)
+    tmp_path = path <> ".tmp.#{:erlang.unique_integer([:positive])}"
+
+    case File.write(tmp_path, json) do
+      :ok -> {:ok, tmp_path}
+      {:error, reason} -> {:error, reason}
+    end
+  end
+
+  defp rename_both(session_tmp, session_path, meta_tmp, meta_path) do
+    case File.rename(session_tmp, session_path) do
+      :ok ->
+        case File.rename(meta_tmp, meta_path) do
+          :ok ->
+            :ok
+
+          {:error, reason} ->
+            # Roll back the first rename
+            _ = File.rename(session_path, session_tmp)
+            {:error, reason}
+        end
+
+      {:error, reason} ->
+        {:error, reason}
+    end
+  end
+
   defp atomic_write_json(path, data) do
     json = Jason.encode!(data, pretty: true)
-    tmp_path = path <> ".tmp"
+    tmp_path = path <> ".tmp.#{:erlang.unique_integer([:positive])}"
 
     with :ok <- File.write(tmp_path, json),
          :ok <- File.rename(tmp_path, path) do

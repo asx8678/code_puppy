@@ -14,7 +14,9 @@ defmodule CodePuppyControl.SessionStorageTest do
   # ---------------------------------------------------------------------------
 
   setup do
-    tmp = Path.join(System.tmp_dir!(), "session_storage_test_#{System.unique_integer([:positive])}")
+    tmp =
+      Path.join(System.tmp_dir!(), "session_storage_test_#{System.unique_integer([:positive])}")
+
     File.mkdir_p!(tmp)
     on_exit(fn -> File.rm_rf!(tmp) end)
     {:ok, base_dir: tmp}
@@ -305,7 +307,9 @@ defmodule CodePuppyControl.SessionStorageTest do
     end
 
     test "filters by name pattern (string)", %{base_dir: dir} do
-      assert {:ok, results} = SessionStorage.search_sessions(name_pattern: "review", base_dir: dir)
+      assert {:ok, results} =
+               SessionStorage.search_sessions(name_pattern: "review", base_dir: dir)
+
       names = Enum.map(results, & &1.session_name)
       assert "alpha-review" in names
       assert "gamma-review" in names
@@ -495,6 +499,30 @@ defmodule CodePuppyControl.SessionStorageTest do
 
       SessionStorage.save_session("count-2", [], base_dir: dir)
       assert SessionStorage.count_sessions(base_dir: dir) == 2
+    end
+  end
+
+  # ---------------------------------------------------------------------------
+  # Isolation guard
+  # ---------------------------------------------------------------------------
+
+  describe "isolation guard" do
+    test "base_dir/0 rejects paths outside ~/.code_puppy_ex/" do
+      # Temporarily set env var to the forbidden Python path
+      original = System.get_env("PUP_SESSION_DIR")
+      System.put_env("PUP_SESSION_DIR", Path.expand("~/.code_puppy/sessions"))
+
+      on_exit(fn ->
+        if original do
+          System.put_env("PUP_SESSION_DIR", original)
+        else
+          System.delete_env("PUP_SESSION_DIR")
+        end
+      end)
+
+      assert_raise ArgumentError, ~r/outside ~\/\.code_puppy_ex\//, fn ->
+        SessionStorage.base_dir()
+      end
     end
   end
 end
