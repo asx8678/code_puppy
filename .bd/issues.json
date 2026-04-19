@@ -3365,9 +3365,10 @@
         ]
       },
       "created_at": "2026-04-18T19:48:21.561567",
-      "updated_at": "2026-04-19T11:33:38.475200",
+      "updated_at": "2026-04-19T12:21:45.904743",
       "comments": [
-        "pack-leader-019da5 claiming. Worktree: ../bd-169, branch feature/bd-169-browser-strategy. Deliverable: strategy decision doc evaluating Wallaby vs ChromicPDF vs Python Port vs drop-tools. No code changes to Python tree (bd-187 freeze policy)."
+        "pack-leader-019da5 claiming. Worktree: ../bd-169, branch feature/bd-169-browser-strategy. Deliverable: strategy decision doc evaluating Wallaby vs ChromicPDF vs Python Port vs drop-tools. No code changes to Python tree (bd-187 freeze policy).",
+        "Merged to main as `5c7f0d26` by retriever. Critics: shepherd (APPROVE, spot-checked code citations all accurate), watchdog (APPROVE). Deliverable: docs/decisions/bd-169-browser-automation-strategy.md (208 lines). Recommendation: Option 4 (drop browser tools for Elixir v1). Option 3 (tiny Python Playwright service) is documented fallback. 7 open questions flagged for PM sign-off \u2014 see doc. Closed by pack-leader-019da5."
       ]
     },
     "bd-170": {
@@ -3763,7 +3764,7 @@
       "id": "bd-187",
       "title": "Python pup freeze policy during Elixir migration (bug fixes only)",
       "description": "Policy: during the Python \u2192 Elixir migration, the Python codebase is FROZEN except for critical bug fixes.\n\n## Rules\n- NO refactors in code_puppy/ Python tree\n- NO schema changes to puppy.cfg or any *.json config files\n- NO new features in Python\n- YES critical bug fixes (crashes, data loss, security)\n- YES adding deprecation warnings that guide users toward pup-ex\n- YES docs updates\n\n## Rationale\nPython pup is the daily driver. Elixir pup-ex is the work-in-progress replacement. If Python changes, Elixir has to chase a moving target, and the user's working environment is at risk.\n\n## Enforcement\n- CI check: PRs touching code_puppy/**/*.py with non-trivial changes require a \"bug-fix\" or \"docs\" label\n- Reviewer guidance added to CONTRIBUTING.md\n- bd issues touching Python must be explicitly approved against this policy\n\n## Acceptance\n- CI rule active\n- CONTRIBUTING.md section added\n- bd template updated with policy checkbox",
-      "status": "open",
+      "status": "closed",
       "priority": 2,
       "type": "task",
       "labels": [
@@ -3775,7 +3776,7 @@
       ],
       "dependencies": {},
       "created_at": "2026-04-19T02:09:26.576664",
-      "updated_at": "2026-04-19T11:33:38.477986",
+      "updated_at": "2026-04-19T12:21:45.916728",
       "comments": [
         "pack-leader-019da5 claiming. Worktree: ../bd-187, branch feature/bd-187-python-freeze-policy. Deliverable: CONTRIBUTING.md update + bd template checkbox + CI guard hint. Pure policy doc work."
       ]
@@ -3887,7 +3888,20 @@
       "created_at": "2026-04-19T11:27:55.901759",
       "updated_at": "2026-04-19T11:29:49.461599",
       "comments": []
+    },
+    "bd-195": {
+      "id": "bd-195",
+      "title": "Reconcile browser automation docs after PM approves bd-169 recommendation",
+      "description": "bd-169 produced a decision doc recommending Option 4 (drop browser automation for Elixir v1). Before landing the decision in practice, these docs must be reconciled:\n- MIGRATION_MAP.md:340-356, 576 \u2014 already says DROP-V1\n- docs/THIN_SHELL_CONTRACT.md:166 \u2014 says Likely Retain (must update to align)\n- Record explicit R6-style risk acceptance (no formal R6 entry exists in repo today)\n- Decide terminal_* Playwright tooling scope \u2014 same drop decision or separate?",
+      "status": "open",
+      "priority": 2,
+      "type": "task",
+      "labels": [],
+      "dependencies": {},
+      "created_at": "2026-04-19T12:21:53.956195",
+      "updated_at": "2026-04-19T12:21:53.956204",
+      "comments": []
     }
   },
-  "counter": 194
+  "counter": 195
 }
