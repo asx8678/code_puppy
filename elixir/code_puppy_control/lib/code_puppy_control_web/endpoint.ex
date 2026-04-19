@@ -26,7 +26,7 @@ defmodule CodePuppyControlWeb.Endpoint do
 
   # WebSocket socket for real-time events (SessionChannel, RunChannel)
   socket "/socket", CodePuppyControlWeb.UserSocket,
-    websocket: true,
+    websocket: [connect_info: [:peer_data, :trace_context_headers, :x_headers, :uri]],
     longpoll: false
 
   # Serve at "/" the static files from "priv/static" directory.
@@ -57,5 +57,11 @@ defmodule CodePuppyControlWeb.Endpoint do
   plug Plug.MethodOverride
   plug Plug.Head
   plug Plug.Session, @session_options
+
+  # Security middleware (bd-218)
+  # Order: CORS → RateLimiter → Router → Auth (per-pipeline in router)
+  plug CodePuppyControlWeb.Plugs.CORS
+  plug CodePuppyControlWeb.Plugs.RateLimiter
+
   plug CodePuppyControlWeb.Router
 end
