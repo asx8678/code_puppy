@@ -11,7 +11,7 @@ defmodule CodePuppyControl.LLM.CredentialsTest do
   - Validation (missing keys)
   - OAuth models always validate :ok
   """
-  use ExUnit.Case, async: true
+  use ExUnit.Case, async: false
 
   alias CodePuppyControl.ModelFactory.Credentials
 

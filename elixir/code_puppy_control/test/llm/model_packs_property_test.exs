@@ -80,7 +80,7 @@ defmodule CodePuppyControl.LLM.ModelPacksPropertyTest do
     property "get_model_for_role falls back to default_role for unknown roles" do
       check all(
               primary <- string(:alphanumeric, min_length: 1, max_length: 20),
-              unknown_role <- string(:alphanumeric, min_length: 1, max_length: 15)
+              unknown_role <- string(:alphanumeric, min_length: 20, max_length: 30)
             ) do
         default_role = "coder"
         pack = %ModelPack{
@@ -90,9 +90,10 @@ defmodule CodePuppyControl.LLM.ModelPacksPropertyTest do
           default_role: default_role
         }
 
-        # unknown_role may or may not equal default_role, but should still resolve
+        # min_length: 20 guarantees unknown_role != "coder" (5 chars)
         result = ModelPack.get_model_for_role(pack, unknown_role)
         assert is_binary(result)
+        assert result == primary
       end
     end
 
@@ -166,34 +167,71 @@ defmodule CodePuppyControl.LLM.ModelPacksPropertyTest do
     end
   end
 
-  # ── No Model in Two Roles Simultaneously ────────────────────────────────
+  # ── Non-tautological ModelPack Properties ────────────────────────────
 
   describe "model exclusivity across roles (property)" do
-    property "models in a pack's roles can be unique when configured so" do
+    property "a ModelPack created with primary M has M as the primary for that role" do
+      check all(
+              primary <- string(:alphanumeric, min_length: 1, max_length: 15),
+              role <- string(:alphanumeric, min_length: 1, max_length: 10)
+            ) do
+        pack = %ModelPack{
+          name: "primary-test",
+          description: "Test",
+          roles: %{role => %RoleConfig{primary: primary}},
+          default_role: role
+        }
+
+        assert ModelPack.get_model_for_role(pack, role) == primary
+      end
+    end
+
+    property "get_fallback_chain always returns a non-empty list for any valid role" do
+      check all(
+              primary <- string(:alphanumeric, min_length: 1, max_length: 15),
+              role <- string(:alphanumeric, min_length: 1, max_length: 10),
+              fallback_count <- integer(0..4)
+            ) do
+        fallbacks = if fallback_count > 0, do: (for i <- 1..fallback_count, do: "fallback-#{i}"), else: []
+
+        pack = %ModelPack{
+          name: "chain-test",
+          description: "Test",
+          roles: %{role => %RoleConfig{primary: primary, fallbacks: fallbacks}},
+          default_role: role
+        }
+
+        chain = ModelPack.get_fallback_chain(pack, role)
+        assert is_list(chain)
+        assert length(chain) >= 1
+        assert hd(chain) == primary
+      end
+    end
+
+    property "no model name appears as primary in two different roles when explicitly distinct" do
       check all(
               model_a <- string(:alphanumeric, min_length: 1, max_length: 15),
               model_b <- string(:alphanumeric, min_length: 1, max_length: 15),
-              model_c <- string(:alphanumeric, min_length: 1, max_length: 15)
+              max_attempts: 20
             ) do
-        # Only test when models are distinct (the invariant is "CAN be unique")
-        if model_a != model_b and model_a != model_c and model_b != model_c do
+        # Ensure distinct models to test the non-overlap invariant
+        if model_a != model_b do
           pack = %ModelPack{
             name: "exclusive-test",
             description: "Test",
             roles: %{
               "planner" => %RoleConfig{primary: model_a},
-              "coder" => %RoleConfig{primary: model_b},
-              "reviewer" => %RoleConfig{primary: model_c}
+              "coder" => %RoleConfig{primary: model_b}
             },
             default_role: "coder"
           }
 
-          # All primaries are distinct
           primaries =
             pack.roles
             |> Map.values()
             |> Enum.map(& &1.primary)
 
+          # When primaries are distinct by construction, the pack reflects that
           assert length(Enum.uniq(primaries)) == length(primaries),
                  "Each role should have a unique primary model"
         end
