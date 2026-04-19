@@ -64,6 +64,8 @@ defmodule CodePuppyControl.LLM do
 
   # ── chat/2,3 ──────────────────────────────────────────────────────────────
 
+  def chat(messages, tools \\ [], opts \\ [])
+
   @doc """
   Non-streaming chat completion via a pre-resolved model handle.
 
@@ -91,8 +93,6 @@ defmodule CodePuppyControl.LLM do
   """
   @spec chat([Provider.message()], [Provider.tool()], keyword()) ::
           {:ok, Provider.response()} | {:error, term()}
-  def chat(messages, tools \\ [], opts \\ [])
-
   def chat(messages, tools, opts)
       when is_list(messages) and is_list(tools) and is_list(opts) do
     with {:ok, provider_mod, resolved_opts} <- resolve_provider(opts) do
@@ -105,6 +105,8 @@ defmodule CodePuppyControl.LLM do
   end
 
   # ── stream_chat/3,4 ───────────────────────────────────────────────────────
+
+  def stream_chat(messages, tools \\ [], opts \\ [], callback_fn)
 
   @doc """
   Streaming chat completion via a pre-resolved model handle.
@@ -135,8 +137,6 @@ defmodule CodePuppyControl.LLM do
           (Provider.stream_event() -> any())
         ) ::
           :ok | {:error, term()}
-  def stream_chat(messages, tools \\ [], opts \\ [], callback_fn)
-
   def stream_chat(messages, tools, opts, callback_fn)
       when is_list(messages) and is_list(tools) and is_list(opts) and is_function(callback_fn, 1) do
     with {:ok, provider_mod, resolved_opts} <- resolve_provider(opts) do
