@@ -2,18 +2,22 @@ defmodule CodePuppyControl.Config.Paths do
   @moduledoc """
   XDG-compatible path resolution for Code Puppy directories and files.
 
-  Resolves paths using the XDG Base Directory specification with these
-  priority rules:
+  Implements ADR-003 dual-home config isolation. The Elixir pup-ex runtime
+  uses `~/.code_puppy_ex/` as its home, separate from the Python pup's
+  `~/.code_puppy/`. Writes to the legacy home are blocked by the
+  `CodePuppyControl.Config.Isolation` guard module.
 
-  1. `PUP_HOME` env var — overrides all other paths (project convention)
-  2. `PUPPY_HOME` env var — legacy support with deprecation warning
-  3. XDG env vars (`XDG_CONFIG_HOME`, etc.) — standard XDG
-  4. Default `~/.code_puppy` — fallback for all file types
+  ## Home Resolution Priority
+
+  1. `PUP_EX_HOME` env var — explicit Elixir home override
+  2. `PUP_HOME` env var — legacy override (deprecation warning)
+  3. `PUPPY_HOME` env var — oldest legacy override (deprecation warning)
+  4. Default `~/.code_puppy_ex/` — standard fallback
 
   ## Path Layout
 
   ```
-  ~/.code_puppy/
+  ~/.code_puppy_ex/
   ├── puppy.cfg           # Main config (INI format)
   ├── mcp_servers.json    # MCP server definitions
   ├── models.json         # Model registry
@@ -27,63 +31,93 @@ defmodule CodePuppyControl.Config.Paths do
   ```
 
   When XDG env vars are set, files split across config/data/cache/state
-  directories per the spec. Otherwise everything lives under `~/.code_puppy`.
+  directories per the spec. Otherwise everything lives under `~/.code_puppy_ex`.
   """
 
+  require Logger
+
   @home_dir Path.expand("~")
+
+  @max_symlink_depth 40
 
   # ── Base directories ────────────────────────────────────────────────────
 
   @doc """
-  Root directory for all Code Puppy files.
+  Root directory for all Elixir pup-ex files.
 
-  Resolution order: `PUP_HOME` → `PUPPY_HOME` (legacy) → `~/.code_puppy`.
+  Resolution order: `PUP_EX_HOME` → `PUP_HOME` (deprecated) →
+  `PUPPY_HOME` (deprecated) → `~/.code_puppy_ex`.
   """
   @spec home_dir() :: String.t()
   def home_dir do
-    System.get_env("PUP_HOME") ||
-      System.get_env("PUPPY_HOME") ||
-      Path.join(@home_dir, ".code_puppy")
+    cond do
+      env = System.get_env("PUP_EX_HOME") ->
+        env
+
+      env = System.get_env("PUP_HOME") ->
+        maybe_warn_deprecation("PUP_HOME")
+        env
+
+      env = System.get_env("PUPPY_HOME") ->
+        maybe_warn_deprecation("PUPPY_HOME")
+        env
+
+      true ->
+        Path.join(@home_dir, ".code_puppy_ex")
+    end
+  end
+
+  @doc """
+  Legacy home directory — always `~/.code_puppy`, regardless of env vars.
+
+  This is the Python pup's home directory. Elixir pup-ex must NEVER write
+  here. Use only for read-only import via `mix pup_ex.import`.
+
+      read_only: true, legacy: true
+  """
+  @spec legacy_home_dir() :: String.t()
+  def legacy_home_dir do
+    Path.join(@home_dir, ".code_puppy")
   end
 
   @doc """
   Configuration directory. Contains `puppy.cfg`, `mcp_servers.json`.
 
-  Uses `XDG_CONFIG_HOME/code_puppy` if set, otherwise falls back to `home_dir/`.
+  Uses `XDG_CONFIG_HOME/code_puppy_ex` if set, otherwise falls back to `home_dir/`.
   """
   @spec config_dir() :: String.t()
   def config_dir do
-    xdg_dir("XDG_CONFIG_HOME", ".config")
+    xdg_dir("XDG_CONFIG_HOME")
   end
 
   @doc """
   Data directory. Contains `models.json`, `agents/`, `skills/`.
 
-  Uses `XDG_DATA_HOME/code_puppy` if set, otherwise falls back to `home_dir/`.
+  Uses `XDG_DATA_HOME/code_puppy_ex` if set, otherwise falls back to `home_dir/`.
   """
   @spec data_dir() :: String.t()
   def data_dir do
-    xdg_dir("XDG_DATA_HOME", ".local/share")
+    xdg_dir("XDG_DATA_HOME")
   end
 
   @doc """
   Cache directory. Contains autosaves and temporary data.
 
-  Uses `XDG_CACHE_HOME/code_puppy` if set, otherwise falls back to `home_dir/`.
+  Uses `XDG_CACHE_HOME/code_puppy_ex` if set, otherwise falls back to `home_dir/`.
   """
   @spec cache_dir() :: String.t()
   def cache_dir do
-    xdg_dir("XDG_CACHE_HOME", ".cache")
+    xdg_dir("XDG_CACHE_HOME")
   end
 
   @doc """
   State directory. Contains command history and persistent runtime state.
 
-  Uses `XDG_STATE_HOME/code_puppy` if set, otherwise falls back to `home_dir/`.
+  Uses `XDG_STATE_HOME/code_puppy_ex` if set, otherwise falls back to `home_dir/`.
   """
   @spec state_dir() :: String.t()
   def state_dir do
-    xdg_dir("XDG_STATE_HOME", ".local/state")
+    xdg_dir("XDG_STATE_HOME")
   end
 
   # ── Config files ────────────────────────────────────────────────────────
@@ -130,6 +164,81 @@ defmodule CodePuppyControl.Config.Paths do
   @spec command_history_file() :: String.t()
   def command_history_file, do: Path.join(state_dir(), "command_history.txt")
 
+  # ── Canonical Path Resolution ───────────────────────────────────────────
+
+  @doc """
+  Resolve a path to its canonical form by following all symlinks.
+
+  Walks each path component, resolving symlinks at every level. Returns the
+  fully resolved path. If max symlink depth (40) is exceeded, returns the
+  last successfully resolved path. If the path or any component doesn't
+  exist, returns the `Path.expand/1` result (symlinks can only be followed
+  for existing filesystem entries).
+  """
+  @spec canonical_resolve(Path.t()) :: String.t()
+  def canonical_resolve(path) do
+    expanded = Path.expand(path)
+    walk_components(Path.split(expanded), [], 0)
+  end
+
+  defp walk_components(remaining, acc, depth) when depth >= @max_symlink_depth do
+    join_accumulated(acc, remaining)
+  end
+
+  defp walk_components([], acc, _depth) do
+    Path.join(Enum.reverse(acc))
+  end
+
+  defp walk_components([component | rest], acc, depth) do
+    current =
+      case acc do
+        [] -> component
+        _ -> Path.join(Enum.reverse([component | acc]))
+      end
+
+    case :file.read_link(current) do
+      {:ok, target} ->
+        resolved = resolve_symlink_target(current, target)
+        new_components = Path.split(resolved) ++ rest
+        walk_components(new_components, [], depth + 1)
+
+      {:error, _} ->
+        walk_components(rest, [component | acc], depth)
+    end
+  end
+
+  defp resolve_symlink_target(source, target) do
+    if Path.type(target) == :absolute do
+      Path.expand(target)
+    else
+      source
+      |> Path.dirname()
+      |> Path.join(target)
+      |> Path.expand()
+    end
+  end
+
+  defp join_accumulated(acc, remaining) do
+    Path.join(Enum.reverse(acc) ++ remaining)
+  end
+
+  # ── Legacy Home Detection ───────────────────────────────────────────────
+
+  @doc """
+  Returns `true` if the given path resolves to a location under the legacy
+  home directory (`~/.code_puppy`).
+
+  Performs canonical resolution (following symlinks) before comparison.
+  This blocks symlink attacks where a path like `/tmp/link → ~/.code_puppy/x`
+  would bypass the isolation guard.
+  """
+  @spec in_legacy_home?(Path.t()) :: boolean()
+  def in_legacy_home?(path) do
+    resolved = canonical_resolve(path)
+    legacy = legacy_home_dir()
+    resolved == legacy or String.starts_with?(resolved, legacy <> "/")
+  end
+
   # ── Utilities ───────────────────────────────────────────────────────────
 
   @doc """
@@ -159,23 +268,49 @@ defmodule CodePuppyControl.Config.Paths do
 
   # ── Private ─────────────────────────────────────────────────────────────
 
-  defp xdg_dir(xdg_var, _fallback_subdir) do
-    # If PUP_HOME is set, everything goes under it
-    case System.get_env("PUP_HOME") do
-      nil -> xdg_or_legacy(xdg_var)
-      home -> home
+  defp xdg_dir(xdg_var) do
+    cond do
+      env = System.get_env("PUP_EX_HOME") ->
+        env
+
+      env = System.get_env("PUP_HOME") ->
+        maybe_warn_deprecation("PUP_HOME")
+        env
+
+      true ->
+        xdg_or_default(xdg_var)
     end
   end
 
-  defp xdg_or_legacy(xdg_var) do
+  defp xdg_or_default(xdg_var) do
     case System.get_env(xdg_var) do
       nil ->
-        # Legacy: check PUPPY_HOME, then default ~/.code_puppy
-        System.get_env("PUPPY_HOME") ||
-          Path.join(@home_dir, ".code_puppy")
+        case System.get_env("PUPPY_HOME") do
+          nil ->
+            Path.join(@home_dir, ".code_puppy_ex")
+
+          home ->
+            maybe_warn_deprecation("PUPPY_HOME")
+            home
+        end
 
       xdg_base ->
-        Path.join(xdg_base, "code_puppy")
+        Path.join(xdg_base, "code_puppy_ex")
     end
+  end
+
+  @doc false
+  def maybe_warn_deprecation(env_var) do
+    key = {:code_puppy_control, :deprecation_warned, env_var}
+
+    unless :persistent_term.get(key, false) do
+      :persistent_term.put(key, true)
+
+      Logger.warning(
+        "#{env_var} is deprecated for Elixir pup-ex. Use PUP_EX_HOME instead."
+      )
+    end
+
+    :ok
   end
 end
