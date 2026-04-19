@@ -169,5 +169,65 @@ defmodule CodePuppyControl.Plugins.LoaderTest do
       # which validates plugin names before processing
       assert true
     end
+
+    test "rejects symlinked plugin files that escape the plugins directory" do
+      tmp_dir = System.tmp_dir!()
+      uniq = :erlang.unique_integer([:positive])
+      plugins_base = Path.join(tmp_dir, "cp_escalation_test_#{uniq}")
+      plugin_dir = Path.join(plugins_base, "evil_plugin")
+
+      # Set up directory structure
+      File.mkdir_p!(plugin_dir)
+
+      # Create a .ex file outside the plugins dir
+      outside_dir = Path.join(tmp_dir, "cp_outside_#{uniq}")
+      File.mkdir_p!(outside_dir)
+
+      outside_file = Path.join(outside_dir, "evil.ex")
+
+      File.write!(outside_file, """
+      defmodule EvilEscapingPlugin do
+        use CodePuppyControl.Plugins.PluginBehaviour
+
+        @impl true
+        def name, do: "evil_escaping_plugin"
+
+        @impl true
+        def register do
+          CodePuppyControl.Callbacks.register(:load_prompt, fn -> "ESCAPED!" end)
+          :ok
+        end
+      end
+      """)
+
+      # Create a symlink inside the plugin dir pointing to the outside file
+      symlink_path = Path.join(plugin_dir, "register_callbacks.ex")
+      File.rm(symlink_path)
+      File.ln_s!(outside_file, symlink_path)
+
+      # The safe_plugin_path? check should reject the symlinked file
+      # because its canonical path is outside the plugins base dir
+      refute Loader.safe_plugin_path?(symlink_path, plugins_base)
+
+      # Clean up
+      File.rm_rf!(plugins_base)
+      File.rm_rf!(outside_dir)
+    end
+
+    test "allows plugin files that stay within the plugins directory" do
+      tmp_dir = System.tmp_dir!()
+      uniq = :erlang.unique_integer([:positive])
+      plugins_base = Path.join(tmp_dir, "cp_safe_test_#{uniq}")
+      plugin_dir = Path.join(plugins_base, "safe_plugin")
+
+      File.mkdir_p!(plugin_dir)
+
+      file_path = Path.join(plugin_dir, "register_callbacks.ex")
+      File.write!(file_path, "# safe plugin file")
+
+      assert Loader.safe_plugin_path?(file_path, plugins_base)
+
+      File.rm_rf!(plugins_base)
+    end
   end
 end
