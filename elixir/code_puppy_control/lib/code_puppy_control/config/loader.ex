@@ -63,7 +63,10 @@ defmodule CodePuppyControl.Config.Loader do
   def get_cached do
     case :persistent_term.get(@persistent_term_key, :not_loaded) do
       :not_loaded ->
-        load(CodePuppyControl.Config.Paths.config_file())
+        # Reload from the last explicitly loaded path if known,
+        # so that a cache-miss after Writer.invalidate/0 doesn't
+        # silently switch back to the default config file.
+        load(loaded_path())
 
       config ->
         config

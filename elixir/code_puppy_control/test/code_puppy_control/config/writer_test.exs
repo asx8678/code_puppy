@@ -86,6 +86,35 @@ defmodule CodePuppyControl.Config.WriterTest do
     end
   end
 
+  describe "bd-197 regression: consecutive writes without explicit reload" do
+    test "consecutive writes stay in the originally loaded file", %{cfg_path: cfg_path} do
+      ensure_writer_started()
+
+      # First write
+      assert :ok = Writer.set_value("model", "first_write")
+      # Second write WITHOUT calling Loader.load/1 in between
+      assert :ok = Writer.set_value("timeout", "42")
+
+      # Both writes should be in the originally loaded file
+      content = File.read!(cfg_path)
+      assert content =~ "first_write", "Expected first_write in #{cfg_path}"
+      assert content =~ "42", "Expected timeout=42 in #{cfg_path}"
+
+      # Default config file should NOT contain our test values
+      default_path = CodePuppyControl.Config.Paths.config_file()
+
+      if File.exists?(default_path) do
+        default_content = File.read!(default_path)
+
+        refute default_content =~ "first_write",
+               "Test value leaked into default config at #{default_path}"
+
+        refute default_content =~ "42",
+               "Test value leaked into default config at #{default_path}"
+      end
+    end
+  end
+
   describe "roundtrip" do
     test "set then get returns same value", %{cfg_path: cfg_path} do
       ensure_writer_started()
