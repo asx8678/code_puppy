@@ -3459,11 +3459,12 @@
       "id": "bd-174",
       "title": "8.1 Port/adapt test suite to ExUnit + Stream.Data",
       "description": "Port Python test suite to ExUnit. Use Stream.Data for property-based tests. Maintain coverage gates per module.",
-      "status": "open",
+      "status": "closed",
       "priority": 2,
       "type": "task",
       "labels": [
-        "migration,python-to-elixir,rewrite,phase-8"
+        "migration,python-to-elixir,rewrite,phase-8",
+        "claimed:planning-agent-019da7"
       ],
       "dependencies": {
         "discovered-from": [
@@ -3471,8 +3472,11 @@
         ]
       },
       "created_at": "2026-04-18T19:48:35.152599",
-      "updated_at": "2026-04-19T00:56:48.956569",
-      "comments": []
+      "updated_at": "2026-04-19T20:37:18.004908",
+      "comments": [
+        "Claimed by planning-agent-019da7. Approaching as a scoping/planning task \u2014 will produce a phased porting plan + mix.exs dep check + pilot proof-of-concept, NOT a full port in one go. bd-174 is epic-sized and a one-shot is irresponsible.",
+        "Wave 1 delivered by planning-agent-019da7 in commit e19f3a3c.\n\nDeliverables:\n- docs/decisions/bd-174-test-suite-porting-plan.md (scoping plan, 5 waves)\n- mix.exs + mix.lock: stream_data ~> 1.0 added as test-only dep\n- test/code_puppy_control/stream/event_property_test.exs (pilot: 3 properties, all green)\n\nScope rationale: The naive '585 Python tests -> 585 Elixir tests' count is misleading. Many Python tests are obsolete (dead code, TUI, asyncio plumbing) or already have Elixir equivalents. Expected actual port count: ~150-200 files across 4 follow-up waves.\n\nWaves 2-5 to be filed as separate bd issues:\n- Wave 2: Core contracts (tool behaviour, config, paths, isolation) -- ~30 files\n- Wave 3: Messaging + streaming (hasher, pruner, normalizer, event) -- ~25 files\n- Wave 4: LLM layer (provider, anthropic/openai adapters, model_factory) -- ~40 files\n- Wave 5: Runtime (agent loop, run_manager, scheduler, MCP) -- ~50 files\n\nTest results: 3 properties, 65 total stream tests, 0 failures. Pilot successfully caught one generator bug during development (Done/UsageUpdate lack :index field), validating the property-test approach."
+      ]
     },
     "bd-175": {
       "id": "bd-175",
@@ -4168,7 +4172,91 @@
       "created_at": "2026-04-19T20:32:02.787371",
       "updated_at": "2026-04-19T20:32:02.787378",
       "comments": []
+    },
+    "bd-210": {
+      "id": "bd-210",
+      "title": "bd-174 Wave 2: Port core contract tests (tool behaviour, config, paths, isolation) to ExUnit",
+      "description": "Wave 2 of bd-174 test-suite port (see docs/decisions/bd-174-test-suite-porting-plan.md).\n\nScope: ~30 files covering core contracts\n- tests/test_tool_schema.py\n- tests/test_capability_registry.py\n- tests/config_package/* (multiple)\n- tests/test_paths.py\n- tests/test_isolation.py\n- related subagent_context, skills tests\n\nApproach:\n- Port 1:1 where Elixir has a direct equivalent module\n- DROP Python-plumbing tests (asyncio, pydantic, typer)\n- Use Stream.Data (ExUnitProperties) for invariant-style tests where it adds signal\n- Match or exceed Python coverage floor per module\n\nPrereq: bd-174 Wave 1 must be closed (it is \u2014 StreamData dep landed in e19f3a3c).",
+      "status": "open",
+      "priority": 2,
+      "type": "task",
+      "labels": [
+        "migration,python-to-elixir,rewrite,phase-8,follow-up-bd-174"
+      ],
+      "dependencies": {
+        "discovered-from": [
+          "bd-174",
+          "bd-141",
+          "bd-132"
+        ]
+      },
+      "created_at": "2026-04-19T20:37:26.461795",
+      "updated_at": "2026-04-19T20:37:26.461802",
+      "comments": []
+    },
+    "bd-211": {
+      "id": "bd-211",
+      "title": "bd-174 Wave 3: Port messaging + streaming tests (hasher, pruner, normalizer, event) to ExUnit",
+      "description": "Wave 3 of bd-174 test-suite port.\n\nScope: ~25 files covering messaging and streaming.\n- tests/test_messaging_extended.py, tests/test_message_core.py\n- tests/test_hasher.py, tests/test_pruner.py\n- Streaming event/normalizer tests\n\nStream.Event already has property-test coverage from Wave 1 pilot (event_property_test.exs). Wave 3 extends that pattern to hasher (hash invariants), pruner (token-budget invariants), normalizer (identity on wrapped events).\n\nPrereq: Wave 2 complete (shared helper patterns will emerge there).",
+      "status": "open",
+      "priority": 2,
+      "type": "task",
+      "labels": [
+        "migration,python-to-elixir,rewrite,phase-8,follow-up-bd-174"
+      ],
+      "dependencies": {
+        "discovered-from": [
+          "bd-174",
+          "bd-141",
+          "bd-132"
+        ]
+      },
+      "created_at": "2026-04-19T20:37:29.717231",
+      "updated_at": "2026-04-19T20:37:29.717239",
+      "comments": []
+    },
+    "bd-212": {
+      "id": "bd-212",
+      "title": "bd-174 Wave 4: Port LLM layer tests (provider, Anthropic, OpenAI, model_factory) to ExUnit",
+      "description": "Wave 4 of bd-174 test-suite port.\n\nScope: ~40 files covering LLM adapters.\n- tests/test_anthropic_provider.py, tests/test_openai_provider.py\n- tests/test_model_factory.py, tests/test_model_registry.py\n- tests/test_model_packs.py, tests/test_round_robin_model.py\n- tests/test_credentials.py, tests/test_model_availability.py\n\nUse mock_llm_http.ex (already in test/support) for provider tests.\nProperty tests for model_pack invariants (no model appears in two roles simultaneously, etc.).\n\nPrereq: Wave 3 complete.",
+      "status": "open",
+      "priority": 2,
+      "type": "task",
+      "labels": [
+        "migration,python-to-elixir,rewrite,phase-8,follow-up-bd-174"
+      ],
+      "dependencies": {
+        "discovered-from": [
+          "bd-174",
+          "bd-141",
+          "bd-132"
+        ]
+      },
+      "created_at": "2026-04-19T20:37:32.995137",
+      "updated_at": "2026-04-19T20:37:32.995145",
+      "comments": []
+    },
+    "bd-213": {
+      "id": "bd-213",
+      "title": "bd-174 Wave 5: Port runtime tests (agent loop, run_manager, scheduler, MCP) to ExUnit",
+      "description": "Wave 5 of bd-174 test-suite port.\n\nScope: ~50 files covering runtime orchestration.\n- tests/test_agent_loop.py, tests/test_run_manager.py\n- tests/test_scheduler.py, tests/test_scheduler_tools.py\n- tests/test_mcp_*.py\n- tests/test_event_bus.py, tests/test_event_store.py\n\nMost complex wave. Integration-heavy. Use async: false for GenServer-backed tests.\nProperty tests for scheduler cron invariants and rate-limiter token-bucket invariants.\n\nPrereq: Wave 4 complete.",
+      "status": "open",
+      "priority": 2,
+      "type": "task",
+      "labels": [
+        "migration,python-to-elixir,rewrite,phase-8,follow-up-bd-174"
+      ],
+      "dependencies": {
+        "discovered-from": [
+          "bd-174",
+          "bd-141",
+          "bd-132"
+        ]
+      },
+      "created_at": "2026-04-19T20:37:36.321031",
+      "updated_at": "2026-04-19T20:37:36.321039",
+      "comments": []
     }
   },
-  "counter": 209
+  "counter": 213
 }
