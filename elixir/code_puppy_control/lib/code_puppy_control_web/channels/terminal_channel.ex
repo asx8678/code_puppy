@@ -146,7 +146,7 @@ defmodule CodePuppyControlWeb.TerminalChannel do
 
   @impl true
   def handle_in("input", %{"data" => data}, socket) do
-    session_id = socket.assigns.session_id
+    session_id = socket.assigns.pty_session_id
 
     # Support both string and base64-encoded binary input
     binary_data =
@@ -172,7 +172,7 @@ defmodule CodePuppyControlWeb.TerminalChannel do
 
   @impl true
   def handle_in("resize", %{"cols" => cols, "rows" => rows}, socket) do
-    session_id = socket.assigns.session_id
+    session_id = socket.assigns.pty_session_id
 
     case PtyManager.resize(session_id, cols, rows) do
       :ok ->
@@ -231,11 +231,14 @@ defmodule CodePuppyControlWeb.TerminalChannel do
 
   @impl true
   def terminate(reason, socket) do
-    session_id = socket.assigns[:session_id]
-    Logger.info("TerminalChannel: client left session #{session_id}, reason: #{inspect(reason)}")
+    pty_session_id = socket.assigns[:pty_session_id]
 
-    if session_id do
-      PtyManager.close_session(session_id)
+    Logger.info(
+      "TerminalChannel: client left PTY session #{pty_session_id}, reason: #{inspect(reason)}"
+    )
+
+    if pty_session_id do
+      PtyManager.close_session(pty_session_id)
     end
 
     :ok

@@ -59,11 +59,8 @@ defmodule CodePuppyControlWeb.HealthChannel do
       socket
       |> assign(:joined_at, DateTime.utc_now())
 
-    # Send initial status
+    # Send initial status (the handler also schedules the next tick)
     send(self(), :send_health_status)
-
-    # Schedule periodic health updates
-    schedule_health()
 
     {:ok, %{status: "connected"}, socket}
   end

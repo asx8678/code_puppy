@@ -61,6 +61,26 @@ defmodule CodePuppyControl.PtyManager.Stub do
     end)
   end
 
+  @doc """
+  Set a custom PTY session ID to return from `create_session/2`.
+
+  When set, `create_session("topic-id", ...)` returns `%{id: custom_id, ...}`
+  and records calls under `custom_id` for write/resize/close. This lets
+  tests verify that the channel uses the PTY-assigned ID (not the topic ID).
+
+  Pass `nil` to reset to default behaviour (PTY ID == topic ID).
+  """
+  @spec set_custom_pty_id(String.t() | nil) :: :ok
+  def set_custom_pty_id(custom_id) do
+    Agent.update(agent_name(), fn state ->
+      if custom_id do
+        Map.put(state, :custom_pty_id, custom_id)
+      else
+        Map.delete(state, :custom_pty_id)
+      end
+    end)
+  end
+
   # ===========================================================================
   # PtyManager callback implementations
   # ===========================================================================
@@ -71,16 +91,22 @@ defmodule CodePuppyControl.PtyManager.Stub do
     cols = Keyword.get(opts, :cols, 80)
     rows = Keyword.get(opts, :rows, 24)
 
+    # Allow tests to override the returned PTY ID
+    pty_id =
+      Agent.get(agent_name(), fn state ->
+        Map.get(state, :custom_pty_id, session_id)
+      end)
+
     Agent.update(agent_name(), fn state ->
       state
-      |> Map.put({:session, session_id}, %{id: session_id, cols: cols, rows: rows})
-      |> Map.put({:on_output, session_id}, on_output)
-      |> Map.update({:calls, session_id}, [{:create, %{cols: cols, rows: rows}}], fn calls ->
+      |> Map.put({:session, pty_id}, %{id: pty_id, cols: cols, rows: rows})
+      |> Map.put({:on_output, pty_id}, on_output)
+      |> Map.update({:calls, pty_id}, [{:create, %{cols: cols, rows: rows}}], fn calls ->
         calls ++ [{:create, %{cols: cols, rows: rows}}]
       end)
     end)
 
-    {:ok, %{id: session_id, cols: cols, rows: rows}}
+    {:ok, %{id: pty_id, cols: cols, rows: rows}}
   end
 
   @impl true
