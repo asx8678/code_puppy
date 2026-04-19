@@ -1,14 +1,10 @@
 defmodule CodePuppyControlWeb.CommandsControllerTest do
-  use ExUnit.Case, async: true
-
-  import Phoenix.ConnTest
-
-  @endpoint CodePuppyControlWeb.Endpoint
+  use CodePuppyControlWeb.ConnCase, async: true
 
   # ── GET /api/commands ───────────────────────────────────────────────────
 
   describe "GET /api/commands" do
-    test "returns a list (currently empty stub)" do
+    test "returns a list (may include agents from AgentCatalogue)" do
       conn =
         build_conn()
         |> get("/api/commands")
@@ -37,7 +33,7 @@ defmodule CodePuppyControlWeb.CommandsControllerTest do
     test "returns 501 Not Implemented (stub)" do
       conn =
         build_conn()
-        |> post("/api/commands/execute", %{command: "/help"})
+        |> post_json("/api/commands/execute", %{command: "/help"})
 
       body = json_response(conn, 501)
       assert body["error"] =~ "not yet implemented"
@@ -50,7 +46,7 @@ defmodule CodePuppyControlWeb.CommandsControllerTest do
     test "returns empty suggestions (stub)" do
       conn =
         build_conn()
-        |> post("/api/commands/autocomplete", %{partial: "/se"})
+        |> post_json("/api/commands/autocomplete", %{partial: "/se"})
 
       body = json_response(conn, 200)
       assert is_list(body["suggestions"])

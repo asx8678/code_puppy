@@ -1,9 +1,5 @@
 defmodule CodePuppyControlWeb.SessionsControllerTest do
-  use ExUnit.Case, async: true
-
-  import Phoenix.ConnTest
-
-  @endpoint CodePuppyControlWeb.Endpoint
+  use CodePuppyControlWeb.ConnCase, async: true
 
   # ── GET /api/sessions ───────────────────────────────────────────────────
 
@@ -48,6 +44,35 @@ defmodule CodePuppyControlWeb.SessionsControllerTest do
 
       body = json_response(conn, 400)
       assert body["error"] =~ "order must be"
+    end
+
+    test "returns 422 for negative offset" do
+      conn =
+        build_conn()
+        |> get("/api/sessions?offset=-1")
+
+      body = json_response(conn, 422)
+      assert is_map(body["errors"])
+      assert Map.has_key?(body["errors"], "offset")
+    end
+
+    test "returns 422 for non-numeric offset" do
+      conn =
+        build_conn()
+        |> get("/api/sessions?offset=abc")
+
+      body = json_response(conn, 422)
+      assert is_map(body["errors"])
+    end
+
+    test "returns 422 for limit exceeding maximum" do
+      conn =
+        build_conn()
+        |> get("/api/sessions?limit=999")
+
+      body = json_response(conn, 422)
+      assert is_map(body["errors"])
+      assert Map.has_key?(body["errors"], "limit")
     end
   end
 

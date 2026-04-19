@@ -33,12 +33,10 @@ defmodule CodePuppyControlWeb.SessionsController do
   - `order` — sort direction: `desc` (default) or `asc`
   """
   def index(conn, params) do
-    offset = parse_int(Map.get(params, "offset", "0"), 0, min: 0)
-    limit = parse_int(Map.get(params, "limit", "50"), 50, min: 1, max: 200)
-    sort_by = Map.get(params, "sort_by", "last_updated")
-    order = Map.get(params, "order", "desc")
-
-    with :ok <- validate_sort_by(sort_by),
+    with {:ok, offset, limit} <- validate_pagination(params, max_limit: 200, default_limit: 50),
+         sort_by = Map.get(params, "sort_by", "last_updated"),
+         order = Map.get(params, "order", "desc"),
+         :ok <- validate_sort_by(sort_by),
          :ok <- validate_order(order) do
       {:ok, sessions} = Sessions.list_sessions_with_metadata()
 
@@ -54,7 +52,12 @@ defmodule CodePuppyControlWeb.SessionsController do
         has_more: offset + length(paginated) < total
       })
     else
-      {:error, reason} ->
+      {:error, %Ecto.Changeset{} = changeset} ->
+        conn
+        |> put_status(:unprocessable_entity)
+        |> json(changeset_errors(changeset))
+
+      {:error, reason} when is_binary(reason) ->
         conn
         |> put_status(:bad_request)
         |> json(%{error: reason})
@@ -93,10 +96,8 @@ defmodule CodePuppyControlWeb.SessionsController do
   - `limit` — max messages to return (1–500, default 100)
   """
   def messages(conn, %{"id" => session_id} = params) do
-    offset = parse_int(Map.get(params, "offset", "0"), 0, min: 0)
-    limit = parse_int(Map.get(params, "limit", "100"), 100, min: 1, max: 500)
-
-    with :ok <- validate_session_id(session_id),
+    with {:ok, offset, limit} <- validate_pagination(params, max_limit: 500, default_limit: 100),
+         :ok <- validate_session_id(session_id),
          {:ok, %{history: history}} <- Sessions.load_session(session_id) do
       total = length(history)
       paginated = Enum.slice(history, offset, limit)
@@ -109,6 +110,11 @@ defmodule CodePuppyControlWeb.SessionsController do
         has_more: offset + length(paginated) < total
       })
     else
+      {:error, %Ecto.Changeset{} = changeset} ->
+        conn
+        |> put_status(:unprocessable_entity)
+        |> json(changeset_errors(changeset))
+
       {:error, :invalid_session_id} ->
         conn
         |> put_status(:bad_request)
@@ -168,22 +174,53 @@ defmodule CodePuppyControlWeb.SessionsController do
   defp validate_order(order) when order in ~w(asc desc), do: :ok
   defp validate_order(_), do: {:error, "order must be 'asc' or 'desc'"}
 
-  defp parse_int(str, default, opts) when is_binary(str) do
-    case Integer.parse(str) do
-      {val, ""} ->
-        min = Keyword.get(opts, :min)
-        max = Keyword.get(opts, :max)
+  @doc false
+  # Validates pagination query params using a schemaless Ecto changeset.
+  # Returns {:ok, offset, limit} on success, or {:error, changeset} on failure.
+  defp validate_pagination(params, opts) do
+    max_limit = Keyword.get(opts, :max_limit, 200)
+    default_limit = Keyword.get(opts, :default_limit, 50)
 
-        val = if min, do: max(min, val), else: val
-        val = if max, do: min(max, val), else: val
-        val
+    types = %{offset: :integer, limit: :integer}
 
-      _ ->
-        default
+    attrs = %{
+      offset: Map.get(params, "offset"),
+      limit: Map.get(params, "limit")
+    }
+
+    changeset =
+      {%{}, types}
+      |> Ecto.Changeset.cast(attrs, Map.keys(types))
+      |> Ecto.Changeset.validate_number(:offset,
+        greater_than_or_equal_to: 0,
+        message: "must be >= 0"
+      )
+      |> Ecto.Changeset.validate_number(:limit,
+        greater_than: 0,
+        less_than_or_equal_to: max_limit,
+        message: "must be between 1 and #{max_limit}"
+      )
+
+    if changeset.valid? do
+      offset = Ecto.Changeset.get_change(changeset, :offset, 0)
+      limit = Ecto.Changeset.get_change(changeset, :limit, default_limit)
+      {:ok, offset, limit}
+    else
+      {:error, changeset}
     end
   end
 
-  defp parse_int(_, default, _opts), do: default
+  # Translates changeset validation errors into a JSON-friendly error map.
+  defp changeset_errors(changeset) do
+    errors =
+      Ecto.Changeset.traverse_errors(changeset, fn {msg, opts} ->
+        Regex.replace(~r"%\{(.+?)\}", msg, fn _, key ->
+          opts |> Keyword.get(String.to_existing_atom(key), key) |> to_string()
+        end)
+      end)
+
+    %{errors: errors}
+  end
 
   defp sort_sessions(sessions, "session_id", "asc"),
     do: Enum.sort_by(sessions, & &1.name)

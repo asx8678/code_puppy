@@ -1,9 +1,5 @@
 defmodule CodePuppyControlWeb.InfoControllerTest do
-  use ExUnit.Case, async: true
-
-  import Phoenix.ConnTest
-
-  @endpoint CodePuppyControlWeb.Endpoint
+  use CodePuppyControlWeb.ConnCase, async: true
 
   test "GET / returns app info JSON" do
     conn =

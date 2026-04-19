@@ -1,9 +1,5 @@
 defmodule CodePuppyControlWeb.ConfigControllerTest do
-  use ExUnit.Case, async: true
-
-  import Phoenix.ConnTest
-
-  @endpoint CodePuppyControlWeb.Endpoint
+  use CodePuppyControlWeb.ConnCase, async: true
 
   # ── GET /api/config ─────────────────────────────────────────────────────
 
@@ -85,7 +81,7 @@ defmodule CodePuppyControlWeb.ConfigControllerTest do
     test "returns 404 for unknown key" do
       conn =
         build_conn()
-        |> put("/api/config/nonexistent_key_xyz", %{value: "test"})
+        |> put_json("/api/config/nonexistent_key_xyz", %{value: "test"})
 
       body = json_response(conn, 404)
       assert body["error"] =~ "not found"
@@ -94,10 +90,30 @@ defmodule CodePuppyControlWeb.ConfigControllerTest do
     test "returns 400 when value is missing" do
       conn =
         build_conn()
-        |> put("/api/config/model", %{})
+        |> put_json("/api/config/model", %{})
 
       body = json_response(conn, 400)
       assert body["error"] =~ "Missing required field: value"
+    end
+
+    test "returns 422 when value is a map (complex type)" do
+      conn =
+        build_conn()
+        |> put_json("/api/config/model", %{value: %{nested: true}})
+
+      body = json_response(conn, 422)
+      assert body["error"] =~ "must be a string, number, boolean, or null"
+      assert body["received_type"] == "map"
+    end
+
+    test "returns 422 when value is a list (complex type)" do
+      conn =
+        build_conn()
+        |> put_json("/api/config/model", %{value: [1, 2, 3]})
+
+      body = json_response(conn, 422)
+      assert body["error"] =~ "must be a string, number, boolean, or null"
+      assert body["received_type"] == "list"
     end
   end
 

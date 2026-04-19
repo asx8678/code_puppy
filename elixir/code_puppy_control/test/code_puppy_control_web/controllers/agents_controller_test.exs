@@ -1,9 +1,5 @@
 defmodule CodePuppyControlWeb.AgentsControllerTest do
-  use ExUnit.Case, async: true
-
-  import Phoenix.ConnTest
-
-  @endpoint CodePuppyControlWeb.Endpoint
+  use CodePuppyControlWeb.ConnCase, async: true
 
   # ── GET /api/agents ─────────────────────────────────────────────────────
 

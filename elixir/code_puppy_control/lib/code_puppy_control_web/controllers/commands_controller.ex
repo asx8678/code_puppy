@@ -24,6 +24,8 @@ defmodule CodePuppyControlWeb.CommandsController do
 
   use CodePuppyControlWeb, :controller
 
+  alias CodePuppyControl.Tools.AgentCatalogue
+
   @doc """
   GET /api/commands
 
@@ -32,14 +34,37 @@ defmodule CodePuppyControlWeb.CommandsController do
   Returns a sorted list of command info objects including name,
   description, usage, aliases, category, and detailed help.
 
-  Currently returns an empty list — the command registry has not been
-  ported to Elixir yet.
+  ## Stub note (bd-214)
+
+  The Python `command_registry` and plugin callback system
+  (`on_custom_command_help`) have not yet been ported to Elixir.
+  As a stopgap, this endpoint queries `AgentCatalogue` for agent
+  names and presents them as commands. Once
+  `CodePuppyControl.CommandRegistry` is implemented, this will
+  be replaced with a proper command lookup.
   """
   def index(conn, _params) do
-    # TODO(bd-214): Integrate with CodePuppyControl.CommandRegistry when available.
+    # TODO(bd-214): Replace with CodePuppyControl.CommandRegistry when available.
     # The Python version reads from command_registry.get_unique_commands()
     # and plugin callbacks (on_custom_command_help).
-    json(conn, [])
+    commands =
+      case try_list_agents() do
+        {:ok, agents} ->
+          Enum.map(agents, fn info ->
+            %{
+              name: info.name,
+              description: info.description,
+              usage: "/#{info.name}",
+              aliases: [],
+              category: "agent"
+            }
+          end)
+
+        :error ->
+          []
+      end
+
+    json(conn, commands)
   end
 
   @doc """
@@ -97,5 +122,18 @@ defmodule CodePuppyControlWeb.CommandsController do
   def autocomplete(conn, _params) do
     # TODO(bd-214): Integrate with CodePuppyControl.CommandRegistry when available.
     json(conn, %{suggestions: []})
+  end
+
+  # ── Private helpers ──────────────────────────────────────────────────────
+
+  # Attempt to read from AgentCatalogue; gracefully handle the case where
+  # the GenServer hasn't started (e.g. in test or before supervision tree
+  # is fully booted).
+  defp try_list_agents do
+    try do
+      {:ok, AgentCatalogue.list_agents()}
+    catch
+      :exit, _ -> :error
+    end
   end
 end

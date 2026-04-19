@@ -82,24 +82,34 @@ defmodule CodePuppyControlWeb.ConfigController do
   def update(conn, %{"key" => key, "value" => value}) do
     valid_keys = Config.get_config_keys()
 
-    if key in valid_keys do
-      case safe_set_value(key, to_string(value)) do
-        :ok ->
-          # Read back the persisted value for response (may differ from input)
-          updated_value = Config.get_value(key)
-          json(conn, %{key: key, value: redact(key, updated_value)})
+    cond do
+      key not in valid_keys ->
+        conn
+        |> put_status(:not_found)
+        |> json(%{error: "Config key '#{key}' not found. Valid keys: #{inspect(valid_keys)}"})
 
-        {:error, reason} ->
-          Logger.error("Failed to set config key '#{key}': #{inspect(reason)}")
+      not scalar_value?(value) ->
+        conn
+        |> put_status(:unprocessable_entity)
+        |> json(%{
+          error: "Config values must be a string, number, boolean, or null",
+          received_type: value_type_name(value)
+        })
 
-          conn
-          |> put_status(:internal_server_error)
-          |> json(%{error: "Failed to set config value", details: inspect(reason)})
-      end
-    else
-      conn
-      |> put_status(:not_found)
-      |> json(%{error: "Config key '#{key}' not found. Valid keys: #{inspect(valid_keys)}"})
+      true ->
+        case safe_set_value(key, to_string(value)) do
+          :ok ->
+            # Read back the persisted value for response (may differ from input)
+            updated_value = Config.get_value(key)
+            json(conn, %{key: key, value: redact(key, updated_value)})
+
+          {:error, reason} ->
+            Logger.error("Failed to set config key '#{key}': #{inspect(reason)}")
+
+            conn
+            |> put_status(:internal_server_error)
+            |> json(%{error: "Failed to set config value", details: inspect(reason)})
+        end
     end
   end
 
@@ -171,4 +181,18 @@ defmodule CodePuppyControlWeb.ConfigController do
   end
 
   defp redact(_key, value), do: value
+
+  # Config values must be scalar types that can be safely serialized
+  # to a string via `to_string/1`. Maps and lists crash or produce
+  # garbage output.
+  defp scalar_value?(value) when is_binary(value), do: true
+  defp scalar_value?(value) when is_number(value), do: true
+  defp scalar_value?(value) when is_boolean(value), do: true
+  defp scalar_value?(nil), do: true
+  defp scalar_value?(_), do: false
+
+  defp value_type_name(value) when is_map(value), do: "map"
+  defp value_type_name(value) when is_list(value), do: "list"
+  defp value_type_name(value) when is_tuple(value), do: "tuple"
+  defp value_type_name(_), do: "unknown"
 end

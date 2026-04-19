@@ -10,8 +10,8 @@ defmodule CodePuppyControlWeb.ConnCase do
 
   using do
     quote do
-      use Phoenix.ConnTest
-
+      import Plug.Conn
+      import Phoenix.ConnTest
       import Jason.Helpers
       import CodePuppyControlWeb.ConnCase.Helpers
 
@@ -24,6 +24,8 @@ defmodule CodePuppyControlWeb.ConnCase do
     Helper functions for controller tests.
     """
 
+    @endpoint CodePuppyControlWeb.Endpoint
+
     @doc """
     Sends a JSON POST request.
     """
@@ -31,7 +33,7 @@ defmodule CodePuppyControlWeb.ConnCase do
       conn
       |> Plug.Conn.put_req_header("content-type", "application/json")
       |> Plug.Conn.put_req_header("accept", "application/json")
-      |> Phoenix.ConnTest.post(path, Jason.encode!(body))
+      |> Phoenix.ConnTest.dispatch(@endpoint, :post, path, Jason.encode!(body))
     end
 
     @doc """
@@ -41,7 +43,7 @@ defmodule CodePuppyControlWeb.ConnCase do
       conn
       |> Plug.Conn.put_req_header("content-type", "application/json")
       |> Plug.Conn.put_req_header("accept", "application/json")
-      |> Phoenix.ConnTest.put(path, Jason.encode!(body))
+      |> Phoenix.ConnTest.dispatch(@endpoint, :put, path, Jason.encode!(body))
     end
   end
 end
