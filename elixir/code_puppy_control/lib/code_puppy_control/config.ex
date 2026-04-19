@@ -1,79 +1,71 @@
 defmodule CodePuppyControl.Config do
   @moduledoc """
-  Centralized configuration management for CodePuppyControl.
+  Top-level facade for Code Puppy configuration.
 
-  This module provides typed accessor functions for all application configuration,
-  validates required values at startup, and handles environment variable migration
-  from legacy names to the standardized `PUP_` prefix.
+  Delegates to focused sub-modules under `CodePuppyControl.Config.*`:
+
+  | Module | Responsibility |
+  |--------|---------------|
+  | `Config.Loader` | INI parser, persistent_term cache, env overrides |
+  | `Config.Writer` | Atomic writes (temp-file swap) |
+  | `Config.Paths` | XDG paths, file/dir constants |
+  | `Config.Models` | Model name, per-model settings, OpenAI params |
+  | `Config.Agents` | Default agent, agent dirs, personalization |
+  | `Config.TUI` | Banner colors, diff colors, display flags |
+  | `Config.Cache` | Session cache, WS history, frontend emitter |
+  | `Config.Limits` | Compaction, token budgets, timeouts |
+  | `Config.Debug` | Feature toggles, safety levels, API keys |
+  | `Config.Migrator` | Schema version migrations for puppy.cfg |
 
   ## Environment Variables
 
-  The following environment variables are recognized:
+  All new env vars use the `PUP_` prefix. Legacy `PUPPY_*` vars are
+  supported with deprecation warnings.
 
-  | Variable | Legacy Name | Required in Prod | Description |
-  |----------|-------------|-------------------|-------------|
-  | `PUP_SECRET_KEY_BASE` | `SECRET_KEY_BASE` | Yes | Phoenix endpoint secret key (min 64 bytes) |
-  | `PUP_DATABASE_PATH` | `DATABASE_PATH` | Yes | Path to SQLite database file |
-  | `PUP_PYTHON_WORKER_SCRIPT` | `PYTHON_WORKER_SCRIPT` | Yes | Path to Python worker entry point |
-  | `PUP_HISTORY_LIMIT` | - | No | Max events stored in history (default: 1000) |
-  | `PUP_WEBSOCKET_SECRET` | - | No | Secret for WebSocket authentication (optional) |
-
-  ## Migration Guide
-
-  If you are currently using the legacy environment variable names, migrate by:
-
-  1. Renaming `SECRET_KEY_BASE` to `PUP_SECRET_KEY_BASE`
-  2. Renaming `DATABASE_PATH` to `PUP_DATABASE_PATH`
-  3. Renaming `PYTHON_WORKER_SCRIPT` to `PUP_PYTHON_WORKER_SCRIPT`
-
-  Legacy names are supported with deprecation warnings during a transition period.
+  | Variable | Legacy Name | Description |
+  |----------|-------------|-------------|
+  | `PUP_HOME` | `PUPPY_HOME` | Override all code_puppy directories |
+  | `PUP_SECRET_KEY_BASE` | `SECRET_KEY_BASE` | Phoenix endpoint secret |
+  | `PUP_DATABASE_PATH` | `DATABASE_PATH` | SQLite database path |
+  | `PUP_MODEL` | `PUPPY_DEFAULT_MODEL` | Override model selection |
+  | `PUP_AGENT` | `PUPPY_DEFAULT_AGENT` | Override default agent |
+  | `PUP_DEBUG` | - | Enable debug mode |
 
   ## Usage
 
-  Use the typed accessor functions rather than directly calling `Application.get_env/3`:
+      # Direct access via sub-modules (preferred for new code)
+      CodePuppyControl.Config.Models.global_model_name()
+      CodePuppyControl.Config.Debug.yolo_mode?()
 
-      # Preferred
-      CodePuppyControl.Config.secret_key_base()
-      CodePuppyControl.Config.database_path()
-
-      # Avoid
-      Application.get_env(:code_puppy_control, :secret_key_base)
-
-  ## Validation
-
-  In production environments (`MIX_ENV=prod`), required configuration values are
-  validated at startup. Missing required configuration will cause the application
-  to fail fast with a descriptive error message.
-
-  Validation is relaxed in development and test environments to support zero-config
-  local development.
+      # Facade access (backward-compatible)
+      CodePuppyControl.Config.get_value("model")
   """
 
   require Logger
 
+  alias CodePuppyControl.Config.{
+    Loader,
+    Writer,
+    Paths,
+    Models,
+    Agents,
+    TUI,
+    Cache,
+    Limits,
+    Debug,
+    Migrator
+  }
+
   @typedoc "Application environment atom"
   @type env :: :dev | :test | :prod
 
-  @typedoc "Configuration key"
-  @type key :: atom()
+  # ── Environment detection ───────────────────────────────────────────────
 
-  @typedoc "Configuration value"
-  @type value :: term()
-
-  @doc """
-  Returns the current application environment.
-
-  ## Examples
-
-      iex> CodePuppyControl.Config.config_env() in [:dev, :test, :prod]
-      true
-  """
   @spec config_env() :: env()
   def config_env do
     Application.get_env(:code_puppy_control, :env) ||
       if Mix.env() == :test, do: :test, else: Mix.env()
   catch
-    # Handle cases where Mix is not available (releases)
     _, _ ->
       case System.get_env("MIX_ENV", "prod") do
         "dev" -> :dev
@@ -82,28 +74,29 @@ defmodule CodePuppyControl.Config do
       end
   end
 
-  @doc """
-  Returns true if running in production environment.
-
-  ## Examples
-
-      iex> CodePuppyControl.Config.prod?()
-      false
-  """
   @spec prod?() :: boolean()
-  def prod? do
-    config_env() == :prod
-  end
+  def prod?, do: config_env() == :prod
+
+  # ── Facade: core config access ──────────────────────────────────────────
+
+  @doc "Get a value from the default section. Delegates to `Loader.get_value/1`."
+  @spec get_value(String.t()) :: String.t() | nil
+  def get_value(key), do: Loader.get_value(key)
+
+  @doc "Set a value in the default section. Delegates to `Writer.set_value/2`."
+  @spec set_value(String.t(), String.t()) :: :ok
+  def set_value(key, value), do: Writer.set_value(key, value)
+
+  @doc "Get all config keys. Delegates to `Loader.keys/0`."
+  @spec get_config_keys() :: [String.t()]
+  def get_config_keys, do: Loader.keys()
+
+  # ── Facade: environment-specific config ─────────────────────────────────
 
   @doc """
-  Gets the secret key base for Phoenix endpoint.
+  Return the secret key base for Phoenix endpoint.
 
   Required in production. Must be at least 64 bytes.
-
-  ## Examples
-
-      iex> CodePuppyControl.Config.secret_key_base()
-      "secret_key_base_for_dev_only_..."
   """
   @spec secret_key_base() :: String.t()
   def secret_key_base do
@@ -111,14 +104,8 @@ defmodule CodePuppyControl.Config do
   end
 
   @doc """
-  Gets the database path for SQLite.
-
-  Required in production. Defaults to in-memory or temp paths in dev/test.
-
-  ## Examples
-
-      iex> CodePuppyControl.Config.database_path()
-      "priv/dev.db"
+  Return the database path for SQLite.
+  Required in production. Defaults to `priv/dev.db` in dev/test.
   """
   @spec database_path() :: String.t()
   def database_path do
@@ -131,14 +118,8 @@ defmodule CodePuppyControl.Config do
   end
 
   @doc """
-  Gets the path to the Python worker script.
-
-  Required in production. In test, defaults to a mock path.
-
-  ## Examples
-
-      iex> CodePuppyControl.Config.python_worker_script()
-      "/path/to/worker.py"
+  Return the path to the Python worker script.
+  Required in production. Defaults to a mock path in test.
   """
   @spec python_worker_script() :: String.t()
   def python_worker_script do
@@ -153,67 +134,23 @@ defmodule CodePuppyControl.Config do
         get_string_with_legacy(
           "PUP_PYTHON_WORKER_SCRIPT",
           "PYTHON_WORKER_SCRIPT",
-          "/tmp/mock_python_worker.py"
+          "/tmp/mock_worker.py"
         )
     end
   end
 
-  @doc """
-  Gets the history limit for event storage.
-
-  This controls how many events are kept in the in-memory history.
-  Defaults to 1000. Set to 0 for unlimited.
-
-  ## Examples
-
-      iex> CodePuppyControl.Config.history_limit()
-      1000
-  """
+  @doc "Return the history limit (default `1000`)."
   @spec history_limit() :: non_neg_integer()
   def history_limit do
-    value =
-      Application.get_env(:code_puppy_control, :history_limit) ||
-        parse_integer_env("PUP_HISTORY_LIMIT", 1000)
-
-    if is_integer(value) and value >= 0 do
-      value
-    else
-      Logger.warning("Invalid PUP_HISTORY_LIMIT value: #{inspect(value)}, using default 1000")
-      1000
-    end
+    Application.get_env(:code_puppy_control, :history_limit) ||
+      parse_integer_env("PUP_HISTORY_LIMIT", 1000)
   end
 
-  @doc """
-  Gets the WebSocket secret for authentication.
-
-  Optional. If not set, WebSocket connections are accepted without authentication.
-  Future versions will use this for token-based auth.
-
-  ## Examples
-
-      iex> CodePuppyControl.Config.websocket_secret()
-      nil
-  """
+  @doc "Return the WebSocket secret or `nil`."
   @spec websocket_secret() :: String.t() | nil
-  def websocket_secret do
-    System.get_env("PUP_WEBSOCKET_SECRET")
-  end
+  def websocket_secret, do: System.get_env("PUP_WEBSOCKET_SECRET")
 
-  @doc """
-  Validates all required configuration.
-
-  Called during application startup to fail fast if required configuration
-  is missing in production environments.
-
-  ## Raises
-
-  - `RuntimeError` if required configuration is missing in production
-
-  ## Examples
-
-      iex> CodePuppyControl.Config.validate!()
-      :ok
-  """
+  @doc "Validate all required config. Raises in production if missing."
   @spec validate!() :: :ok
   def validate! do
     if prod?() do
@@ -226,23 +163,10 @@ defmodule CodePuppyControl.Config do
     end
   end
 
-  @doc """
-  Loads configuration from environment variables at runtime.
-
-  This function should be called from `config/runtime.exs` to ensure
-  environment variables are read and validated.
-
-  Returns a keyword list of config values that can be passed to `config/2`.
-
-  ## Examples
-
-      iex> CodePuppyControl.Config.load_from_env()
-      [secret_key_base: "...", database_path: "...", ...]
-  """
+  @doc "Load config from env into a keyword list for `config/runtime.exs`."
   @spec load_from_env() :: keyword()
   def load_from_env do
     if prod?() do
-      # In production, validate everything upfront
       validate!()
 
       [
@@ -252,7 +176,6 @@ defmodule CodePuppyControl.Config do
         {:history_limit, history_limit()}
       ]
     else
-      # In dev/test, use relaxed loading
       [
         {:python_worker_script, python_worker_script()},
         {:history_limit, history_limit()}
@@ -260,16 +183,136 @@ defmodule CodePuppyControl.Config do
     end
   end
 
-  # ============================================================================
-  # Private Functions
-  # ============================================================================
+  # ── Facade: delegations to sub-modules ──────────────────────────────────
+  # Keep backward-compatible function names pointing at the right submodule.
 
-  # Gets a required string configuration value with legacy support
+  # Paths (constants)
+  @deprecated "Use CodePuppyControl.Config.Paths functions directly"
+  def config_dir, do: Paths.config_dir()
+  @deprecated "Use CodePuppyControl.Config.Paths functions directly"
+  def data_dir, do: Paths.data_dir()
+  @deprecated "Use CodePuppyControl.Config.Paths functions directly"
+  def cache_dir, do: Paths.cache_dir()
+  @deprecated "Use CodePuppyControl.Config.Paths functions directly"
+  def state_dir, do: Paths.state_dir()
+  @deprecated "Use CodePuppyControl.Config.Paths functions directly"
+  def config_file, do: Paths.config_file()
+
+  # Agents
+  @deprecated "Use CodePuppyControl.Config.Agents.default_agent/0"
+  def get_default_agent, do: Agents.default_agent()
+  @deprecated "Use CodePuppyControl.Config.Agents.set_default_agent/1"
+  def set_default_agent(name), do: Agents.set_default_agent(name)
+  @deprecated "Use CodePuppyControl.Config.Agents.puppy_name/0"
+  def get_puppy_name, do: Agents.puppy_name()
+  @deprecated "Use CodePuppyControl.Config.Agents.owner_name/0"
+  def get_owner_name, do: Agents.owner_name()
+  @deprecated "Use CodePuppyControl.Config.Agents.user_agents_dir/0"
+  def get_user_agents_directory, do: Agents.user_agents_dir()
+
+  # Models
+  @deprecated "Use CodePuppyControl.Config.Models.global_model_name/0"
+  def get_global_model_name, do: Models.global_model_name()
+  @deprecated "Use CodePuppyControl.Config.Models.set_global_model/1"
+  def set_model_name(model), do: Models.set_global_model(model)
+  @deprecated "Use CodePuppyControl.Config.Models.agent_pinned_model/1"
+  def get_agent_pinned_model(agent), do: Models.agent_pinned_model(agent)
+  @deprecated "Use CodePuppyControl.Config.Models.set_agent_pinned_model/2"
+  def set_agent_pinned_model(agent, model), do: Models.set_agent_pinned_model(agent, model)
+  @deprecated "Use CodePuppyControl.Config.Models.clear_agent_pinned_model/1"
+  def clear_agent_pinned_model(agent), do: Models.clear_agent_pinned_model(agent)
+  @deprecated "Use CodePuppyControl.Config.Models.all_agent_pinned_models/0"
+  def get_all_agent_pinned_models, do: Models.all_agent_pinned_models()
+
+  # TUI
+  @deprecated "Use CodePuppyControl.Config.TUI functions directly"
+  def get_banner_color(name), do: TUI.banner_color(name)
+  @deprecated "Use CodePuppyControl.Config.TUI functions directly"
+  def set_banner_color(name, color), do: TUI.set_banner_color(name, color)
+  @deprecated "Use CodePuppyControl.Config.TUI functions directly"
+  def get_diff_addition_color, do: TUI.diff_addition_color()
+  @deprecated "Use CodePuppyControl.Config.TUI functions directly"
+  def set_diff_addition_color(color), do: TUI.set_diff_addition_color(color)
+  @deprecated "Use CodePuppyControl.Config.TUI functions directly"
+  def get_diff_deletion_color, do: TUI.diff_deletion_color()
+  @deprecated "Use CodePuppyControl.Config.TUI functions directly"
+  def set_diff_deletion_color(color), do: TUI.set_diff_deletion_color(color)
+
+  # Limits
+  @deprecated "Use CodePuppyControl.Config.Limits functions directly"
+  def get_protected_token_count, do: Limits.protected_token_count()
+  @deprecated "Use CodePuppyControl.Config.Limits functions directly"
+  def get_compaction_threshold, do: Limits.compaction_threshold()
+  @deprecated "Use CodePuppyControl.Config.Limits functions directly"
+  def get_compaction_strategy, do: Limits.compaction_strategy()
+  @deprecated "Use CodePuppyControl.Config.Limits functions directly"
+  def get_message_limit, do: Limits.message_limit()
+  @deprecated "Use CodePuppyControl.Config.Limits functions directly"
+  def get_resume_message_count, do: Limits.resume_message_count()
+
+  # Debug / feature toggles
+  @deprecated "Use CodePuppyControl.Config.Debug functions directly"
+  def get_yolo_mode, do: Debug.yolo_mode?()
+  @deprecated "Use CodePuppyControl.Config.Debug functions directly"
+  def get_temperature, do: Models.temperature()
+  @deprecated "Use CodePuppyControl.Config.Debug functions directly"
+  def set_temperature(val), do: Models.set_temperature(val)
+  @deprecated "Use CodePuppyControl.Config.Debug functions directly"
+  def load_api_keys_to_environment, do: Debug.load_api_keys_to_environment()
+
+  # ── Ensure config exists ───────────────────────────────────────────────
+
+  @doc """
+  Ensure all XDG directories and `puppy.cfg` exist.
+  If required keys (`puppy_name`, `owner_name`) are missing, prompts the user.
+  """
+  @spec ensure_config_exists() :: :ok
+  def ensure_config_exists do
+    Paths.ensure_dirs!()
+
+    config = Loader.get_cached()
+    section = Loader.default_section()
+    section_map = Map.get(config, section, %{})
+
+    missing =
+      for key <- ["puppy_name", "owner_name"],
+          is_nil(section_map[key]) or section_map[key] == "",
+          do: key
+
+    if missing != [] do
+      IO.puts("🐾 Let's get your Puppy ready!")
+
+      updated_section =
+        Enum.reduce(missing, section_map, fn key, acc ->
+          prompt =
+            case key do
+              "puppy_name" -> "What should we name the puppy? "
+              "owner_name" -> "What's your name (so Code Puppy knows its owner)? "
+              other -> "Enter #{other}: "
+            end
+
+          value = IO.gets(prompt) |> to_string() |> String.trim()
+          Map.put(acc, key, value)
+        end)
+
+      updated_config = Map.put(config, section, updated_section)
+      Writer.write_config(updated_config)
+    end
+
+    :ok
+  end
+
+  # ── Migrator delegation ────────────────────────────────────────────────
+
+  @doc "Run pending schema migrations on `puppy.cfg`."
+  @spec migrate() :: {:ok, non_neg_integer()} | {:error, String.t()}
+  def migrate, do: Migrator.migrate()
+
+  # ── Private helpers ─────────────────────────────────────────────────────
+
   defp get_required_string(config_key, new_var, legacy_var) do
-    # First check if already loaded into application env
     case Application.get_env(:code_puppy_control, config_key) do
       nil ->
-        # Load from env with legacy fallback
         value = get_string_with_legacy(new_var, legacy_var, nil)
 
         if is_nil(value) or value == "" do
@@ -283,7 +326,6 @@ defmodule CodePuppyControl.Config do
           """
         end
 
-        # Store for future access
         Application.put_env(:code_puppy_control, config_key, value)
         value
 
@@ -292,7 +334,6 @@ defmodule CodePuppyControl.Config do
     end
   end
 
-  # Gets a string env var with legacy fallback and deprecation warning
   defp get_string_with_legacy(new_var, legacy_var, default) do
     case System.get_env(new_var) do
       nil ->
@@ -301,7 +342,6 @@ defmodule CodePuppyControl.Config do
             default
 
           value ->
-            # Only log deprecation warning in production to reduce noise
             if prod?() do
               Logger.warning(
                 "Environment variable #{legacy_var} is deprecated. " <>
@@ -317,7 +357,6 @@ defmodule CodePuppyControl.Config do
     end
   end
 
-  # Parses an integer environment variable
   defp parse_integer_env(var_name, default) do
     case System.get_env(var_name) do
       nil ->
