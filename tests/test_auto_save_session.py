@@ -248,7 +248,7 @@ class TestAutoSaveSessionFunctionality:
 
 
 class TestFinalizeAutoSaveSession:
-    @patch("code_puppy.config.rotate_autosave_id", return_value="fresh_id")
+    @patch("code_puppy.runtime_state.rotate_autosave_id", return_value="fresh_id")
     @patch("code_puppy.config.auto_save_session_if_enabled", return_value=True)
     def test_finalize_autosave_session_saves_and_rotates(
         self, mock_auto_save, mock_rotate
@@ -258,7 +258,7 @@ class TestFinalizeAutoSaveSession:
         mock_auto_save.assert_called_once_with()
         mock_rotate.assert_called_once_with()
 
-    @patch("code_puppy.config.rotate_autosave_id", return_value="fresh_id")
+    @patch("code_puppy.runtime_state.rotate_autosave_id", return_value="fresh_id")
     @patch("code_puppy.config.auto_save_session_if_enabled", return_value=False)
     def test_finalize_autosave_session_rotates_even_without_save(
         self, mock_auto_save, mock_rotate

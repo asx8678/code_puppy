@@ -79,16 +79,46 @@ def get_current_autosave_id() -> str:
 
 def rotate_autosave_id() -> str:
     """Force a new autosave session ID and return it."""
-    transport = _get_transport()
-    result = transport._send_request("runtime_rotate_autosave_id", {})
-    return result["autosave_id"]
+    try:
+        transport = _get_transport()
+        result = transport._send_request("runtime_rotate_autosave_id", {})
+        return result["autosave_id"]
+    except (ElixirTransportError, OSError, BrokenPipeError, ConnectionError, TimeoutError) as exc:
+        if _degraded():
+            import logging
+            logging.getLogger(__name__).warning(
+                "Elixir transport unavailable during rotate_autosave_id; "
+                "using degraded Python-local ID (PUP_ALLOW_ELIXIR_DEGRADED=1): %s",
+                exc,
+            )
+            with _DEGRADED_STATE_LOCK:
+                global _CURRENT_AUTOSAVE_ID
+                from datetime import datetime
+                _CURRENT_AUTOSAVE_ID = datetime.now().strftime("%Y%m%d_%H%M%S")
+                return _CURRENT_AUTOSAVE_ID
+        raise
 
 
 def get_current_autosave_session_name() -> str:
     """Return the full session name used for autosaves (no file extension)."""
-    transport = _get_transport()
-    result = transport._send_request("runtime_get_autosave_session_name", {})
-    return result["session_name"]
+    try:
+        transport = _get_transport()
+        result = transport._send_request("runtime_get_autosave_session_name", {})
+        return result["session_name"]
+    except (ElixirTransportError, OSError, BrokenPipeError, ConnectionError, TimeoutError) as exc:
+        if _degraded():
+            import logging
+            from datetime import datetime
+            logging.getLogger(__name__).warning(
+                "Elixir transport unavailable during get_autosave_session_name; "
+                "using degraded Python-local session name: %s",
+                exc,
+            )
+            with _DEGRADED_STATE_LOCK:
+                return "auto_session_%s" % (
+                    _CURRENT_AUTOSAVE_ID or datetime.now().strftime("%Y%m%d_%H%M%S")
+                )
+        raise
 
 
 def set_current_autosave_from_session_name(session_name: str) -> str:
@@ -97,17 +127,48 @@ def set_current_autosave_from_session_name(session_name: str) -> str:
     Accepts names like 'auto_session_YYYYMMDD_HHMMSS' and extracts the ID part.
     Returns the ID that was set.
     """
-    transport = _get_transport()
-    result = transport._send_request(
-        "runtime_set_autosave_from_session", {"session_name": session_name}
-    )
-    return result["autosave_id"]
+    try:
+        transport = _get_transport()
+        result = transport._send_request(
+            "runtime_set_autosave_from_session", {"session_name": session_name}
+        )
+        return result["autosave_id"]
+    except (ElixirTransportError, OSError, BrokenPipeError, ConnectionError, TimeoutError) as exc:
+        if _degraded():
+            import logging
+            logging.getLogger(__name__).warning(
+                "Elixir transport unavailable during set_autosave_from_session; "
+                "using degraded Python-local storage: %s",
+                exc,
+            )
+            with _DEGRADED_STATE_LOCK:
+                global _CURRENT_AUTOSAVE_ID
+                if session_name.startswith("auto_session_"):
+                    _CURRENT_AUTOSAVE_ID = session_name[len("auto_session_"):]
+                else:
+                    _CURRENT_AUTOSAVE_ID = session_name
+                return _CURRENT_AUTOSAVE_ID
+        raise
 
 
 def reset_autosave_id() -> None:
     """Reset the autosave ID to None (primarily for testing)."""
-    transport = _get_transport()
-    transport._send_request("runtime_reset_autosave_id", {})
+    try:
+        transport = _get_transport()
+        transport._send_request("runtime_reset_autosave_id", {})
+    except (ElixirTransportError, OSError, BrokenPipeError, ConnectionError, TimeoutError) as exc:
+        if _degraded():
+            import logging
+            logging.getLogger(__name__).warning(
+                "Elixir transport unavailable during reset_autosave_id; "
+                "resetting Python-local ID: %s",
+                exc,
+            )
+            with _DEGRADED_STATE_LOCK:
+                global _CURRENT_AUTOSAVE_ID
+                _CURRENT_AUTOSAVE_ID = None
+            return
+        raise
 
 
 # =============================================================================
@@ -160,11 +221,31 @@ def reset_session_model() -> None:
 
 
 def finalize_autosave_session() -> str:
-    """Persist the current autosave snapshot and rotate to a fresh session."""
+    """Persist the current autosave snapshot and rotate to a fresh session.
+
+    This function is best-effort and never raises: autosave rotation is not
+    a critical-path operation, so any failure (transport dead, disk full,
+    etc.) falls back to a timestamp-based ID so the caller can keep running.
+    """
     from code_puppy.config import auto_save_session_if_enabled
 
-    auto_save_session_if_enabled()
-    return rotate_autosave_id()
+    try:
+        auto_save_session_if_enabled()
+    except Exception as exc:
+        import logging
+        logging.getLogger(__name__).warning(
+            "auto_save_session_if_enabled failed during finalize: %s", exc
+        )
+
+    try:
+        return rotate_autosave_id()
+    except Exception as exc:
+        import logging
+        from datetime import datetime
+        logging.getLogger(__name__).warning(
+            "rotate_autosave_id failed during finalize; using timestamp fallback: %s", exc
+        )
+        return datetime.now().strftime("%Y%m%d_%H%M%S_fallback")
 
 
 def get_state() -> dict[str, Any]:

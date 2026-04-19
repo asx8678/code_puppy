@@ -2216,9 +2216,12 @@ get_diff_context_lines = _make_int_getter(
 
 
 def finalize_autosave_session() -> str:
-    """Persist the current autosave snapshot and rotate to a fresh session."""
-    auto_save_session_if_enabled()
-    return rotate_autosave_id()
+    """Persist the current autosave snapshot and rotate to a fresh session.
+
+    Thin delegate to runtime_state.finalize_autosave_session (which is
+    best-effort and never raises). Retained here for backward-compat imports.
+    """
+    return runtime_state.finalize_autosave_session()
 
 
 get_suppress_thinking_messages = _make_bool_getter(
