@@ -8,7 +8,6 @@ on:
     paths:
       - "code_puppy/**/*.py"
       - "puppy.cfg"
-      - "*.json"
 
 jobs:
   python-freeze-check:
@@ -17,11 +16,6 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
-
-      - name: Check PR labels
-        id: labels
-        uses: actions/labeler@v5
-        if: github.event.action == "opened" || github.event.action == "synchronize"
 
       - name: Verify freeze policy compliance
         run: |
