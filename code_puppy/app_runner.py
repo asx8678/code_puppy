@@ -388,6 +388,27 @@ class AppRunner:
 
                 asyncio.create_task(check_version_background(current_version))
 
+        # bd-192: eagerly probe Elixir transport so failures surface with a clear
+        # banner instead of a cryptic traceback deep inside prompt rendering.
+        try:
+            from code_puppy.elixir_transport_helpers import get_transport
+
+            get_transport()
+        except Exception as _transport_err:
+            from code_puppy.messaging import emit_error, emit_warning
+
+            emit_error(
+                "Elixir control-plane failed to start:\n"
+                f"  {type(_transport_err).__name__}: {_transport_err}\n"
+                "Remediation:\n"
+                "  * Run manually: cd elixir/code_puppy_control && mix code_puppy.stdio_service\n"
+                "  * Check elixir is installed: which elixir\n"
+                "  * To boot anyway in degraded mode: export PUP_ALLOW_ELIXIR_DEGRADED=1"
+            )
+            if os.environ.get("PUP_ALLOW_ELIXIR_DEGRADED") != "1":
+                raise
+            emit_warning("Continuing in degraded mode (PUP_ALLOW_ELIXIR_DEGRADED=1)")
+
         await callbacks.on_startup()
 
         # Log free-threading (no-GIL) status

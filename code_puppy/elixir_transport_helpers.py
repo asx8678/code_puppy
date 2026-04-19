@@ -39,27 +39,47 @@ with ElixirTransport() as transport:
 - `PUP_LOG_LEVEL` - Set Elixir service log level (debug, info, warn, error)
 """
 
+import threading
 from typing import Any
-
-
-# Deferred import to avoid circular dependencies
-def get_transport() -> "ElixirTransport":  # type: ignore # noqa: F821
-    """Get or create the module-level transport singleton."""
-    global _module_transport
-    if _module_transport is None:
-        from code_puppy.elixir_transport import ElixirTransport
-
-        _module_transport = ElixirTransport()
-        _module_transport.start()
-    return _module_transport
-
-
-# Backward compatibility alias
-_get_transport = get_transport
 
 
 # Module-level singleton for simple use cases
 _module_transport: Any = None
+
+# Threading lock for double-checked locking pattern
+_module_transport_lock = threading.Lock()
+
+
+# Backward compatibility alias
+def _get_transport() -> "ElixirTransport":  # type: ignore # noqa: F821
+    """Get or create the module-level transport singleton (backward compatibility alias)."""
+    return get_transport()
+
+
+def get_transport() -> "ElixirTransport":  # type: ignore # noqa: F821
+    """Get or create the module-level transport singleton.
+
+    Thread-safe under free-threaded Python (3.13+ with GIL disabled):
+    only a fully-started transport is ever published to the module-level
+    variable. If startup fails, the exception propagates and no partial
+    transport is cached.
+    """
+    global _module_transport
+    # Fast path: already initialized
+    if _module_transport is not None:
+        return _module_transport
+
+    with _module_transport_lock:
+        # Re-check under lock (double-checked locking)
+        if _module_transport is not None:
+            return _module_transport
+
+        from code_puppy.elixir_transport import ElixirTransport
+
+        t = ElixirTransport()
+        t.start()  # may raise; if so, _module_transport stays None
+        _module_transport = t  # publish only after successful start
+        return _module_transport
 
 
 def list_files(
@@ -188,14 +208,20 @@ def health_check() -> dict[str, Any]:
 def shutdown() -> None:
     """Shutdown the module-level transport singleton.
 
-        Call this when you're done using the module-level convenience functions
+    Call this when you're done using the module-level convenience functions
     to properly clean up resources.
 
-        Example:
-            >>> files = list_files(".")
-            >>> shutdown()
+    Example:
+        >>> files = list_files(".")
+        >>> shutdown()
     """
     global _module_transport
-    if _module_transport is not None:
-        _module_transport.stop()
+    # Swap out under lock, stop outside lock to avoid holding it during I/O.
+    # Tradeoff: another thread could call get_transport() and start a new
+    # transport before we stop the old one, but that's acceptable since
+    # we guarantee the returned transport is always in a started state.
+    with _module_transport_lock:
+        local = _module_transport
         _module_transport = None
+    if local is not None:
+        local.stop()

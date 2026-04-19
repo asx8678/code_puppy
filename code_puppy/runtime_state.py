@@ -17,7 +17,19 @@ with Python fallback) to a pure thin wrapper that routes exclusively to
 Elixir. The public API remains unchanged for backward compatibility.
 """
 
+import os
+import threading
 from typing import Any
+
+from code_puppy.elixir_transport import ElixirTransportError
+
+# bd-192: opt-in degraded mode lock for thread-safe degraded-mode state access
+_DEGRADED_STATE_LOCK = threading.Lock()
+
+
+def _degraded() -> bool:
+    # bd-192: Check env var directly instead of using a cached constant
+    return os.environ.get("PUP_ALLOW_ELIXIR_DEGRADED") == "1"
 
 # =============================================================================
 # Backward Compatibility Stubs (bd-133)
@@ -49,9 +61,20 @@ def _get_transport():
 
 def get_current_autosave_id() -> str:
     """Get or create the current autosave session ID for this process."""
-    transport = _get_transport()
-    result = transport._send_request("runtime_get_autosave_id", {})
-    return result["autosave_id"]
+    try:
+        transport = _get_transport()
+        result = transport._send_request("runtime_get_autosave_id", {})
+        return result["autosave_id"]
+    except (ElixirTransportError, OSError, BrokenPipeError, ConnectionError, TimeoutError):
+        if _degraded():
+            with _DEGRADED_STATE_LOCK:
+                global _CURRENT_AUTOSAVE_ID
+                if _CURRENT_AUTOSAVE_ID is None:
+                    from datetime import datetime
+
+                    _CURRENT_AUTOSAVE_ID = datetime.now().strftime("%Y%m%d_%H%M%S")
+                return _CURRENT_AUTOSAVE_ID
+        raise
 
 
 def rotate_autosave_id() -> str:
@@ -94,15 +117,35 @@ def reset_autosave_id() -> None:
 
 def get_session_model() -> str | None:
     """Get the cached session model name, or None if not yet initialized."""
-    transport = _get_transport()
-    result = transport._send_request("runtime_get_session_model", {})
-    return result["session_model"]
+    try:
+        transport = _get_transport()
+        result = transport._send_request("runtime_get_session_model", {})
+        return result["session_model"]
+    except (ElixirTransportError, OSError, BrokenPipeError, ConnectionError, TimeoutError):
+        if _degraded():
+            import logging
+
+            logging.getLogger(__name__).warning(
+                "Elixir transport unavailable; using degraded Python-local "
+                "session_model (PUP_ALLOW_ELIXIR_DEGRADED=1)"
+            )
+            with _DEGRADED_STATE_LOCK:
+                return _SESSION_MODEL
+        raise
 
 
 def set_session_model(model: str | None) -> None:
     """Set the session-local model name."""
-    transport = _get_transport()
-    transport._send_request("runtime_set_session_model", {"model": model})
+    try:
+        transport = _get_transport()
+        transport._send_request("runtime_set_session_model", {"model": model})
+    except (ElixirTransportError, OSError, BrokenPipeError, ConnectionError, TimeoutError):
+        if _degraded():
+            with _DEGRADED_STATE_LOCK:
+                global _SESSION_MODEL
+                _SESSION_MODEL = model
+            return
+        raise
 
 
 def reset_session_model() -> None:
