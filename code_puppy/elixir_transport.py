@@ -385,11 +385,31 @@ class ElixirTransport:
                 "Call start() before sending requests."
             )
         if self._process.poll() is not None:
-            raise ElixirTransportError(
-                f"Elixir process died (exit code {self._process.returncode}). "
-                "This usually means the BEAM VM crashed between startup and the "
-                "first request. Check plugin startup callbacks for errors."
+            # bd-204: auto-restart with backoff on subprocess death
+            exit_code = self._process.returncode
+            logger.warning(
+                "Elixir process died (exit code %s). "
+                "Attempting auto-restart with backoff...",
+                exit_code,
             )
+            # Reset state so start() will accept a new process
+            self._process = None
+            self._closed = False
+            # Backoff before restarting to let things settle
+            time.sleep(0.5)
+            try:
+                self.start()
+            except ElixirTransportError:
+                logger.error("Auto-restart failed")
+                raise
+            # Double-check the restarted process is alive
+            if self._process is None or self._process.poll() is not None:
+                code = self._process.returncode if self._process else "N/A"
+                raise ElixirTransportError(
+                    f"Auto-restart failed: process died again "
+                    f"(exit code {code})."
+                )
+            logger.info("Auto-restart succeeded, resuming request")
 
         # Lock protects the entire send+receive cycle to ensure request/response
         # matching and prevent interleaving of concurrent requests
