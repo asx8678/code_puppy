@@ -110,6 +110,23 @@ defmodule CodePuppyControl.Agent.Events do
   end
 
   @doc """
+  Builds a `messages_compacted` event.
+
+  Emitted when compaction/pruning reduces the message history
+  before an LLM call.
+  """
+  @spec messages_compacted(String.t(), String.t() | nil, map()) :: map()
+  def messages_compacted(run_id, session_id, stats) when is_map(stats) do
+    %{
+      type: "agent_messages_compacted",
+      run_id: run_id,
+      session_id: session_id,
+      stats: stats,
+      timestamp: DateTime.utc_now()
+    }
+  end
+
+  @doc """
   Builds a `run_completed` event.
   """
   @spec run_completed(String.t(), String.t() | nil, map()) :: map()

@@ -153,6 +153,38 @@ defmodule CodePuppyControl.Agent.EventsTest do
     end
   end
 
+  describe "messages_compacted/3" do
+    test "builds correct event" do
+      stats = %{original_count: 160, compacted_count: 33, dropped_by_filter: 0}
+      event = Events.messages_compacted(@run_id, @session_id, stats)
+
+      assert event.type == "agent_messages_compacted"
+      assert event.run_id == @run_id
+      assert event.session_id == @session_id
+      assert event.stats == stats
+      assert %DateTime{} = event.timestamp
+    end
+
+    test "handles nil session_id" do
+      stats = %{original_count: 50, compacted_count: 20}
+      event = Events.messages_compacted(@run_id, nil, stats)
+
+      assert event.session_id == nil
+      assert event.stats.original_count == 50
+    end
+
+    test "encodes and decodes to JSON" do
+      stats = %{original_count: 100, compacted_count: 30, dropped_by_filter: 5}
+      event = Events.messages_compacted(@run_id, @session_id, stats)
+
+      assert {:ok, json} = Events.to_json(event)
+      assert {:ok, decoded} = Events.from_json(json)
+
+      assert decoded["type"] == "agent_messages_compacted"
+      assert decoded["stats"]["original_count"] == 100
+    end
+  end
+
   describe "all events have required fields" do
     test "every event has type, run_id, session_id, timestamp" do
       events = [
