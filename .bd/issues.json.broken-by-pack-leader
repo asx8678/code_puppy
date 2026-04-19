@@ -2544,12 +2544,15 @@
           "bd-132"
         ],
         "blocks": [
-          "bd-150",
-          "bd-151",
-          "bd-152",
           "bd-153",
-          "bd-154",
-          "bd-155"
+          "bd-152",
+          "bd-137",
+          "bd-155",
+          "bd-139",
+          "bd-133",
+          "bd-135",
+          "bd-150",
+          "bd-141"
         ]
       },
       "created_at": "2026-04-18T19:46:59.312007",
@@ -2571,10 +2574,9 @@
           "bd-132"
         ],
         "blocks": [
-          "bd-134",
           "bd-156",
-          "bd-157",
-          "bd-158"
+          "bd-141",
+          "bd-136"
         ]
       },
       "created_at": "2026-04-18T19:47:05.044179",
@@ -2596,12 +2598,10 @@
           "bd-132"
         ],
         "blocks": [
-          "bd-135",
-          "bd-159",
-          "bd-160",
           "bd-161",
-          "bd-162",
-          "bd-163"
+          "bd-135",
+          "bd-163",
+          "bd-140"
         ]
       },
       "created_at": "2026-04-18T19:47:09.444757",
@@ -2623,11 +2623,11 @@
           "bd-132"
         ],
         "blocks": [
-          "bd-134",
+          "bd-166",
           "bd-164",
           "bd-165",
-          "bd-166",
-          "bd-167"
+          "bd-138",
+          "bd-140"
         ]
       },
       "created_at": "2026-04-18T19:47:13.329659",
@@ -2650,8 +2650,7 @@
         ],
         "blocks": [
           "bd-137",
-          "bd-168",
-          "bd-169"
+          "bd-140"
         ]
       },
       "created_at": "2026-04-18T19:47:17.340741",
@@ -2673,8 +2672,8 @@
           "bd-132"
         ],
         "blocks": [
-          "bd-134",
-          "bd-170"
+          "bd-170",
+          "bd-140"
         ]
       },
       "created_at": "2026-04-18T19:47:20.916780",
@@ -2696,13 +2695,12 @@
           "bd-132"
         ],
         "blocks": [
-          "bd-136",
-          "bd-137",
-          "bd-138",
-          "bd-139",
           "bd-171",
-          "bd-172",
-          "bd-173"
+          "bd-138",
+          "bd-142",
+          "bd-139",
+          "bd-136",
+          "bd-172"
         ]
       },
       "created_at": "2026-04-18T19:47:26.144362",
@@ -2724,11 +2722,7 @@
           "bd-132"
         ],
         "blocks": [
-          "bd-134",
-          "bd-135",
-          "bd-174",
-          "bd-175",
-          "bd-176"
+          "bd-142"
         ]
       },
       "created_at": "2026-04-18T19:47:30.031832",
@@ -2750,12 +2744,10 @@
           "bd-132"
         ],
         "blocks": [
-          "bd-140",
-          "bd-141",
           "bd-177",
-          "bd-178",
+          "bd-180",
           "bd-179",
-          "bd-180"
+          "bd-141"
         ]
       },
       "created_at": "2026-04-18T19:47:34.129143",
@@ -2919,7 +2911,7 @@
       "id": "bd-150",
       "title": "1.5 Port all remaining tools",
       "description": "Port remaining Python tools not yet in Elixir: file_modifications, skills, process_runner, subagent_context, staged_changes.",
-      "status": "closed",
+      "status": "open",
       "priority": 2,
       "type": "task",
       "labels": [
@@ -2929,19 +2921,21 @@
       "dependencies": {
         "discovered-from": [
           "bd-134"
+        ],
+        "blocks": [
+          "bd-134",
+          "bd-154"
         ]
       },
       "created_at": "2026-04-18T19:47:56.665822",
-      "updated_at": "2026-04-19T01:26:48.057135",
-      "comments": [
-        "Committed as 65dd370e. Ported file_modifications (5 submodules), process_runner, skills, subagent_context. staged_changes test coverage added. 266 tests, 0 failures."
-      ]
+      "updated_at": "2026-04-19T00:56:48.401822",
+      "comments": []
     },
     "bd-151": {
       "id": "bd-151",
       "title": "1.6 Adaptive rate limiter \u2192 Elixir GenServer + ETS",
       "description": "Replace Python adaptive rate limiter with Elixir GenServer backed by ETS for fast lookups. Must handle per-provider limits, backoff, and burst allowances.",
-      "status": "closed",
+      "status": "open",
       "priority": 2,
       "type": "task",
       "labels": [
@@ -2951,19 +2945,21 @@
       "dependencies": {
         "discovered-from": [
           "bd-134"
+        ],
+        "blocks": [
+          "bd-154",
+          "bd-134"
         ]
       },
       "created_at": "2026-04-18T19:47:56.694656",
-      "updated_at": "2026-04-19T01:26:48.086832",
-      "comments": [
-        "Committed as 2727032e. Adaptive rate limiter GenServer + ETS token bucket + 3-state circuit breaker + exponential cooldown backoff. Supervisor wired in application.ex. 44 tests, 0 failures."
-      ]
+      "updated_at": "2026-04-19T00:56:48.433408",
+      "comments": []
     },
     "bd-152": {
       "id": "bd-152",
       "title": "1.7 Token ledger + usage tracking",
       "description": "Implement token counting, per-session usage ledger, and cost tracking. Port any Python tokenization heuristics.",
-      "status": "closed",
+      "status": "open",
       "priority": 2,
       "type": "task",
       "labels": [
@@ -2973,13 +2969,16 @@
       "dependencies": {
         "discovered-from": [
           "bd-134"
+        ],
+        "blocks": [
+          "bd-134",
+          "bd-153",
+          "bd-154"
         ]
       },
       "created_at": "2026-04-18T19:47:56.724085",
-      "updated_at": "2026-04-19T01:26:48.117407",
-      "comments": [
-        "Already committed as 41679e36 (pre-pack-leader). 377 LOC + cost/attempt submodules + 50 tests, 0 failures. Integrated into Agent.Loop.finalize_turn."
-      ]
+      "updated_at": "2026-04-19T00:56:48.463949",
+      "comments": []
     },
     "bd-153": {
       "id": "bd-153",
@@ -2997,7 +2996,8 @@
           "bd-134"
         ],
         "blocks": [
-          "bd-152"
+          "bd-152",
+          "bd-134"
         ]
       },
       "created_at": "2026-04-18T19:47:56.753540",
@@ -3019,10 +3019,10 @@
           "bd-134"
         ],
         "blocks": [
-          "bd-150",
-          "bd-151",
+          "bd-134",
           "bd-152",
-          "bd-155"
+          "bd-155",
+          "bd-150"
         ]
       },
       "created_at": "2026-04-18T19:47:56.783018",
@@ -3043,6 +3043,10 @@
       "dependencies": {
         "discovered-from": [
           "bd-134"
+        ],
+        "blocks": [
+          "bd-134",
+          "bd-154"
         ]
       },
       "created_at": "2026-04-18T19:47:56.812533",
@@ -3053,7 +3057,7 @@
       "id": "bd-156",
       "title": "2.1 Callback registry in Elixir (20+ hooks, merge semantics)",
       "description": "Implement the callback registry matching Python's 20+ hooks with proper merge semantics (str=concat, list=extend, dict=update, bool=OR).",
-      "status": "closed",
+      "status": "open",
       "priority": 2,
       "type": "task",
       "labels": [
@@ -3063,13 +3067,16 @@
       "dependencies": {
         "discovered-from": [
           "bd-135"
+        ],
+        "blocks": [
+          "bd-135",
+          "bd-157",
+          "bd-158"
         ]
       },
       "created_at": "2026-04-18T19:48:03.299082",
-      "updated_at": "2026-04-19T01:26:48.147627",
-      "comments": [
-        "Committed as 5132ad4f. Callback registry with 33 hooks (>20+ spec), 4 merge strategies (concat_str/extend_list/update_map/or_bool) + :noop. Fixed 2 bugs during review: update_map direction (later wins) and :noop single-real-value preference. 109 tests, 0 failures."
-      ]
+      "updated_at": "2026-04-19T00:56:48.555481",
+      "comments": []
     },
     "bd-157": {
       "id": "bd-157",
@@ -3087,7 +3094,9 @@
           "bd-135"
         ],
         "blocks": [
-          "bd-156"
+          "bd-135",
+          "bd-156",
+          "bd-158"
         ]
       },
       "created_at": "2026-04-18T19:48:03.330928",
@@ -3109,8 +3118,9 @@
           "bd-135"
         ],
         "blocks": [
-          "bd-156",
-          "bd-157"
+          "bd-157",
+          "bd-135",
+          "bd-156"
         ]
       },
       "created_at": "2026-04-18T19:48:03.359737",
@@ -3131,6 +3141,13 @@
       "dependencies": {
         "discovered-from": [
           "bd-136"
+        ],
+        "blocks": [
+          "bd-162",
+          "bd-136",
+          "bd-161",
+          "bd-160",
+          "bd-163"
         ]
       },
       "created_at": "2026-04-18T19:48:10.270721",
@@ -3152,7 +3169,8 @@
           "bd-136"
         ],
         "blocks": [
-          "bd-159"
+          "bd-163",
+          "bd-136"
         ]
       },
       "created_at": "2026-04-18T19:48:10.303237",
@@ -3174,7 +3192,8 @@
           "bd-136"
         ],
         "blocks": [
-          "bd-159"
+          "bd-136",
+          "bd-162"
         ]
       },
       "created_at": "2026-04-18T19:48:10.333257",
@@ -3196,7 +3215,7 @@
           "bd-136"
         ],
         "blocks": [
-          "bd-159",
+          "bd-136",
           "bd-161"
         ]
       },
@@ -3219,8 +3238,7 @@
           "bd-136"
         ],
         "blocks": [
-          "bd-159",
-          "bd-160"
+          "bd-136"
         ]
       },
       "created_at": "2026-04-18T19:48:10.390822",
@@ -3230,7 +3248,7 @@
     "bd-164": {
       "id": "bd-164",
       "title": "4.1 Port config.py (84KB) to Elixir",
-      "description": "Port the 84KB config.py into ~8 focused Elixir modules. Spec the semantics first (R5 risk). Must handle: defaults, env overrides, file config, CLI flags, dynamic reload.\n\n## \u26a0\ufe0f Isolation Requirement (added per bd-186)\n\nThis task MUST:\n- Write only to ~/.code_puppy_ex/ (never ~/.code_puppy/)\n- Pass the bd-186 CI gates (no-writes-to-python-home, fresh-install-works, existing-install-untouched)\n- Run all tests against temp directories, never the user's real home\n- Respect the Python freeze policy (bd-187) \u2014 do not modify code_puppy/**/*.py",
+      "description": "Port the 84KB config.py into ~8 focused Elixir modules. Spec the semantics first (R5 risk). Must handle: defaults, env overrides, file config, CLI flags, dynamic reload.",
       "status": "open",
       "priority": 1,
       "type": "task",
@@ -3241,20 +3259,21 @@
       "dependencies": {
         "discovered-from": [
           "bd-137"
+        ],
+        "blocks": [
+          "bd-165",
+          "bd-137",
+          "bd-166"
         ]
       },
       "created_at": "2026-04-18T19:48:17.126393",
-      "updated_at": "2026-04-19T09:43:02.780428",
-      "comments": [
-        "Partial commit as 1930f9a2. 10-module split implemented (loader/writer/paths/models/agents/tui/cache/limits/debug/migrator). 145 tests with 9 failures in write-path (Writer/Models/Migrator). MIGRATION_MAP.md also landed.\n\nRemaining work (stays OPEN):\n1. Verify all Python config.py accessors are mapped function-by-function\n2. Fix 9 write-path persistence bugs\n3. Implement dynamic reload (file watcher)\n4. Back-compat audit across existing call sites\n\nReady for follow-up code-puppy dispatch.",
-        "\n## \u26a0\ufe0f Isolation Requirement (added per bd-186)\n\nThis task MUST:\n- Write only to ~/.code_puppy_ex/ (never ~/.code_puppy/)\n- Pass the bd-186 CI gates (no-writes-to-python-home, fresh-install-works, existing-install-untouched)\n- Run all tests against temp directories, never the user's real home\n- Respect the Python freeze policy (bd-187) \u2014 do not modify code_puppy/**/*.py\n\nDependency: bd-186 now blocks this issue.",
-        "bd-186 isolation infrastructure has landed. This issue's implementation MUST:\n\n1. Write only to ~/.code_puppy_ex/ via Paths.* helpers\n   (never hardcode ~/.code_puppy/ paths)\n2. Use Isolation.safe_write! / safe_mkdir_p! / safe_rm! / safe_rm_rf!\n   for ALL filesystem mutations on user-home paths\n3. Use Isolation.read_only_legacy/1 if reading from ~/.code_puppy/\n   during one-time migration imports (and only then)\n\nRelevant commits:\n- 86b05f29 \u2014 Config.Paths extension + Config.Isolation guard module\n- 2ea04ea9 \u2014 8 hardcoded callsites routed through Paths\n- 438685ac \u2014 FirstRun + pup_ex.import/doctor/auth.login CLI\n- b692dfdb \u2014 5 ADR CI gates + GitHub Actions workflow\n\nADR-003 is the canonical design doc:\ndocs/adr/ADR-003-dual-home-config-isolation.md\n\nAny PR touching config, session, OAuth, secrets, or compat tests will\nhave to pass `mix gates.isolation` in CI. Start there."
-      ]
+      "updated_at": "2026-04-19T00:56:48.833103",
+      "comments": []
     },
     "bd-165": {
       "id": "bd-165",
       "title": "4.2 Session storage last mile",
-      "description": "Port session_storage.py (31KB) to Elixir. Session CRUD, search, export. One-shot migrator for existing Python sessions (R8).\n\n## \u26a0\ufe0f Isolation Requirement (added per bd-186)\n\nThis task MUST:\n- Write only to ~/.code_puppy_ex/ (never ~/.code_puppy/)\n- Pass the bd-186 CI gates (no-writes-to-python-home, fresh-install-works, existing-install-untouched)\n- Run all tests against temp directories, never the user's real home\n- Respect the Python freeze policy (bd-187) \u2014 do not modify code_puppy/**/*.py",
+      "description": "Port session_storage.py (31KB) to Elixir. Session CRUD, search, export. One-shot migrator for existing Python sessions (R8).",
       "status": "open",
       "priority": 2,
       "type": "task",
@@ -3266,15 +3285,12 @@
           "bd-137"
         ],
         "blocks": [
-          "bd-164"
+          "bd-137"
         ]
       },
       "created_at": "2026-04-18T19:48:17.158145",
-      "updated_at": "2026-04-19T09:43:02.764044",
-      "comments": [
-        "\n## \u26a0\ufe0f Isolation Requirement (added per bd-186)\n\nThis task MUST:\n- Write only to ~/.code_puppy_ex/ (never ~/.code_puppy/)\n- Pass the bd-186 CI gates (no-writes-to-python-home, fresh-install-works, existing-install-untouched)\n- Run all tests against temp directories, never the user's real home\n- Respect the Python freeze policy (bd-187) \u2014 do not modify code_puppy/**/*.py\n\nDependency: bd-186 now blocks this issue.",
-        "bd-186 isolation infrastructure has landed. This issue's implementation MUST:\n\n1. Write only to ~/.code_puppy_ex/ via Paths.* helpers\n   (never hardcode ~/.code_puppy/ paths)\n2. Use Isolation.safe_write! / safe_mkdir_p! / safe_rm! / safe_rm_rf!\n   for ALL filesystem mutations on user-home paths\n3. Use Isolation.read_only_legacy/1 if reading from ~/.code_puppy/\n   during one-time migration imports (and only then)\n\nRelevant commits:\n- 86b05f29 \u2014 Config.Paths extension + Config.Isolation guard module\n- 2ea04ea9 \u2014 8 hardcoded callsites routed through Paths\n- 438685ac \u2014 FirstRun + pup_ex.import/doctor/auth.login CLI\n- b692dfdb \u2014 5 ADR CI gates + GitHub Actions workflow\n\nADR-003 is the canonical design doc:\ndocs/adr/ADR-003-dual-home-config-isolation.md\n\nAny PR touching config, session, OAuth, secrets, or compat tests will\nhave to pass `mix gates.isolation` in CI. Start there."
-      ]
+      "updated_at": "2026-04-19T00:56:31.464875",
+      "comments": []
     },
     "bd-166": {
       "id": "bd-166",
@@ -3292,20 +3308,17 @@
         ],
         "blocks": [
           "bd-164",
-          "bd-167"
+          "bd-137"
         ]
       },
       "created_at": "2026-04-18T19:48:17.188100",
-      "updated_at": "2026-04-19T09:43:02.760709",
-      "comments": [
-        "## \u26a0\ufe0f Isolation Requirement (added per bd-186)\n\nThis task MUST:\n- Write only to ~/.code_puppy_ex/ (never ~/.code_puppy/)\n- Pass the bd-186 CI gates (no-writes-to-python-home, fresh-install-works, existing-install-untouched)\n- Run all tests against temp directories, never the user's real home\n- Respect the Python freeze policy (bd-187) \u2014 do not modify code_puppy/**/*.py\n\n## OAuth Strategy Decision (per user directive)\n\nElixir runs its OWN OAuth flows independently. Do NOT attempt to import or share tokens from ~/.code_puppy/. User will re-authenticate under pup-ex.",
-        "bd-186 isolation infrastructure has landed. This issue's implementation MUST:\n\n1. Write only to ~/.code_puppy_ex/ via Paths.* helpers\n   (never hardcode ~/.code_puppy/ paths)\n2. Use Isolation.safe_write! / safe_mkdir_p! / safe_rm! / safe_rm_rf!\n   for ALL filesystem mutations on user-home paths\n3. Use Isolation.read_only_legacy/1 if reading from ~/.code_puppy/\n   during one-time migration imports (and only then)\n\nRelevant commits:\n- 86b05f29 \u2014 Config.Paths extension + Config.Isolation guard module\n- 2ea04ea9 \u2014 8 hardcoded callsites routed through Paths\n- 438685ac \u2014 FirstRun + pup_ex.import/doctor/auth.login CLI\n- b692dfdb \u2014 5 ADR CI gates + GitHub Actions workflow\n\nADR-003 is the canonical design doc:\ndocs/adr/ADR-003-dual-home-config-isolation.md\n\nAny PR touching config, session, OAuth, secrets, or compat tests will\nhave to pass `mix gates.isolation` in CI. Start there."
-      ]
+      "updated_at": "2026-04-19T00:56:31.495992",
+      "comments": []
     },
     "bd-167": {
       "id": "bd-167",
       "title": "4.4 Secrets / credential store",
-      "description": "OS keychain integration for storing API keys and tokens. Port any Python keyring usage.\n\n## \u26a0\ufe0f Isolation Requirement (added per bd-186)\n\nThis task MUST:\n- Write only to ~/.code_puppy_ex/ (never ~/.code_puppy/)\n- Pass the bd-186 CI gates (no-writes-to-python-home, fresh-install-works, existing-install-untouched)\n- Run all tests against temp directories, never the user's real home\n- Respect the Python freeze policy (bd-187) \u2014 do not modify code_puppy/**/*.py",
+      "description": "OS keychain integration for storing API keys and tokens. Port any Python keyring usage.",
       "status": "open",
       "priority": 2,
       "type": "task",
@@ -3315,19 +3328,20 @@
       "dependencies": {
         "discovered-from": [
           "bd-137"
+        ],
+        "blocks": [
+          "bd-137",
+          "bd-166"
         ]
       },
       "created_at": "2026-04-18T19:48:17.217798",
-      "updated_at": "2026-04-19T09:43:02.759048",
-      "comments": [
-        "\n## \u26a0\ufe0f Isolation Requirement (added per bd-186)\n\nThis task MUST:\n- Write only to ~/.code_puppy_ex/ (never ~/.code_puppy/)\n- Pass the bd-186 CI gates (no-writes-to-python-home, fresh-install-works, existing-install-untouched)\n- Run all tests against temp directories, never the user's real home\n- Respect the Python freeze policy (bd-187) \u2014 do not modify code_puppy/**/*.py\n\nDependency: bd-186 now blocks this issue.",
-        "bd-186 isolation infrastructure has landed. This issue's implementation MUST:\n\n1. Write only to ~/.code_puppy_ex/ via Paths.* helpers\n   (never hardcode ~/.code_puppy/ paths)\n2. Use Isolation.safe_write! / safe_mkdir_p! / safe_rm! / safe_rm_rf!\n   for ALL filesystem mutations on user-home paths\n3. Use Isolation.read_only_legacy/1 if reading from ~/.code_puppy/\n   during one-time migration imports (and only then)\n\nRelevant commits:\n- 86b05f29 \u2014 Config.Paths extension + Config.Isolation guard module\n- 2ea04ea9 \u2014 8 hardcoded callsites routed through Paths\n- 438685ac \u2014 FirstRun + pup_ex.import/doctor/auth.login CLI\n- b692dfdb \u2014 5 ADR CI gates + GitHub Actions workflow\n\nADR-003 is the canonical design doc:\ndocs/adr/ADR-003-dual-home-config-isolation.md\n\nAny PR touching config, session, OAuth, secrets, or compat tests will\nhave to pass `mix gates.isolation` in CI. Start there."
-      ]
+      "updated_at": "2026-04-19T00:56:48.864292",
+      "comments": []
     },
     "bd-168": {
       "id": "bd-168",
-      "title": "5.1 Build Phoenix server replacing FastAPI (Channels + Plug + PTY)",
-      "description": "Replace Python FastAPI server with Phoenix. Includes: REST app endpoints, WebSocket handler, PTY manager, security middleware.\n\nCLARIFICATION: This is NOT a line-by-line port of FastAPI-the-framework. It's a native Phoenix implementation providing equivalent behavior using idiomatic Elixir tools:\n\n- REST endpoints \u2192 Phoenix.Router + controllers (Plug pipeline)\n- WebSocket handler \u2192 Phoenix.Channels (topics, presence, broadcast, auto-reconnect)\n- PTY manager \u2192 Elixir Port / erlexec / NIF\n- Security middleware \u2192 Plug pipeline (auth, CORS, rate limiting)\n- Pub/sub between sessions \u2192 Phoenix.PubSub (built-in, no Redis needed)\n\nUse Phoenix-idiomatic patterns throughout. Do NOT replicate FastAPI abstractions in Elixir.\n\nRelated: see new sibling issue for Phoenix LiveView web-UI evaluation (potential scope expansion, not part of this task).",
+      "title": "5.1 Port FastAPI to Phoenix",
+      "description": "Replace Python FastAPI server with Phoenix. Includes: REST app endpoints, WebSocket handler, PTY manager, security middleware.",
       "status": "open",
       "priority": 2,
       "type": "task",
@@ -3338,15 +3352,13 @@
         "discovered-from": [
           "bd-138"
         ],
-        "related-to": [
-          "bd-181"
+        "blocks": [
+          "bd-138"
         ]
       },
       "created_at": "2026-04-18T19:48:21.529960",
-      "updated_at": "2026-04-19T01:54:23.152492",
-      "comments": [
-        "TITLE CLARIFICATION: 5.1 Build Phoenix server replacing FastAPI (Channels + Plug + PTY)\n\nThis is NOT a line-by-line port of FastAPI-the-framework. It's a native Phoenix implementation providing equivalent behavior using idiomatic Elixir tools:\n\n- REST endpoints \u2192 Phoenix.Router + controllers (Plug pipeline)\n- WebSocket handler \u2192 Phoenix.Channels (topics, presence, broadcast, auto-reconnect)\n- PTY manager \u2192 Elixir Port / erlexec / NIF\n- Security middleware \u2192 Plug pipeline (auth, CORS, rate limiting)\n- Pub/sub between sessions \u2192 Phoenix.PubSub (built-in, no Redis needed)\n\nUse Phoenix-idiomatic patterns throughout. Do NOT replicate FastAPI abstractions in Elixir.\n\nRelated: see new sibling issue for Phoenix LiveView web-UI evaluation (potential scope expansion, not part of this task)."
-      ]
+      "updated_at": "2026-04-19T00:56:31.557723",
+      "comments": []
     },
     "bd-169": {
       "id": "bd-169",
@@ -3360,6 +3372,9 @@
       ],
       "dependencies": {
         "discovered-from": [
+          "bd-138"
+        ],
+        "blocks": [
           "bd-138"
         ]
       },
@@ -3380,6 +3395,9 @@
       ],
       "dependencies": {
         "discovered-from": [
+          "bd-139"
+        ],
+        "blocks": [
           "bd-139"
         ]
       },
@@ -3402,7 +3420,9 @@
           "bd-140"
         ],
         "blocks": [
-          "bd-172"
+          "bd-173",
+          "bd-172",
+          "bd-140"
         ]
       },
       "created_at": "2026-04-18T19:48:29.925496",
@@ -3422,6 +3442,10 @@
       "dependencies": {
         "discovered-from": [
           "bd-140"
+        ],
+        "blocks": [
+          "bd-140",
+          "bd-171"
         ]
       },
       "created_at": "2026-04-18T19:48:29.957006",
@@ -3443,7 +3467,7 @@
           "bd-140"
         ],
         "blocks": [
-          "bd-171"
+          "bd-140"
         ]
       },
       "created_at": "2026-04-18T19:48:29.985724",
@@ -3463,6 +3487,10 @@
       "dependencies": {
         "discovered-from": [
           "bd-141"
+        ],
+        "blocks": [
+          "bd-141",
+          "bd-176"
         ]
       },
       "created_at": "2026-04-18T19:48:35.152599",
@@ -3481,6 +3509,9 @@
       ],
       "dependencies": {
         "discovered-from": [
+          "bd-141"
+        ],
+        "blocks": [
           "bd-141"
         ]
       },
@@ -3503,7 +3534,8 @@
           "bd-141"
         ],
         "blocks": [
-          "bd-174"
+          "bd-174",
+          "bd-141"
         ]
       },
       "created_at": "2026-04-18T19:48:35.213477",
@@ -3523,6 +3555,11 @@
       "dependencies": {
         "discovered-from": [
           "bd-142"
+        ],
+        "blocks": [
+          "bd-180",
+          "bd-142",
+          "bd-178"
         ]
       },
       "created_at": "2026-04-18T19:48:41.400133",
@@ -3544,7 +3581,10 @@
           "bd-142"
         ],
         "blocks": [
-          "bd-177"
+          "bd-142",
+          "bd-177",
+          "bd-180",
+          "bd-179"
         ]
       },
       "created_at": "2026-04-18T19:48:41.432783",
@@ -3566,7 +3606,8 @@
           "bd-142"
         ],
         "blocks": [
-          "bd-178"
+          "bd-142",
+          "bd-180"
         ]
       },
       "created_at": "2026-04-18T19:48:41.462049",
@@ -3588,288 +3629,14 @@
           "bd-142"
         ],
         "blocks": [
-          "bd-177",
-          "bd-178",
-          "bd-179"
+          "bd-179",
+          "bd-142"
         ]
       },
       "created_at": "2026-04-18T19:48:41.491135",
       "updated_at": "2026-04-19T00:56:31.929626",
       "comments": []
-    },
-    "bd-181": {
-      "id": "bd-181",
-      "title": "5.3 Evaluate Phoenix LiveView for optional web UI",
-      "description": "Decision task: should Code Puppy grow an optional browser-based UI powered by Phoenix LiveView?\n\nContext:\n- Today the Python app is TUI-only (Textual) plus a headless FastAPI server.\n- Once we're on Phoenix (bd-168), LiveView becomes essentially free.\n- LiveView could provide a web-accessible companion UI (remote sessions, team dashboards, browser-based REPL) without a separate SPA.\n\nOptions:\nA) In-scope for Phase 5 \u2014 ship a minimal LiveView companion alongside the Phoenix API.\nB) Defer \u2014 file follow-up issue for a later phase, ship REST/Channels only.\nC) Drop \u2014 TUI remains the only frontend; LiveView not pursued.\n\nAcceptance criteria:\n- Decision documented with rationale.\n- If A: scope + endpoints defined, separate bd issue(s) created for implementation.\n- If B: follow-up bd issue filed.\n- If C: rationale captured, issue closed as wontfix.\n\nDependencies: should be decided before or alongside bd-168 to inform Phoenix app structure.",
-      "status": "open",
-      "priority": 2,
-      "type": "task",
-      "labels": [
-        "migration",
-        "python-to-elixir",
-        "rewrite",
-        "phase-5"
-      ],
-      "dependencies": {
-        "discovered-from": [
-          "bd-138"
-        ],
-        "related-to": [
-          "bd-168"
-        ]
-      },
-      "created_at": "2026-04-19T01:54:20.280883",
-      "updated_at": "2026-04-19T01:54:23.246307",
-      "comments": []
-    },
-    "bd-182": {
-      "id": "bd-182",
-      "title": "Freeze ~/.code_puppy/ config schema contract",
-      "description": "Document the current on-disk schema for every file in ~/.code_puppy/ that the Elixir port must preserve. This is the source-of-truth contract for bd-164, bd-165, bd-166, bd-167.\n\nDeliverable: a markdown doc (e.g., docs/config_schema_contract.md) covering:\n- puppy.cfg (TOML schema, every key, every type, defaults)\n- extra_models.json, claude_models.json, chatgpt_models.json, model_packs.json (JSON schemas)\n- mcp_registry.json (JSON schema)\n- hooks.json (JSON schema)\n- concurrency.toml, pack_parallelism.toml (TOML schemas)\n- OAuth token JSONs: claude_code_oauth.json, chatgpt_oauth.json, antigravity_oauth.json (format + sensitive fields)\n- SQLite/DuckDB schemas: code_puppy_dev.db, analytics.duckdb (table definitions)\n- Directory conventions: memory/, state/, autosaves/, plugins/, agents/, subagent_sessions/, repl_state/, browser_profiles/\n\nAcceptance criteria:\n- Every file/dir in ~/.code_puppy/ is documented or explicitly declared \"not migrated\"\n- Schema doc is versioned (v1 = current Python)\n- Any future change to these schemas requires a version bump + migration plan\n\n## Scope Clarification (per bd-186)\nThis is a PURE DOCUMENTATION task. It reads Python source code and describes the on-disk schema. It must NOT:\n- Modify any file in ~/.code_puppy/\n- Run the Python pup binary\n- Touch code_puppy/ source files\nOutput is docs/config_schema_contract.md ONLY.",
-      "status": "open",
-      "priority": 2,
-      "type": "task",
-      "labels": [
-        "migration",
-        "python-to-elixir",
-        "rewrite",
-        "safety-net"
-      ],
-      "dependencies": {
-        "blocks": [
-          "bd-165",
-          "bd-164",
-          "bd-167",
-          "bd-166"
-        ]
-      },
-      "created_at": "2026-04-19T02:02:19.873217",
-      "updated_at": "2026-04-19T02:11:51.895027",
-      "comments": [
-        "\n## Scope Clarification (per bd-186)\n\nThis is a PURE DOCUMENTATION task. It reads Python source code and describes the on-disk schema. It must NOT:\n- Modify any file in ~/.code_puppy/\n- Run the Python pup binary\n- Touch code_puppy/ source files\nOutput is docs/config_schema_contract.md ONLY."
-      ]
-    },
-    "bd-183": {
-      "id": "bd-183",
-      "title": "Backup/restore tool for ~/.code_puppy/ pre-migration",
-      "description": "Ship a one-command snapshot tool that users run BEFORE their first pup-ex invocation.\n\nRequirements:\n- Command: pup backup or code-puppy backup \u2192 creates ~/.code_puppy.backup-YYYYMMDD-HHMMSS/ as a full copy\n- Command: pup restore <path> \u2192 restores from backup (with confirmation prompt)\n- Auto-backup on first pup-ex run (unless --no-backup flag)\n- Exclude only obvious transient data (*.db-wal, *.db-shm, cache/)\n- Preserve file permissions and symlinks\n- Works on macOS + Linux (Windows phase 7)\n\nAcceptance criteria:\n- User can rollback to pre-migration state in a single command\n- Auto-backup is opt-out, not opt-in\n- Documented in MIGRATION_STATUS.md and README.md",
-      "status": "open",
-      "priority": 2,
-      "type": "task",
-      "labels": [
-        "migration",
-        "python-to-elixir",
-        "rewrite",
-        "safety-net"
-      ],
-      "dependencies": {
-        "blocks": [
-          "bd-177"
-        ]
-      },
-      "created_at": "2026-04-19T02:02:28.209542",
-      "updated_at": "2026-04-19T02:02:32.635311",
-      "comments": []
-    },
-    "bd-184": {
-      "id": "bd-184",
-      "title": "Config compatibility test suite (golden-file tests)",
-      "description": "Build a test suite that validates the Elixir implementation produces/consumes config files byte-compatible (or semantically equivalent) with the Python implementation.\n\nScope:\n- Golden input files for: puppy.cfg, extra_models.json, claude_models.json, chatgpt_models.json, model_packs.json, mcp_registry.json, hooks.json, concurrency.toml, pack_parallelism.toml\n- Test runner that: (1) loads golden file with Python \u2192 dumps normalized form; (2) loads same file with Elixir \u2192 dumps normalized form; (3) asserts equality\n- Also test the reverse: write from Elixir, read from Python, assert round-trip parity\n- Should run in CI as a gate for bd-164 merge\n\nAcceptance criteria:\n- 100% of schema contract (Issue A) is covered\n- Round-trip tests pass in both directions\n- CI job fails on any schema drift\n\n## \u26a0\ufe0f Isolation Requirement (added per bd-186)\n\nThis task MUST:\n- Write only to ~/.code_puppy_ex/ (never ~/.code_puppy/)\n- Pass the bd-186 CI gates (no-writes-to-python-home, fresh-install-works, existing-install-untouched)\n- Run all tests against temp directories, never the user's real home\n- Respect the Python freeze policy (bd-187) \u2014 do not modify code_puppy/**/*.py",
-      "status": "open",
-      "priority": 2,
-      "type": "task",
-      "labels": [
-        "migration",
-        "python-to-elixir",
-        "rewrite",
-        "safety-net"
-      ],
-      "dependencies": {
-        "depends-on": [
-          "bd-182"
-        ],
-        "blocks": [
-          "bd-164"
-        ]
-      },
-      "created_at": "2026-04-19T02:02:28.211118",
-      "updated_at": "2026-04-19T09:43:02.778423",
-      "comments": [
-        "\n## \u26a0\ufe0f Isolation Requirement (added per bd-186)\n\nThis task MUST:\n- Write only to ~/.code_puppy_ex/ (never ~/.code_puppy/)\n- Pass the bd-186 CI gates (no-writes-to-python-home, fresh-install-works, existing-install-untouched)\n- Run all tests against temp directories, never the user's real home\n- Respect the Python freeze policy (bd-187) \u2014 do not modify code_puppy/**/*.py\n\nDependency: bd-186 now blocks this issue.",
-        "bd-186 isolation infrastructure has landed. This issue's implementation MUST:\n\n1. Write only to ~/.code_puppy_ex/ via Paths.* helpers\n   (never hardcode ~/.code_puppy/ paths)\n2. Use Isolation.safe_write! / safe_mkdir_p! / safe_rm! / safe_rm_rf!\n   for ALL filesystem mutations on user-home paths\n3. Use Isolation.read_only_legacy/1 if reading from ~/.code_puppy/\n   during one-time migration imports (and only then)\n\nRelevant commits:\n- 86b05f29 \u2014 Config.Paths extension + Config.Isolation guard module\n- 2ea04ea9 \u2014 8 hardcoded callsites routed through Paths\n- 438685ac \u2014 FirstRun + pup_ex.import/doctor/auth.login CLI\n- b692dfdb \u2014 5 ADR CI gates + GitHub Actions workflow\n\nADR-003 is the canonical design doc:\ndocs/adr/ADR-003-dual-home-config-isolation.md\n\nAny PR touching config, session, OAuth, secrets, or compat tests will\nhave to pass `mix gates.isolation` in CI. Start there."
-      ]
-    },
-    "bd-185": {
-      "id": "bd-185",
-      "title": "Plugin porting strategy RFC (Python plugins under Elixir)",
-      "description": "RFC / decision task. The Python plugins in ~/.code_puppy/plugins/ and code_puppy/plugins/ cannot run directly under Elixir. Decide the strategy before bd-157 (plugin discovery) and bd-158 (port 49 plugins).\n\nOptions:\nA) Rewrite all plugins in Elixir \u2192 cleanest, highest effort, breaks user plugins\nB) Python side-car via Port \u2192 keep user plugins working, adds runtime complexity, slower\nC) Hybrid \u2192 rewrite builtin plugins in Elixir, side-car for user plugins\nD) Declare plugin API v2 (Elixir-only), provide migration tool + compatibility shim for v1 plugins\n\nMust address:\n- User plugin compatibility (is there a breaking change? how loud?)\n- Hook API parity (all 20+ hooks in code_puppy/callbacks.py)\n- Performance expectations (side-car = IPC overhead per hook call)\n- Security model (user plugins are trusted local Python \u2014 does that change with Ports?)\n- Migration path for plugin authors\n\nAcceptance criteria:\n- Decision documented with rationale\n- If B/C: IPC protocol spec'd\n- If D: migration tool designed + compatibility shim scoped\n- bd-157 and bd-158 descriptions updated to reflect chosen strategy",
-      "status": "open",
-      "priority": 2,
-      "type": "task",
-      "labels": [
-        "migration",
-        "python-to-elixir",
-        "rewrite",
-        "safety-net"
-      ],
-      "dependencies": {
-        "blocks": [
-          "bd-157",
-          "bd-158"
-        ]
-      },
-      "created_at": "2026-04-19T02:02:28.213093",
-      "updated_at": "2026-04-19T02:02:32.682227",
-      "comments": []
-    },
-    "bd-186": {
-      "id": "bd-186",
-      "title": "Dual-home config isolation \u2014 Elixir pup-ex never writes to ~/.code_puppy/",
-      "description": "HARD PREREQUISITE for bd-164, bd-165, bd-166, bd-167, bd-184. Must land before any Elixir code reads or writes config.\n\n## Problem\nLast attempt at porting config.py broke the user's ~/.code_puppy/ directory and made Python pup unusable. Root cause: Elixir and Python were sharing a single config home with overlapping read/write surfaces.\n\n## Solution: Dual-Home Isolation\n\nElixir pup-ex gets its OWN config home: `~/.code_puppy_ex/`\nPython pup continues using `~/.code_puppy/` \u2014 untouched forever.\n\n## Rules (non-negotiable, CI-enforced)\n1. Elixir NEVER writes under ~/.code_puppy/ \u2014 no exceptions\n2. Elixir reads from ~/.code_puppy/ only via explicit opt-in import commands\n3. Python pup is frozen during migration (bug fixes only \u2014 see bd-187)\n4. OAuth tokens are re-acquired by Elixir independently (no sharing)\n\n## Deliverables\n\n### 1. Config home resolution\n- Default: `~/.code_puppy_ex/`\n- Overridable via `PUP_EX_HOME` env var\n- Created on first run with correct permissions (0700)\n\n### 2. First-run behavior\n- If ~/.code_puppy_ex/ doesn't exist: create it empty, show welcome message\n- Offer optional import: \"Import non-sensitive config from Python pup? [Y/n]\"\n- If yes: copy puppy.cfg, *_models.json, mcp_registry.json, hooks.json, concurrency.toml, pack_parallelism.toml \u2014 with .imported-from-python marker file\n- NEVER import: OAuth tokens, sessions, autosaves, databases, command_history\n- Fresh install (no ~/.code_puppy/) must work cleanly\n\n### 3. Commands\n- `pup-ex import --from ~/.code_puppy` \u2014 manual re-sync (copy-only, idempotent, never reverse)\n- `pup-ex doctor` \u2014 reports isolation status, config paths, detects any bleed-through\n- `pup-ex auth login` \u2014 runs fresh OAuth flows, stores tokens in ~/.code_puppy_ex/\n\n### 4. Hard runtime guard\n- Filesystem path guard: any write attempt to a path canonicalizing under ~/.code_puppy/ raises ConfigIsolationViolation and exits\n- Implemented as a Plug-style middleware around all file writes\n- Tested via property test that throws random paths at the guard\n\n### 5. CI gates (all must pass)\n- test_no_writes_to_python_home: fs-watcher/strace assertion across full test suite\n- test_no_reads_of_python_secrets_without_flag: OAuth files only readable with --import-tokens (which we're NOT implementing for now per decision A on OAuth)\n- test_import_is_copy_only: before/after diff of ~/.code_puppy/ after import must be empty\n- test_fresh_install_works: boot with no ~/.code_puppy/ present\n- test_existing_install_untouched: after 10 Elixir runs, find ~/.code_puppy -newer <marker> returns nothing\n\n## Acceptance Criteria\n- All 5 CI gates pass\n- `pup-ex doctor` shows \"\u2705 Isolated\" on a machine with both binaries installed\n- Docs updated in MIGRATION_STATUS.md and README.md with dual-home architecture diagram\n- bd-164, bd-165, bd-166, bd-167 descriptions updated to reference this isolation requirement\n\n## Design Decisions (user-approved)\n- Home path: `~/.code_puppy_ex/` (option 1A)\n- OAuth: re-authenticate separately, no sharing with Python tokens (option 2A)\n- Python policy: frozen except critical bug fixes (option 3B \u2014 see bd-187)\n\n## Blocks\nbd-164, bd-165, bd-166, bd-167, bd-184",
-      "status": "open",
-      "priority": 1,
-      "type": "task",
-      "labels": [
-        "migration",
-        "python-to-elixir",
-        "rewrite",
-        "safety-net",
-        "phase-0",
-        "claimed"
-      ],
-      "dependencies": {
-        "blocks": [
-          "bd-164",
-          "bd-165",
-          "bd-166",
-          "bd-167",
-          "bd-184"
-        ]
-      },
-      "created_at": "2026-04-19T02:09:20.063535",
-      "updated_at": "2026-04-19T10:59:29.538529",
-      "comments": [
-        "Claimed by planning-agent-019da4. Execution plan: 6 phases \u2014 ADR \u2192 core isolation infra (Paths+guard+route callsites) \u2192 first-run/import/doctor/auth CLI \u2192 5 CI gates \u2192 docs + downstream issue updates \u2192 review & close. Full plan documented in this session's planning output. Starting Phase 1 (ADR).",
-        "Phase 1 (ADR) status correction: ADR already exists at  (accepted 2026-04-19, same day). A duplicate was briefly created at  and has been removed. ADR-003 is the canonical design doc \u2014 covers path precedence (PUP_EX_HOME \u2192 XDG \u2192 ~/.code_puppy_ex), import allowlist, guard semantics (ConfigIsolation module + safe_write!/safe_mkdir_p!/safe_rm!/safe_rm_rf!), canonical path resolution defeating symlink attacks, 5 CI gates, and the 8 hardcoded violations to fix. MIGRATION_STATUS.md also already has a bd-186 section. Phase 1 complete \u2014 moving to Phase 2 (core isolation infrastructure: extend Config.Paths + build ConfigIsolation guard + route ~10 hardcoded callsites).",
-        "Phases 1-4 shipped. Remaining: Phase 5 (docs \u2014 in flight), Phase 6 (review + close).\n\nAll 5 ADR-003 CI gates passing. Mix `gates.isolation` runs in < 1s locally.\nLive isolation confirmed on macOS arm64 \u2014 `mix pup_ex.doctor` reports:\n\n  Summary: 7 checks passed, 0 failures, 2 informational notes.\n  Status: ISOLATED \u2705\n\nCommits: 86b05f29 (2a) \u2192 2ea04ea9 (2b) \u2192 438685ac (3) \u2192 b692dfdb (4)\nAll four on gitlab/main and origin/main.\n\nDownstream cross-refs (bd-164/165/166/167/184) updated with integration\nguidance comments.",
-        "Phase 6 review complete. Do NOT close bd-186 yet.\n\nElixir-reviewer + security-auditor both ran 2026-04-19 and independently \nidentified 9 CRITICAL structural bypasses in the isolation guard. \nSecurity-auditor empirically REPRODUCED the bypasses:\n\n- PUP_HOME=~/.code_puppy caused Elixir to write to the Python home\n- Root-symlinked ~/.code_puppy bypassed the guard entirely\n- Importer copied forbidden credential files inside skill dirs\n- Importer followed symlinks and exfiltrated /etc/passwd via agents/\n\nThe ADR-003 claim 'cannot accidentally damage Python pup' is structurally \nFALSE in the current implementation. The 8 automated gate tests pass only \nbecause they don't probe the identified bypass vectors.\n\nPhases 1-5 shipped (commits 86b05f29 / 2ea04ea9 / 438685ac / b692dfdb / \n3d8c4388). Follow-up issue filed to fix the 9 blockers + 5 HIGH items \nbefore bd-186 can close.\n\nFollow-up tracking: bd-XXX filed 2026-04-19 \u2014 replace XXX with the actual \nID after creation.\n\nReview reports saved to docs/reviews/bd-186-phase-6-*.md.",
-        "UPDATE: Follow-up issue filed as bd-193."
-      ]
-    },
-    "bd-187": {
-      "id": "bd-187",
-      "title": "Python pup freeze policy during Elixir migration (bug fixes only)",
-      "description": "Policy: during the Python \u2192 Elixir migration, the Python codebase is FROZEN except for critical bug fixes.\n\n## Rules\n- NO refactors in code_puppy/ Python tree\n- NO schema changes to puppy.cfg or any *.json config files\n- NO new features in Python\n- YES critical bug fixes (crashes, data loss, security)\n- YES adding deprecation warnings that guide users toward pup-ex\n- YES docs updates\n\n## Rationale\nPython pup is the daily driver. Elixir pup-ex is the work-in-progress replacement. If Python changes, Elixir has to chase a moving target, and the user's working environment is at risk.\n\n## Enforcement\n- CI check: PRs touching code_puppy/**/*.py with non-trivial changes require a \"bug-fix\" or \"docs\" label\n- Reviewer guidance added to CONTRIBUTING.md\n- bd issues touching Python must be explicitly approved against this policy\n\n## Acceptance\n- CI rule active\n- CONTRIBUTING.md section added\n- bd template updated with policy checkbox",
-      "status": "open",
-      "priority": 2,
-      "type": "task",
-      "labels": [
-        "migration",
-        "python-to-elixir",
-        "rewrite",
-        "safety-net",
-        "policy"
-      ],
-      "dependencies": {},
-      "created_at": "2026-04-19T02:09:26.576664",
-      "updated_at": "2026-04-19T02:09:29.967619",
-      "comments": []
-    },
-    "bd-188": {
-      "id": "bd-188",
-      "title": "Add delegation block to python-programmer prompt",
-      "description": "Teach python-programmer delegation strategy. Done by python-programmer.",
-      "status": "closed",
-      "priority": 2,
-      "type": "task",
-      "labels": [],
-      "dependencies": {},
-      "created_at": "2026-04-19T08:15:21.911083",
-      "updated_at": "2026-04-19T08:15:24.822845",
-      "comments": []
-    },
-    "bd-189": {
-      "id": "bd-189",
-      "title": "Create heavy-coder JSON agent",
-      "description": "New JSON agent at ~/.code_puppy/agents/heavy-coder.json pinned to wafer-glm-5.1. Full tool set for large code generation.",
-      "status": "closed",
-      "priority": 2,
-      "type": "task",
-      "labels": [],
-      "dependencies": {},
-      "created_at": "2026-04-19T08:15:21.914458",
-      "updated_at": "2026-04-19T08:15:54.441544",
-      "comments": []
-    },
-    "bd-190": {
-      "id": "bd-190",
-      "title": "Add delegation block to code-puppy prompt",
-      "description": "Teach code-puppy to delegate to light-coder/heavy-coder. Done by python-programmer.",
-      "status": "closed",
-      "priority": 2,
-      "type": "task",
-      "labels": [],
-      "dependencies": {},
-      "created_at": "2026-04-19T08:15:21.924719",
-      "updated_at": "2026-04-19T08:15:24.790016",
-      "comments": []
-    },
-    "bd-191": {
-      "id": "bd-191",
-      "title": "Pin models in puppy.cfg for light-coder and heavy-coder",
-      "description": "Add agent_model_light-coder=k2p5-turbo and agent_model_heavy-coder=wafer-glm-5.1 to ~/.code_puppy/puppy.cfg",
-      "status": "closed",
-      "priority": 2,
-      "type": "task",
-      "labels": [],
-      "dependencies": {},
-      "created_at": "2026-04-19T08:15:21.930339",
-      "updated_at": "2026-04-19T08:15:54.480964",
-      "comments": []
-    },
-    "bd-192": {
-      "id": "bd-192",
-      "title": "Harden Elixir transport startup: fix masking bug, add degraded mode, preflight banner",
-      "description": "Startup crashes with 'Transport not started or process died' when Elixir service fails to start, masking the real error. Plan: (1) don't cache un-started transport in elixir_transport_helpers.get_transport, (2) add PUP_ALLOW_ELIXIR_DEGRADED=1 fallback in runtime_state for session_model/autosave_id, (3) preflight banner in app_runner so users see real errors. Traceback was: ElixirTransportError at config.py:1064 -> runtime_state.py:98 -> elixir_transport.py:379.",
-      "status": "closed",
-      "priority": 1,
-      "type": "bug",
-      "labels": [],
-      "dependencies": {},
-      "created_at": "2026-04-19T08:31:12.306692",
-      "updated_at": "2026-04-19T09:05:38.501437",
-      "comments": []
-    },
-    "bd-193": {
-      "id": "bd-193",
-      "title": "bd-186 follow-up: fix isolation bypass blockers identified in Phase 6 review",
-      "description": "Phase 6 review of bd-186 (elixir-reviewer + security-auditor, run 2026-04-19) \nidentified CRITICAL structural holes in the isolation guard. Security-auditor \nempirically reproduced the bypasses.\n\nbd-186 phases 1-5 have shipped (ADR, Paths+Isolation guard, routing, CLI, CI \ngates, docs \u2014 commits 86b05f29 / 2ea04ea9 / 438685ac / b692dfdb / 3d8c4388). \nThe infrastructure exists and mostly works, but the ADR-003 claim cannot",
-      "status": "open",
-      "priority": 1,
-      "type": "task",
-      "labels": [
-        "migration",
-        "python-to-elixir",
-        "rewrite",
-        "bd-186-followup",
-        "safety-net"
-      ],
-      "dependencies": {
-        "blocks": [
-          "bd-165",
-          "bd-184",
-          "bd-166",
-          "bd-167",
-          "bd-164"
-        ],
-        "depends-on": [
-          "bd-186"
-        ]
-      },
-      "created_at": "2026-04-19T10:58:56.571204",
-      "updated_at": "2026-04-19T10:59:13.686217",
-      "comments": []
     }
   },
-  "counter": 193
+  "counter": 180
 }

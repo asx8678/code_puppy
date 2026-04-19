@@ -111,7 +111,10 @@ defmodule Mix.Tasks.CodePuppy.StdioService do
     Ecto.Migrator.run(CodePuppyControl.Repo, :up, all: true)
 
     # Start PubSub for event distribution
-    {:ok, _} = Supervisor.start_link([Phoenix.PubSub.child_spec(name: CodePuppyControl.PubSub)], strategy: :one_for_one)
+    {:ok, _} =
+      Supervisor.start_link([Phoenix.PubSub.child_spec(name: CodePuppyControl.PubSub)],
+        strategy: :one_for_one
+      )
 
     # Ensure the required modules are available
     Code.ensure_loaded(CodePuppyControl.FileOps)
@@ -134,7 +137,6 @@ defmodule Mix.Tasks.CodePuppy.StdioService do
     # Clients should drop all output before this line to avoid processing startup noise.
     handshake = %{"jsonrpc" => "2.0", "method" => "_ready", "params" => %{}}
     IO.puts(:stdio, Jason.encode!(handshake))
-
 
     # Run the stdio service (blocks until EOF)
     CodePuppyControl.Transport.StdioService.run()

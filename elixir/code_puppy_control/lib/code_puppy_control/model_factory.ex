@@ -1,0 +1,324 @@
+defmodule CodePuppyControl.ModelFactory do
+  @moduledoc """
+  Resolves model names into LLM-ready handles.
+
+  Bridges the gap between `ModelRegistry` (which holds config) and a caller
+  that wants to execute against a model. Takes a model name, looks up its
+  config, resolves credentials, and builds a `Handle` struct that bundles
+  everything needed for an API call.
+
+  ## Usage
+
+      # Resolve a model to a handle
+      {:ok, handle} = ModelFactory.resolve("gpt-4o")
+
+      # Use the handle with the LLM facade
+      {:ok, response} = LLM.chat(handle, messages, tools)
+
+      # List all available models (with credentials present)
+      models = ModelFactory.list_available()
+
+      # Validate credentials for a model
+      :ok = ModelFactory.validate_credentials("gpt-4o")
+
+  ## Provider Types Supported
+
+  | Type               | Status   | Notes                           |
+  |--------------------|----------|---------------------------------|
+  | `openai`           | ✅ Full  | OpenAI Chat Completions API     |
+  | `anthropic`        | ✅ Full  | Anthropic Messages API          |
+  | `custom_openai`    | ✅ Full  | Custom OpenAI-compatible endpoint|
+  | `custom_anthropic` | ✅ Full  | Custom Anthropic-compatible     |
+  | `azure_openai`     | ✅ Full  | Azure OpenAI Service            |
+  | `cerebras`         | ✅ Full  | Cerebras (OpenAI-compatible)    |
+  | `zai_coding`       | ✅ Full  | ZAI Coding (OpenAI-compatible)  |
+  | `zai_api`          | ✅ Full  | ZAI API (OpenAI-compatible)     |
+  | `openrouter`       | ✅ Full  | OpenRouter gateway              |
+  | `gemini`           | ✅ Full  | Google Gemini                   |
+  | `gemini_oauth`     | ✅ Full  | Gemini OAuth (OpenAI-compat)    |
+  | `custom_gemini`    | ✅ Full  | Custom Gemini-compatible        |
+  | `claude_code`      | ⏳ Stub  | Phase 4 (bd-166) OAuth          |
+  | `chatgpt_oauth`    | ⏳ Stub  | Phase 4 (bd-166) OAuth          |
+  | `round_robin`      | ➡️ Defer | Handled by routing/             |
+  """
+
+  alias CodePuppyControl.ModelFactory.{Credentials, Handle}
+  alias CodePuppyControl.ModelRegistry
+  alias CodePuppyControl.LLM.Providers.{OpenAI, Anthropic}
+
+  require Logger
+
+  # Provider type → provider module mapping
+  @provider_map %{
+    "openai" => OpenAI,
+    "anthropic" => Anthropic,
+    "custom_openai" => OpenAI,
+    "custom_anthropic" => Anthropic,
+    "azure_openai" => OpenAI,
+    "cerebras" => OpenAI,
+    "zai_coding" => OpenAI,
+    "zai_api" => OpenAI,
+    "openrouter" => OpenAI,
+    "gemini" => OpenAI,
+    "gemini_oauth" => OpenAI,
+    "custom_gemini" => OpenAI
+  }
+
+  # Default API base URLs per provider type
+  @default_base_urls %{
+    "openai" => "https://api.openai.com",
+    "anthropic" => "https://api.anthropic.com",
+    "cerebras" => "https://api.cerebras.ai",
+    "openrouter" => "https://openrouter.ai/api",
+    "gemini" => "https://generativelanguage.googleapis.com/v1beta/openai"
+  }
+
+  # OAuth types deferred to Phase 4
+  @oauth_types ["claude_code", "chatgpt_oauth"]
+
+  # ============================================================================
+  # Public API
+  # ============================================================================
+
+  @doc """
+  Resolve a model name into an opaque handle ready for LLM execution.
+
+  Looks up the model in `ModelRegistry`, resolves the provider type,
+  fetches credentials, extracts custom endpoint config, and builds
+  a `Handle` struct.
+
+  Returns `{:ok, handle}` or `{:error, reason}`.
+
+  ## Examples
+
+      iex> ModelFactory.resolve("gpt-4o")
+      {:ok, %Handle{provider_module: OpenAI, ...}}
+
+      iex> ModelFactory.resolve("nonexistent-model")
+      {:error, {:unknown_model, "nonexistent-model"}}
+  """
+  @spec resolve(String.t()) :: {:ok, Handle.t()} | {:error, term()}
+  def resolve(model_name) when is_binary(model_name) do
+    case ModelRegistry.get_config(model_name) do
+      nil ->
+        {:error, {:unknown_model, model_name}}
+
+      config ->
+        provider_type = ModelRegistry.get_model_type(config) || "unknown"
+        do_resolve(model_name, config, provider_type)
+    end
+  end
+
+  @doc """
+  Resolve a model name, raising on error.
+
+  Same as `resolve/1` but returns the handle directly or raises.
+
+  ## Examples
+
+      iex> ModelFactory.resolve!("gpt-4o")
+      %Handle{...}
+  """
+  @spec resolve!(String.t()) :: Handle.t()
+  def resolve!(model_name) when is_binary(model_name) do
+    case resolve(model_name) do
+      {:ok, handle} -> handle
+      {:error, reason} -> raise "Failed to resolve model '#{model_name}': #{inspect(reason)}"
+    end
+  end
+
+  @doc """
+  List all available models with their resolved provider info.
+
+  Filters to models where:
+  1. The model is in ModelRegistry
+  2. The provider type is supported (not unknown)
+  3. Credentials are present (API key or OAuth)
+
+  Returns a list of `{model_name, provider_type, provider_module}` tuples.
+
+  ## Examples
+
+      iex> ModelFactory.list_available()
+      [{"gpt-4o", "openai", OpenAI}, {"claude-sonnet-4", "anthropic", Anthropic}]
+  """
+  @spec list_available() :: [{String.t(), String.t(), module()}]
+  def list_available do
+    ModelRegistry.get_all_configs()
+    |> Enum.flat_map(fn {name, config} ->
+      provider_type = ModelRegistry.get_model_type(config)
+
+      cond do
+        is_nil(provider_type) ->
+          []
+
+        provider_type in @oauth_types ->
+          # OAuth models are "available" (validation deferred to Phase 4)
+          case Map.get(@provider_map, provider_type) do
+            nil -> []
+            mod -> [{name, provider_type, mod}]
+          end
+
+        true ->
+          case Map.get(@provider_map, provider_type) do
+            nil ->
+              []
+
+            mod ->
+              case Credentials.validate(provider_type, config) do
+                :ok -> [{name, provider_type, mod}]
+                {:missing, _} -> []
+              end
+          end
+      end
+    end)
+    |> Enum.sort_by(fn {name, _, _} -> name end)
+  end
+
+  @doc """
+  Validate that required credentials exist for a model.
+
+  Returns `:ok` if all required environment variables are set,
+  or `{:missing, [env_var_names]}` listing what's missing.
+
+  ## Examples
+
+      iex> ModelFactory.validate_credentials("gpt-4o")
+      :ok
+
+      iex> ModelFactory.validate_credentials("some-model-without-key")
+      {:missing, ["OPENAI_API_KEY"]}
+  """
+  @spec validate_credentials(String.t()) :: :ok | {:missing, [String.t()]} | {:error, term()}
+  def validate_credentials(model_name) when is_binary(model_name) do
+    case ModelRegistry.get_config(model_name) do
+      nil ->
+        {:error, {:unknown_model, model_name}}
+
+      config ->
+        provider_type = ModelRegistry.get_model_type(config) || "unknown"
+        Credentials.validate(provider_type, config)
+    end
+  end
+
+  @doc """
+  Returns the provider module for a model type string.
+
+  Useful for introspection without resolving a full handle.
+
+  ## Examples
+
+      iex> ModelFactory.provider_module_for_type("openai")
+      {:ok, OpenAI}
+
+      iex> ModelFactory.provider_module_for_type("unknown")
+      :error
+  """
+  @spec provider_module_for_type(String.t()) :: {:ok, module()} | :error
+  def provider_module_for_type(provider_type) when is_binary(provider_type) do
+    case Map.get(@provider_map, provider_type) do
+      nil -> :error
+      mod -> {:ok, mod}
+    end
+  end
+
+  # ============================================================================
+  # Private: Provider Resolution
+  # ============================================================================
+
+  # OAuth types → return stub error
+  defp do_resolve(model_name, _config, provider_type) when provider_type in @oauth_types do
+    Logger.debug("ModelFactory: #{provider_type} model '#{model_name}' is Phase 4 (bd-166)")
+    {:error, {:oauth_phase_4, provider_type, model_name}}
+  end
+
+  # Round-robin → not handled here, delegates to routing
+  defp do_resolve(_model_name, _config, "round_robin") do
+    {:error, :round_robin_use_routing}
+  end
+
+  # Unknown/unsupported type
+  defp do_resolve(model_name, _config, provider_type) do
+    case Map.get(@provider_map, provider_type) do
+      nil ->
+        {:error, {:unsupported_model_type, provider_type, model_name}}
+
+      provider_mod ->
+        build_handle(model_name, provider_type, provider_mod)
+    end
+  end
+
+  defp build_handle(model_name, provider_type, provider_mod) do
+    config = ModelRegistry.get_config(model_name)
+    api_key = Credentials.resolve_api_key(provider_type, config)
+
+    {base_url, extra_headers} = resolve_endpoint(config, provider_type)
+
+    # Build model opts: the API-facing model name + any config overrides
+    api_model_name = Map.get(config, "name", model_name)
+
+    model_opts =
+      []
+      |> maybe_put_kw(:model, api_model_name)
+      |> maybe_put_kw(:temperature, Map.get(config, "temperature"))
+      |> maybe_put_kw(:max_tokens, Map.get(config, "max_output_tokens"))
+      |> merge_config_opts(config)
+
+    handle = %Handle{
+      model_name: model_name,
+      provider_module: provider_mod,
+      provider_config: config,
+      api_key: api_key,
+      base_url: base_url,
+      extra_headers: extra_headers,
+      model_opts: model_opts
+    }
+
+    {:ok, handle}
+  end
+
+  # ── Endpoint Resolution ───────────────────────────────────────────────────
+
+  # Custom endpoints: extract URL, headers, and optional api_key from config
+  defp resolve_endpoint(config, _provider_type) do
+    case Map.get(config, "custom_endpoint") do
+      nil ->
+        # Use provider default base URL
+        provider_type = ModelRegistry.get_model_type(config)
+        base_url = Map.get(@default_base_urls, provider_type)
+        {base_url, []}
+
+      custom_config ->
+        case Credentials.resolve_custom_endpoint(custom_config) do
+          {:ok, {url, headers, _custom_api_key}} ->
+            {url, headers}
+
+          {:error, reason} ->
+            Logger.warning(
+              "ModelFactory: custom endpoint config error for #{inspect(config)}: #{inspect(reason)}"
+            )
+
+            {nil, []}
+        end
+    end
+  end
+
+  # ── Model Opts Helpers ────────────────────────────────────────────────────
+
+  defp maybe_put_kw(opts, _key, nil), do: opts
+  defp maybe_put_kw(opts, key, value), do: Keyword.put(opts, key, value)
+
+  # Merge any extra opts from model config (e.g., "extra_body", "http2", etc.)
+  defp merge_config_opts(opts, config) do
+    config
+    |> Map.get("model_opts", %{})
+    |> Enum.reduce(opts, fn {key, val}, acc ->
+      key_atom = if is_binary(key), do: String.to_existing_atom(key), else: key
+      Keyword.put(acc, key_atom, val)
+    end)
+  rescue
+    ArgumentError ->
+      # Unknown atom in model_opts — skip safely
+      opts
+  end
+end

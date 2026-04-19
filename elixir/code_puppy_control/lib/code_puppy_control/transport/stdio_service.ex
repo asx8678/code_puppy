@@ -2134,7 +2134,12 @@ defmodule CodePuppyControl.Transport.StdioService do
               Protocol.encode_response(%{"data" => Base.encode64(binary)}, id)
 
             {:error, reason} ->
-              Protocol.encode_error(-32000, "Incremental serialization failed: #{reason}", nil, id)
+              Protocol.encode_error(
+                -32000,
+                "Incremental serialization failed: #{reason}",
+                nil,
+                id
+              )
           end
 
         {:error, reason} ->
@@ -2187,12 +2192,12 @@ defmodule CodePuppyControl.Transport.StdioService do
     end
   end
 
-  
   # bd-137: Session Storage API (SQLite/Ecto backed)
 
   defp handle_request("session_save", params, id) do
     name = params["name"]
     history = params["history"] || []
+
     opts = [
       compacted_hashes: params["compacted_hashes"] || [],
       total_tokens: params["total_tokens"] || 0,
@@ -2202,12 +2207,15 @@ defmodule CodePuppyControl.Transport.StdioService do
 
     case CodePuppyControl.Sessions.save_session(name, history, opts) do
       {:ok, session} ->
-        Protocol.encode_response(%{
-          "success" => true,
-          "name" => session.name,
-          "message_count" => session.message_count,
-          "total_tokens" => session.total_tokens
-        }, id)
+        Protocol.encode_response(
+          %{
+            "success" => true,
+            "name" => session.name,
+            "message_count" => session.message_count,
+            "total_tokens" => session.total_tokens
+          },
+          id
+        )
 
       {:error, changeset} ->
         errors = traverse_changeset_errors(changeset)
@@ -2220,10 +2228,13 @@ defmodule CodePuppyControl.Transport.StdioService do
 
     case CodePuppyControl.Sessions.load_session(name) do
       {:ok, %{history: history, compacted_hashes: hashes}} ->
-        Protocol.encode_response(%{
-          "history" => history,
-          "compacted_hashes" => hashes
-        }, id)
+        Protocol.encode_response(
+          %{
+            "history" => history,
+            "compacted_hashes" => hashes
+          },
+          id
+        )
 
       {:error, :not_found} ->
         Protocol.encode_error(-32000, "Session not found: #{name}", nil, id)
@@ -2238,17 +2249,20 @@ defmodule CodePuppyControl.Transport.StdioService do
 
     case CodePuppyControl.Sessions.load_session_full(name) do
       {:ok, session} ->
-        Protocol.encode_response(%{
-          "name" => session.name,
-          "history" => session.history || [],
-          "compacted_hashes" => session.compacted_hashes || [],
-          "message_count" => session.message_count,
-          "total_tokens" => session.total_tokens,
-          "auto_saved" => session.auto_saved,
-          "timestamp" => session.timestamp,
-          "created_at" => if(session.inserted_at, do: DateTime.to_iso8601(session.inserted_at)),
-          "updated_at" => if(session.updated_at, do: DateTime.to_iso8601(session.updated_at))
-        }, id)
+        Protocol.encode_response(
+          %{
+            "name" => session.name,
+            "history" => session.history || [],
+            "compacted_hashes" => session.compacted_hashes || [],
+            "message_count" => session.message_count,
+            "total_tokens" => session.total_tokens,
+            "auto_saved" => session.auto_saved,
+            "timestamp" => session.timestamp,
+            "created_at" => if(session.inserted_at, do: DateTime.to_iso8601(session.inserted_at)),
+            "updated_at" => if(session.updated_at, do: DateTime.to_iso8601(session.updated_at))
+          },
+          id
+        )
 
       {:error, :not_found} ->
         Protocol.encode_error(-32000, "Session not found: #{name}", nil, id)
@@ -2308,7 +2322,8 @@ defmodule CodePuppyControl.Transport.StdioService do
       end)
     end)
   end
-# Method not found handler
+
+  # Method not found handler
   defp handle_request(method, _params, id) do
     Protocol.encode_error(
       -32601,

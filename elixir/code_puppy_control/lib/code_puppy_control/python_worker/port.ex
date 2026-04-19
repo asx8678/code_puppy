@@ -588,12 +588,12 @@ defmodule CodePuppyControl.PythonWorker.Port do
     Protocol.encode_response(stats, nil)
   end
 
-
   # bd-137: Session storage handlers (Ecto/SQLite backed)
 
   defp handle_file_request("session_save", params) do
     name = params["name"]
     history = params["history"] || []
+
     opts = [
       compacted_hashes: params["compacted_hashes"] || [],
       total_tokens: params["total_tokens"] || 0,
@@ -603,12 +603,15 @@ defmodule CodePuppyControl.PythonWorker.Port do
 
     case CodePuppyControl.Sessions.save_session(name, history, opts) do
       {:ok, session} ->
-        Protocol.encode_response(%{
-          "success" => true,
-          "name" => session.name,
-          "message_count" => session.message_count,
-          "total_tokens" => session.total_tokens
-        }, nil)
+        Protocol.encode_response(
+          %{
+            "success" => true,
+            "name" => session.name,
+            "message_count" => session.message_count,
+            "total_tokens" => session.total_tokens
+          },
+          nil
+        )
 
       {:error, changeset} ->
         errors = traverse_changeset_errors(changeset)
@@ -621,10 +624,13 @@ defmodule CodePuppyControl.PythonWorker.Port do
 
     case CodePuppyControl.Sessions.load_session(name) do
       {:ok, %{history: history, compacted_hashes: hashes}} ->
-        Protocol.encode_response(%{
-          "history" => history,
-          "compacted_hashes" => hashes
-        }, nil)
+        Protocol.encode_response(
+          %{
+            "history" => history,
+            "compacted_hashes" => hashes
+          },
+          nil
+        )
 
       {:error, :not_found} ->
         Protocol.encode_error(-32000, "Session not found: #{name}", nil, nil)
@@ -639,17 +645,20 @@ defmodule CodePuppyControl.PythonWorker.Port do
 
     case CodePuppyControl.Sessions.load_session_full(name) do
       {:ok, session} ->
-        Protocol.encode_response(%{
-          "name" => session.name,
-          "history" => session.history || [],
-          "compacted_hashes" => session.compacted_hashes || [],
-          "message_count" => session.message_count,
-          "total_tokens" => session.total_tokens,
-          "auto_saved" => session.auto_saved,
-          "timestamp" => session.timestamp,
-          "created_at" => session.inserted_at && DateTime.to_iso8601(session.inserted_at),
-          "updated_at" => session.updated_at && DateTime.to_iso8601(session.updated_at)
-        }, nil)
+        Protocol.encode_response(
+          %{
+            "name" => session.name,
+            "history" => session.history || [],
+            "compacted_hashes" => session.compacted_hashes || [],
+            "message_count" => session.message_count,
+            "total_tokens" => session.total_tokens,
+            "auto_saved" => session.auto_saved,
+            "timestamp" => session.timestamp,
+            "created_at" => session.inserted_at && DateTime.to_iso8601(session.inserted_at),
+            "updated_at" => session.updated_at && DateTime.to_iso8601(session.updated_at)
+          },
+          nil
+        )
 
       {:error, :not_found} ->
         Protocol.encode_error(-32000, "Session not found: #{name}", nil, nil)

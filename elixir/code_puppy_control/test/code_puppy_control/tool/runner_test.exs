@@ -1,0 +1,247 @@
+defmodule CodePuppyControl.Tool.RunnerTest do
+  use ExUnit.Case, async: false
+
+  alias CodePuppyControl.Tool.{Registry, Runner}
+
+  # ── Test Tool Modules ─────────────────────────────────────────────────────
+
+  defmodule EchoTool do
+    use CodePuppyControl.Tool
+
+    @impl true
+    def name, do: :runner_echo
+
+    @impl true
+    def description, do: "Echoes back the input"
+
+    @impl true
+    def parameters do
+      %{
+        "type" => "object",
+        "properties" => %{
+          "message" => %{"type" => "string", "minLength" => 1}
+        },
+        "required" => ["message"]
+      }
+    end
+
+    @impl true
+    def invoke(%{"message" => message}, _ctx) do
+      {:ok, "echo: #{message}"}
+    end
+  end
+
+  defmodule BlockedTool do
+    use CodePuppyControl.Tool
+
+    @impl true
+    def name, do: :runner_blocked
+
+    @impl true
+    def description, do: "A tool that always denies permission"
+
+    @impl true
+    def parameters, do: %{"type" => "object", "properties" => %{}}
+
+    @impl true
+    def invoke(_args, _ctx), do: {:ok, "should not reach here"}
+
+    @impl true
+    def permission_check(_args, _ctx) do
+      {:deny, "blocked for testing"}
+    end
+  end
+
+  defmodule SlowTool do
+    use CodePuppyControl.Tool
+
+    @impl true
+    def name, do: :runner_slow
+
+    @impl true
+    def description, do: "A tool that sleeps longer than timeout"
+
+    @impl true
+    def parameters, do: %{"type" => "object", "properties" => %{}}
+
+    @impl true
+    def invoke(_args, _ctx) do
+      Process.sleep(10_000)
+      {:ok, "done"}
+    end
+  end
+
+  defmodule CrashTool do
+    use CodePuppyControl.Tool
+
+    @impl true
+    def name, do: :runner_crash
+
+    @impl true
+    def description, do: "A tool that raises an exception"
+
+    @impl true
+    def parameters, do: %{"type" => "object", "properties" => %{}}
+
+    @impl true
+    def invoke(_args, _ctx) do
+      raise "intentional crash"
+    end
+  end
+
+  # ── Setup ─────────────────────────────────────────────────────────────────
+
+  setup do
+    Registry.clear()
+    Registry.register_many([EchoTool, BlockedTool, SlowTool, CrashTool])
+
+    on_exit(fn ->
+      Registry.clear()
+    end)
+
+    :ok
+  end
+
+  # ── Tests ─────────────────────────────────────────────────────────────────
+
+  describe "invoke/3 — happy path" do
+    test "invokes a registered tool with valid args" do
+      assert {:ok, "echo: hello"} =
+               Runner.invoke(:runner_echo, %{"message" => "hello"}, %{run_id: "test-1"})
+    end
+
+    test "context is optional" do
+      assert {:ok, "echo: world"} =
+               Runner.invoke(:runner_echo, %{"message" => "world"})
+    end
+
+    test "build_context/1 creates a standard context" do
+      ctx = Runner.build_context(run_id: "run-42", agent_module: MyAgent)
+      assert ctx.run_id == "run-42"
+      assert ctx.agent_module == MyAgent
+      assert is_integer(ctx.timestamp)
+    end
+  end
+
+  describe "invoke/3 — permission denied" do
+    test "returns error when permission_check denies" do
+      result = Runner.invoke(:runner_blocked, %{}, %{run_id: "test-block"})
+      assert {:error, reason} = result
+      assert String.contains?(reason, "permission denied")
+      assert String.contains?(reason, "blocked for testing")
+    end
+  end
+
+  describe "invoke/3 — validation failure" do
+    test "returns error when args don't match schema" do
+      # EchoTool requires "message" with minLength 1
+      result = Runner.invoke(:runner_echo, %{}, %{run_id: "test-val"})
+      assert {:error, reason} = result
+      assert String.contains?(reason, "validation failed")
+      assert String.contains?(reason, "missing required field: message")
+    end
+
+    test "validates minLength constraint" do
+      result = Runner.invoke(:runner_echo, %{"message" => ""}, %{run_id: "test-val2"})
+      assert {:error, reason} = result
+      assert String.contains?(reason, "validation failed")
+    end
+  end
+
+  describe "invoke/3 — timeout" do
+    test "returns error when tool exceeds timeout" do
+      result =
+        Runner.invoke(:runner_slow, %{}, %{
+          run_id: "test-timeout",
+          timeout: 100
+        })
+
+      assert {:error, reason} = result
+      assert String.contains?(reason, "timed out")
+    end
+  end
+
+  describe "invoke/3 — tool crash" do
+    test "returns error when tool raises exception" do
+      result = Runner.invoke(:runner_crash, %{}, %{run_id: "test-crash"})
+      assert {:error, reason} = result
+      # Exception is caught inside invoke_tool, returns "error" not "crashed"
+      assert String.contains?(reason, "error")
+      assert String.contains?(reason, "intentional crash")
+    end
+  end
+
+  describe "invoke/3 — tool not found" do
+    test "returns error for unregistered tool" do
+      result = Runner.invoke(:nonexistent_tool_xyz, %{}, %{run_id: "test-404"})
+      assert {:error, reason} = result
+      assert String.contains?(reason, "Tool not found")
+    end
+  end
+
+  describe "resolve_tool/1" do
+    test "resolves from registry" do
+      assert {:ok, EchoTool} = Runner.resolve_tool(:runner_echo)
+    end
+
+    test "returns error for unknown tools" do
+      assert {:error, _} = Runner.resolve_tool(:totally_unknown_tool)
+    end
+  end
+
+  describe "decode_args/1" do
+    test "decodes JSON string" do
+      assert %{"key" => "value"} = Runner.decode_args(~s({"key": "value"}))
+    end
+
+    test "passes through map" do
+      assert %{"a" => 1} = Runner.decode_args(%{"a" => 1})
+    end
+
+    test "handles nil" do
+      assert %{} = Runner.decode_args(nil)
+    end
+
+    test "handles invalid JSON string" do
+      result = Runner.decode_args("not json")
+      assert is_map(result)
+    end
+
+    test "handles non-map JSON" do
+      result = Runner.decode_args("[1, 2, 3]")
+      assert is_map(result)
+    end
+  end
+
+  describe "telemetry" do
+    test "emits tool: invoke:start and invoke:stop events" do
+      test_pid = self()
+      handler_id = "test-runner-telemetry"
+
+      :telemetry.attach_many(
+        handler_id,
+        [
+          [:tool, :invoke, :start],
+          [:tool, :invoke, :stop]
+        ],
+        fn event, measurements, metadata, _config ->
+          send(test_pid, {:telemetry, event, measurements, metadata})
+        end,
+        nil
+      )
+
+      Runner.invoke(:runner_echo, %{"message" => "telemetry test"}, %{run_id: "test-tel"})
+
+      # Should receive start event
+      assert_receive {:telemetry, [:tool, :invoke, :start], _meas, meta_start}, 1000
+      assert meta_start.tool_name == :runner_echo
+
+      # Should receive stop event
+      assert_receive {:telemetry, [:tool, :invoke, :stop], meas_stop, meta_stop}, 1000
+      assert meta_stop.tool_name == :runner_echo
+      assert is_integer(meas_stop.duration)
+
+      :telemetry.detach(handler_id)
+    end
+  end
+end

@@ -1010,11 +1010,14 @@ defmodule CodePuppyControl.Transport.StdioServiceTest do
   describe "message.truncation_indices" do
     test "calculates truncation indices within budget" do
       per_message_tokens = [100, 200, 300, 400, 500]
-      request = encode_request(
-        "message.truncation_indices",
-        %{"per_message_tokens" => per_message_tokens, "protected_tokens" => 700},
-        1
-      )
+
+      request =
+        encode_request(
+          "message.truncation_indices",
+          %{"per_message_tokens" => per_message_tokens, "protected_tokens" => 700},
+          1
+        )
+
       output = capture_stdio([request])
       response = decode_response(output)
       assert response["id"] == 1
@@ -1024,15 +1027,18 @@ defmodule CodePuppyControl.Transport.StdioServiceTest do
 
     test "respects second_has_thinking flag" do
       per_message_tokens = [100, 50, 200, 300]
-      request = encode_request(
-        "message.truncation_indices",
-        %{
-          "per_message_tokens" => per_message_tokens,
-          "protected_tokens" => 400,
-          "second_has_thinking" => true
-        },
-        1
-      )
+
+      request =
+        encode_request(
+          "message.truncation_indices",
+          %{
+            "per_message_tokens" => per_message_tokens,
+            "protected_tokens" => 400,
+            "second_has_thinking" => true
+          },
+          1
+        )
+
       output = capture_stdio([request])
       response = decode_response(output)
       assert 0 in response["result"]["indices"]
@@ -1048,16 +1054,20 @@ defmodule CodePuppyControl.Transport.StdioServiceTest do
         %{"kind" => "request", "parts" => []},
         %{"kind" => "response", "parts" => []}
       ]
+
       per_message_tokens = [100, 200, 150, 250]
-      request = encode_request(
-        "message.split_for_summarization",
-        %{
-          "per_message_tokens" => per_message_tokens,
-          "messages" => messages,
-          "protected_tokens_limit" => 400
-        },
-        1
-      )
+
+      request =
+        encode_request(
+          "message.split_for_summarization",
+          %{
+            "per_message_tokens" => per_message_tokens,
+            "messages" => messages,
+            "protected_tokens_limit" => 400
+          },
+          1
+        )
+
       output = capture_stdio([request])
       response = decode_response(output)
       assert response["id"] == 1
@@ -1100,7 +1110,9 @@ defmodule CodePuppyControl.Transport.StdioServiceTest do
     end
 
     test "returns error for invalid base64" do
-      request = encode_request("message.deserialize_session", %{"data" => "not-valid-base64!!!"}, 1)
+      request =
+        encode_request("message.deserialize_session", %{"data" => "not-valid-base64!!!"}, 1)
+
       output = capture_stdio([request])
       response = decode_response(output)
       assert response["error"]["code"] == -32602
@@ -1113,11 +1125,14 @@ defmodule CodePuppyControl.Transport.StdioServiceTest do
       {:ok, binary} = CodePuppyControl.Messages.Serializer.serialize_session(initial)
       existing_data = Base.encode64(binary)
       new_messages = [%{"kind" => "response", "role" => "assistant", "parts" => []}]
-      request = encode_request(
-        "message.serialize_incremental",
-        %{"new_messages" => new_messages, "existing_data" => existing_data},
-        1
-      )
+
+      request =
+        encode_request(
+          "message.serialize_incremental",
+          %{"new_messages" => new_messages, "existing_data" => existing_data},
+          1
+        )
+
       output = capture_stdio([request])
       response = decode_response(output)
       assert response["id"] == 1
@@ -1129,11 +1144,14 @@ defmodule CodePuppyControl.Transport.StdioServiceTest do
 
     test "handles nil existing_data (fresh start)" do
       new_messages = [%{"kind" => "request", "parts" => []}]
-      request = encode_request(
-        "message.serialize_incremental",
-        %{"new_messages" => new_messages, "existing_data" => nil},
-        1
-      )
+
+      request =
+        encode_request(
+          "message.serialize_incremental",
+          %{"new_messages" => new_messages, "existing_data" => nil},
+          1
+        )
+
       output = capture_stdio([request])
       response = decode_response(output)
       assert response["id"] == 1
@@ -1148,6 +1166,7 @@ defmodule CodePuppyControl.Transport.StdioServiceTest do
         "role" => "user",
         "parts" => [%{"part_kind" => "text", "content" => "Hello world"}]
       }
+
       request = encode_request("message.hash", %{"message" => message}, 1)
       output = capture_stdio([request])
       response = decode_response(output)
@@ -1162,6 +1181,7 @@ defmodule CodePuppyControl.Transport.StdioServiceTest do
         "role" => "user",
         "parts" => [%{"part_kind" => "text", "content" => "Test content"}]
       }
+
       request1 = encode_request("message.hash", %{"message" => message}, 1)
       request2 = encode_request("message.hash", %{"message" => message}, 2)
       output1 = capture_stdio([request1])
@@ -1185,6 +1205,7 @@ defmodule CodePuppyControl.Transport.StdioServiceTest do
         %{"kind" => "request", "role" => "user", "parts" => []},
         %{"kind" => "response", "role" => "assistant", "parts" => []}
       ]
+
       request = encode_request("message.hash_batch", %{"messages" => messages}, 1)
       output = capture_stdio([request])
       response = decode_response(output)
@@ -1203,6 +1224,7 @@ defmodule CodePuppyControl.Transport.StdioServiceTest do
         "tool_call_id" => nil,
         "tool_name" => nil
       }
+
       request = encode_request("message.stringify_part", %{"part" => part}, 1)
       output = capture_stdio([request])
       response = decode_response(output)

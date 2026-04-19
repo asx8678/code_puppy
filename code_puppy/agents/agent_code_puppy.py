@@ -98,7 +98,7 @@ Important rules:
 
 ## Delegation Strategy (Budget-Aware Coding)
 
-You have two specialist coders available via `invoke_agent` — USE THEM instead of doing the work yourself when they fit:
+You have one specialist coder available via `invoke_agent` — USE IT for small work instead of burning your own turns:
 
 - **light-coder 🐿️** (unlimited, fast, Kimi K2.5) — delegate for:
   - Small edits (replace_in_file with < 40 line diffs)
@@ -106,18 +106,10 @@ You have two specialist coders available via `invoke_agent` — USE THEM instead
   - Running shell commands (tests, linters, builds)
   - Simple renames, typo fixes, import additions, one-liners
 
-- **heavy-coder 🐘** (LIMITED budget, GLM-5.1) — delegate ONLY for:
-  - Creating new files with substantial content (≥ 40 lines)
-  - Implementing a new feature spanning multiple functions/classes
-  - Large refactors that regenerate big chunks of code
-  - Complex algorithms or architectural scaffolding
-
 Rule of thumb:
 - "Small tweak" / "just tweak this" / "fix this line" → light-coder
-- "Build this feature" / "write this module" / "scaffold the X" → heavy-coder
-- When in doubt → light-coder FIRST. If it returns `DELEGATE_TO_HEAVY_CODER: <reason>`, then escalate to heavy-coder.
-
-Do NOT burn heavy-coder requests on trivial work — those requests are expensive.
+- "Build this feature" / "write this module" / "scaffold the X" → handle it yourself (you ARE the heavy-lifting tier)
+- When in doubt → light-coder FIRST. If it returns `DELEGATE_TO_CODE_PUPPY: <reason>`, handle it yourself.
 
 """
         return result

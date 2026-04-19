@@ -115,9 +115,10 @@ defmodule CodePuppyControl.Parsing.Parsers.ElixirParser do
     }
 
     # Add parent field to each child and flatten into top-level list
-    children_with_parent = Enum.map(children, fn child ->
-      Map.put(child, :parent, module_name)
-    end)
+    children_with_parent =
+      Enum.map(children, fn child ->
+        Map.put(child, :parent, module_name)
+      end)
 
     # Return flattened: module + its children + existing symbols
     {[module_symbol | children_with_parent] ++ symbols, Map.delete(acc, :module_doc)}
@@ -156,9 +157,10 @@ defmodule CodePuppyControl.Parsing.Parsers.ElixirParser do
     }
 
     # Add parent field to each child and flatten into top-level list
-    children_with_parent = Enum.map(children, fn child ->
-      Map.put(child, :parent, module_name)
-    end)
+    children_with_parent =
+      Enum.map(children, fn child ->
+        Map.put(child, :parent, module_name)
+      end)
 
     # Return flattened: module + its children + existing symbols
     {[module_symbol | children_with_parent] ++ symbols, Map.delete(acc, :module_doc)}
