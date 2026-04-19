@@ -4,14 +4,14 @@ Brief description of the issue:
 
 ## Python Freeze Policy (bd-187)
 
-Check the boxes that apply:
+During the Python→Elixir migration, the Python codebase is frozen. Check exactly one:
 
-- [ ] This issue does NOT touch `code_puppy/**/*.py`, OR
-- [ ] It is a critical bug fix (crash / data loss / security), OR
-- [ ] It is a docs-only change, OR
-- [ ] It is a deprecation warning guiding users to pup-ex
+- [ ] This issue does NOT modify `code_puppy/**/*.py`, `puppy.cfg`, or any `*.json` config schema
+- [ ] This is a **critical bug fix** (crash, data loss, or security issue)
+- [ ] This is a **docs-only** change (including CONTRIBUTING.md, README, etc.)
+- [ ] This is a **deprecation warning** guiding users toward pup-ex
 
-> **Note:** If none of these apply, this change may be rejected during the Python freeze period. Please open an issue against the Elixir codebase instead.
+If none of the above apply, this issue is blocked by the freeze policy — see CONTRIBUTING.md.
 
 ## Type of Change
 
