@@ -3244,12 +3244,13 @@
         ]
       },
       "created_at": "2026-04-18T19:48:17.126393",
-      "updated_at": "2026-04-19T11:33:38.483075",
+      "updated_at": "2026-04-19T12:23:36.782385",
       "comments": [
         "Partial commit as 1930f9a2. 10-module split implemented (loader/writer/paths/models/agents/tui/cache/limits/debug/migrator). 145 tests with 9 failures in write-path (Writer/Models/Migrator). MIGRATION_MAP.md also landed.\n\nRemaining work (stays OPEN):\n1. Verify all Python config.py accessors are mapped function-by-function\n2. Fix 9 write-path persistence bugs\n3. Implement dynamic reload (file watcher)\n4. Back-compat audit across existing call sites\n\nReady for follow-up code-puppy dispatch.",
         "\n## \u26a0\ufe0f Isolation Requirement (added per bd-186)\n\nThis task MUST:\n- Write only to ~/.code_puppy_ex/ (never ~/.code_puppy/)\n- Pass the bd-186 CI gates (no-writes-to-python-home, fresh-install-works, existing-install-untouched)\n- Run all tests against temp directories, never the user's real home\n- Respect the Python freeze policy (bd-187) \u2014 do not modify code_puppy/**/*.py\n\nDependency: bd-186 now blocks this issue.",
         "bd-186 isolation infrastructure has landed. This issue's implementation MUST:\n\n1. Write only to ~/.code_puppy_ex/ via Paths.* helpers\n   (never hardcode ~/.code_puppy/ paths)\n2. Use Isolation.safe_write! / safe_mkdir_p! / safe_rm! / safe_rm_rf!\n   for ALL filesystem mutations on user-home paths\n3. Use Isolation.read_only_legacy/1 if reading from ~/.code_puppy/\n   during one-time migration imports (and only then)\n\nRelevant commits:\n- 86b05f29 \u2014 Config.Paths extension + Config.Isolation guard module\n- 2ea04ea9 \u2014 8 hardcoded callsites routed through Paths\n- 438685ac \u2014 FirstRun + pup_ex.import/doctor/auth.login CLI\n- b692dfdb \u2014 5 ADR CI gates + GitHub Actions workflow\n\nADR-003 is the canonical design doc:\ndocs/adr/ADR-003-dual-home-config-isolation.md\n\nAny PR touching config, session, OAuth, secrets, or compat tests will\nhave to pass `mix gates.isolation` in CI. Start there.",
-        "pack-leader-019da5 claiming. Resuming partial work in existing worktree ../bd-164 (branch feature/bd-164-config-completion, commit 1930f9a2). Focus: fix 9 failing tests in Writer/Models/Migrator modules."
+        "pack-leader-019da5 claiming. Resuming partial work in existing worktree ../bd-164 (branch feature/bd-164-config-completion, commit 1930f9a2). Focus: fix 9 failing tests in Writer/Models/Migrator modules.",
+        "## Partial Completion Note (pack-leader-019da5 wave-1)\n\n### What was done this session\n- Resumed partial work from commit `1930f9a2`\n- Fixed 9 failing tests in Writer/Models/Migrator (commit `21bd16c6`)\n- Addressed shepherd review: `@doc`/`@spec` positioning + Writer.start_link `:name` key fix (commit `eef64a20`)\n- **Result**: 145/145 config tests passing, mix format clean, bd-186 isolation verified (~/.code_puppy/puppy.cfg mtime unchanged during test run)\n\n### Critics\n- **shepherd**: APPROVE (round 2)\n- **watchdog**: APPROVE (round 2, with scoped freeze check `5132ad4f..HEAD`)\n\n### \u26a0\ufe0f MERGE BLOCKED \u2014 Parallel implementation on `main`\nRetriever attempted merge and hit **13 Add/Add conflicts**. Investigation showed that the Config modules (loader.ex, writer.ex, models.ex, paths.ex, etc.) AND the stub modules (Tool.Registry, Stream.Event, Stream.Normalizer) **already exist on main** with different content \u2014 landed via a parallel path (likely GitLab sync through `gitlab/feature/bd-134-remove-config-functions` and related branches).\n\nMerge-base between `main` and `feature/bd-164-config-completion` is `d01edba3`, well before any of the bd-150/151/152/156/164 ancestor commits on the feature branch.\n\n### Worktree preserved\n- `/Users/adam2/projects/bd-164` at `feature/bd-164-config-completion` (head `eef64a20`)\n- Do NOT delete \u2014 needed for reconciliation\n\n### Status\n- **Stays OPEN** until reconciliation issue is resolved\n- See follow-up issue **bd-197** for reconciliation plan"
       ]
     },
     "bd-165": {
@@ -3922,7 +3923,33 @@
       "created_at": "2026-04-19T12:22:13.303563",
       "updated_at": "2026-04-19T12:22:15.806044",
       "comments": []
+    },
+    "bd-197": {
+      "id": "bd-197",
+      "title": "Reconcile parallel Elixir implementation for bd-164 ancestor chain (Config + stubs)",
+      "description": "The `feature/bd-164-config-completion` branch carries implementations for:\n- Config modules (loader.ex, writer.ex, models.ex, paths.ex, agents.ex, tui.ex, cache.ex, limits.ex, debug.ex, migrator.ex)\n- Tool stub modules (tool.ex, tool/registry.ex)\n- Stream stub modules (stream/event.ex, stream/normalizer.ex)\n- tools/skills.ex\n\nBut `main` already has these files with DIFFERENT content, landed via a parallel path (possibly GitLab sync or a prior cherry-pick). The two implementations must be reconciled before bd-164 can merge.\n\n## Conflicting files (13)\n- .bd/issues.json (trivial, reproducible)\n- bd-120-baseline.log (trivial log artifact)\n- elixir/code_puppy_control/lib/code_puppy_control/config/loader.ex\n- elixir/code_puppy_control/lib/code_puppy_control/config/writer.ex\n- elixir/code_puppy_control/lib/code_puppy_control/config/models.ex\n- elixir/code_puppy_control/lib/code_puppy_control/config/paths.ex\n- elixir/code_puppy_control/lib/code_puppy_control/stream/event.ex\n- elixir/code_puppy_control/lib/code_puppy_control/stream/normalizer.ex\n- elixir/code_puppy_control/lib/code_puppy_control/tool/registry.ex\n- elixir/code_puppy_control/lib/code_puppy_control/tools/skills.ex\n- elixir/code_puppy_control/test/code_puppy_control/config/migrator_test.exs\n- elixir/code_puppy_control/test/code_puppy_control/config/paths_test.exs\n- elixir/code_puppy_control/test/code_puppy_control/config/writer_test.exs\n\n## Merge-base\n`d01edba3` \u2014 current main has diverged significantly from the bd-164 feature branch since this point.\n\n## Recommended approach\n1. Compare feature branch impl (`eef64a20`) vs main impl file-by-file using `git diff main..feature/bd-164-config-completion -- <file>`\n2. For each file, decide canonical version \u2014 likely take the one with more tests passing\n3. Cherry-pick or re-implement winning bits onto a fresh branch off current main\n4. Preserve the bd-164 worktree until decision is made (`/Users/adam2/projects/bd-164`)\n\n## Critics status on feature branch content\n- shepherd APPROVED with `eef64a20`\n- watchdog APPROVED with scoped freeze check (`5132ad4f..HEAD` .py diff empty, 145/145 config tests, full suite at 80-failure baseline)\n\n## Acceptance\n- One canonical implementation on main\n- bd-164 worktree cleaned up after reconciliation\n- bd-164 closable",
+      "status": "open",
+      "priority": 1,
+      "type": "task",
+      "labels": [
+        "migration",
+        "python-to-elixir",
+        "rewrite",
+        "phase-4",
+        "reconciliation"
+      ],
+      "dependencies": {
+        "discovered-from": [
+          "bd-164"
+        ],
+        "parent": [
+          "bd-132"
+        ]
+      },
+      "created_at": "2026-04-19T12:23:29.909151",
+      "updated_at": "2026-04-19T12:23:40.564330",
+      "comments": []
     }
   },
-  "counter": 196
+  "counter": 197
 }
