@@ -73,10 +73,11 @@ defmodule CodePuppyControl.PtyManager do
             cols: pos_integer(),
             rows: pos_integer(),
             shell: String.t(),
-            subscriber: pid() | nil
+            subscriber: pid() | nil,
+            closing?: boolean()
           }
 
-    defstruct [:session_id, :os_pid, :pid, :cols, :rows, :shell, :subscriber]
+    defstruct [:session_id, :os_pid, :pid, :cols, :rows, :shell, :subscriber, closing?: false]
   end
 
   # ---------------------------------------------------------------------------
@@ -99,7 +100,7 @@ defmodule CodePuppyControl.PtyManager do
 
     * `:cols` - Terminal width in columns (default: 80)
     * `:rows` - Terminal height in rows (default: 24)
-    * `:shell` - Shell executable path (default: `$SHELL` or `/bin/bash`)
+    * `:shell` - Shell executable path (default: `$SHELL` env → `bash` → `sh` → `/bin/sh`)
     * `:subscriber` - PID to receive `{:pty_output, session_id, data}` messages
 
   Returns `{:ok, %Session{}}` on success or `{:error, reason}` on failure.
@@ -191,28 +192,43 @@ defmodule CodePuppyControl.PtyManager do
 
   @impl true
   def init(_opts) do
-    # Ensure erlexec application is started
     case Application.ensure_all_started(:erlexec) do
-      {:ok, _} -> :ok
-      {:error, {:already_started, :erlexec}} -> :ok
-      {:error, _} = err -> err
-    end
+      {:ok, _} ->
+        {:ok, %__MODULE__{sessions: %{}}}
 
-    state = %__MODULE__{sessions: %{}}
-    {:ok, state}
+      {:error, {:already_started, :erlexec}} ->
+        {:ok, %__MODULE__{sessions: %{}}}
+
+      {:error, reason} ->
+        {:stop, {:erlexec_start_failed, reason}}
+    end
   end
 
   @impl true
   def handle_call({:create_session, session_id, opts}, _from, state) do
-    if Map.has_key?(state.sessions, session_id) do
-      Logger.warning("PtyManager: session #{session_id} already exists, closing old one")
-      close_session_internal(session_id, state)
-    end
+    state =
+      if Map.has_key?(state.sessions, session_id) do
+        Logger.warning("PtyManager: session #{session_id} already exists, closing old one")
+
+        case close_session_internal(session_id, state) do
+          {:ok, new_state} -> new_state
+          {:error, :not_found} -> state
+        end
+      else
+        state
+      end
 
     cols = Keyword.get(opts, :cols, 80)
     rows = Keyword.get(opts, :rows, 24)
     subscriber = Keyword.get(opts, :subscriber)
-    shell = Keyword.get(opts, :shell, System.get_env("SHELL") || "/bin/bash")
+
+    shell =
+      Keyword.get_lazy(opts, :shell, fn ->
+        System.get_env("SHELL") ||
+          System.find_executable("bash") ||
+          System.find_executable("sh") ||
+          "/bin/sh"
+      end)
 
     erlexec_opts = [
       :pty,
@@ -221,7 +237,8 @@ defmodule CodePuppyControl.PtyManager do
       {:stderr, :stdout},
       {:winsz, {rows, cols}},
       :monitor,
-      {:kill_timeout, 5}
+      {:kill_timeout, 5},
+      {:env, [{"TERM", System.get_env("TERM") || "xterm-256color"}]}
     ]
 
     case :exec.run(String.to_charlist(shell), erlexec_opts) do
@@ -372,8 +389,19 @@ defmodule CodePuppyControl.PtyManager do
         Logger.debug("PtyManager: received DOWN for unknown os_pid #{os_pid}")
         {:noreply, state}
 
+      %{closing?: true} = session ->
+        # Session was already closed via close_session_internal — notification
+        # was sent there. Just clean up the session map.
+        new_sessions = Map.delete(state.sessions, session.session_id)
+
+        Logger.debug(
+          "PtyManager: session #{session.session_id} DOWN after close (reason=#{inspect(reason)})"
+        )
+
+        {:noreply, %{state | sessions: new_sessions}}
+
       session ->
-        # Notify subscriber if present
+        # Unexpected exit — subscriber wasn't notified yet, so do it now
         if session.subscriber do
           send(session.subscriber, {:pty_exit, session.session_id, reason})
         end
@@ -402,10 +430,12 @@ defmodule CodePuppyControl.PtyManager do
   @impl true
   def terminate(_reason, state) do
     Enum.each(state.sessions, fn {_id, session} ->
-      try do
-        :exec.stop(session.os_pid)
-      rescue
-        _ -> :ok
+      unless session.closing? do
+        try do
+          :exec.stop(session.os_pid)
+        catch
+          :exit, _reason -> :ok
+        end
       end
     end)
 
@@ -421,16 +451,29 @@ defmodule CodePuppyControl.PtyManager do
       nil ->
         {:error, :not_found}
 
+      %{closing?: true} ->
+        # Already closing — idempotent
+        {:ok, state}
+
       session ->
+        # Notify subscriber BEFORE stopping so the message is delivered
+        # within this handle_call's reply cycle (no race with async DOWN)
+        if session.subscriber do
+          send(session.subscriber, {:pty_exit, session.session_id, :closed})
+        end
+
         # erlexec stop sends SIGTERM then SIGKILL after kill_timeout
         try do
           :exec.stop(session.os_pid)
-        rescue
-          _ -> :ok
+        catch
+          :exit, _reason -> :ok
         end
 
-        new_sessions = Map.delete(state.sessions, session_id)
-        Logger.info("PtyManager: closed session #{session_id}")
+        # Mark as closing; actual map deletion happens in handle_info({:DOWN, ...})
+        # The DOWN handler sees closing?: true and skips the duplicate notification
+        updated = %{session | closing?: true}
+        new_sessions = Map.put(state.sessions, session_id, updated)
+        Logger.info("PtyManager: closing session #{session_id}")
         {:ok, %{state | sessions: new_sessions}}
     end
   end

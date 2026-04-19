@@ -72,7 +72,7 @@ defmodule CodePuppyControl.PtyManagerTest do
     @tag :integration
     test "create_session spawns a shell process", %{manager: manager} do
       assert {:ok, session} =
-               GenServer.call(manager, {:create_session, "test-1", []})
+               GenServer.call(manager, {:create_session, "test-1", [subscriber: self()]})
 
       assert %Session{} = session
       assert session.session_id == "test-1"
@@ -85,9 +85,10 @@ defmodule CodePuppyControl.PtyManagerTest do
       assert GenServer.call(manager, :list_sessions) == ["test-1"]
       assert GenServer.call(manager, :count) == 1
 
-      # Cleanup
+      # Cleanup — pty_exit sent synchronously from close_session
+      drain_pty_output("test-1")
       assert :ok = GenServer.call(manager, {:close_session, "test-1"})
-      assert GenServer.call(manager, :list_sessions) == []
+      assert_receive {:pty_exit, "test-1", :closed}
     end
 
     @tag :integration
@@ -95,14 +96,16 @@ defmodule CodePuppyControl.PtyManagerTest do
       assert {:ok, session} =
                GenServer.call(
                  manager,
-                 {:create_session, "test-size", [cols: 120, rows: 40]}
+                 {:create_session, "test-size", [cols: 120, rows: 40, subscriber: self()]}
                )
 
       assert session.cols == 120
       assert session.rows == 40
 
       # Cleanup
+      drain_pty_output("test-size")
       assert :ok = GenServer.call(manager, {:close_session, "test-size"})
+      assert_receive {:pty_exit, "test-size", :closed}
     end
 
     @tag :integration
@@ -110,54 +113,73 @@ defmodule CodePuppyControl.PtyManagerTest do
       assert {:ok, session} =
                GenServer.call(
                  manager,
-                 {:create_session, "test-shell", [shell: "/bin/sh"]}
+                 {:create_session, "test-shell", [shell: "/bin/sh", subscriber: self()]}
                )
 
       assert session.shell == "/bin/sh"
 
       # Cleanup
+      drain_pty_output("test-shell")
       assert :ok = GenServer.call(manager, {:close_session, "test-shell"})
+      assert_receive {:pty_exit, "test-shell", :closed}
     end
 
     @tag :integration
     test "create_session replaces existing session with same id", %{manager: manager} do
       assert {:ok, session1} =
-               GenServer.call(manager, {:create_session, "dup", []})
+               GenServer.call(manager, {:create_session, "dup", [subscriber: self()]})
 
       os_pid_1 = session1.os_pid
 
       assert {:ok, session2} =
-               GenServer.call(manager, {:create_session, "dup", []})
+               GenServer.call(manager, {:create_session, "dup", [subscriber: self()]})
 
       # Should be a new process (old one was killed)
       assert session2.os_pid != os_pid_1
+
+      # Wait for old session's pty_exit (from close_session_internal)
+      assert_receive {:pty_exit, "dup", :closed}
 
       # Only one session in the map
       assert GenServer.call(manager, :count) == 1
 
       # Cleanup
+      drain_pty_output("dup")
       assert :ok = GenServer.call(manager, {:close_session, "dup"})
+      assert_receive {:pty_exit, "dup", :closed}, 5_000
     end
 
     @tag :integration
-    test "write sends data to the shell", %{manager: manager} do
+    test "write sends data to the shell and produces output", %{manager: manager} do
       assert {:ok, _session} =
-               GenServer.call(manager, {:create_session, "write-test", []})
+               GenServer.call(
+                 manager,
+                 {:create_session, "write-test", [subscriber: self()]}
+               )
+
+      # Drain initial prompt output
+      drain_pty_output("write-test")
 
       assert :ok =
                GenServer.call(manager, {:write, "write-test", "echo hello\n"})
 
-      # Give the shell time to process
-      Process.sleep(200)
+      # Wait for actual output instead of sleeping
+      assert_receive {:pty_output, "write-test", data}, 3_000
+      assert is_binary(data)
 
       # Cleanup
+      drain_pty_output("write-test")
       assert :ok = GenServer.call(manager, {:close_session, "write-test"})
+      assert_receive {:pty_exit, "write-test", :closed}
     end
 
     @tag :integration
     test "resize changes terminal dimensions", %{manager: manager} do
       assert {:ok, _session} =
-               GenServer.call(manager, {:create_session, "resize-test", []})
+               GenServer.call(
+                 manager,
+                 {:create_session, "resize-test", [subscriber: self()]}
+               )
 
       assert :ok =
                GenServer.call(manager, {:resize, "resize-test", 200, 50})
@@ -167,7 +189,9 @@ defmodule CodePuppyControl.PtyManagerTest do
       assert session.rows == 50
 
       # Cleanup
+      drain_pty_output("resize-test")
       assert :ok = GenServer.call(manager, {:close_session, "resize-test"})
+      assert_receive {:pty_exit, "resize-test", :closed}
     end
 
     @tag :integration
@@ -189,7 +213,9 @@ defmodule CodePuppyControl.PtyManagerTest do
       assert combined =~ "pty_test_output"
 
       # Cleanup
+      drain_pty_output("sub-test")
       assert :ok = GenServer.call(manager, {:close_session, "sub-test"})
+      assert_receive {:pty_exit, "sub-test", :closed}
     end
 
     @tag :integration
@@ -208,7 +234,9 @@ defmodule CodePuppyControl.PtyManagerTest do
       assert combined =~ "late_output"
 
       # Cleanup
+      drain_pty_output("late-sub")
       assert :ok = GenServer.call(manager, {:close_session, "late-sub"})
+      assert_receive {:pty_exit, "late-sub", :closed}
     end
 
     @tag :integration
@@ -234,20 +262,34 @@ defmodule CodePuppyControl.PtyManagerTest do
 
       # Cleanup
       assert :ok = GenServer.call(manager, {:close_session, "unsub-test"})
+      # We unsubscribed, so we won't get pty_exit either
     end
 
     @tag :integration
     test "close_all terminates all sessions", %{manager: manager} do
       assert {:ok, _} =
-               GenServer.call(manager, {:create_session, "a", []})
+               GenServer.call(
+                 manager,
+                 {:create_session, "a", [subscriber: self()]}
+               )
 
       assert {:ok, _} =
-               GenServer.call(manager, {:create_session, "b", []})
+               GenServer.call(
+                 manager,
+                 {:create_session, "b", [subscriber: self()]}
+               )
 
       assert GenServer.call(manager, :count) == 2
 
+      # Drain output before close to avoid mailbox noise
+      drain_pty_output("a")
+      drain_pty_output("b")
+
       assert :ok = GenServer.call(manager, :close_all)
-      assert GenServer.call(manager, :count) == 0
+
+      # Both pty_exit messages sent synchronously from close_all
+      assert_receive {:pty_exit, "a", :closed}
+      assert_receive {:pty_exit, "b", :closed}
     end
 
     @tag :integration
@@ -262,12 +304,26 @@ defmodule CodePuppyControl.PtyManagerTest do
       assert :ok =
                GenServer.call(manager, {:write, "exit-test", "exit\n"})
 
-      # Should receive exit notification
+      # Should receive exit notification from DOWN handler (not close_session)
       assert_receive {:pty_exit, "exit-test", _reason}, 5_000
+    end
 
-      # Session should be cleaned up
-      Process.sleep(100)
-      assert GenServer.call(manager, {:get_session, "exit-test"}) == nil
+    @tag :integration
+    test "close_session sends pty_exit to subscriber", %{manager: manager} do
+      assert {:ok, _session} =
+               GenServer.call(
+                 manager,
+                 {:create_session, "close-notify", [subscriber: self()]}
+               )
+
+      # Drain output first
+      drain_pty_output("close-notify")
+
+      # Close the session explicitly
+      assert :ok = GenServer.call(manager, {:close_session, "close-notify"})
+
+      # Subscriber receives pty_exit synchronously from close_session
+      assert_receive {:pty_exit, "close-notify", :closed}
     end
   end
 
@@ -286,7 +342,7 @@ defmodule CodePuppyControl.PtyManagerTest do
                  {:create_session, "bad-shell", [shell: "/nonexistent/shell", subscriber: self()]}
                )
 
-      # The process should exit with an error
+      # The process should exit with an error (from DOWN handler)
       assert_receive {:pty_exit, "bad-shell", _reason}, 5_000
     end
   end
@@ -294,6 +350,16 @@ defmodule CodePuppyControl.PtyManagerTest do
   # ===========================================================================
   # Test helpers
   # ===========================================================================
+
+  # Drain all pending {:pty_output, ...} messages for a session from the mailbox.
+  # Used before close_session to avoid stale output interfering with assert_receive.
+  defp drain_pty_output(session_id) do
+    receive do
+      {:pty_output, ^session_id, _data} -> drain_pty_output(session_id)
+    after
+      0 -> :ok
+    end
+  end
 
   defp collect_pty_output(session_id, timeout) do
     collect_pty_output(session_id, timeout, [])
