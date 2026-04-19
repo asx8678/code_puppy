@@ -43,7 +43,8 @@ defmodule CodePuppyControl.ModelFactory.Credentials do
   Resolution order:
   1. If config has `"api_key_env"`, look up that env var
   2. Fall back to the provider's default env var
-  3. Return `nil` if neither is set (OAuth models like claude_code intentionally have no key)
+  3. Check the encrypted credential store (`CodePuppyControl.Credentials`)
+  4. Return `nil` if neither is set (OAuth models like claude_code intentionally have no key)
 
   ## Examples
 
@@ -60,10 +61,11 @@ defmodule CodePuppyControl.ModelFactory.Credentials do
       end
 
     # 2. Fall back to provider default
+    # 3. Check encrypted credential store
     env_var ||
       case Map.get(@provider_env_vars, provider_type) do
         nil -> nil
-        default_var -> System.get_env(default_var)
+        default_var -> System.get_env(default_var) || credential_store_get(default_var)
       end
   end
 
@@ -198,5 +200,17 @@ defmodule CodePuppyControl.ModelFactory.Credentials do
       var_name ->
         [var_name]
     end
+  end
+
+  # Check the encrypted credential store as a fallback.
+  # Silently returns nil if the store is unavailable (not initialized,
+  # corrupted, key mismatch, etc.). The store is optional.
+  defp credential_store_get(key_name) do
+    case CodePuppyControl.Credentials.get(key_name) do
+      {:ok, value} -> value
+      _ -> nil
+    end
+  rescue
+    _ -> nil
   end
 end
