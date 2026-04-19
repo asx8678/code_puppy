@@ -163,7 +163,7 @@ The following **62,000+ lines** across major modules are not yet classified as r
 
 | Module | Files | Lines | Current Usage | Proposed Direction |
 |--------|-------|-------|---------------|-------------------|
-| `tools/browser/` | 13 | 4,750 | Browser automation, Playwright | **Likely Retain** — Playwright is Python-native |
+| `tools/browser/` | 13 | 4,750 | Browser automation, Playwright | **DROP-V1** — No mature Elixir browser automation; revisit post-v1 via bd-209 |
 | `mcp_/` | 19 | 8,158 | MCP server management | **Under Review** — Elixir has native MCP |
 
 ### Agents Beyond Base

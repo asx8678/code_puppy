@@ -204,5 +204,10 @@ If a late-stage requirement emerges, the fallback should be:
 
 ## Final decision
 
-**Option 4 for v1.**
+**Option 4 for v1: Drop browser automation for Elixir v1**
+
+**Risk R6 accepted:** Users requiring browser automation must stay on Python version or use external tooling.
+
 **Option 3 only if product says browser automation is mandatory before release.**
+
+**Revisit:** Post-v1 browser automation revisit tracked in **bd-209**.
