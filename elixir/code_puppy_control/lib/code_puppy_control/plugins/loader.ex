@@ -146,18 +146,121 @@ defmodule CodePuppyControl.Plugins.Loader do
   defp load_builtin_plugins do
     ensure_ets_table()
 
-    # Find all compiled modules that implement PluginBehaviour
-    # and aren't already loaded
     loaded_names = list_loaded() |> Enum.map(& &1.name)
 
-    :code.all_loaded()
-    |> Enum.map(fn {mod, _} -> mod end)
-    |> Enum.filter(&plugin_behaviour?/1)
-    |> Enum.reject(fn mod -> mod.name() in loaded_names end)
-    |> Enum.map(fn mod ->
-      register_plugin(mod, :builtin)
-      mod.name()
-    end)
+    # Discover compiled modules implementing PluginBehaviour
+    module_names =
+      :code.all_loaded()
+      |> Enum.map(fn {mod, _} -> mod end)
+      |> Enum.filter(&plugin_behaviour?/1)
+      |> Enum.reject(fn mod -> mod.name() in loaded_names end)
+      |> Enum.map(fn mod ->
+        register_plugin(mod, :builtin)
+        mod.name()
+      end)
+
+    # Discover builtin plugins in priv/plugins/
+    priv_names = load_priv_plugins(loaded_names)
+
+    module_names ++ priv_names
+  end
+
+  @doc false
+  @spec load_priv_plugins([atom()]) :: [atom()]
+  defp load_priv_plugins(already_loaded_names) do
+    priv_dir = priv_plugins_dir()
+
+    unless File.dir?(priv_dir) do
+      []
+    else
+      priv_dir
+      |> File.ls!()
+      |> Enum.filter(fn name ->
+        dir = Path.join(priv_dir, name)
+
+        File.dir?(dir) and
+          not String.starts_with?(name, "_") and
+          not String.starts_with?(name, ".")
+      end)
+      |> Enum.flat_map(fn plugin_name ->
+        # Skip if already loaded by name
+        name_atom =
+          plugin_name
+          |> String.replace("-", "_")
+          |> String.to_atom()
+
+        if name_atom in already_loaded_names do
+          []
+        else
+          load_priv_plugin(plugin_name, priv_dir)
+        end
+      end)
+    end
+  end
+
+  @doc false
+  @spec load_priv_plugin(String.t(), String.t()) :: [atom()]
+  defp load_priv_plugin(plugin_name, plugins_dir) do
+    plugin_dir = Path.join(plugins_dir, plugin_name)
+
+    # Try register_callbacks.ex first, then any .ex file
+    ex_files =
+      [Path.join(plugin_dir, "register_callbacks.ex")]
+      |> Enum.filter(&File.exists?/1)
+      |> case do
+        [] ->
+          plugin_dir
+          |> File.ls!()
+          |> Enum.filter(&String.ends_with?(&1, ".ex"))
+          |> Enum.map(&Path.join(plugin_dir, &1))
+
+        files ->
+          files
+      end
+
+    case ex_files do
+      [] ->
+        Logger.debug("No .ex files found in priv plugin: #{plugin_name}")
+        []
+
+      files ->
+        Enum.flat_map(files, fn file ->
+          try do
+            modules_before = loaded_modules()
+            Code.compile_file(file)
+            modules_after = loaded_modules()
+            new_modules = modules_after -- modules_before
+
+            plugin_modules = Enum.filter(new_modules, &plugin_behaviour?/1)
+
+            Enum.map(plugin_modules, fn mod ->
+              register_plugin(mod, :builtin)
+              mod.name()
+            end)
+          rescue
+            e ->
+              Logger.error(
+                "Failed to load priv plugin '#{plugin_name}': #{Exception.message(e)}"
+              )
+
+              []
+          end
+        end)
+    end
+  end
+
+  @doc """
+  Returns the path to the priv/plugins/ directory for builtin plugins.
+  """
+  @spec priv_plugins_dir() :: String.t()
+  def priv_plugins_dir do
+    :code.priv_dir(:code_puppy_control)
+    |> to_string()
+    |> Path.join("plugins")
+  rescue
+    _ ->
+      # Fallback for development: priv/plugins/ relative to the project
+      Path.join([File.cwd!(), "priv", "plugins"])
   end
 
   # ── User Plugin Discovery ───────────────────────────────────────
@@ -269,19 +372,39 @@ defmodule CodePuppyControl.Plugins.Loader do
 
     :ets.insert(__MODULE__, {module.name(), plugin_info})
 
-    # Register callbacks from the plugin
-    callbacks = module.register_callbacks()
+    # Prefer register/0 over register_callbacks/0
+    cond do
+      function_exported?(module, :register, 0) ->
+        case module.register() do
+          :ok ->
+            :ok
 
-    Enum.each(callbacks, fn {hook_name, fun} ->
-      try do
-        Callbacks.register(hook_name, fun)
-      rescue
-        ArgumentError ->
-          Logger.warning(
-            "Plugin #{module.name()} registered callback for unknown hook: #{hook_name}"
-          )
-      end
-    end)
+          {:error, reason} ->
+            Logger.warning("Plugin #{module.name()} register/0 returned error: #{inspect(reason)}")
+
+          other ->
+            Logger.warning("Plugin #{module.name()} register/0 returned unexpected: #{inspect(other)}")
+        end
+
+      function_exported?(module, :register_callbacks, 0) ->
+        callbacks = module.register_callbacks()
+
+        Enum.each(callbacks, fn {hook_name, fun} ->
+          try do
+            Callbacks.register(hook_name, fun)
+          rescue
+            ArgumentError ->
+              Logger.warning(
+                "Plugin #{module.name()} registered callback for unknown hook: #{hook_name}"
+              )
+          end
+        end)
+
+      true ->
+        Logger.warning(
+          "Plugin #{module.name()} implements neither register/0 nor register_callbacks/0"
+        )
+    end
 
     # Call startup
     if function_exported?(module, :startup, 0) do
