@@ -1,16 +1,13 @@
 """Post-edit syntax validation helpers.
 
-Inspired by plandex's app/server/syntax/validate.go. After every agent
-edit, validate the file syntax within a short timeout. If parsing fails
-or times out, surface structured error markers to the agent so it can
-self-correct on the next turn.
+This module previously routed to a native tree-sitter backend (turbo_parse).
+After bd-86 removed the native acceleration layer, validation is a no-op stub.
+The real syntax validation now lives on the Elixir side via
+CodePuppyControl.Parsing.Parser, but no Python bridge endpoint exists yet
+(filed as future work). Until that endpoint exists, validate_file_sync
+returns PARSER_UNAVAILABLE which is fail-open.
 
-This module is designed to **fail open**:
-- If turbo_parse is unavailable, validation is skipped silently.
-- If the language has no registered parser, validation is skipped.
-- If the parser hits the timeout, a TimedOut result is returned.
-- Exceptions inside the parser are logged and treated as "parser
-  unavailable" rather than being propagated as edit failures.
+bd-208: Cleaned up dead native-backend branches.
 
 Usage:
 
@@ -18,66 +15,15 @@ Usage:
     if result.status is ValidationStatus.INVALID:
         # Surface result.errors back to the agent
         ...
-
-bd-93: Migrated from direct turbo_parse_bridge to NativeBackend for
-Elixir-first routing and unified acceleration access.
 """
 
 import logging
 from dataclasses import dataclass, field
 from enum import Enum
-from pathlib import Path
-from typing import TYPE_CHECKING
-
-if TYPE_CHECKING:
-    pass
 
 logger = logging.getLogger(__name__)
 
 PARSER_TIMEOUT_S = 0.5  # matches plandex's 500ms
-
-# Extensions we try to validate. Anything else returns PARSER_UNAVAILABLE.
-# Keep this conservative — expansion should happen as turbo_parse gains coverage.
-_VALIDATABLE_EXTS: frozenset[str] = frozenset(
-    {
-        ".py",
-        ".js",
-        ".ts",
-        ".tsx",
-        ".jsx",
-        ".go",
-        ".rs",
-        ".java",
-        ".c",
-        ".cpp",
-        ".h",
-        ".hpp",
-        ".rb",
-        ".php",
-        ".swift",
-        ".kt",
-    }
-)
-
-# Map extensions to tree-sitter language names for turbo_parse
-_EXT_TO_LANGUAGE: dict[str, str] = {
-    ".py": "python",
-    ".js": "javascript",
-    ".ts": "typescript",
-    ".tsx": "tsx",
-    ".jsx": "jsx",
-    ".go": "go",
-    ".rs": "rust",
-    ".java": "java",
-    ".c": "c",
-    ".cpp": "cpp",
-    ".h": "c",
-    ".hpp": "cpp",
-    ".rb": "ruby",
-    ".php": "php",
-    ".swift": "swift",
-    ".kt": "kotlin",
-}
 
 
 class ValidationStatus(str, Enum):
@@ -103,27 +49,6 @@ class ValidationResult:
         return self.status is not ValidationStatus.INVALID
 
 
-def _ext_is_validatable(path: str) -> bool:
-    return Path(path).suffix.lower() in _VALIDATABLE_EXTS
-
-
-def _get_language_from_ext(path: str) -> str | None:
-    return _EXT_TO_LANGUAGE.get(Path(path).suffix.lower())
-
-
-def _validate_via_native_backend(path: str, content: str) -> ValidationResult:
-    """Attempt to validate using native backend's extract_syntax_diagnostics.
-
-    bd-86: Native acceleration layer removed. Returns PARSER_UNAVAILABLE
-    to trigger Python fallback validation.
-
-    Interpretation:
-    - PARSER_UNAVAILABLE is fail-open: validation won't block operations.
-    """
-    # bd-86: Native acceleration removed, always return unavailable
-    return ValidationResult(status=ValidationStatus.PARSER_UNAVAILABLE)
-
-
 def validate_file_sync(
     path: str,
     content: str,
@@ -132,10 +57,10 @@ def validate_file_sync(
 ) -> ValidationResult:
     """Synchronously validate file content, failing open on any error.
 
-    This is the main entrypoint. bd-50: Native acceleration removed,
-    always returns PARSER_UNAVAILABLE to use Python fallback validation.
+    This is the main entrypoint. bd-86: Native acceleration removed,
+    always returns PARSER_UNAVAILABLE (fail-open).
     """
-    # bd-50: Native acceleration removed, parser unavailable
+    # bd-208: No Python-side parser available; see module docstring.
     return ValidationResult(status=ValidationStatus.PARSER_UNAVAILABLE)
 
 

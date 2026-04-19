@@ -1,7 +1,7 @@
 """Code Explorer Plugin — Callback Registration.
 
-Registers code exploration tools that integrate turbo_parse symbols
-with existing code exploration flows in code_puppy.
+Registers code exploration tools that integrate with the Elixir
+code_context bridge to provide structural information in code_puppy.
 
 ## Available Tools
 
@@ -96,9 +96,9 @@ def _register_get_code_context_tool(agent):
         - Explore code with symbol-level information
         - Navigate large files efficiently
 
-        This tool integrates turbo_parse to provide structural information
-        about the code, including class hierarchies, function signatures,
-        and import statements.
+        This tool integrates with the Elixir code_context bridge to provide
+        structural information about the code, including class hierarchies,
+        function signatures, and import statements.
 
         Args:
             file_path: Path to the file to analyze
@@ -315,7 +315,7 @@ def _register_tools() -> list[dict[str, Any]]:
 def _explore_help() -> list[tuple[str, str]]:
     """Return help entries for the /explore command."""
     return [
-        ("explore", "Symbol-augmented code exploration with turbo_parse"),
+        ("explore", "Symbol-augmented code exploration via the Elixir code_context bridge"),
         ("explore file <path>", "Get code context for a single file"),
         ("explore dir <path>", "Explore a directory of code files"),
         ("explore outline <path>", "Show hierarchical outline of a file"),
@@ -430,7 +430,7 @@ def _handle_explore_help() -> str:
     return """📖 /explore Command Help
 ========================
 
-Symbol-augmented code exploration with turbo_parse integration.
+Symbol-augmented code exploration via the Elixir code_context bridge.
 
 Usage:
   /explore file <path>     Get code context for a single file

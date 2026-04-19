@@ -30,25 +30,29 @@ Code Puppy has a **runtime backend selector** called `fast_puppy` that routes pe
 |------------|----------------|---------|
 | `file_ops` | `file_service` | Batch file ops (`list_files`, `grep`, `read_file`) |
 | `repo_index` | `repo_index` | Repository indexing |
-| `parse` | `turbo_parse_nif` | Tree-sitter parsing, symbols, diagnostics |
+| `parse` | `CodePuppyControl.Parsing.Parser` | Pure-Elixir parsers (elixir, erlang, python, javascript, typescript, tsx, rust) |
 
-**Phase 4 Update:** All parse operations now route through `NativeBackend` with **Elixir-first routing** (bd-93):
-- Elixir NIF (`turbo_parse_nif`) → Python fallback
-- Direct `turbo_parse_bridge` imports are **deprecated** — use `NativeBackend` instead
-- New `NativeBackend` methods for parsing:
-  - `extract_syntax_diagnostics(file_path, code, language)` — Extract syntax errors/warnings
-  - `parse_health_check()` — Check parse backend health
-  - `parse_stats()` — Get parse operation statistics
+**Phase 4 Update (revised in bd-208):** The native acceleration layer (turbo_parse_bridge, native_backend, acceleration/) has been fully removed. Parse / symbol operations now live exclusively in Elixir under `CodePuppyControl.Parsing.Parser` (see `elixir/code_puppy_control/lib/code_puppy_control/parsing/`).
+
+Python access pattern:
+```python
+from code_puppy.plugins.elixir_bridge import is_connected, call_method
+
+if is_connected():
+    result = call_method('code_context.explore_file', {'file_path': path})
+```
+
+If the Elixir bridge is not running, code falls back to pure-Python heuristics (e.g. regex-based skeleton). Do NOT add a new `native_backend` module — that pattern is dead.
 
 **Phase 3 Reality:** Fast Puppy is now a **runtime selector**, not a crate builder:
 - `/fast_puppy profile elixir_first` → Prefer Elixir backends (default)
 - `/fast_puppy profile python_only` → Pure Python fallback
 
 **Agent Guidelines:**
-- Check capability availability via bridge flags
-- All backends provide Python stubs — fall back gracefully
-- Don't manually edit `fast_puppy/` — add new capabilities via `NATIVE_BACKENDS` registry
-- **Migration rule:** Import from `fast_puppy.native_backend` instead of direct bridge imports
+- Check Elixir bridge availability via `code_puppy.plugins.elixir_bridge.is_connected()`
+- All parse operations route through the Elixir bridge; fall back to pure-Python heuristics when disconnected
+- Don't manually edit `fast_puppy/` — add new capabilities via the bridge
+- **Migration rule:** Import from `code_puppy.plugins.elixir_bridge` instead of direct bridge imports or `native_backend`
 - To test without native acceleration: set `enable_elixir_control=false` in `puppy.cfg`
 
 ## Available Hooks

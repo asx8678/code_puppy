@@ -4,16 +4,11 @@ Replaces function/method bodies with ``...`` to show only signatures,
 class declarations, and top-level constants. Dramatically reduces token
 usage when providing file context to LLMs.
 
-Inspired by Agentless ``compress_file.py`` (libcst-based, Python-only).
-This implementation uses tree-sitter via ``NativeBackend`` for
-multi-language support, with a regex fallback for when tree-sitter is
-unavailable.
+Pure regex-based skeleton generator. Tree-sitter / symbol-aware skeletons
+are available via the Elixir code_context.explore_file bridge (see
+code_puppy/code_context/explorer.py) when the Elixir runtime is connected.
 
-Supported languages (tree-sitter path):
-    Python, JavaScript, TypeScript, Rust, Go, Java, C, C++, Ruby
-
-Fallback mode (regex path):
-    Python-like languages with indent-based blocks.
+bd-208: Removed dead tree-sitter branches (deleted in bd-86).
 """
 
 import logging
@@ -22,86 +17,9 @@ from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
-# Extension → tree-sitter language name
-_EXT_TO_LANG: dict[str, str] = {
-    ".py": "python",
-    ".js": "javascript",
-    ".ts": "typescript",
-    ".tsx": "tsx",
-    ".jsx": "jsx",
-    ".go": "go",
-    ".rs": "rust",
-    ".java": "java",
-    ".c": "c",
-    ".cpp": "cpp",
-    ".h": "c",
-    ".hpp": "cpp",
-    ".rb": "ruby",
-}
-
-
-def _lang_from_path(path: str) -> str | None:
-    """Resolve tree-sitter language name from file extension."""
-    return _EXT_TO_LANG.get(Path(path).suffix.lower())
-
 
 # ---------------------------------------------------------------------------
-# Tree-sitter based skeleton (preferred)
-# ---------------------------------------------------------------------------
-
-def _skeleton_via_treesitter(content: str, language: str) -> str | None:
-    """Generate skeleton using tree-sitter symbol extraction.
-
-    bd-86: Tree-sitter acceleration removed - now always returns None
-    to fall back to regex-based implementation.
-
-    Returns None to trigger Python fallback.
-    """
-    # bd-86: Tree-sitter native acceleration removed, use Python fallback
-    return None
-
-
-def _render_symbols(symbols: list[dict], source: str) -> str:
-    """Render tree-sitter symbol list into skeleton source text.
-
-    Each symbol dict is expected to have:
-        name, kind, start_line, end_line, children (optional)
-    """
-    source_lines = source.splitlines()
-    output_lines: list[str] = []
-
-    for sym in symbols:
-        kind = sym.get("kind", "")
-        start = sym.get("start_line", 0)
-        # Include the signature line(s)
-        if 0 < start <= len(source_lines):
-            output_lines.append(source_lines[start - 1])
-
-        children = sym.get("children", [])
-        if children:
-            # Recurse into children (class methods, nested items)
-            for child in children:
-                child_start = child.get("start_line", 0)
-                if 0 < child_start <= len(source_lines):
-                    sig_line = source_lines[child_start - 1]
-                    output_lines.append(sig_line)
-                    # Add placeholder body
-                    indent = len(sig_line) - len(sig_line.lstrip())
-                    output_lines.append(" " * (indent + 4) + "...")
-                    output_lines.append("")
-        elif kind in ("function", "method", "def", "fn", "func"):
-            # Leaf function — add placeholder
-            if 0 < start <= len(source_lines):
-                sig_line = source_lines[start - 1]
-                indent = len(sig_line) - len(sig_line.lstrip())
-                output_lines.append(" " * (indent + 4) + "...")
-            output_lines.append("")
-
-    return "\n".join(output_lines)
-
-
-# ---------------------------------------------------------------------------
-# Regex fallback skeleton (Python-like indent languages)
+# Regex skeleton (the only implementation)
 # ---------------------------------------------------------------------------
 
 # Patterns that start a block scope
@@ -237,8 +155,9 @@ def get_skeleton(
 
     Args:
         content: Full source code content.
-        path: File path (used to detect language from extension).
-        language: Explicit tree-sitter language name. Overrides path detection.
+        path: File path (reserved for API compatibility; not used currently).
+        language: Explicit language name (reserved for API compatibility;
+            not used currently).
         max_lines: Optional cap on output lines. Truncates with ``...`` marker.
 
     Returns:
@@ -262,19 +181,8 @@ def get_skeleton(
     if not content.strip():
         return ""
 
-    # Resolve language
-    lang = language
-    if lang is None and path is not None:
-        lang = _lang_from_path(path)
-
-    # Try tree-sitter first
-    result = None
-    if lang is not None:
-        result = _skeleton_via_treesitter(content, lang)
-
-    # Fall back to regex
-    if result is None:
-        result = _skeleton_via_regex(content)
+    # bd-208: Tree-sitter path removed; use regex directly.
+    result = _skeleton_via_regex(content)
 
     # Apply max_lines cap
     if max_lines is not None and result:
