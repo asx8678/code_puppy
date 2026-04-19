@@ -3230,7 +3230,7 @@
     "bd-164": {
       "id": "bd-164",
       "title": "4.1 Port config.py (84KB) to Elixir",
-      "description": "Port the 84KB config.py into ~8 focused Elixir modules. Spec the semantics first (R5 risk). Must handle: defaults, env overrides, file config, CLI flags, dynamic reload.",
+      "description": "Port the 84KB config.py into ~8 focused Elixir modules. Spec the semantics first (R5 risk). Must handle: defaults, env overrides, file config, CLI flags, dynamic reload.\n\n## \u26a0\ufe0f Isolation Requirement (added per bd-186)\n\nThis task MUST:\n- Write only to ~/.code_puppy_ex/ (never ~/.code_puppy/)\n- Pass the bd-186 CI gates (no-writes-to-python-home, fresh-install-works, existing-install-untouched)\n- Run all tests against temp directories, never the user's real home\n- Respect the Python freeze policy (bd-187) \u2014 do not modify code_puppy/**/*.py",
       "status": "open",
       "priority": 1,
       "type": "task",
@@ -3244,15 +3244,16 @@
         ]
       },
       "created_at": "2026-04-18T19:48:17.126393",
-      "updated_at": "2026-04-19T01:26:56.022260",
+      "updated_at": "2026-04-19T02:11:51.880777",
       "comments": [
-        "Partial commit as 1930f9a2. 10-module split implemented (loader/writer/paths/models/agents/tui/cache/limits/debug/migrator). 145 tests with 9 failures in write-path (Writer/Models/Migrator). MIGRATION_MAP.md also landed.\n\nRemaining work (stays OPEN):\n1. Verify all Python config.py accessors are mapped function-by-function\n2. Fix 9 write-path persistence bugs\n3. Implement dynamic reload (file watcher)\n4. Back-compat audit across existing call sites\n\nReady for follow-up code-puppy dispatch."
+        "Partial commit as 1930f9a2. 10-module split implemented (loader/writer/paths/models/agents/tui/cache/limits/debug/migrator). 145 tests with 9 failures in write-path (Writer/Models/Migrator). MIGRATION_MAP.md also landed.\n\nRemaining work (stays OPEN):\n1. Verify all Python config.py accessors are mapped function-by-function\n2. Fix 9 write-path persistence bugs\n3. Implement dynamic reload (file watcher)\n4. Back-compat audit across existing call sites\n\nReady for follow-up code-puppy dispatch.",
+        "\n## \u26a0\ufe0f Isolation Requirement (added per bd-186)\n\nThis task MUST:\n- Write only to ~/.code_puppy_ex/ (never ~/.code_puppy/)\n- Pass the bd-186 CI gates (no-writes-to-python-home, fresh-install-works, existing-install-untouched)\n- Run all tests against temp directories, never the user's real home\n- Respect the Python freeze policy (bd-187) \u2014 do not modify code_puppy/**/*.py\n\nDependency: bd-186 now blocks this issue."
       ]
     },
     "bd-165": {
       "id": "bd-165",
       "title": "4.2 Session storage last mile",
-      "description": "Port session_storage.py (31KB) to Elixir. Session CRUD, search, export. One-shot migrator for existing Python sessions (R8).",
+      "description": "Port session_storage.py (31KB) to Elixir. Session CRUD, search, export. One-shot migrator for existing Python sessions (R8).\n\n## \u26a0\ufe0f Isolation Requirement (added per bd-186)\n\nThis task MUST:\n- Write only to ~/.code_puppy_ex/ (never ~/.code_puppy/)\n- Pass the bd-186 CI gates (no-writes-to-python-home, fresh-install-works, existing-install-untouched)\n- Run all tests against temp directories, never the user's real home\n- Respect the Python freeze policy (bd-187) \u2014 do not modify code_puppy/**/*.py",
       "status": "open",
       "priority": 2,
       "type": "task",
@@ -3268,8 +3269,10 @@
         ]
       },
       "created_at": "2026-04-18T19:48:17.158145",
-      "updated_at": "2026-04-19T00:56:31.464875",
-      "comments": []
+      "updated_at": "2026-04-19T02:11:51.877752",
+      "comments": [
+        "\n## \u26a0\ufe0f Isolation Requirement (added per bd-186)\n\nThis task MUST:\n- Write only to ~/.code_puppy_ex/ (never ~/.code_puppy/)\n- Pass the bd-186 CI gates (no-writes-to-python-home, fresh-install-works, existing-install-untouched)\n- Run all tests against temp directories, never the user's real home\n- Respect the Python freeze policy (bd-187) \u2014 do not modify code_puppy/**/*.py\n\nDependency: bd-186 now blocks this issue."
+      ]
     },
     "bd-166": {
       "id": "bd-166",
@@ -3291,13 +3294,15 @@
         ]
       },
       "created_at": "2026-04-18T19:48:17.188100",
-      "updated_at": "2026-04-19T00:56:31.495992",
-      "comments": []
+      "updated_at": "2026-04-19T02:10:18.526533",
+      "comments": [
+        "## \u26a0\ufe0f Isolation Requirement (added per bd-186)\n\nThis task MUST:\n- Write only to ~/.code_puppy_ex/ (never ~/.code_puppy/)\n- Pass the bd-186 CI gates (no-writes-to-python-home, fresh-install-works, existing-install-untouched)\n- Run all tests against temp directories, never the user's real home\n- Respect the Python freeze policy (bd-187) \u2014 do not modify code_puppy/**/*.py\n\n## OAuth Strategy Decision (per user directive)\n\nElixir runs its OWN OAuth flows independently. Do NOT attempt to import or share tokens from ~/.code_puppy/. User will re-authenticate under pup-ex."
+      ]
     },
     "bd-167": {
       "id": "bd-167",
       "title": "4.4 Secrets / credential store",
-      "description": "OS keychain integration for storing API keys and tokens. Port any Python keyring usage.",
+      "description": "OS keychain integration for storing API keys and tokens. Port any Python keyring usage.\n\n## \u26a0\ufe0f Isolation Requirement (added per bd-186)\n\nThis task MUST:\n- Write only to ~/.code_puppy_ex/ (never ~/.code_puppy/)\n- Pass the bd-186 CI gates (no-writes-to-python-home, fresh-install-works, existing-install-untouched)\n- Run all tests against temp directories, never the user's real home\n- Respect the Python freeze policy (bd-187) \u2014 do not modify code_puppy/**/*.py",
       "status": "open",
       "priority": 2,
       "type": "task",
@@ -3310,8 +3315,10 @@
         ]
       },
       "created_at": "2026-04-18T19:48:17.217798",
-      "updated_at": "2026-04-19T00:56:48.864292",
-      "comments": []
+      "updated_at": "2026-04-19T02:11:51.893233",
+      "comments": [
+        "\n## \u26a0\ufe0f Isolation Requirement (added per bd-186)\n\nThis task MUST:\n- Write only to ~/.code_puppy_ex/ (never ~/.code_puppy/)\n- Pass the bd-186 CI gates (no-writes-to-python-home, fresh-install-works, existing-install-untouched)\n- Run all tests against temp directories, never the user's real home\n- Respect the Python freeze policy (bd-187) \u2014 do not modify code_puppy/**/*.py\n\nDependency: bd-186 now blocks this issue."
+      ]
     },
     "bd-168": {
       "id": "bd-168",
@@ -3610,7 +3617,152 @@
       "created_at": "2026-04-19T01:54:20.280883",
       "updated_at": "2026-04-19T01:54:23.246307",
       "comments": []
+    },
+    "bd-182": {
+      "id": "bd-182",
+      "title": "Freeze ~/.code_puppy/ config schema contract",
+      "description": "Document the current on-disk schema for every file in ~/.code_puppy/ that the Elixir port must preserve. This is the source-of-truth contract for bd-164, bd-165, bd-166, bd-167.\n\nDeliverable: a markdown doc (e.g., docs/config_schema_contract.md) covering:\n- puppy.cfg (TOML schema, every key, every type, defaults)\n- extra_models.json, claude_models.json, chatgpt_models.json, model_packs.json (JSON schemas)\n- mcp_registry.json (JSON schema)\n- hooks.json (JSON schema)\n- concurrency.toml, pack_parallelism.toml (TOML schemas)\n- OAuth token JSONs: claude_code_oauth.json, chatgpt_oauth.json, antigravity_oauth.json (format + sensitive fields)\n- SQLite/DuckDB schemas: code_puppy_dev.db, analytics.duckdb (table definitions)\n- Directory conventions: memory/, state/, autosaves/, plugins/, agents/, subagent_sessions/, repl_state/, browser_profiles/\n\nAcceptance criteria:\n- Every file/dir in ~/.code_puppy/ is documented or explicitly declared \"not migrated\"\n- Schema doc is versioned (v1 = current Python)\n- Any future change to these schemas requires a version bump + migration plan\n\n## Scope Clarification (per bd-186)\nThis is a PURE DOCUMENTATION task. It reads Python source code and describes the on-disk schema. It must NOT:\n- Modify any file in ~/.code_puppy/\n- Run the Python pup binary\n- Touch code_puppy/ source files\nOutput is docs/config_schema_contract.md ONLY.",
+      "status": "open",
+      "priority": 2,
+      "type": "task",
+      "labels": [
+        "migration",
+        "python-to-elixir",
+        "rewrite",
+        "safety-net"
+      ],
+      "dependencies": {
+        "blocks": [
+          "bd-165",
+          "bd-164",
+          "bd-167",
+          "bd-166"
+        ]
+      },
+      "created_at": "2026-04-19T02:02:19.873217",
+      "updated_at": "2026-04-19T02:11:51.895027",
+      "comments": [
+        "\n## Scope Clarification (per bd-186)\n\nThis is a PURE DOCUMENTATION task. It reads Python source code and describes the on-disk schema. It must NOT:\n- Modify any file in ~/.code_puppy/\n- Run the Python pup binary\n- Touch code_puppy/ source files\nOutput is docs/config_schema_contract.md ONLY."
+      ]
+    },
+    "bd-183": {
+      "id": "bd-183",
+      "title": "Backup/restore tool for ~/.code_puppy/ pre-migration",
+      "description": "Ship a one-command snapshot tool that users run BEFORE their first pup-ex invocation.\n\nRequirements:\n- Command: pup backup or code-puppy backup \u2192 creates ~/.code_puppy.backup-YYYYMMDD-HHMMSS/ as a full copy\n- Command: pup restore <path> \u2192 restores from backup (with confirmation prompt)\n- Auto-backup on first pup-ex run (unless --no-backup flag)\n- Exclude only obvious transient data (*.db-wal, *.db-shm, cache/)\n- Preserve file permissions and symlinks\n- Works on macOS + Linux (Windows phase 7)\n\nAcceptance criteria:\n- User can rollback to pre-migration state in a single command\n- Auto-backup is opt-out, not opt-in\n- Documented in MIGRATION_STATUS.md and README.md",
+      "status": "open",
+      "priority": 2,
+      "type": "task",
+      "labels": [
+        "migration",
+        "python-to-elixir",
+        "rewrite",
+        "safety-net"
+      ],
+      "dependencies": {
+        "blocks": [
+          "bd-177"
+        ]
+      },
+      "created_at": "2026-04-19T02:02:28.209542",
+      "updated_at": "2026-04-19T02:02:32.635311",
+      "comments": []
+    },
+    "bd-184": {
+      "id": "bd-184",
+      "title": "Config compatibility test suite (golden-file tests)",
+      "description": "Build a test suite that validates the Elixir implementation produces/consumes config files byte-compatible (or semantically equivalent) with the Python implementation.\n\nScope:\n- Golden input files for: puppy.cfg, extra_models.json, claude_models.json, chatgpt_models.json, model_packs.json, mcp_registry.json, hooks.json, concurrency.toml, pack_parallelism.toml\n- Test runner that: (1) loads golden file with Python \u2192 dumps normalized form; (2) loads same file with Elixir \u2192 dumps normalized form; (3) asserts equality\n- Also test the reverse: write from Elixir, read from Python, assert round-trip parity\n- Should run in CI as a gate for bd-164 merge\n\nAcceptance criteria:\n- 100% of schema contract (Issue A) is covered\n- Round-trip tests pass in both directions\n- CI job fails on any schema drift\n\n## \u26a0\ufe0f Isolation Requirement (added per bd-186)\n\nThis task MUST:\n- Write only to ~/.code_puppy_ex/ (never ~/.code_puppy/)\n- Pass the bd-186 CI gates (no-writes-to-python-home, fresh-install-works, existing-install-untouched)\n- Run all tests against temp directories, never the user's real home\n- Respect the Python freeze policy (bd-187) \u2014 do not modify code_puppy/**/*.py",
+      "status": "open",
+      "priority": 2,
+      "type": "task",
+      "labels": [
+        "migration",
+        "python-to-elixir",
+        "rewrite",
+        "safety-net"
+      ],
+      "dependencies": {
+        "depends-on": [
+          "bd-182"
+        ],
+        "blocks": [
+          "bd-164"
+        ]
+      },
+      "created_at": "2026-04-19T02:02:28.211118",
+      "updated_at": "2026-04-19T02:11:51.891515",
+      "comments": [
+        "\n## \u26a0\ufe0f Isolation Requirement (added per bd-186)\n\nThis task MUST:\n- Write only to ~/.code_puppy_ex/ (never ~/.code_puppy/)\n- Pass the bd-186 CI gates (no-writes-to-python-home, fresh-install-works, existing-install-untouched)\n- Run all tests against temp directories, never the user's real home\n- Respect the Python freeze policy (bd-187) \u2014 do not modify code_puppy/**/*.py\n\nDependency: bd-186 now blocks this issue."
+      ]
+    },
+    "bd-185": {
+      "id": "bd-185",
+      "title": "Plugin porting strategy RFC (Python plugins under Elixir)",
+      "description": "RFC / decision task. The Python plugins in ~/.code_puppy/plugins/ and code_puppy/plugins/ cannot run directly under Elixir. Decide the strategy before bd-157 (plugin discovery) and bd-158 (port 49 plugins).\n\nOptions:\nA) Rewrite all plugins in Elixir \u2192 cleanest, highest effort, breaks user plugins\nB) Python side-car via Port \u2192 keep user plugins working, adds runtime complexity, slower\nC) Hybrid \u2192 rewrite builtin plugins in Elixir, side-car for user plugins\nD) Declare plugin API v2 (Elixir-only), provide migration tool + compatibility shim for v1 plugins\n\nMust address:\n- User plugin compatibility (is there a breaking change? how loud?)\n- Hook API parity (all 20+ hooks in code_puppy/callbacks.py)\n- Performance expectations (side-car = IPC overhead per hook call)\n- Security model (user plugins are trusted local Python \u2014 does that change with Ports?)\n- Migration path for plugin authors\n\nAcceptance criteria:\n- Decision documented with rationale\n- If B/C: IPC protocol spec'd\n- If D: migration tool designed + compatibility shim scoped\n- bd-157 and bd-158 descriptions updated to reflect chosen strategy",
+      "status": "open",
+      "priority": 2,
+      "type": "task",
+      "labels": [
+        "migration",
+        "python-to-elixir",
+        "rewrite",
+        "safety-net"
+      ],
+      "dependencies": {
+        "blocks": [
+          "bd-157",
+          "bd-158"
+        ]
+      },
+      "created_at": "2026-04-19T02:02:28.213093",
+      "updated_at": "2026-04-19T02:02:32.682227",
+      "comments": []
+    },
+    "bd-186": {
+      "id": "bd-186",
+      "title": "Dual-home config isolation \u2014 Elixir pup-ex never writes to ~/.code_puppy/",
+      "description": "HARD PREREQUISITE for bd-164, bd-165, bd-166, bd-167, bd-184. Must land before any Elixir code reads or writes config.\n\n## Problem\nLast attempt at porting config.py broke the user's ~/.code_puppy/ directory and made Python pup unusable. Root cause: Elixir and Python were sharing a single config home with overlapping read/write surfaces.\n\n## Solution: Dual-Home Isolation\n\nElixir pup-ex gets its OWN config home: `~/.code_puppy_ex/`\nPython pup continues using `~/.code_puppy/` \u2014 untouched forever.\n\n## Rules (non-negotiable, CI-enforced)\n1. Elixir NEVER writes under ~/.code_puppy/ \u2014 no exceptions\n2. Elixir reads from ~/.code_puppy/ only via explicit opt-in import commands\n3. Python pup is frozen during migration (bug fixes only \u2014 see bd-187)\n4. OAuth tokens are re-acquired by Elixir independently (no sharing)\n\n## Deliverables\n\n### 1. Config home resolution\n- Default: `~/.code_puppy_ex/`\n- Overridable via `PUP_EX_HOME` env var\n- Created on first run with correct permissions (0700)\n\n### 2. First-run behavior\n- If ~/.code_puppy_ex/ doesn't exist: create it empty, show welcome message\n- Offer optional import: \"Import non-sensitive config from Python pup? [Y/n]\"\n- If yes: copy puppy.cfg, *_models.json, mcp_registry.json, hooks.json, concurrency.toml, pack_parallelism.toml \u2014 with .imported-from-python marker file\n- NEVER import: OAuth tokens, sessions, autosaves, databases, command_history\n- Fresh install (no ~/.code_puppy/) must work cleanly\n\n### 3. Commands\n- `pup-ex import --from ~/.code_puppy` \u2014 manual re-sync (copy-only, idempotent, never reverse)\n- `pup-ex doctor` \u2014 reports isolation status, config paths, detects any bleed-through\n- `pup-ex auth login` \u2014 runs fresh OAuth flows, stores tokens in ~/.code_puppy_ex/\n\n### 4. Hard runtime guard\n- Filesystem path guard: any write attempt to a path canonicalizing under ~/.code_puppy/ raises ConfigIsolationViolation and exits\n- Implemented as a Plug-style middleware around all file writes\n- Tested via property test that throws random paths at the guard\n\n### 5. CI gates (all must pass)\n- test_no_writes_to_python_home: fs-watcher/strace assertion across full test suite\n- test_no_reads_of_python_secrets_without_flag: OAuth files only readable with --import-tokens (which we're NOT implementing for now per decision A on OAuth)\n- test_import_is_copy_only: before/after diff of ~/.code_puppy/ after import must be empty\n- test_fresh_install_works: boot with no ~/.code_puppy/ present\n- test_existing_install_untouched: after 10 Elixir runs, find ~/.code_puppy -newer <marker> returns nothing\n\n## Acceptance Criteria\n- All 5 CI gates pass\n- `pup-ex doctor` shows \"\u2705 Isolated\" on a machine with both binaries installed\n- Docs updated in MIGRATION_STATUS.md and README.md with dual-home architecture diagram\n- bd-164, bd-165, bd-166, bd-167 descriptions updated to reference this isolation requirement\n\n## Design Decisions (user-approved)\n- Home path: `~/.code_puppy_ex/` (option 1A)\n- OAuth: re-authenticate separately, no sharing with Python tokens (option 2A)\n- Python policy: frozen except critical bug fixes (option 3B \u2014 see bd-187)\n\n## Blocks\nbd-164, bd-165, bd-166, bd-167, bd-184",
+      "status": "open",
+      "priority": 1,
+      "type": "task",
+      "labels": [
+        "migration",
+        "python-to-elixir",
+        "rewrite",
+        "safety-net",
+        "phase-0"
+      ],
+      "dependencies": {
+        "blocks": [
+          "bd-164",
+          "bd-165",
+          "bd-166",
+          "bd-167",
+          "bd-184"
+        ]
+      },
+      "created_at": "2026-04-19T02:09:20.063535",
+      "updated_at": "2026-04-19T02:09:58.215244",
+      "comments": []
+    },
+    "bd-187": {
+      "id": "bd-187",
+      "title": "Python pup freeze policy during Elixir migration (bug fixes only)",
+      "description": "Policy: during the Python \u2192 Elixir migration, the Python codebase is FROZEN except for critical bug fixes.\n\n## Rules\n- NO refactors in code_puppy/ Python tree\n- NO schema changes to puppy.cfg or any *.json config files\n- NO new features in Python\n- YES critical bug fixes (crashes, data loss, security)\n- YES adding deprecation warnings that guide users toward pup-ex\n- YES docs updates\n\n## Rationale\nPython pup is the daily driver. Elixir pup-ex is the work-in-progress replacement. If Python changes, Elixir has to chase a moving target, and the user's working environment is at risk.\n\n## Enforcement\n- CI check: PRs touching code_puppy/**/*.py with non-trivial changes require a \"bug-fix\" or \"docs\" label\n- Reviewer guidance added to CONTRIBUTING.md\n- bd issues touching Python must be explicitly approved against this policy\n\n## Acceptance\n- CI rule active\n- CONTRIBUTING.md section added\n- bd template updated with policy checkbox",
+      "status": "open",
+      "priority": 2,
+      "type": "task",
+      "labels": [
+        "migration",
+        "python-to-elixir",
+        "rewrite",
+        "safety-net",
+        "policy"
+      ],
+      "dependencies": {},
+      "created_at": "2026-04-19T02:09:26.576664",
+      "updated_at": "2026-04-19T02:09:29.967619",
+      "comments": []
     }
   },
-  "counter": 181
+  "counter": 187
 }
