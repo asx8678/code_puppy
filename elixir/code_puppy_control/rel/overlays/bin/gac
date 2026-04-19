@@ -1,0 +1,20 @@
+#!/usr/bin/env bash
+# gac - Git Auto Commit CLI wrapper
+# Invokes the Elixir Mix task or falls back to the Python CLI.
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+MIX_PROJECT_DIR="${SCRIPT_DIR}/../.."
+
+# If we're inside the Elixir project, use the Mix task
+if [ -f "${MIX_PROJECT_DIR}/mix.exs" ] && command -v mix &>/dev/null; then
+    exec mix do cd "${MIX_PROJECT_DIR}", gac -- "$@"
+fi
+
+# Fall back to the Python `gac` if available
+if command -v gac &>/dev/null; then
+    exec gac "$@"
+fi
+
+echo "Error: Neither the Elixir Mix task nor the Python 'gac' command is available." >&2
+exit 1

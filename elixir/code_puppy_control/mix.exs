@@ -9,8 +9,17 @@ defmodule CodePuppyControl.MixProject do
       elixirc_paths: elixirc_paths(Mix.env()),
       start_permanent: Mix.env() == :prod,
       compilers: [:leex, :yecc] ++ Mix.compilers(),
+      escript: escript(),
       aliases: aliases(),
       deps: deps()
+    ]
+  end
+
+  defp escript do
+    [
+      main_module: CodePuppyControl.CLI,
+      name: :pup,
+      app: nil
     ]
   end
 
