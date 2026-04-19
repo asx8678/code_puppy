@@ -3330,7 +3330,7 @@
       "id": "bd-168",
       "title": "5.1 Build Phoenix server replacing FastAPI (Channels + Plug + PTY)",
       "description": "Replace Python FastAPI server with Phoenix. Includes: REST app endpoints, WebSocket handler, PTY manager, security middleware.\n\nCLARIFICATION: This is NOT a line-by-line port of FastAPI-the-framework. It's a native Phoenix implementation providing equivalent behavior using idiomatic Elixir tools:\n\n- REST endpoints \u2192 Phoenix.Router + controllers (Plug pipeline)\n- WebSocket handler \u2192 Phoenix.Channels (topics, presence, broadcast, auto-reconnect)\n- PTY manager \u2192 Elixir Port / erlexec / NIF\n- Security middleware \u2192 Plug pipeline (auth, CORS, rate limiting)\n- Pub/sub between sessions \u2192 Phoenix.PubSub (built-in, no Redis needed)\n\nUse Phoenix-idiomatic patterns throughout. Do NOT replicate FastAPI abstractions in Elixir.\n\nRelated: see new sibling issue for Phoenix LiveView web-UI evaluation (potential scope expansion, not part of this task).",
-      "status": "open",
+      "status": "closed",
       "priority": 2,
       "type": "task",
       "labels": [
@@ -3345,9 +3345,12 @@
         ]
       },
       "created_at": "2026-04-18T19:48:21.529960",
-      "updated_at": "2026-04-19T01:54:23.152492",
+      "updated_at": "2026-04-19T20:47:23.782747",
       "comments": [
-        "TITLE CLARIFICATION: 5.1 Build Phoenix server replacing FastAPI (Channels + Plug + PTY)\n\nThis is NOT a line-by-line port of FastAPI-the-framework. It's a native Phoenix implementation providing equivalent behavior using idiomatic Elixir tools:\n\n- REST endpoints \u2192 Phoenix.Router + controllers (Plug pipeline)\n- WebSocket handler \u2192 Phoenix.Channels (topics, presence, broadcast, auto-reconnect)\n- PTY manager \u2192 Elixir Port / erlexec / NIF\n- Security middleware \u2192 Plug pipeline (auth, CORS, rate limiting)\n- Pub/sub between sessions \u2192 Phoenix.PubSub (built-in, no Redis needed)\n\nUse Phoenix-idiomatic patterns throughout. Do NOT replicate FastAPI abstractions in Elixir.\n\nRelated: see new sibling issue for Phoenix LiveView web-UI evaluation (potential scope expansion, not part of this task)."
+        "TITLE CLARIFICATION: 5.1 Build Phoenix server replacing FastAPI (Channels + Plug + PTY)\n\nThis is NOT a line-by-line port of FastAPI-the-framework. It's a native Phoenix implementation providing equivalent behavior using idiomatic Elixir tools:\n\n- REST endpoints \u2192 Phoenix.Router + controllers (Plug pipeline)\n- WebSocket handler \u2192 Phoenix.Channels (topics, presence, broadcast, auto-reconnect)\n- PTY manager \u2192 Elixir Port / erlexec / NIF\n- Security middleware \u2192 Plug pipeline (auth, CORS, rate limiting)\n- Pub/sub between sessions \u2192 Phoenix.PubSub (built-in, no Redis needed)\n\nUse Phoenix-idiomatic patterns throughout. Do NOT replicate FastAPI abstractions in Elixir.\n\nRelated: see new sibling issue for Phoenix LiveView web-UI evaluation (potential scope expansion, not part of this task).",
+        "Claimed by planning-agent-019da7. Approaching as scoping + pilot (same pattern as bd-174 Wave 1). Will produce a phased porting plan covering FastAPI \u2192 Phoenix mapping, route/channel inventory, and a minimal proof-of-concept. Full port is multi-week work and will be broken into follow-up bd issues.",
+        "Wave 1 delivered by planning-agent-019da7 in commit 27fc163c.\n\nDeliverables:\n- docs/decisions/bd-168-phoenix-server-plan.md (216-line 5-wave scoping plan)\n- InfoController + GET / route (replaces FastAPI GET / handler)\n- Controller test (1 test, 0 failures, clean compile)\n\nNo new deps. Phoenix pipeline validated end-to-end.\n\nWaves 2-5 to be filed as separate bd issues:\n- Wave 2: REST resources (sessions/config/agents/commands routers) \u2014 ~4 controllers + schemas\n- Wave 3: WebSocket channels (events/terminal/health) \u2014 3 new channels\n- Wave 4: PTY manager (Port.open or erlexec, TBD)\n- Wave 5: Security middleware (auth plug, CORS, rate limiting)",
+        "Wave 1 delivered by planning-agent-019da7 in commit 27fc163c. Deliverables: docs/decisions/bd-168-phoenix-server-plan.md (5-wave scoping plan), InfoController + GET / route (replaces FastAPI GET /), controller test (1 pass 0 fail). Clean compile, no new deps. Waves 2-5 to be filed as separate bd issues."
       ]
     },
     "bd-169": {
@@ -4256,7 +4259,87 @@
       "created_at": "2026-04-19T20:37:36.321031",
       "updated_at": "2026-04-19T20:37:36.321039",
       "comments": []
+    },
+    "bd-214": {
+      "id": "bd-214",
+      "title": "bd-168 Wave 2: Port FastAPI sessions/config/agents/commands routers to Phoenix controllers",
+      "description": "Wave 2 of bd-168 Phoenix server migration. Scope: ~4 Phoenix controllers + request/response schemas.\n\nPort from code_puppy/api/routers/{sessions,config,agents,commands}.py \u2014 4 Python router modules containing approximately 20-30 total endpoints.\n\nApproach:\n- One Phoenix controller per Python router\n- Request validation via Ecto schemaless changesets (decision to be locked in this wave)\n- Response encoding via Jason\n- Controller tests via ConnCase (create test/support/conn_case.ex this wave)\n\nPrereq: bd-168 Wave 1 closed (info endpoint + pipeline scaffold landed).\n\nReference: docs/decisions/bd-168-phoenix-server-plan.md",
+      "status": "open",
+      "priority": 2,
+      "type": "task",
+      "labels": [
+        "migration,python-to-elixir,rewrite,phase-5,follow-up-bd-168"
+      ],
+      "dependencies": {
+        "discovered-from": [
+          "bd-168",
+          "bd-138"
+        ]
+      },
+      "created_at": "2026-04-19T20:45:17.868043",
+      "updated_at": "2026-04-19T20:45:17.868051",
+      "comments": []
+    },
+    "bd-215": {
+      "id": "bd-215",
+      "title": "bd-168 Wave 2: Port FastAPI sessions/config/agents/commands routers to Phoenix controllers",
+      "description": "Wave 2 of bd-168. Port 4 Python router modules (sessions, config, agents, commands) to Phoenix controllers with Ecto schemaless changesets for request validation. Create test/support/conn_case.ex this wave. See docs/decisions/bd-168-phoenix-server-plan.md.",
+      "status": "open",
+      "priority": 2,
+      "type": "task",
+      "labels": [
+        "migration,python-to-elixir,rewrite,phase-5,follow-up-bd-168"
+      ],
+      "dependencies": {},
+      "created_at": "2026-04-19T20:47:33.118815",
+      "updated_at": "2026-04-19T20:47:33.118822",
+      "comments": []
+    },
+    "bd-216": {
+      "id": "bd-216",
+      "title": "bd-168 Wave 3: Port FastAPI WebSocket endpoints to Phoenix Channels",
+      "description": "Wave 3 of bd-168. Port /ws/events, /ws/terminal, /ws/health to Phoenix Channels (EventsChannel, TerminalChannel, HealthChannel). Auth via socket :connect callback. TerminalChannel depends on Wave 4 PTY manager. See docs/decisions/bd-168-phoenix-server-plan.md.",
+      "status": "open",
+      "priority": 2,
+      "type": "task",
+      "labels": [
+        "migration,python-to-elixir,rewrite,phase-5,follow-up-bd-168"
+      ],
+      "dependencies": {},
+      "created_at": "2026-04-19T20:47:36.015052",
+      "updated_at": "2026-04-19T20:47:36.015060",
+      "comments": []
+    },
+    "bd-217": {
+      "id": "bd-217",
+      "title": "bd-168 Wave 4: PTY manager GenServer (Port.open or erlexec)",
+      "description": "Wave 4 of bd-168. Port code_puppy/api/pty_manager.py to Elixir. Key decision: Port.open/2 vs erlexec dep. Must handle OS-portable PTY (macOS BSD + Linux openpty), stream stdout/stderr, handle resize. Most OS-intensive wave. See docs/decisions/bd-168-phoenix-server-plan.md.",
+      "status": "open",
+      "priority": 2,
+      "type": "task",
+      "labels": [
+        "migration,python-to-elixir,rewrite,phase-5,follow-up-bd-168"
+      ],
+      "dependencies": {},
+      "created_at": "2026-04-19T20:47:39.001488",
+      "updated_at": "2026-04-19T20:47:39.001502",
+      "comments": []
+    },
+    "bd-218": {
+      "id": "bd-218",
+      "title": "bd-168 Wave 5: Security middleware plugs (auth + CORS + rate limiting)",
+      "description": "Wave 5 of bd-168. Port code_puppy/api/security.py to Plug pipeline: auth plug (token-based), CORS plug (CORSPlug), rate limiting (Hammer or PlugAttack). Shared token-verifier reused by WebSocket :connect. Depends on Wave 2 (real routes to protect). See docs/decisions/bd-168-phoenix-server-plan.md.",
+      "status": "open",
+      "priority": 2,
+      "type": "task",
+      "labels": [
+        "migration,python-to-elixir,rewrite,phase-5,follow-up-bd-168"
+      ],
+      "dependencies": {},
+      "created_at": "2026-04-19T20:47:41.770139",
+      "updated_at": "2026-04-19T20:47:41.770147",
+      "comments": []
     }
   },
-  "counter": 213
+  "counter": 218
 }
