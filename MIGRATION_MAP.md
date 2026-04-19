@@ -22,7 +22,7 @@
 |-------|-------|-------|-------|-----|
 | Phase 1 | bd-134 | Agent Runtime | 32 | ~24,500 |
 | Phase 2 | bd-135 | Plugins A/B | 28 | ~12,300 |
-| Phase 3 | bd-136 | TUI (Ratatouille) | 45 | ~18,200 |
+| Phase 3 | bd-136 | TUI (Owl + IO.ANSI) | 45 | ~18,200 |
 | Phase 4 | bd-137 | Config/Session/Auth | 18 | ~15,800 |
 | Phase 5 | bd-138 | API/Browser | 15 | ~8,400 |
 | Phase 6 | bd-139 | DBOS → Oban | 4 | ~2,100 |
@@ -697,7 +697,7 @@
 | Phase 0 | bd-132 | Planning | 1 week | — | — |
 | Phase 1 | bd-134 | Core Runtime | 3 weeks | 32 | ~24,500 |
 | Phase 2 | bd-135 | Plugins A/B | 4 weeks | 28 | ~12,300 |
-| Phase 3 | bd-136 | TUI (Ratatouille) | 4 weeks | 45 | ~18,200 |
+| Phase 3 | bd-136 | TUI (Owl + IO.ANSI) | 4 weeks | 45 | ~18,200 |
 | Phase 4 | bd-137 | Config/Session/Auth | 3 weeks | 18 | ~15,800 |
 | Phase 5 | bd-138 | API/Browser | 2 weeks | 15 | ~8,400 |
 | Phase 6 | bd-139 | DBOS → Oban | 1 week | 4 | ~2,100 |
