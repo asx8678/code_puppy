@@ -1,0 +1,509 @@
+defmodule CodePuppyControl.SessionStorage do
+  @doc """
+  File-based session CRUD, search, and export for Code Puppy.
+
+  All sessions stored as JSON under `~/.code_puppy_ex/sessions/` (bd-165).
+  Never touches `~/.code_puppy/` — migration is via `SessionStorage.Migrator`.
+  """
+
+  require Logger
+
+  alias CodePuppyControl.SessionStorage.Format
+
+  # ---------------------------------------------------------------------------
+  # Types
+  # ---------------------------------------------------------------------------
+
+  @type session_name :: String.t()
+  @type message :: map()
+  @type history :: [message()]
+  @type compacted_hashes :: [String.t()]
+  @type total_tokens :: non_neg_integer()
+
+  @type session_metadata :: %{
+          session_name: session_name(),
+          timestamp: String.t(),
+          message_count: non_neg_integer(),
+          total_tokens: total_tokens(),
+          auto_saved: boolean()
+        }
+
+  @type session_data :: %{
+          format: String.t(),
+          payload: %{
+            messages: history(),
+            compacted_hashes: compacted_hashes()
+          },
+          metadata: session_metadata()
+        }
+
+  # ---------------------------------------------------------------------------
+  # Directory Management
+  # ---------------------------------------------------------------------------
+
+  @doc """
+  Returns the base directory for Elixir session storage.
+
+  Defaults to `~/.code_puppy_ex/sessions/`. Override with `PUP_SESSION_DIR`
+  environment variable for testing or custom paths.
+  """
+  @spec base_dir :: Path.t()
+  def base_dir do
+    case System.get_env("PUP_SESSION_DIR") do
+      nil -> Path.expand("~/.code_puppy_ex/sessions")
+      dir -> Path.expand(dir)
+    end
+  end
+
+  @doc """
+  Ensures the session storage directory exists.
+
+  Creates `~/.code_puppy_ex/sessions/` (or `PUP_SESSION_DIR`) if missing.
+  """
+  @spec ensure_dir :: {:ok, Path.t()} | {:error, term()}
+  def ensure_dir do
+    dir = base_dir()
+
+    case File.mkdir_p(dir) do
+      :ok -> {:ok, dir}
+      {:error, reason} -> {:error, reason}
+    end
+  end
+
+  # ---------------------------------------------------------------------------
+  # CRUD Operations
+  # ---------------------------------------------------------------------------
+
+  @doc "Saves a session (creates or updates).\n\nOptions: `:compacted_hashes`, `:total_tokens`, `:auto_saved`, `:timestamp`, `:base_dir`.\n"
+  @spec save_session(session_name(), history(), keyword()) ::
+          {:ok, session_metadata()} | {:error, term()}
+  def save_session(name, history, opts \\ []) do
+    dir = Keyword.get(opts, :base_dir, base_dir())
+    compacted_hashes = Keyword.get(opts, :compacted_hashes, [])
+    total_tokens = Keyword.get(opts, :total_tokens, 0)
+    auto_saved = Keyword.get(opts, :auto_saved, false)
+    timestamp = Keyword.get(opts, :timestamp, now_iso())
+
+    with :ok <- File.mkdir_p(dir) do
+      paths = Format.build_paths(dir, name)
+      message_count = length(history)
+
+      payload = %{
+        "messages" => history,
+        "compacted_hashes" => compacted_hashes
+      }
+
+      metadata = %{
+        "session_name" => name,
+        "timestamp" => timestamp,
+        "message_count" => message_count,
+        "total_tokens" => total_tokens,
+        "auto_saved" => auto_saved
+      }
+
+      session_data = %{
+        "format" => Format.current_format(),
+        "payload" => payload,
+        "metadata" => metadata
+      }
+
+      with :ok <- atomic_write_json(paths.session_path, session_data),
+           :ok <- atomic_write_json(paths.metadata_path, metadata) do
+        {:ok,
+         %{
+           session_name: name,
+           timestamp: timestamp,
+           message_count: message_count,
+           total_tokens: total_tokens,
+           auto_saved: auto_saved
+         }}
+      end
+    end
+  end
+
+  @doc "Loads session messages and compacted hashes. Options: `:base_dir`.\n"
+  @spec load_session(session_name(), keyword()) ::
+          {:ok, %{messages: history(), compacted_hashes: compacted_hashes()}}
+          | {:error, :not_found | term()}
+  def load_session(name, opts \\ []) do
+    dir = Keyword.get(opts, :base_dir, base_dir())
+    paths = Format.build_paths(dir, name)
+
+    case File.read(paths.session_path) do
+      {:ok, raw} ->
+        case Jason.decode(raw) do
+          {:ok, %{"payload" => payload}} ->
+            messages = Map.get(payload, "messages", [])
+            hashes = Map.get(payload, "compacted_hashes", [])
+            {:ok, %{messages: messages, compacted_hashes: hashes}}
+
+          {:ok, data} when is_list(data) ->
+            # Legacy format: raw list of messages
+            {:ok, %{messages: data, compacted_hashes: []}}
+
+          {:ok, _other} ->
+            {:error, "Unexpected session data format"}
+
+          {:error, reason} ->
+            {:error, "JSON decode error: #{inspect(reason)}"}
+        end
+
+      {:error, :enoent} ->
+        {:error, :not_found}
+
+      {:error, reason} ->
+        {:error, reason}
+    end
+  end
+
+  @doc "Loads full session data including format and metadata. Options: `:base_dir`.\n"
+  @spec load_session_full(session_name(), keyword()) ::
+          {:ok, session_data()} | {:error, :not_found | term()}
+  def load_session_full(name, opts \\ []) do
+    dir = Keyword.get(opts, :base_dir, base_dir())
+    paths = Format.build_paths(dir, name)
+
+    case File.read(paths.session_path) do
+      {:ok, raw} ->
+        case Jason.decode(raw) do
+          {:ok, data} -> {:ok, data}
+          {:error, reason} -> {:error, "JSON decode error: #{inspect(reason)}"}
+        end
+
+      {:error, :enoent} ->
+        {:error, :not_found}
+
+      {:error, reason} ->
+        {:error, reason}
+    end
+  end
+
+  @doc "Updates session metadata fields.\n\nOptions: `:auto_saved`, `:total_tokens`, `:timestamp`, `:base_dir`.\n"
+  @spec update_session(session_name(), keyword()) ::
+          {:ok, session_metadata()} | {:error, term()}
+  def update_session(name, opts \\ []) do
+    dir = Keyword.get(opts, :base_dir, base_dir())
+    normalized = Format.normalize_name(name)
+
+    case load_session_full(normalized, base_dir: dir) do
+      {:ok, data} ->
+        metadata = Map.get(data, "metadata", %{})
+
+        updated_metadata =
+          metadata
+          |> maybe_put("auto_saved", Keyword.get(opts, :auto_saved))
+          |> maybe_put("total_tokens", Keyword.get(opts, :total_tokens))
+          |> maybe_put("timestamp", Keyword.get(opts, :timestamp))
+          |> Map.put("updated_at", now_iso())
+
+        updated_data = Map.put(data, "metadata", updated_metadata)
+
+        paths = Format.build_paths(dir, normalized)
+
+        with :ok <- atomic_write_json(paths.session_path, updated_data),
+             :ok <- atomic_write_json(paths.metadata_path, updated_metadata) do
+          {:ok, map_to_metadata(updated_metadata)}
+        end
+
+      {:error, :not_found} ->
+        {:error, :not_found}
+
+      {:error, reason} ->
+        {:error, reason}
+    end
+  end
+
+  @doc "Deletes a session by name (idempotent). Options: `:base_dir`.\n"
+  @spec delete_session(session_name(), keyword()) :: :ok | {:error, term()}
+  def delete_session(name, opts \\ []) do
+    dir = Keyword.get(opts, :base_dir, base_dir())
+    paths = Format.build_paths(dir, name)
+
+    _ = File.rm(paths.session_path)
+    _ = File.rm(paths.metadata_path)
+
+    :ok
+  end
+
+  # ---------------------------------------------------------------------------
+  # Listing & Search
+  # ---------------------------------------------------------------------------
+
+  @doc "Lists all session names sorted alphabetically. Options: `:base_dir`.\n"
+  @spec list_sessions(keyword()) :: {:ok, [session_name()]} | {:error, term()}
+  def list_sessions(opts \\ []) do
+    dir = Keyword.get(opts, :base_dir, base_dir())
+
+    case File.ls(dir) do
+      {:ok, files} ->
+        names =
+          files
+          |> Enum.filter(&String.ends_with?(&1, Format.session_ext()))
+          |> Enum.reject(&String.ends_with?(&1, Format.metadata_suffix()))
+          |> Enum.map(&Path.rootname(&1))
+          |> Enum.sort()
+
+        {:ok, names}
+
+      {:error, :enoent} ->
+        {:ok, []}
+
+      {:error, reason} ->
+        {:error, reason}
+    end
+  end
+
+  @doc "Lists sessions with metadata, sorted newest-first. Options: `:base_dir`.\n"
+  @spec list_sessions_with_metadata(keyword()) :: {:ok, [session_metadata()]} | {:error, term()}
+  def list_sessions_with_metadata(opts \\ []) do
+    dir = Keyword.get(opts, :base_dir, base_dir())
+
+    case File.ls(dir) do
+      {:ok, files} ->
+        meta_files =
+          files
+          |> Enum.filter(&String.ends_with?(&1, Format.metadata_suffix()))
+
+        sessions =
+          meta_files
+          |> Enum.map(&load_metadata_file(Path.join(dir, &1)))
+          |> Enum.filter(&match?({:ok, _}, &1))
+          |> Enum.map(fn {:ok, meta} -> meta end)
+          |> Enum.sort_by(& &1.timestamp, :desc)
+          # newest first
+
+        {:ok, sessions}
+
+      {:error, :enoent} ->
+        {:ok, []}
+
+      {:error, reason} ->
+        {:error, reason}
+    end
+  end
+
+  @doc """
+  Searches sessions by filters.
+
+  Options: `:name_pattern` (string/regex), `:auto_saved`, `:min_tokens`,
+  `:max_tokens`, `:since`, `:until` (ISO8601), `:base_dir`, `:limit` (default 100).
+  """
+  @spec search_sessions(keyword()) :: {:ok, [session_metadata()]} | {:error, term()}
+  def search_sessions(opts \\ []) do
+    limit = Keyword.get(opts, :limit, 100)
+    name_pattern = Keyword.get(opts, :name_pattern)
+    auto_saved = Keyword.get(opts, :auto_saved)
+    min_tokens = Keyword.get(opts, :min_tokens)
+    max_tokens = Keyword.get(opts, :max_tokens)
+    since = Keyword.get(opts, :since)
+    until = Keyword.get(opts, :until)
+
+    case list_sessions_with_metadata(opts) do
+      {:ok, sessions} ->
+        filtered =
+          sessions
+          |> filter_by_name(name_pattern)
+          |> filter_by_auto_saved(auto_saved)
+          |> filter_by_token_range(min_tokens, max_tokens)
+          |> filter_by_time_range(since, until)
+          |> Enum.take(limit)
+
+        {:ok, filtered}
+
+      {:error, reason} ->
+        {:error, reason}
+    end
+  end
+
+  # ---------------------------------------------------------------------------
+  # Cleanup
+  # ---------------------------------------------------------------------------
+
+  @doc "Cleans up old sessions, keeping only the most recent N. Options: `:base_dir`.\n"
+  @spec cleanup_sessions(non_neg_integer(), keyword()) :: {:ok, [session_name()]} | {:error, term()}
+  def cleanup_sessions(max_sessions, _opts \\ [])
+
+  def cleanup_sessions(max_sessions, _opts) when max_sessions <= 0, do: {:ok, []}
+
+  def cleanup_sessions(max_sessions, opts) do
+    case list_sessions_with_metadata(opts) do
+      {:ok, sessions} ->
+        if length(sessions) <= max_sessions do
+          {:ok, []}
+        else
+          to_delete = Enum.drop(sessions, max_sessions)
+          deleted = delete_sessions(to_delete, opts)
+          {:ok, deleted}
+        end
+
+      {:error, reason} ->
+        {:error, reason}
+    end
+  end
+
+  # ---------------------------------------------------------------------------
+  # Export
+  # ---------------------------------------------------------------------------
+
+  @doc """
+  Exports a session to JSON.
+
+  Options: `:base_dir`, `:output_path` (write to file instead of returning string).
+  """
+  @spec export_session(session_name(), keyword()) ::
+          {:ok, String.t() | Path.t()} | {:error, term()}
+  def export_session(name, opts \\ []) do
+    dir = Keyword.get(opts, :base_dir, base_dir())
+
+    with {:ok, data} <- load_session_full(name, base_dir: dir) do
+      json = Jason.encode!(data, pretty: true)
+      write_or_return(json, Keyword.get(opts, :output_path))
+    end
+  end
+
+  @doc """
+  Exports all sessions as a JSON array.
+
+  Options: `:base_dir`, `:output_path` (write to file instead of returning string).
+  """
+  @spec export_all_sessions(keyword()) ::
+          {:ok, String.t() | Path.t()} | {:error, term()}
+  def export_all_sessions(opts \\ []) do
+    with {:ok, names} <- list_sessions(opts) do
+      sessions =
+        names
+        |> Enum.map(&load_session_full(&1, opts))
+        |> Enum.filter(&match?({:ok, _}, &1))
+        |> Enum.map(fn {:ok, data} -> data end)
+
+      json = Jason.encode!(sessions, pretty: true)
+      write_or_return(json, Keyword.get(opts, :output_path))
+    end
+  end
+
+  # ---------------------------------------------------------------------------
+  # Utility
+  # ---------------------------------------------------------------------------
+
+  @doc "Checks if a session exists. Options: `:base_dir`.\n"
+  @spec session_exists?(session_name(), keyword()) :: boolean()
+  def session_exists?(name, opts \\ []) do
+    dir = Keyword.get(opts, :base_dir, base_dir())
+    paths = Format.build_paths(dir, name)
+    File.exists?(paths.session_path)
+  end
+
+  @doc "Returns the count of stored sessions. Options: `:base_dir`.\n"
+  @spec count_sessions(keyword()) :: non_neg_integer()
+  def count_sessions(opts \\ []) do
+    case list_sessions(opts) do
+      {:ok, names} -> length(names)
+      {:error, _} -> 0
+    end
+  end
+
+  # ---------------------------------------------------------------------------
+  # Private Helpers
+  # ---------------------------------------------------------------------------
+
+  defp now_iso do
+    DateTime.utc_now() |> DateTime.to_iso8601()
+  end
+
+  defp atomic_write_json(path, data) do
+    json = Jason.encode!(data, pretty: true)
+    tmp_path = path <> ".tmp"
+
+    with :ok <- File.write(tmp_path, json),
+         :ok <- File.rename(tmp_path, path) do
+      :ok
+    else
+      {:error, reason} ->
+        _ = File.rm(tmp_path)
+        {:error, reason}
+    end
+  end
+
+  defp load_metadata_file(path) do
+    case File.read(path) do
+      {:ok, raw} ->
+        case Jason.decode(raw) do
+          {:ok, data} -> {:ok, map_to_metadata(data)}
+          {:error, reason} -> {:error, reason}
+        end
+
+      {:error, reason} ->
+        {:error, reason}
+    end
+  end
+
+  defp map_to_metadata(data) when is_map(data) do
+    %{
+      session_name: Map.get(data, "session_name", Map.get(data, "name", "")),
+      timestamp: Map.get(data, "timestamp", ""),
+      message_count: Map.get(data, "message_count", 0),
+      total_tokens: Map.get(data, "total_tokens", 0),
+      auto_saved: Map.get(data, "auto_saved", false)
+    }
+  end
+
+  defp maybe_put(map, _key, nil), do: map
+  defp maybe_put(map, key, value), do: Map.put(map, key, value)
+
+  # Search filter helpers
+
+  defp filter_by_name(sessions, nil), do: sessions
+
+  defp filter_by_name(sessions, pattern) when is_binary(pattern) do
+    case Regex.compile(pattern, "i") do
+      {:ok, regex} -> filter_by_name(sessions, regex)
+      {:error, _} -> sessions
+    end
+  end
+
+  defp filter_by_name(sessions, %Regex{} = regex) do
+    Enum.filter(sessions, fn meta ->
+      Regex.match?(regex, meta.session_name)
+    end)
+  end
+
+  defp filter_by_auto_saved(sessions, nil), do: sessions
+
+  defp filter_by_auto_saved(sessions, flag) when is_boolean(flag) do
+    Enum.filter(sessions, &(&1.auto_saved == flag))
+  end
+
+  defp filter_by_token_range(sessions, nil, nil), do: sessions
+
+  defp filter_by_token_range(sessions, min, max) do
+    Enum.filter(sessions, fn meta ->
+      tokens = meta.total_tokens
+      (is_nil(min) or tokens >= min) and (is_nil(max) or tokens <= max)
+    end)
+  end
+
+  defp filter_by_time_range(sessions, nil, nil), do: sessions
+
+  defp filter_by_time_range(sessions, since, until) do
+    Enum.filter(sessions, fn meta ->
+      ts = meta.timestamp
+      (is_nil(since) or ts >= since) and (is_nil(until) or ts <= until)
+    end)
+  end
+
+  defp delete_sessions(sessions, opts) do
+    Enum.map(sessions, fn meta ->
+      _ = delete_session(meta.session_name, opts)
+      meta.session_name
+    end)
+  end
+
+  defp write_or_return(json, nil), do: {:ok, json}
+
+  defp write_or_return(json, path) do
+    with :ok <- File.mkdir_p(Path.dirname(path)),
+         :ok <- File.write(path, json) do
+      {:ok, path}
+    end
+  end
+end
