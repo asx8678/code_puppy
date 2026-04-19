@@ -1,12 +1,15 @@
 defmodule CodePuppyControl.LLM.ModelPacksPropertyTest do
   @moduledoc """
-  Property-based tests for ModelPacks invariants.
+  Property-based tests for ModelPacks behavioral invariants.
 
-  Ports invariants from tests/test_model_packs.py and adds:
-  - No model appears in two roles simultaneously within a pack (when configured that way)
-  - get_model_chain always includes the primary model as the first element
-  - Fallback chain always starts with primary + fallbacks
-  - get_model_for_role returns a string
+  Tests REAL routing and fallback behavior, not struct-field tautologies:
+  - Unknown roles always route through default_role
+  - nil role delegates to default_role
+  - Orphan default_role (not in roles) degrades to "auto"
+  - Fallback chain for unknown roles delegates to default_role's chain
+  - Fallback chains contain no duplicates when inputs are distinct
+  - to_map preserves all role data
+  - create_pack + retrieval round-trips correctly
   - All default packs have consistent structure
   """
   use ExUnit.Case, async: false
@@ -167,74 +170,214 @@ defmodule CodePuppyControl.LLM.ModelPacksPropertyTest do
     end
   end
 
-  # ── Non-tautological ModelPack Properties ────────────────────────────
+  # ── Real Behavior Invariant Properties ────────────────────────────────
 
-  describe "model exclusivity across roles (property)" do
-    property "a ModelPack created with primary M has M as the primary for that role" do
+  describe "get_model_for_role routing invariants" do
+    property "unknown role always resolves to the default_role's primary" do
       check all(
-              primary <- string(:alphanumeric, min_length: 1, max_length: 15),
-              role <- string(:alphanumeric, min_length: 1, max_length: 10)
+              default_primary <- string(:alphanumeric, min_length: 1, max_length: 15),
+              unknown_role <- string(:alphanumeric, min_length: 20, max_length: 30),
+              default_role <- member_of(["coder", "planner", "reviewer"])
             ) do
+        # min_length: 20 guarantees unknown_role != any 6-char role name
         pack = %ModelPack{
-          name: "primary-test",
+          name: "route-test",
           description: "Test",
-          roles: %{role => %RoleConfig{primary: primary}},
-          default_role: role
+          roles: %{default_role => %RoleConfig{primary: default_primary}},
+          default_role: default_role
         }
 
-        assert ModelPack.get_model_for_role(pack, role) == primary
+        result = ModelPack.get_model_for_role(pack, unknown_role)
+
+        # The REAL invariant: unknown roles route through default_role logic
+        assert result == default_primary,
+               "unknown role '#{unknown_role}' should resolve to default_role's primary"
       end
     end
 
-    property "get_fallback_chain always returns a non-empty list for any valid role" do
+    property "nil role delegates to default_role" do
       check all(
-              primary <- string(:alphanumeric, min_length: 1, max_length: 15),
-              role <- string(:alphanumeric, min_length: 1, max_length: 10),
-              fallback_count <- integer(0..4)
-            ) do
-        fallbacks = if fallback_count > 0, do: (for i <- 1..fallback_count, do: "fallback-#{i}"), else: []
-
-        pack = %ModelPack{
-          name: "chain-test",
-          description: "Test",
-          roles: %{role => %RoleConfig{primary: primary, fallbacks: fallbacks}},
-          default_role: role
-        }
-
-        chain = ModelPack.get_fallback_chain(pack, role)
-        assert is_list(chain)
-        assert length(chain) >= 1
-        assert hd(chain) == primary
-      end
-    end
-
-    property "no model name appears as primary in two different roles when explicitly distinct" do
-      check all(
-              model_a <- string(:alphanumeric, min_length: 1, max_length: 15),
-              model_b <- string(:alphanumeric, min_length: 1, max_length: 15),
+              default_primary <- string(:alphanumeric, min_length: 1, max_length: 15),
+              other_primary <- string(:alphanumeric, min_length: 1, max_length: 15),
               max_attempts: 20
             ) do
-        # Ensure distinct models to test the non-overlap invariant
-        if model_a != model_b do
+        if default_primary != other_primary do
           pack = %ModelPack{
-            name: "exclusive-test",
+            name: "nil-role-test",
             description: "Test",
             roles: %{
-              "planner" => %RoleConfig{primary: model_a},
-              "coder" => %RoleConfig{primary: model_b}
+              "coder" => %RoleConfig{primary: default_primary},
+              "planner" => %RoleConfig{primary: other_primary}
             },
             default_role: "coder"
           }
 
-          primaries =
-            pack.roles
-            |> Map.values()
-            |> Enum.map(& &1.primary)
-
-          # When primaries are distinct by construction, the pack reflects that
-          assert length(Enum.uniq(primaries)) == length(primaries),
-                 "Each role should have a unique primary model"
+          # nil MUST route to the default_role, not some other role
+          assert ModelPack.get_model_for_role(pack, nil) == default_primary
+          # And explicitly requesting the default_role gives the same result
+          assert ModelPack.get_model_for_role(pack, "coder") == default_primary
+          # But a different known role gives a DIFFERENT result
+          assert ModelPack.get_model_for_role(pack, "planner") == other_primary
         end
+      end
+    end
+
+    property "default_role missing from roles returns 'auto'" do
+      check all(
+              role <- string(:alphanumeric, min_length: 1, max_length: 10),
+              primary <- string(:alphanumeric, min_length: 1, max_length: 15)
+            ) do
+        # If default_role points to a non-existent role, get_model_for_role
+        # must return "auto" as a safe fallback — NOT crash or return nil
+        pack = %ModelPack{
+          name: "orphan-default-test",
+          description: "Test",
+          roles: %{role => %RoleConfig{primary: primary}},
+          default_role: "nonexistent"
+        }
+
+        # Requesting the orphan default_role directly
+        assert ModelPack.get_model_for_role(pack, "nonexistent") == "auto"
+
+        # Unknown role falls back to default_role which is also missing → "auto"
+        assert ModelPack.get_model_for_role(pack, "also_missing") == "auto"
+      end
+    end
+  end
+
+  describe "get_fallback_chain routing invariants" do
+    property "fallback chain for unknown role delegates to default_role's chain" do
+      check all(
+              primary <- string(:alphanumeric, min_length: 1, max_length: 15),
+              fallback_count <- integer(1..4),
+              unknown_role <- string(:alphanumeric, min_length: 20, max_length: 30)
+            ) do
+        fallbacks = for i <- 1..fallback_count, do: "fb-#{i}"
+
+        pack = %ModelPack{
+          name: "chain-route-test",
+          description: "Test",
+          roles: %{"coder" => %RoleConfig{primary: primary, fallbacks: fallbacks}},
+          default_role: "coder"
+        }
+
+        chain = ModelPack.get_fallback_chain(pack, unknown_role)
+        expected = ModelPack.get_fallback_chain(pack, "coder")
+
+        # The REAL invariant: unknown roles get the SAME chain as default_role
+        assert chain == expected
+      end
+    end
+
+    property "fallback chain for orphan default_role returns [\"auto\"]" do
+      check all(
+              role <- string(:alphanumeric, min_length: 1, max_length: 10),
+              primary <- string(:alphanumeric, min_length: 1, max_length: 15)
+            ) do
+        pack = %ModelPack{
+          name: "orphan-chain-test",
+          description: "Test",
+          roles: %{role => %RoleConfig{primary: primary}},
+          default_role: "nonexistent"
+        }
+
+        # When default_role doesn't exist, chain degrades to ["auto"]
+        assert ModelPack.get_fallback_chain(pack, "nonexistent") == ["auto"]
+        assert ModelPack.get_fallback_chain(pack, nil) == ["auto"]
+      end
+    end
+
+    property "fallback chain has no duplicate models when fallbacks don't contain primary" do
+      check all(
+              primary <- string(:alphanumeric, min_length: 5, max_length: 15),
+              fb1 <- string(:alphanumeric, min_length: 5, max_length: 15),
+              fb2 <- string(:alphanumeric, min_length: 5, max_length: 15),
+              max_attempts: 30
+            ) do
+        # Filter to ensure all three are distinct (stream_data may generate collisions)
+        if primary != fb1 and primary != fb2 and fb1 != fb2 do
+          pack = %ModelPack{
+            name: "no-dupe-test",
+            description: "Test",
+            roles: %{"coder" => %RoleConfig{primary: primary, fallbacks: [fb1, fb2]}},
+            default_role: "coder"
+          }
+
+          chain = ModelPack.get_fallback_chain(pack, "coder")
+
+          # REAL invariant: no model appears twice in the chain
+          assert length(chain) == length(Enum.uniq(chain)),
+                 "fallback chain should have no duplicates, got: #{inspect(chain)}"
+        end
+      end
+    end
+  end
+
+  describe "to_map round-trip invariant" do
+    property "to_map preserves all role primaries and fallbacks" do
+      check all(
+              name <- string(:alphanumeric, min_length: 1, max_length: 12),
+              primary_a <- string(:alphanumeric, min_length: 1, max_length: 15),
+              primary_b <- string(:alphanumeric, min_length: 1, max_length: 15),
+              fallback_count <- integer(0..3)
+            ) do
+        fallbacks = if fallback_count > 0, do: (for i <- 1..fallback_count, do: "fb-#{i}"), else: []
+
+        pack = %ModelPack{
+          name: name,
+          description: "Round-trip test",
+          roles: %{
+            "coder" => %RoleConfig{primary: primary_a, fallbacks: fallbacks},
+            "planner" => %RoleConfig{primary: primary_b}
+          },
+          default_role: "coder"
+        }
+
+        mapped = ModelPack.to_map(pack)
+
+        # to_map must preserve name, description, default_role
+        assert mapped[:name] == name
+        assert mapped[:description] == "Round-trip test"
+        assert mapped[:default_role] == "coder"
+
+        # to_map must preserve role primaries and fallbacks
+        assert mapped[:roles]["coder"][:primary] == primary_a
+        assert mapped[:roles]["coder"][:fallbacks] == fallbacks
+        assert mapped[:roles]["planner"][:primary] == primary_b
+      end
+    end
+  end
+
+  describe "create_pack + get_model_for_role integration" do
+    property "a created pack's roles are retrievable via get_model_for_role" do
+      check all(
+              primary <- string(:alphanumeric, min_length: 1, max_length: 15),
+              fb1 <- string(:alphanumeric, min_length: 1, max_length: 15),
+              max_attempts: 20
+            ) do
+        name = "test-pp-prop-#{:erlang.unique_integer([:positive])}"
+
+        roles = %{
+          "coder" => %{
+            "primary" => primary,
+            "fallbacks" => [fb1],
+            "trigger" => "provider_failure"
+          }
+        }
+
+        assert {:ok, _pack} = ModelPacks.create_pack(name, "Property test pack", roles, "coder")
+
+        # Now verify the REAL behavior: the GenServer stores it and
+        # get_model_for_role through the pack resolves correctly
+        retrieved = ModelPacks.get_pack(name)
+        assert ModelPack.get_model_for_role(retrieved, "coder") == primary
+        assert ModelPack.get_fallback_chain(retrieved, "coder") == [primary, fb1]
+
+        # And unknown role falls back to coder's primary
+        assert ModelPack.get_model_for_role(retrieved, "nonexistent") == primary
+
+        # Clean up
+        ModelPacks.delete_pack(name)
       end
     end
   end
