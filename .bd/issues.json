@@ -3624,8 +3624,10 @@
         ]
       },
       "created_at": "2026-04-19T01:54:20.280883",
-      "updated_at": "2026-04-19T01:54:23.246307",
-      "comments": []
+      "updated_at": "2026-04-19T20:24:57.579915",
+      "comments": [
+        "Claimed by planning-agent-019da7. Scope: decision doc only. Creates NEW docs/decisions/bd-181-liveview-evaluation.md. No edits to existing (purged) docs."
+      ]
     },
     "bd-182": {
       "id": "bd-182",
@@ -3904,8 +3906,12 @@
         ]
       },
       "created_at": "2026-04-19T12:21:53.956195",
-      "updated_at": "2026-04-19T12:21:57.493794",
-      "comments": []
+      "updated_at": "2026-04-19T20:20:29.400170",
+      "comments": [
+        "Claimed by planning-agent-019da7. Scope: markdown/docs only. Zero code changes.",
+        "@claim planning-agent-019da7",
+        "Releasing claim (planning-agent-019da7). bd-195 cannot be worked on safely from this session: the three target files (MIGRATION_MAP.md, docs/THIN_SHELL_CONTRACT.md, docs/decisions/bd-169-browser-automation-strategy.md) are all present at HEAD but DELETED in the current working tree as part of an unstaged large-scale docs purge (60+ deleted docs, owned by another session). Editing them would require either restoring them (undoing the other session's work) or committing the deletions (not mine to commit).\n\nRecommendation: bd-195 should be re-picked after the pending docs-purge is either committed or reverted. Alternatively, bd-195 could be re-scoped to \"document the decision in whichever docs survive the purge\" once the purge settles.\n\nNo changes made. Re-opening for pickup."
+      ]
     },
     "bd-196": {
       "id": "bd-196",
@@ -4115,14 +4121,19 @@
       "id": "bd-207",
       "title": "Audit fallout from cfg\u2192env promotion bug (fixed in 4cafdcd6)",
       "description": "## Summary\n\nA latent bug in the cfg\u2192env promotion loop was discovered and fixed as a side-effect of commit 4cafdcd6d6e2561c4c70559ecf733e45e8fb333b (\"feat(models): register Wafer Pass provider + fix silent cfg\u2192env bug\").\n\n## The Bug\n\n`lib/code_puppy_control/config/debug.ex`\"'s `load_api_keys_to_environment/0` iterated its `@api_key_names` allowlist (uppercase entries like `OPENAI_API_KEY`, `OPENROUTER_API_KEY`, `WAFER_API_KEY`, etc.) and called `Loader.get_value(key)` directly with those uppercase strings. But the INI parser in `Loader.parse_file/1` stores keys as-written from `puppy.cfg`, which is lowercase (`openai_api_key = ...`, `openrouter_api_key = ...`). Result: every lookup returned `nil` and the entire function was a silent no-op.\n\n## The Fix\n\nDowncase the env var name before the Loader lookup:\n\n```elixir\nconfig_key = String.downcase(key)\ncase Loader.get_value(config_key) do ...\n```\n\n## Affected File\n\n`lib/code_puppy_control/config/debug.ex` (the `@api_key_names` loop in `load_api_keys_to_environment/0`)\n\n## Affected Env Vars\n\nAll of these were silently un-promoted:\n- `OPENAI_API_KEY`\n- `GEMINI_API_KEY`\n- `ANTHROPIC_API_KEY`\n- `CEREBRAS_API_KEY`\n- `SYN_API_KEY`\n- `AZURE_OPENAI_API_KEY`\n- `AZURE_OPENAI_ENDPOINT`\n- `OPENROUTER_API_KEY`\n- `ZAI_API_KEY`\n- `WAFER_API_KEY`\n\n## Audit Tasks\n\n- [ ] Search the codebase for other call sites that assume env vars are populated from `puppy.cfg` \u2014 any that would have been no-ops before 4cafdcd6?\n- [ ] Verify the fix in production: boot the app with only `puppy.cfg` populated (no shell exports, no `.env`) and confirm `System.get_env/1` returns the expected values for all keys in the allowlist\n- [ ] Consider adding parametric tests covering every key in `@api_key_names`, not just `WAFER_API_KEY`\n- [ ] Decide whether `Loader.get_value/1` should do case-insensitive lookup as a belt-and-suspenders guard, OR whether the allowlist should store keys in their native lowercase form with `String.upcase/1` applied for `System.put_env/2` (either design is fine; current fix downcases at the call site \u2014 just document the convention)\n- [ ] Check whether any users filed past issues complaining about \"my API key isn\"'t being picked up\" \u2014 might have been this bug\n\n## Severity Note\n\nUsers were likely masked from this by shell exports or `.env` file loading elsewhere, which is why it went undetected. Low user impact in practice, but the silent-failure-mode is the real concern.",
-      "status": "open",
+      "status": "closed",
       "priority": 2,
       "type": "bug",
-      "labels": [],
+      "labels": [
+        "claimed-by-planning-agent-019da7"
+      ],
       "dependencies": {},
       "created_at": "2026-04-19T19:45:03.122811",
-      "updated_at": "2026-04-19T19:45:03.122818",
-      "comments": []
+      "updated_at": "2026-04-19T20:23:03.595259",
+      "comments": [
+        "Claimed by planning-agent-019da7. Scope: read-only audit. Will produce a written audit report. Zero code changes, no config/env/auth modifications.",
+        "AUDIT COMPLETE \u2014 planning-agent-019da7\n\nBug: Debug.load_api_keys_to_environment/0 passed UPPERCASE env names to Loader.get_value/1 against a lowercase-keyed INI store. Silent no-op for all 10 keys in @api_key_names. Fix: downcase the key before lookup (commit 4cafdcd6).\n\n## Audit task results\n\n1. Other call sites with same bug pattern? NONE.\n   Grepped all Loader.get_value callers in lib/. Every other caller uses a lowercase literal directly (see config/agents.ex, config/limits.ex, config/models.ex, config/cache.ex, config/migrator.ex, config/debug.ex). The @api_key_names loop was uniquely vulnerable because it was the only site iterating canonical UPPERCASE env-name strings against a lowercase INI store. Localized bug, not systemic.\n\n2. Fix verified in production? PARTIALLY.\n   Regression test in debug_test.exs:164 proves wafer_api_key \u2192 WAFER_API_KEY promotion works end-to-end. Boot-with-only-puppy.cfg not explicitly asserted in CI, but mechanism is covered.\n\n3. Parametric tests for every key? GAP.\n   Only WAFER_API_KEY is tested. Other 9 keys (OPENAI, GEMINI, ANTHROPIC, CEREBRAS, SYN, AZURE_OPENAI_API_KEY, AZURE_OPENAI_ENDPOINT, OPENROUTER, ZAI) rely on the fix working generically. The code path IS generic (uniform Enum.each loop), but no enforced parametric coverage \u2192 future refactor could silently regress.\n\n4. Case-insensitive lookup design? CURRENT APPROACH IS CORRECT.\n   Downcase-at-call-site is the right tradeoff. Case-insensitive Loader.get_value would change semantics for 30+ callers. Normalizing at INI parse time would silently alter behavior for callers expecting raw INI keys. Explicit downcase keeps blast radius minimal.\n\n5. Past user issues? COULD NOT AUDIT.\n   Requires GitHub/GitLab issue search (out of session scope). Affected users likely compensated via .env or shell exports; bug may have surfaced as confusing API key behavior rather than outright failure.\n\n## Severity\n\nUser impact: LOW-MEDIUM. The conditional  meant anyone with .env or shell exports was unaffected. Only users relying SOLELY on puppy.cfg for keys saw empty values.\nData risk: None (read-only promotion).\nFix correctness: CORRECT and tested.\n\n## Recommended follow-ups (not filed unless requested)\n\n- Add parametric test covering all 10 keys in @api_key_names (single for-loop, ~30 lines, test-only).\n- Add boot-smoke CI assertion that load_api_keys_to_environment/0 runs at startup and populates at least one key.\n\n## Deliverable: this comment. No code changes made."
+      ]
     },
     "bd-208": {
       "id": "bd-208",
@@ -4136,9 +4147,10 @@
       ],
       "dependencies": {},
       "created_at": "2026-04-19T20:11:43.367974",
-      "updated_at": "2026-04-19T20:14:40.739186",
+      "updated_at": "2026-04-19T20:18:28.660358",
       "comments": [
-        "Claimed by planning-agent-019da7. Scope: dead code removal only, no feature changes, no config/auth touched."
+        "Claimed by planning-agent-019da7. Scope: dead code removal only, no feature changes, no config/auth touched.",
+        "Completed. Verified by planning-agent-019da7 on commit 275893fb.\n\nAll 5 phases satisfied across two commits:\n- 24a8c202 \"bd-208: Remove dead native-backend branches, fix stale docs\" \u2014 Phases 1-2 (Python dead branches + docs + test guard).\n- 275893fb \"bd-208: Remove deprecated turbo_parse_nif.ex stub (Elixir side)\" \u2014 Phases 4-5 (Elixir stub removal + comment cleanup).\n\nVerification results:\n- `grep -rn turbo_parse elixir/code_puppy_control/lib/` \u2192 0 matches\n- `turbo_parse_nif.ex` \u2192 deleted\n- `tests/fuzz/test_symbol_extraction.py` \u2192 deleted (was 100% skipped)\n- `test_no_direct_bridge_imports.py` \u2192 now forbids native_backend/acceleration imports with elixir_bridge guidance\n- AGENTS.md \u2192 Phase 4 section rewritten\n\nMinor optional follow-ups (not blockers, not filing separate issues unless requested):\n- `code_puppy/config.py:2557` has a stale comment mentioning `fast_puppy.native_backend` (different package \u2014 may be intentional).\n- `code_puppy/plugins/elixir_bridge/__init__.py` has 3 docstring references to \"NativeBackend\" as legacy context."
       ]
     }
   },
