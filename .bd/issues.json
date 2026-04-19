@@ -3897,9 +3897,13 @@
       "priority": 2,
       "type": "task",
       "labels": [],
-      "dependencies": {},
+      "dependencies": {
+        "discovered-from": [
+          "bd-164"
+        ]
+      },
       "created_at": "2026-04-19T12:21:53.956195",
-      "updated_at": "2026-04-19T12:21:53.956204",
+      "updated_at": "2026-04-19T12:21:57.493794",
       "comments": []
     }
   },
