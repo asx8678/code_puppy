@@ -540,6 +540,7 @@ class TestInteractiveMode:
                     return_value=True
                 ),
                 "code_puppy.command_line.wiggum_state.stop_wiggum": mock_stop,
+                "code_puppy.command_line.wiggum_state.has_ready_bd_work": MagicMock(return_value=True),
             },
         )
         mock_stop.assert_called()
@@ -1064,6 +1065,7 @@ class TestInteractiveMode:
                     return_value=1
                 ),
                 "code_puppy.command_line.wiggum_state.stop_wiggum": MagicMock(),
+                "code_puppy.command_line.wiggum_state.has_ready_bd_work": MagicMock(return_value=True),
             },
         )
 
@@ -1111,6 +1113,7 @@ class TestInteractiveMode:
                     return_value=1
                 ),
                 "code_puppy.command_line.wiggum_state.stop_wiggum": MagicMock(),
+                "code_puppy.command_line.wiggum_state.has_ready_bd_work": MagicMock(return_value=True),
             },
         )
 
@@ -1150,6 +1153,7 @@ class TestInteractiveMode:
                     return_value=None
                 ),
                 "code_puppy.command_line.wiggum_state.stop_wiggum": mock_stop,
+                "code_puppy.command_line.wiggum_state.has_ready_bd_work": MagicMock(return_value=True),
             },
         )
         mock_stop.assert_called()
@@ -1198,6 +1202,7 @@ class TestInteractiveMode:
                     return_value=1
                 ),
                 "code_puppy.command_line.wiggum_state.stop_wiggum": MagicMock(),
+                "code_puppy.command_line.wiggum_state.has_ready_bd_work": MagicMock(return_value=True),
             },
         )
 
@@ -1567,6 +1572,7 @@ class TestInteractiveModeEdgeCases:
                     return_value=1
                 ),
                 "code_puppy.command_line.wiggum_state.stop_wiggum": MagicMock(),
+                "code_puppy.command_line.wiggum_state.has_ready_bd_work": MagicMock(return_value=True),
             },
         )
 
@@ -1735,6 +1741,7 @@ class TestRemainingEdgeCases:
                 ),
                 "code_puppy.command_line.wiggum_state.is_wiggum_active": fake_wiggum,
                 "code_puppy.command_line.wiggum_state.stop_wiggum": mock_stop,
+                "code_puppy.command_line.wiggum_state.has_ready_bd_work": MagicMock(return_value=True),
             },
         )
         mock_stop.assert_called()

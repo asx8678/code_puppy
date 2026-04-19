@@ -75,3 +75,67 @@ def increment_wiggum_count() -> int:
 def get_wiggum_count() -> int:
     """Get the current wiggum loop count."""
     return _wiggum_state.loop_count
+
+
+def has_ready_bd_work() -> bool:
+    """Return True if `bd ready --json` reports at least one ready issue.
+
+    Fail-open: if bd is not installed, times out, returns non-zero, or
+    outputs malformed JSON, this returns True and emits a warning so
+    the running wiggum loop is not killed due to a flaky tracker.
+    """
+    import json
+    import subprocess
+
+    try:
+        proc = subprocess.run(
+            ["bd", "ready", "--json"],
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+    except FileNotFoundError:
+        try:
+            from code_puppy.messaging import emit_warning
+            emit_warning("wiggum: `bd` CLI not found; cannot auto-stop on empty queue.")
+        except Exception:
+            pass
+        return True
+    except subprocess.TimeoutExpired:
+        try:
+            from code_puppy.messaging import emit_warning
+            emit_warning("wiggum: `bd ready` timed out; continuing loop.")
+        except Exception:
+            pass
+        return True
+
+    if proc.returncode != 0:
+        try:
+            from code_puppy.messaging import emit_warning
+            emit_warning(
+                f"wiggum: `bd ready` exited {proc.returncode}; continuing loop."
+            )
+        except Exception:
+            pass
+        return True
+
+    try:
+        data = json.loads(proc.stdout or "[]")
+    except json.JSONDecodeError:
+        try:
+            from code_puppy.messaging import emit_warning
+            emit_warning("wiggum: could not parse `bd ready --json` output; continuing loop.")
+        except Exception:
+            pass
+        return True
+
+    # bd ready may return a list, or a dict with an "issues" key. Handle both.
+    if isinstance(data, list):
+        return len(data) > 0
+    if isinstance(data, dict):
+        issues = data.get("issues")
+        if isinstance(issues, list):
+            return len(issues) > 0
+        # unknown shape, fail-open
+        return True
+    return True

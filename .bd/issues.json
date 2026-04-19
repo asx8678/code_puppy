@@ -3869,7 +3869,20 @@
       "created_at": "2026-04-19T10:58:56.571204",
       "updated_at": "2026-04-19T10:59:13.686217",
       "comments": []
+    },
+    "bd-194": {
+      "id": "bd-194",
+      "title": "Wiggum auto-stops when bd ready queue is empty",
+      "description": "",
+      "status": "open",
+      "priority": 2,
+      "type": "feature",
+      "labels": [],
+      "dependencies": {},
+      "created_at": "2026-04-19T11:27:55.901759",
+      "updated_at": "2026-04-19T11:27:55.901769",
+      "comments": []
     }
   },
-  "counter": 193
+  "counter": 194
 }

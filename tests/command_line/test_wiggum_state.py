@@ -93,3 +93,69 @@ class TestModuleFunctions:
         # Verify ledger is cleared
         assert len(mock_ledger.attempts) == 0
         assert mock_ledger.total_estimated_input == 0
+
+
+class TestHasReadyBdWork:
+    """Tests for has_ready_bd_work — wiggum's bd-queue probe."""
+
+    def test_empty_list_returns_false(self):
+        from unittest.mock import patch, MagicMock
+        from code_puppy.command_line.wiggum_state import has_ready_bd_work
+
+        mock_proc = MagicMock(returncode=0, stdout="[]")
+        with patch("subprocess.run", return_value=mock_proc):
+            assert has_ready_bd_work() is False
+
+    def test_non_empty_list_returns_true(self):
+        from unittest.mock import patch, MagicMock
+        from code_puppy.command_line.wiggum_state import has_ready_bd_work
+
+        mock_proc = MagicMock(returncode=0, stdout='[{"id": "bd-1"}]')
+        with patch("subprocess.run", return_value=mock_proc):
+            assert has_ready_bd_work() is True
+
+    def test_dict_with_issues_key(self):
+        from unittest.mock import patch, MagicMock
+        from code_puppy.command_line.wiggum_state import has_ready_bd_work
+
+        mock_empty = MagicMock(returncode=0, stdout='{"issues": []}')
+        with patch("subprocess.run", return_value=mock_empty):
+            assert has_ready_bd_work() is False
+
+        mock_full = MagicMock(returncode=0, stdout='{"issues": [{"id": "bd-1"}]}')
+        with patch("subprocess.run", return_value=mock_full):
+            assert has_ready_bd_work() is True
+
+    def test_bd_not_installed_fails_open(self):
+        from unittest.mock import patch
+        from code_puppy.command_line.wiggum_state import has_ready_bd_work
+
+        with patch("subprocess.run", side_effect=FileNotFoundError()):
+            assert has_ready_bd_work() is True
+
+    def test_nonzero_exit_fails_open(self):
+        from unittest.mock import patch, MagicMock
+        from code_puppy.command_line.wiggum_state import has_ready_bd_work
+
+        mock_proc = MagicMock(returncode=1, stdout="", stderr="boom")
+        with patch("subprocess.run", return_value=mock_proc):
+            assert has_ready_bd_work() is True
+
+    def test_bad_json_fails_open(self):
+        from unittest.mock import patch, MagicMock
+        from code_puppy.command_line.wiggum_state import has_ready_bd_work
+
+        mock_proc = MagicMock(returncode=0, stdout="not json")
+        with patch("subprocess.run", return_value=mock_proc):
+            assert has_ready_bd_work() is True
+
+    def test_timeout_fails_open(self):
+        from unittest.mock import patch
+        import subprocess
+        from code_puppy.command_line.wiggum_state import has_ready_bd_work
+
+        with patch(
+            "subprocess.run",
+            side_effect=subprocess.TimeoutExpired(cmd="bd", timeout=5),
+        ):
+            assert has_ready_bd_work() is True

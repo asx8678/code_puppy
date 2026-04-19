@@ -542,12 +542,21 @@ async def interactive_mode(message_renderer, initial_command: str = None) -> Non
             # ================================================================
             from code_puppy.command_line.wiggum_state import (
                 get_wiggum_prompt,
+                has_ready_bd_work,
                 increment_wiggum_count,
                 is_wiggum_active,
                 stop_wiggum,
             )
 
             while is_wiggum_active():
+                if not has_ready_bd_work():
+                    from code_puppy.messaging import emit_warning
+                    emit_warning(
+                        "🍩 Wiggum stopping: `bd ready` queue is empty. Nothing left to chase!"
+                    )
+                    stop_wiggum()
+                    break
+
                 wiggum_prompt = get_wiggum_prompt()
                 if not wiggum_prompt:
                     stop_wiggum()

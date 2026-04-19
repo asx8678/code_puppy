@@ -211,3 +211,19 @@ class TestWiggumCommand:
 
         assert cmd is not None
         assert cmd.name == "wiggum_stop"  # Same CommandInfo
+
+
+class TestWiggumAutoStopOnEmptyBd:
+    """Verify wiggum stops when bd has no ready work."""
+
+    def setup_method(self):
+        from code_puppy.command_line.wiggum_state import stop_wiggum
+        stop_wiggum()
+
+    def teardown_method(self):
+        from code_puppy.command_line.wiggum_state import stop_wiggum
+        stop_wiggum()
+
+    def test_has_ready_bd_work_gate_is_importable(self):
+        from code_puppy.command_line.wiggum_state import has_ready_bd_work
+        assert callable(has_ready_bd_work)
