@@ -34,8 +34,17 @@ defmodule CodePuppyControl.Runtime.EventStoreTest do
     end
 
     test "stores event with atom or string session_id key" do
-      event_atom = %{type: "text", session_id: "atom-test", content: "a-#{System.unique_integer()}"}
-      event_string = %{"type" => "text", "session_id" => "string-test", "content" => "b-#{System.unique_integer()}"}
+      event_atom = %{
+        type: "text",
+        session_id: "atom-test",
+        content: "a-#{System.unique_integer()}"
+      }
+
+      event_string = %{
+        "type" => "text",
+        "session_id" => "string-test",
+        "content" => "b-#{System.unique_integer()}"
+      }
 
       assert :ok = EventStore.store(event_atom)
       assert :ok = EventStore.store(event_string)
@@ -50,7 +59,11 @@ defmodule CodePuppyControl.Runtime.EventStoreTest do
     test "stores multiple events at once" do
       events =
         for i <- 1..3 do
-          %{type: "text", session_id: "batch-test", content: "event-#{i}-#{System.unique_integer()}"}
+          %{
+            type: "text",
+            session_id: "batch-test",
+            content: "event-#{i}-#{System.unique_integer()}"
+          }
         end
 
       assert :ok = EventStore.store_many(events)
@@ -78,7 +91,13 @@ defmodule CodePuppyControl.Runtime.EventStoreTest do
       session_id = "replay-test-#{System.unique_integer([:positive])}"
 
       for i <- 1..5 do
-        EventStore.store(%{type: "text", session_id: session_id, idx: i, uniq: System.unique_integer()})
+        EventStore.store(%{
+          type: "text",
+          session_id: session_id,
+          idx: i,
+          uniq: System.unique_integer()
+        })
+
         Process.sleep(1)
       end
 
@@ -93,14 +112,26 @@ defmodule CodePuppyControl.Runtime.EventStoreTest do
       session_id = "cursor-test-#{System.unique_integer([:positive])}"
 
       for i <- 1..3 do
-        EventStore.store(%{type: "text", session_id: session_id, idx: i, uniq: System.unique_integer()})
+        EventStore.store(%{
+          type: "text",
+          session_id: session_id,
+          idx: i,
+          uniq: System.unique_integer()
+        })
+
         Process.sleep(1)
       end
 
       cursor = EventStore.get_cursor(session_id)
 
       for i <- 4..6 do
-        EventStore.store(%{type: "text", session_id: session_id, idx: i, uniq: System.unique_integer()})
+        EventStore.store(%{
+          type: "text",
+          session_id: session_id,
+          idx: i,
+          uniq: System.unique_integer()
+        })
+
         Process.sleep(1)
       end
 
@@ -115,7 +146,13 @@ defmodule CodePuppyControl.Runtime.EventStoreTest do
       session_id = "limit-test-#{System.unique_integer([:positive])}"
 
       for i <- 1..10 do
-        EventStore.store(%{type: "text", session_id: session_id, idx: i, uniq: System.unique_integer()})
+        EventStore.store(%{
+          type: "text",
+          session_id: session_id,
+          idx: i,
+          uniq: System.unique_integer()
+        })
+
         Process.sleep(1)
       end
 
@@ -126,11 +163,29 @@ defmodule CodePuppyControl.Runtime.EventStoreTest do
     test "filters by :event_types" do
       session_id = "filter-test-#{System.unique_integer([:positive])}"
 
-      EventStore.store(%{type: "text", session_id: session_id, content: "hello-#{System.unique_integer()}"})
+      EventStore.store(%{
+        type: "text",
+        session_id: session_id,
+        content: "hello-#{System.unique_integer()}"
+      })
+
       Process.sleep(1)
-      EventStore.store(%{type: "status", session_id: session_id, status: "running", uniq: System.unique_integer()})
+
+      EventStore.store(%{
+        type: "status",
+        session_id: session_id,
+        status: "running",
+        uniq: System.unique_integer()
+      })
+
       Process.sleep(1)
-      EventStore.store(%{type: "text", session_id: session_id, content: "world-#{System.unique_integer()}"})
+
+      EventStore.store(%{
+        type: "text",
+        session_id: session_id,
+        content: "world-#{System.unique_integer()}"
+      })
+
       Process.sleep(1)
 
       text_events = EventStore.replay(session_id, since: @since_beginning, event_types: ["text"])
@@ -170,11 +225,22 @@ defmodule CodePuppyControl.Runtime.EventStoreTest do
       session_id = "count-test-#{System.unique_integer([:positive])}"
       assert EventStore.count(session_id) == 0
 
-      EventStore.store(%{type: "text", session_id: session_id, content: "first-#{System.unique_integer()}"})
+      EventStore.store(%{
+        type: "text",
+        session_id: session_id,
+        content: "first-#{System.unique_integer()}"
+      })
+
       assert EventStore.count(session_id) == 1
 
       Process.sleep(1)
-      EventStore.store(%{type: "text", session_id: session_id, content: "second-#{System.unique_integer()}"})
+
+      EventStore.store(%{
+        type: "text",
+        session_id: session_id,
+        content: "second-#{System.unique_integer()}"
+      })
+
       assert EventStore.count(session_id) == 2
     end
   end
@@ -216,7 +282,12 @@ defmodule CodePuppyControl.Runtime.EventStoreTest do
       session_id = "trim-test-#{System.unique_integer([:positive])}"
 
       for i <- 1..1005 do
-        EventStore.store(%{type: "text", session_id: session_id, idx: i, uniq: System.unique_integer()})
+        EventStore.store(%{
+          type: "text",
+          session_id: session_id,
+          idx: i,
+          uniq: System.unique_integer()
+        })
       end
 
       count = EventStore.count(session_id)
@@ -250,7 +321,13 @@ defmodule CodePuppyControl.Runtime.EventStoreTest do
       session_id = "all-events-#{System.unique_integer([:positive])}"
 
       for i <- 1..3 do
-        EventStore.store(%{type: "text", session_id: session_id, idx: i, uniq: System.unique_integer()})
+        EventStore.store(%{
+          type: "text",
+          session_id: session_id,
+          idx: i,
+          uniq: System.unique_integer()
+        })
+
         Process.sleep(1)
       end
 
@@ -266,9 +343,20 @@ defmodule CodePuppyControl.Runtime.EventStoreTest do
     test "supports event_types filter" do
       session_id = "filtered-events-#{System.unique_integer([:positive])}"
 
-      EventStore.store(%{type: "text", session_id: session_id, content: "txt-#{System.unique_integer()}}"})
+      EventStore.store(%{
+        type: "text",
+        session_id: session_id,
+        content: "txt-#{System.unique_integer()}}"
+      })
+
       Process.sleep(1)
-      EventStore.store(%{type: "error", session_id: session_id, error: "err-#{System.unique_integer()}"})
+
+      EventStore.store(%{
+        type: "error",
+        session_id: session_id,
+        error: "err-#{System.unique_integer()}"
+      })
+
       Process.sleep(1)
 
       events = EventStore.get_events(session_id, event_types: ["text"], since: @since_beginning)

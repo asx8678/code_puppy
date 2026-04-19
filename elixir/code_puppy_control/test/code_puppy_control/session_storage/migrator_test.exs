@@ -75,9 +75,7 @@ defmodule CodePuppyControl.SessionStorage.MigratorTest do
   end
 
   defp migrate(src, dest, autosave, extra \\ []) do
-    Migrator.migrate(
-      [source_dir: src, source_autosave_dir: autosave, dest_dir: dest] ++ extra
-    )
+    Migrator.migrate([source_dir: src, source_autosave_dir: autosave, dest_dir: dest] ++ extra)
   end
 
   # ---------------------------------------------------------------------------

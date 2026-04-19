@@ -81,7 +81,14 @@ defmodule CodePuppyControl.LLM.ModelRegistryTest do
 
   describe "type_supported?/1" do
     test "returns true for known types" do
-      for type <- ["openai", "anthropic", "custom_openai", "azure_openai", "round_robin", "gemini"] do
+      for type <- [
+            "openai",
+            "anthropic",
+            "custom_openai",
+            "azure_openai",
+            "round_robin",
+            "gemini"
+          ] do
         assert ModelRegistry.type_supported?(type) == true,
                "Expected type '#{type}' to be supported"
       end

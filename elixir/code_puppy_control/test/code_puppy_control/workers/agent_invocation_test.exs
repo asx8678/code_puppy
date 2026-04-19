@@ -32,12 +32,13 @@ defmodule CodePuppyControl.Workers.AgentInvocationTest do
     end
 
     test "worker creates job with correct queue" do
-      changeset = AgentInvocation.new(%{
-        workflow_id: "wf-queue-test",
-        session_id: "sess-test",
-        agent_name: "test-agent",
-        prompt: "Test"
-      })
+      changeset =
+        AgentInvocation.new(%{
+          workflow_id: "wf-queue-test",
+          session_id: "sess-test",
+          agent_name: "test-agent",
+          prompt: "Test"
+        })
 
       # The queue should be set in the changeset
       assert changeset.changes.queue == "workflows"

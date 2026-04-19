@@ -33,7 +33,8 @@ defmodule CodePuppyControl.Runtime.AgentLoopTest do
     def model_preference, do: "test-model"
 
     @impl true
-    def on_tool_result(_tool_name, result, state), do: {:cont, Map.put(state, :last_result, result)}
+    def on_tool_result(_tool_name, result, state),
+      do: {:cont, Map.put(state, :last_result, result)}
   end
 
   # ---------------------------------------------------------------------------

@@ -38,7 +38,8 @@ defmodule CodePuppyControl.LLM.ModelPacksPropertyTest do
     property "get_model_chain always starts with primary" do
       check all(
               primary <- string(:alphanumeric, min_length: 1, max_length: 20),
-              fallbacks <- list_of(string(:alphanumeric, min_length: 1, max_length: 20), max_length: 5)
+              fallbacks <-
+                list_of(string(:alphanumeric, min_length: 1, max_length: 20), max_length: 5)
             ) do
         config = %RoleConfig{primary: primary, fallbacks: fallbacks}
         chain = RoleConfig.get_model_chain(config)
@@ -86,6 +87,7 @@ defmodule CodePuppyControl.LLM.ModelPacksPropertyTest do
               unknown_role <- string(:alphanumeric, min_length: 20, max_length: 30)
             ) do
         default_role = "coder"
+
         pack = %ModelPack{
           name: "prop-test",
           description: "Property test pack",
@@ -105,7 +107,9 @@ defmodule CodePuppyControl.LLM.ModelPacksPropertyTest do
               primary <- string(:alphanumeric, min_length: 1, max_length: 20),
               fallback_count <- integer(0..4)
             ) do
-        fallbacks = if fallback_count > 0, do: (for i <- 1..fallback_count, do: "fallback-#{i}"), else: []
+        fallbacks =
+          if fallback_count > 0, do: for(i <- 1..fallback_count, do: "fallback-#{i}"), else: []
+
         role = "coder"
 
         pack = %ModelPack{
@@ -134,6 +138,7 @@ defmodule CodePuppyControl.LLM.ModelPacksPropertyTest do
     test "all default packs have a valid default_role" do
       for name <- ["single", "coding", "economical", "capacity"] do
         pack = ModelPacks.get_pack(name)
+
         assert Map.has_key?(pack.roles, pack.default_role),
                "Pack '#{name}' default_role '#{pack.default_role}' not in roles"
       end
@@ -321,7 +326,8 @@ defmodule CodePuppyControl.LLM.ModelPacksPropertyTest do
               primary_b <- string(:alphanumeric, min_length: 1, max_length: 15),
               fallback_count <- integer(0..3)
             ) do
-        fallbacks = if fallback_count > 0, do: (for i <- 1..fallback_count, do: "fb-#{i}"), else: []
+        fallbacks =
+          if fallback_count > 0, do: for(i <- 1..fallback_count, do: "fb-#{i}"), else: []
 
         pack = %ModelPack{
           name: name,

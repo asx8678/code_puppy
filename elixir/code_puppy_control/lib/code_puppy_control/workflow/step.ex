@@ -204,7 +204,8 @@ defmodule CodePuppyControl.Workflow.Step do
   end
 
   # Terminal states — no-op (already completed, failed, or cancelled)
-  def cancel(%__MODULE__{state: state} = step) when state in ["completed", "failed", "cancelled"] do
+  def cancel(%__MODULE__{state: state} = step)
+      when state in ["completed", "failed", "cancelled"] do
     {:ok, step}
   end
 
