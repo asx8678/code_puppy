@@ -13,6 +13,37 @@ defmodule CodePuppyControlWeb.Router do
   - `POST /api/runs/:id/execute` - Execute a tool via Python worker
   - `GET /api/runs/:id/history` - Get run request/response history
 
+  ### Sessions (bd-214 Wave 2)
+  - `GET /api/sessions` - List sessions with pagination
+  - `GET /api/sessions/:id` - Get session metadata
+  - `GET /api/sessions/:id/messages` - Get session messages
+  - `DELETE /api/sessions/:id` - Delete a session
+
+  ### Config (bd-214 Wave 2)
+  - `GET /api/config` - List all config keys/values
+  - `GET /api/config/keys` - List valid config keys
+  - `GET /api/config/:key` - Get a config value
+  - `PUT /api/config/:key` - Set a config value
+  - `DELETE /api/config/:key` - Reset a config value
+
+  ### Agents (bd-214 Wave 2)
+  - `GET /api/agents` - List all available agents
+
+  ### Commands (bd-214 Wave 2)
+  - `GET /api/commands` - List all slash commands
+  - `GET /api/commands/:name` - Get command info
+  - `POST /api/commands/execute` - Execute a command
+  - `POST /api/commands/autocomplete` - Get autocomplete suggestions
+
+  ### MCP Server Management
+  - `GET /api/mcp` - List MCP servers
+  - `POST /api/mcp` - Register MCP server
+  - `GET /api/mcp/:id` - Get server status
+  - `DELETE /api/mcp/:id` - Unregister server
+  - `POST /api/mcp/:id/call` - Call a tool
+  - `POST /api/mcp/:id/restart` - Restart server
+  - `GET /api/mcp/health` - MCP health check
+
   ### Health & Metrics
   - `GET /health` - Health check
   - `GET /metrics` - Prometheus metrics (if configured)
@@ -37,9 +68,32 @@ defmodule CodePuppyControlWeb.Router do
   scope "/api", CodePuppyControlWeb do
     pipe_through :api
 
+    # Run management
     resources "/runs", RunController, only: [:create, :show, :delete]
     post "/runs/:id/execute", RunController, :execute
     get "/runs/:id/history", RunController, :history
+
+    # Session management (bd-214 Wave 2)
+    get "/sessions", SessionsController, :index
+    get "/sessions/:id", SessionsController, :show
+    get "/sessions/:id/messages", SessionsController, :messages
+    delete "/sessions/:id", SessionsController, :delete
+
+    # Configuration management (bd-214 Wave 2)
+    get "/config", ConfigController, :index
+    get "/config/keys", ConfigController, :keys
+    get "/config/:key", ConfigController, :show
+    put "/config/:key", ConfigController, :update
+    delete "/config/:key", ConfigController, :delete
+
+    # Agent management (bd-214 Wave 2)
+    get "/agents", AgentsController, :index
+
+    # Command management (bd-214 Wave 2)
+    get "/commands", CommandsController, :index
+    get "/commands/:name", CommandsController, :show
+    post "/commands/execute", CommandsController, :execute
+    post "/commands/autocomplete", CommandsController, :autocomplete
 
     # MCP Server endpoints
     resources "/mcp", MCPController, only: [:index, :create, :show, :delete]
