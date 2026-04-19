@@ -253,7 +253,9 @@ defmodule CodePuppyControl.Credentials do
   """
   @spec store_dir(keyword()) :: String.t()
   def store_dir(opts) do
-    Keyword.get(opts, :store_dir) || default_store_dir()
+    dir = Keyword.get(opts, :store_dir) || default_store_dir()
+    validate_isolation!(dir)
+    dir
   end
 
   @doc """
@@ -274,6 +276,19 @@ defmodule CodePuppyControl.Credentials do
 
   defp default_store_dir do
     CodePuppyControl.Config.Paths.credentials_dir()
+  end
+
+  defp validate_isolation!(dir) do
+    legacy_home = CodePuppyControl.Config.Paths.legacy_home_dir()
+    expanded = Path.expand(dir)
+
+    if String.starts_with?(expanded, legacy_home <> "/") or expanded == legacy_home do
+      raise ArgumentError,
+            "Credentials must not be stored in the legacy Python home " <>
+              "(#{legacy_home}). Use ~/.code_puppy_ex/ instead."
+    end
+
+    :ok
   end
 
   defp default_python_cfg_path do

@@ -6,10 +6,13 @@ defmodule CodePuppyControl.Credentials.Crypto do
 
   ## Key Derivation
 
-  The encryption key is derived from a machine-specific identity (hostname +
-  username) using HMAC-SHA256. This provides at-rest encryption that is:
+  The encryption key is derived from a persistent machine-specific secret
+  stored at `~/.code_puppy_ex/.machine_secret`. This provides at-rest
+  encryption that is:
 
   - Tied to the machine (key isn't portable across hosts)
+  - Persisted across restarts (key is stable, not derived from
+    predictable values like `:erlang.node()`)
   - Sufficient to protect against casual file-reading attacks
   - NOT a replacement for OS keychain integration (future work)
 
@@ -39,10 +42,14 @@ defmodule CodePuppyControl.Credentials.Crypto do
   # ── Key Derivation ──────────────────────────────────────────────────────
 
   @doc """
-  Derive a 32-byte AES-256 key from a machine-specific identity.
+  Derive a 32-byte AES-256 key from a persistent machine secret.
 
-  Uses HMAC-SHA256 over the concatenation of hostname and username,
-  producing a deterministic key tied to the current machine.
+  On first call, generates a random 32-byte secret and persists it to
+  `~/.code_puppy_ex/.machine_secret` (or `PUP_MACHINE_SECRET_PATH`
+  if set). Subsequent calls read the same secret, producing a stable
+  key across restarts.
+
+  The secret file is created with 0o600 permissions.
 
   ## Examples
 
@@ -52,8 +59,26 @@ defmodule CodePuppyControl.Credentials.Crypto do
   """
   @spec derive_key() :: <<_::256>>
   def derive_key do
-    identity = "#{:erlang.node()}:#{System.get_env("USER", "unknown")}"
-    :crypto.mac(:hmac, :sha256, "code_puppy_credential_key", identity)
+    key_file = machine_secret_path()
+
+    case File.read(key_file) do
+      {:ok, secret} ->
+        :crypto.hash(:sha256, secret)
+
+      {:error, _} ->
+        secret = :crypto.strong_rand_bytes(32)
+        File.mkdir_p!(Path.dirname(key_file))
+        File.write!(key_file, secret)
+        File.chmod!(key_file, 0o600)
+        :crypto.hash(:sha256, secret)
+    end
+  end
+
+  @doc false
+  @spec machine_secret_path() :: String.t()
+  def machine_secret_path do
+    System.get_env("PUP_MACHINE_SECRET_PATH") ||
+      Path.join([System.get_env("HOME") || "/tmp", ".code_puppy_ex", ".machine_secret"])
   end
 
   @doc """

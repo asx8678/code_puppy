@@ -10,8 +10,25 @@ defmodule CodePuppyControl.CredentialsTest do
     dir = Path.join(System.tmp_dir!(), "cred_test_#{:erlang.unique_integer([:positive])}")
     File.mkdir_p!(dir)
 
+    # Redirect machine secret to temp dir so tests never write to the real
+    # ~/.code_puppy_ex/.machine_secret
+    secret_tmp =
+      Path.join(System.tmp_dir!(), "cred_secret_#{:erlang.unique_integer([:positive])}")
+
+    File.mkdir_p!(secret_tmp)
+    key_file = Path.join(secret_tmp, ".machine_secret")
+    original_secret_path = System.get_env("PUP_MACHINE_SECRET_PATH")
+    System.put_env("PUP_MACHINE_SECRET_PATH", key_file)
+
     on_exit(fn ->
+      if original_secret_path do
+        System.put_env("PUP_MACHINE_SECRET_PATH", original_secret_path)
+      else
+        System.delete_env("PUP_MACHINE_SECRET_PATH")
+      end
+
       File.rm_rf(dir)
+      File.rm_rf(secret_tmp)
     end)
 
     {:ok, store_dir: dir}
@@ -264,6 +281,48 @@ defmodule CodePuppyControl.CredentialsTest do
       # Value should be trimmed
       assert {:ok, "sk-gemini-spaces"} =
                Credentials.get("GEMINI_API_KEY", store_dir: dir)
+    end
+  end
+
+  describe "isolation: reject legacy Python home" do
+    test "store_dir raises when store_dir points at ~/.code_puppy/" do
+      legacy_home = CodePuppyControl.Config.Paths.legacy_home_dir()
+      legacy_creds = Path.join(legacy_home, "credentials")
+
+      assert_raise ArgumentError, ~r/legacy Python home/, fn ->
+        Credentials.store_dir(store_dir: legacy_creds)
+      end
+    end
+
+    test "set raises when store_dir is the legacy home itself" do
+      legacy_home = CodePuppyControl.Config.Paths.legacy_home_dir()
+
+      assert_raise ArgumentError, ~r/legacy Python home/, fn ->
+        Credentials.set("KEY", "value", store_dir: legacy_home)
+      end
+    end
+
+    test "get raises when store_dir is under ~/.code_puppy/" do
+      legacy_home = CodePuppyControl.Config.Paths.legacy_home_dir()
+      deep_path = Path.join([legacy_home, "sub", "credentials"])
+
+      assert_raise ArgumentError, ~r/legacy Python home/, fn ->
+        Credentials.get("KEY", store_dir: deep_path)
+      end
+    end
+
+    test "delete raises when store_dir is under ~/.code_puppy/" do
+      legacy_home = CodePuppyControl.Config.Paths.legacy_home_dir()
+      deep_path = Path.join([legacy_home, "nested", "creds"])
+
+      assert_raise ArgumentError, ~r/legacy Python home/, fn ->
+        Credentials.delete("KEY", store_dir: deep_path)
+      end
+    end
+
+    test "code_puppy_ex paths are accepted without error", %{store_dir: dir} do
+      # A temp dir that is NOT under ~/.code_puppy/ should work fine
+      assert ^dir = Credentials.store_dir(store_dir: dir)
     end
   end
 

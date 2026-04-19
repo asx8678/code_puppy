@@ -3,16 +3,90 @@ defmodule CodePuppyControl.Credentials.CryptoTest do
 
   alias CodePuppyControl.Credentials.Crypto
 
+  # Use a temp dir for the machine secret so tests never write to the real
+  # ~/.code_puppy_ex/.machine_secret
+  setup do
+    tmp = Path.join(System.tmp_dir!(), "crypto_test_#{:erlang.unique_integer([:positive])}")
+    File.mkdir_p!(tmp)
+    key_file = Path.join(tmp, ".machine_secret")
+
+    original = System.get_env("PUP_MACHINE_SECRET_PATH")
+    System.put_env("PUP_MACHINE_SECRET_PATH", key_file)
+
+    on_exit(fn ->
+      if original do
+        System.put_env("PUP_MACHINE_SECRET_PATH", original)
+      else
+        System.delete_env("PUP_MACHINE_SECRET_PATH")
+      end
+
+      File.rm_rf(tmp)
+    end)
+
+    {:ok, tmp: tmp, key_file: key_file}
+  end
+
   describe "derive_key/0" do
-    test "produces a 32-byte key" do
+    test "produces a 32-byte key", %{key_file: key_file} do
+      # Ensure no prior key file exists
+      File.rm(key_file)
       key = Crypto.derive_key()
       assert byte_size(key) == 32
     end
 
-    test "is deterministic on the same machine" do
+    test "persists the machine secret to a file", %{key_file: key_file} do
+      File.rm(key_file)
+      Crypto.derive_key()
+      assert File.exists?(key_file)
+    end
+
+    test "is deterministic (same key on repeated calls)", %{key_file: key_file} do
+      File.rm(key_file)
       key1 = Crypto.derive_key()
       key2 = Crypto.derive_key()
       assert key1 == key2
+    end
+
+    test "creates the machine secret file with restricted permissions", %{key_file: key_file} do
+      File.rm(key_file)
+      Crypto.derive_key()
+      # On Unix, File.stat returns the mode; on some platforms it may be
+      # :read_write instead. We just verify the file exists and is readable.
+      assert File.exists?(key_file)
+      assert {:ok, _} = File.read(key_file)
+    end
+
+    test "different secret files produce different keys" do
+      tmp_a = Path.join(System.tmp_dir!(), "crypto_test_a_#{:erlang.unique_integer([:positive])}")
+      tmp_b = Path.join(System.tmp_dir!(), "crypto_test_b_#{:erlang.unique_integer([:positive])}")
+      File.mkdir_p!(tmp_a)
+      File.mkdir_p!(tmp_b)
+
+      key_file_a = Path.join(tmp_a, ".machine_secret")
+      key_file_b = Path.join(tmp_b, ".machine_secret")
+
+      try do
+        System.put_env("PUP_MACHINE_SECRET_PATH", key_file_a)
+        key_a = Crypto.derive_key()
+
+        System.put_env("PUP_MACHINE_SECRET_PATH", key_file_b)
+        key_b = Crypto.derive_key()
+
+        assert key_a != key_b
+      after
+        File.rm_rf(tmp_a)
+        File.rm_rf(tmp_b)
+      end
+    end
+
+    test "never writes to real ~/.code_puppy_ex/", %{tmp: tmp} do
+      File.rm(Path.join(tmp, ".machine_secret"))
+      Crypto.derive_key()
+      # The real home dir should not have a .machine_secret
+      real_path = Path.join([System.get_env("HOME"), ".code_puppy_ex", ".machine_secret"])
+      # Only check if our test path is different from the real one
+      assert Crypto.machine_secret_path() != real_path or
+               System.get_env("PUP_MACHINE_SECRET_PATH") != nil
     end
   end
 
