@@ -20,6 +20,9 @@ defmodule CodePuppyControl.PtyManager.Stub do
       # Simulate PTY output for a session
       CodePuppyControl.PtyManager.Stub.simulate_output("my-session", "Hello")
 
+      # Override the PTY session ID returned by create_session
+      CodePuppyControl.PtyManager.Stub.set_custom_pty_id("custom-id")
+
   ## How it works
 
   The real `PtyManager` is a GenServer whose public functions call
@@ -32,7 +35,7 @@ defmodule CodePuppyControl.PtyManager.Stub do
 
   @pty_manager_name CodePuppyControl.PtyManager
 
-  defstruct sessions: %{}, calls: %{}
+  defstruct sessions: %{}, calls: %{}, custom_pty_id: nil
 
   # ---------------------------------------------------------------------------
   # Client API — GenServer start
@@ -77,6 +80,21 @@ defmodule CodePuppyControl.PtyManager.Stub do
     GenServer.call(@pty_manager_name, {:stub_simulate_output, session_id, data})
   end
 
+  @doc """
+  Set a custom PTY session ID to return from `create_session/2`.
+
+  When set, `create_session("topic-id", ...)` returns
+  `%{session_id: custom_id, ...}` and records calls under `custom_id`
+  for write/resize/close. This lets tests verify that the channel uses
+  the PTY-assigned ID (not the topic ID).
+
+  Pass `nil` to reset to default behaviour (PTY ID == topic ID).
+  """
+  @spec set_custom_pty_id(String.t() | nil) :: :ok
+  def set_custom_pty_id(custom_id) do
+    GenServer.call(@pty_manager_name, {:stub_set_custom_pty_id, custom_id})
+  end
+
   # ---------------------------------------------------------------------------
   # GenServer callbacks
   # ---------------------------------------------------------------------------
@@ -95,8 +113,11 @@ defmodule CodePuppyControl.PtyManager.Stub do
     shell = Keyword.get(opts, :shell, "/bin/sh")
     subscriber = Keyword.get(opts, :subscriber)
 
+    # Allow tests to override the returned PTY ID
+    pty_id = state.custom_pty_id || session_id
+
     session = %{
-      session_id: session_id,
+      session_id: pty_id,
       cols: cols,
       rows: rows,
       shell: shell,
@@ -105,9 +126,9 @@ defmodule CodePuppyControl.PtyManager.Stub do
 
     state = %{
       state
-      | sessions: Map.put(state.sessions, session_id, session),
+      | sessions: Map.put(state.sessions, pty_id, session),
         calls:
-          Map.update(state.calls, session_id, [{:create, %{cols: cols, rows: rows}}], fn calls ->
+          Map.update(state.calls, pty_id, [{:create, %{cols: cols, rows: rows}}], fn calls ->
             calls ++ [{:create, %{cols: cols, rows: rows}}]
           end)
     }
@@ -243,6 +264,11 @@ defmodule CodePuppyControl.PtyManager.Stub do
 
         {:reply, :ok, state}
     end
+  end
+
+  @impl true
+  def handle_call({:stub_set_custom_pty_id, custom_id}, _from, state) do
+    {:reply, :ok, %{state | custom_pty_id: custom_id}}
   end
 
   # Catch-all for unrecognised calls

@@ -71,5 +71,18 @@ defmodule CodePuppyControlWeb.HealthChannelTest do
       assert_push "status", status
       assert status.status == "ok"
     end
+
+    test "only one status push per interval (no double-scheduling)" do
+      socket = connect_socket()
+      {:ok, _reply, _socket} = Phoenix.ChannelTest.join(socket, "health", %{})
+
+      # Flush the initial status push triggered by join
+      assert_push "status", _
+
+      # No additional status push should arrive immediately — the next
+      # one is scheduled after @health_interval_ms. If join had both
+      # send() and schedule_health(), we would see a second push here.
+      refute_push "status", _, 50
+    end
   end
 end

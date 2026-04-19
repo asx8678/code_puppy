@@ -110,6 +110,38 @@ defmodule CodePuppyControlWeb.TerminalChannelTest do
     end
   end
 
+  describe "pty_session_id usage" do
+    test "write/resize/close use pty_session_id, not topic session_id" do
+      # Configure stub to return a distinct PTY ID
+      CodePuppyControl.PtyManager.Stub.set_custom_pty_id("pty-abc-123")
+
+      socket = connect_socket("topic-session-id")
+      {:ok, _reply, socket} = Phoenix.ChannelTest.join(socket, "terminal:topic-session-id", %{})
+      assert_push "session_started", _
+
+      # Write should go to the PTY ID, not the topic ID
+      ref = Phoenix.ChannelTest.push(socket, "input", %{"data" => "ls\n"})
+      assert_reply ref, :ok, %{}
+
+      pty_calls = CodePuppyControl.PtyManager.Stub.get_calls("pty-abc-123")
+      topic_calls = CodePuppyControl.PtyManager.Stub.get_calls("topic-session-id")
+
+      # Operations recorded under PTY ID, NOT topic ID
+      assert {:write, "ls\n"} in pty_calls
+      assert Enum.all?(topic_calls, fn {action, _} -> action != :write end)
+
+      # Resize should also use PTY ID
+      ref = Phoenix.ChannelTest.push(socket, "resize", %{"cols" => 200, "rows" => 50})
+      assert_reply ref, :ok, %{}
+
+      pty_calls = CodePuppyControl.PtyManager.Stub.get_calls("pty-abc-123")
+      topic_calls = CodePuppyControl.PtyManager.Stub.get_calls("topic-session-id")
+
+      assert {:resize, %{cols: 200, rows: 50}} in pty_calls
+      assert Enum.all?(topic_calls, fn {action, _} -> action != :resize end)
+    end
+  end
+
   describe "terminate" do
     test "closes PTY session on channel leave" do
       socket = connect_socket("close-test")
@@ -122,6 +154,26 @@ defmodule CodePuppyControlWeb.TerminalChannelTest do
 
       # Leave the channel — this triggers terminate/2 which calls PtyManager.close_session
       Phoenix.ChannelTest.leave(socket)
+    end
+
+    test "close uses pty_session_id, not topic session_id" do
+      CodePuppyControl.PtyManager.Stub.set_custom_pty_id("pty-close-999")
+
+      socket = connect_socket("topic-close-id")
+      {:ok, _reply, socket} = Phoenix.ChannelTest.join(socket, "terminal:topic-close-id", %{})
+      assert_push "session_started", _
+
+      # Manually invoke terminate/2 to verify it uses pty_session_id
+      # (Phoenix.ChannelTest.leave/1 causes process exit which makes assertions hard)
+      :ok =
+        CodePuppyControlWeb.TerminalChannel.terminate(:shutdown, socket)
+
+      # The close call should be recorded under the PTY ID, not the topic ID
+      pty_calls = CodePuppyControl.PtyManager.Stub.get_calls("pty-close-999")
+      topic_calls = CodePuppyControl.PtyManager.Stub.get_calls("topic-close-id")
+
+      assert Enum.any?(pty_calls, fn {action, _} -> action == :close end)
+      assert Enum.all?(topic_calls, fn {action, _} -> action != :close end)
     end
   end
 end
