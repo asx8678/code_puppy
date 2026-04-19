@@ -254,15 +254,13 @@ defmodule CodePuppyControl.Runtime.EventStoreTest do
         Process.sleep(1)
       end
 
-      # get_events delegates to replay with max limit;
-      # on macOS, monotonic time can be negative so replay may filter events.
-      # Verify at minimum the events were stored (count) and the function runs.
-      count = EventStore.count(session_id)
-      assert count == 3
+      assert EventStore.count(session_id) == 3
 
-      events = EventStore.get_events(session_id)
-      assert length(events) <= count
-      assert length(events) >= 0
+      events = EventStore.get_events(session_id, since: @since_beginning)
+      assert length(events) == 3
+
+      indices = Enum.map(events, & &1[:idx])
+      assert indices == [1, 2, 3]
     end
 
     test "supports event_types filter" do
@@ -273,9 +271,9 @@ defmodule CodePuppyControl.Runtime.EventStoreTest do
       EventStore.store(%{type: "error", session_id: session_id, error: "err-#{System.unique_integer()}"})
       Process.sleep(1)
 
-      events = EventStore.get_events(session_id, event_types: ["text"])
-      # May return 0 or 1 depending on monotonic time; function runs without error
-      assert is_list(events)
+      events = EventStore.get_events(session_id, event_types: ["text"], since: @since_beginning)
+      assert length(events) == 1
+      assert Enum.all?(events, &(&1[:type] == "text"))
     end
   end
 end

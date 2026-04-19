@@ -195,11 +195,11 @@ defmodule CodePuppyControl.Scheduler.Task do
   @spec should_run?(t(), DateTime.t()) :: boolean()
   def should_run?(task, now \\ DateTime.utc_now())
 
+  # Disabled tasks never run — must be checked before last_run_at: nil
+  def should_run?(%__MODULE__{enabled: false}, _now), do: false
+
   # Never run before - should run now
   def should_run?(%__MODULE__{last_run_at: nil}, _now), do: true
-
-  # Disabled tasks never run
-  def should_run?(%__MODULE__{enabled: false}, _now), do: false
 
   # One-shot tasks that have already run should not run again
   def should_run?(%__MODULE__{schedule_type: "one_shot", last_run_at: last_run}, _now)

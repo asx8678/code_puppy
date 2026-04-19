@@ -226,13 +226,14 @@ defmodule CodePuppyControl.Runtime.SchedulerTaskTest do
       assert Task.should_run?(task, DateTime.utc_now())
     end
 
-    test "returns false for disabled task with a last_run_at" do
-      # Note: disabled tasks with last_run_at: nil still return true due to
-      # the "never-run" clause matching before the disabled clause.
-      # This is a known ordering issue in should_run?. Testing with last_run_at set.
-      last_run = DateTime.add(DateTime.utc_now(), -3600, :second)
-      task = %Task{schedule_type: "hourly", last_run_at: last_run, enabled: false}
+    test "returns false for disabled task regardless of last_run_at" do
+      # Disabled tasks must never run, even when never run before
+      task = %Task{schedule_type: "hourly", last_run_at: nil, enabled: false}
       refute Task.should_run?(task, DateTime.utc_now())
+
+      last_run = DateTime.add(DateTime.utc_now(), -3600, :second)
+      task_with_history = %Task{schedule_type: "hourly", last_run_at: last_run, enabled: false}
+      refute Task.should_run?(task_with_history, DateTime.utc_now())
     end
 
     test "interval task returns true when interval has elapsed" do

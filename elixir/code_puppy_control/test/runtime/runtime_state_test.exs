@@ -14,8 +14,8 @@ defmodule CodePuppyControl.Runtime.RuntimeStateTest do
     CodePuppyControl.TestSupport.Reset.ensure_gen_server_started(RuntimeState)
     RuntimeState.reset_autosave_id()
     RuntimeState.reset_session_model()
-    # Flush casts
-    Process.sleep(50)
+    # Flush casts by issuing a synchronous call
+    _ = RuntimeState.get_state()
     :ok
   end
 
@@ -81,7 +81,6 @@ defmodule CodePuppyControl.Runtime.RuntimeStateTest do
     test "clears the autosave ID" do
       _ = RuntimeState.get_current_autosave_id()
       :ok = RuntimeState.reset_autosave_id()
-      Process.sleep(50)
 
       # After reset, next access generates a new ID
       new_id = RuntimeState.get_current_autosave_id()
@@ -102,15 +101,12 @@ defmodule CodePuppyControl.Runtime.RuntimeStateTest do
   describe "set_session_model/1" do
     test "sets the session model name" do
       :ok = RuntimeState.set_session_model("claude-sonnet-4")
-      Process.sleep(50)
       assert RuntimeState.get_session_model() == "claude-sonnet-4"
     end
 
     test "can be set to nil" do
       :ok = RuntimeState.set_session_model("test")
-      Process.sleep(50)
       :ok = RuntimeState.set_session_model(nil)
-      Process.sleep(50)
       assert RuntimeState.get_session_model() == nil
     end
   end
@@ -118,9 +114,7 @@ defmodule CodePuppyControl.Runtime.RuntimeStateTest do
   describe "reset_session_model/0" do
     test "clears the session model" do
       :ok = RuntimeState.set_session_model("to-reset")
-      Process.sleep(50)
       :ok = RuntimeState.reset_session_model()
-      Process.sleep(50)
       assert RuntimeState.get_session_model() == nil
     end
   end

@@ -3,10 +3,11 @@ defmodule CodePuppyControl.Runtime.CronSchedulerTest do
   Tests for CronScheduler GenServer — periodic schedule checks, task
   evaluation, and force-check behaviour.
 
-  Uses async: false because CronScheduler is a named singleton GenServer.
+  Each test starts its own per-test CronScheduler via start_supervised/1
+  to avoid shared-state issues with a global singleton.
   """
 
-  use CodePuppyControl.StatefulCase
+  use CodePuppyControl.StatefulCase, async: true
 
   @moduletag timeout: 30_000
 
@@ -18,7 +19,10 @@ defmodule CodePuppyControl.Runtime.CronSchedulerTest do
     :ok = Ecto.Adapters.SQL.Sandbox.checkout(Repo)
     :ok = Ecto.Adapters.SQL.Sandbox.mode(Repo, {:shared, self()})
     Repo.delete_all(Oban.Job)
-    :ok
+
+    name = :"cron_scheduler_#{System.unique_integer([:positive])}"
+    {:ok, _pid} = start_supervised({CronScheduler, name: name, check_interval: 60_000})
+    %{scheduler: name}
   end
 
   # ---------------------------------------------------------------------------
@@ -26,21 +30,21 @@ defmodule CodePuppyControl.Runtime.CronSchedulerTest do
   # ---------------------------------------------------------------------------
 
   describe "get_state/1" do
-    test "returns scheduler state with expected keys" do
-      state = CronScheduler.get_state()
+    test "returns scheduler state with expected keys", %{scheduler: sched} do
+      state = CronScheduler.get_state(sched)
 
       assert Map.has_key?(state, :check_interval)
       assert Map.has_key?(state, :last_check_at)
       assert Map.has_key?(state, :tasks_enqueued)
     end
 
-    test "check_interval is positive" do
-      state = CronScheduler.get_state()
+    test "check_interval is positive", %{scheduler: sched} do
+      state = CronScheduler.get_state(sched)
       assert state.check_interval > 0
     end
 
-    test "tasks_enqueued starts at zero or above" do
-      state = CronScheduler.get_state()
+    test "tasks_enqueued starts at zero or above", %{scheduler: sched} do
+      state = CronScheduler.get_state(sched)
       assert state.tasks_enqueued >= 0
     end
   end
@@ -50,22 +54,22 @@ defmodule CodePuppyControl.Runtime.CronSchedulerTest do
   # ---------------------------------------------------------------------------
 
   describe "check_now/1" do
-    test "triggers a schedule check without error" do
-      assert :ok = CronScheduler.check_now()
+    test "triggers a schedule check without error", %{scheduler: sched} do
+      assert :ok = CronScheduler.check_now(sched)
       # Give it a moment to process
       Process.sleep(100)
     end
 
-    test "updates last_check_at after check" do
+    test "updates last_check_at after check", %{scheduler: sched} do
       # Get initial state
-      initial = CronScheduler.get_state()
+      initial = CronScheduler.get_state(sched)
 
       # Force check
-      :ok = CronScheduler.check_now()
+      :ok = CronScheduler.check_now(sched)
       Process.sleep(100)
 
       # last_check_at should be updated
-      updated = CronScheduler.get_state()
+      updated = CronScheduler.get_state(sched)
       assert updated.last_check_at != nil
 
       if initial.last_check_at != nil do
@@ -104,7 +108,7 @@ defmodule CodePuppyControl.Runtime.CronSchedulerTest do
   # ---------------------------------------------------------------------------
 
   describe "task enqueuing on check" do
-    test "does not enqueue disabled tasks" do
+    test "does not enqueue disabled tasks", %{scheduler: sched} do
       {:ok, _task} =
         Scheduler.create_task(%{
           name: "disabled-check-#{System.unique_integer([:positive])}",
@@ -115,14 +119,14 @@ defmodule CodePuppyControl.Runtime.CronSchedulerTest do
         })
 
       # Get initial enqueue count
-      initial = CronScheduler.get_state()
+      initial = CronScheduler.get_state(sched)
 
       # Force check
-      :ok = CronScheduler.check_now()
+      :ok = CronScheduler.check_now(sched)
       Process.sleep(100)
 
       # tasks_enqueued should not have increased for disabled tasks
-      updated = CronScheduler.get_state()
+      updated = CronScheduler.get_state(sched)
       # The count may have increased from other tests' tasks, but this test
       # just validates the check doesn't crash on disabled tasks.
       assert updated.tasks_enqueued >= initial.tasks_enqueued
