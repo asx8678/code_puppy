@@ -35,6 +35,26 @@ defmodule CodePuppyControl.Agent.Loop do
   The loop calls `CodePuppyControl.Agent.LLM.stream_chat/4` which is expected
   to be a behaviour callback. Until bd-145 delivers the real LLM module,
   pass a mock module via opts for testing.
+
+  ## Compaction
+
+  Before each LLM call, the loop checks whether the message history has
+  grown beyond the compaction threshold. If so, it runs the three-phase
+  compaction pipeline (filter, truncate, split) from `Compaction.compact/2`
+  to reclaim tokens and keep the context window manageable.
+
+  Compaction is **enabled by default** and configurable via start opts:
+
+      # Disable compaction entirely
+      Loop.start_link(agent, messages, compaction_enabled: false)
+
+      # Customize compaction thresholds
+      Loop.start_link(agent, messages,
+        compaction_opts: [trigger_messages: 100, keep_fraction: 0.3]
+      )
+
+  When compaction runs, an `agent_messages_compacted` event is published
+  via the EventBus with stats about what was reduced.
   """
 
   use GenServer
@@ -42,6 +62,7 @@ defmodule CodePuppyControl.Agent.Loop do
   require Logger
 
   alias CodePuppyControl.Agent.{Events, Turn}
+  alias CodePuppyControl.Compaction
   alias CodePuppyControl.Stream.{Event, Normalizer}
   alias CodePuppyControl.Tool.Runner
   alias CodePuppyControl.TokenLedger
@@ -56,7 +77,9 @@ defmodule CodePuppyControl.Agent.Loop do
           session_id: String.t() | nil,
           max_turns: pos_integer(),
           llm_module: module(),
-          metadata: map()
+          metadata: map(),
+          compaction_enabled: boolean(),
+          compaction_opts: keyword()
         ]
 
   @doc """
@@ -166,7 +189,9 @@ defmodule CodePuppyControl.Agent.Loop do
     :turn_number,
     :agent_state,
     :cancelled,
-    :completed
+    :completed,
+    compaction_enabled: true,
+    compaction_opts: []
   ]
 
   @type server_state :: %__MODULE__{
@@ -181,7 +206,9 @@ defmodule CodePuppyControl.Agent.Loop do
           turn_number: non_neg_integer(),
           agent_state: map(),
           cancelled: boolean(),
-          completed: boolean()
+          completed: boolean(),
+          compaction_enabled: boolean(),
+          compaction_opts: keyword()
         }
 
   # ---------------------------------------------------------------------------
@@ -195,6 +222,8 @@ defmodule CodePuppyControl.Agent.Loop do
     max_turns = Keyword.get(opts, :max_turns, 25)
     llm_module = Keyword.get(opts, :llm_module, CodePuppyControl.Agent.LLM)
     metadata = Keyword.get(opts, :metadata, %{})
+    compaction_enabled = Keyword.get(opts, :compaction_enabled, true)
+    compaction_opts = Keyword.get(opts, :compaction_opts, [])
 
     state = %__MODULE__{
       agent_module: agent_module,
@@ -208,7 +237,9 @@ defmodule CodePuppyControl.Agent.Loop do
       turn_number: 0,
       agent_state: %{turn_number: 0, tool_results: []},
       cancelled: false,
-      completed: false
+      completed: false,
+      compaction_enabled: compaction_enabled,
+      compaction_opts: compaction_opts
     }
 
     Logger.info(
@@ -246,6 +277,7 @@ defmodule CodePuppyControl.Agent.Loop do
       message_count: length(state.messages),
       cancelled: state.cancelled,
       completed: state.completed,
+      compaction_enabled: state.compaction_enabled,
       turn: if(state.turn, do: Turn.summary(state.turn), else: nil)
     }
 
@@ -308,6 +340,10 @@ defmodule CodePuppyControl.Agent.Loop do
 
   defp execute_turn(state) do
     turn_number = state.turn_number + 1
+
+    # Compact messages if needed before LLM call
+    state = maybe_compact_messages(state)
+
     turn = Turn.new(turn_number, state.messages)
 
     with {:ok, turn} <- Turn.start_llm_call(turn),
@@ -317,6 +353,52 @@ defmodule CodePuppyControl.Agent.Loop do
     else
       {:error, reason} ->
         {:error, reason, state}
+    end
+  end
+
+  # ---------------------------------------------------------------------------
+  # Compaction Integration
+  # ---------------------------------------------------------------------------
+
+  defp maybe_compact_messages(%{compaction_enabled: false} = state), do: state
+
+  defp maybe_compact_messages(%{compaction_enabled: true} = state) do
+    if Compaction.should_compact?(state.messages, state.compaction_opts) do
+      compact_messages(state)
+    else
+      state
+    end
+  end
+
+  defp compact_messages(state) do
+    case Compaction.compact(state.messages, state.compaction_opts) do
+      {:ok, compacted, stats} ->
+        Logger.info(
+          "Agent.Loop compaction: run_id=#{state.run_id} " <>
+            "#{stats.original_count} -> #{length(compacted)} messages " <>
+            "(dropped=#{stats.dropped_by_filter}, truncated=#{stats.truncated_count})"
+        )
+
+        Events.publish(
+          Events.messages_compacted(state.run_id, state.session_id, %{
+            original_count: stats.original_count,
+            compacted_count: length(compacted),
+            dropped_by_filter: stats.dropped_by_filter,
+            truncated_count: stats.truncated_count,
+            summarize_count: stats.summarize_count,
+            protected_count: stats.protected_count
+          })
+        )
+
+        %{state | messages: compacted}
+
+      {:error, reason} ->
+        Logger.warning(
+          "Agent.Loop compaction failed: run_id=#{state.run_id} reason=#{inspect(reason)}"
+        )
+
+        # Fail gracefully — continue with original messages
+        state
     end
   end
 
