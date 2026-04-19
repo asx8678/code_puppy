@@ -43,7 +43,9 @@ defmodule CodePuppyControl.MixProject do
       # HTTP client with connection pooling (bd-69)
       {:finch, "~> 0.18"},
       # xxhash for pure Elixir HashLine implementation (bd-147)
-      {:xxhash, "~> 0.3"}
+      {:xxhash, "~> 0.3"},
+      # OS process management with PTY support (bd-217)
+      {:erlexec, "~> 2.0"}
     ]
   end
 
