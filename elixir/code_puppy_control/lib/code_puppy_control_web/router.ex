@@ -30,6 +30,7 @@ defmodule CodePuppyControlWeb.Router do
   scope "/", CodePuppyControlWeb do
     pipe_through :api
 
+    get "/", InfoController, :index
     get "/health", HealthController, :index
   end
 
