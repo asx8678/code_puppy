@@ -1,9 +1,10 @@
 defmodule CodePuppyControl.Indexer.SymbolExtractor do
   @moduledoc """
-  Extracts symbols from source files using turbo_parse NIF with regex fallback.
+  Extracts symbols from source files using CodePuppyControl.Parsing.Parser
+  (with regex fallback for languages without a registered parser).
 
-  Uses turbo_parse NIF for tree-sitter based extraction when available,
-  falls back to regex for unsupported languages or when NIF unavailable.
+  Uses tree-sitter based extraction when available, falls back to regex
+  for unsupported languages or when tree-sitter parser is unavailable.
   """
 
   alias CodePuppyControl.Parser
@@ -19,8 +20,8 @@ defmodule CodePuppyControl.Indexer.SymbolExtractor do
   @doc """
   Extracts symbols from source code content.
 
-  Uses turbo_parse NIF for tree-sitter based extraction when available,
-  falls back to regex for unsupported languages or when NIF unavailable.
+  Uses CodePuppyControl.Parsing.Parser for tree-sitter based extraction when available,
+  falls back to regex for unsupported languages or when parser is unavailable.
 
   ## Parameters
 
@@ -38,6 +39,7 @@ defmodule CodePuppyControl.Indexer.SymbolExtractor do
       iex> SymbolExtractor.extract(content, "python", 10)
       ["class Foo", "def bar"]
   """
+  # bd-208: Updated docstring to reference Parsing.Parser instead of deprecated TurboParseNIF
   @spec extract(String.t(), String.t(), pos_integer()) :: [String.t()]
   def extract(content, kind, max_symbols) do
     case Parser.extract_symbols(content, kind) do

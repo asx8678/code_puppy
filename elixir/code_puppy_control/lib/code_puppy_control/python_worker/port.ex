@@ -407,7 +407,8 @@ defmodule CodePuppyControl.PythonWorker.Port do
     Protocol.encode_response(%{"files" => serializable_results}, nil)
   end
 
-  # Parse operation handlers using turbo_parse NIF
+  # Parse operation handlers using CodePuppyControl.Parsing.Parser
+  # bd-208: Updated from deprecated TurboParseNIF to use Parsing.Parser
 
   defp handle_file_request("parse_source", params) do
     source = params["source"]

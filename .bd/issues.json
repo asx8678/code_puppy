@@ -3911,7 +3911,7 @@
       "id": "bd-196",
       "title": "Add direct unit tests for new Elixir stub modules",
       "description": "During bd-164 completion, four stub modules were introduced to the Elixir codebase to unblock compilation from bd-152: CodePuppyControl.Tool, CodePuppyControl.Tool.Registry, CodePuppyControl.Stream.Event, CodePuppyControl.Stream.Normalizer. Watchdog review found no direct unit tests for any of them \u2014 they are only exercised indirectly via integration paths. File direct unit tests covering: Tool behaviour contract, Tool.Registry GenServer start/register/lookup semantics, Stream.Event struct validation, Stream.Normalizer.normalize/1 identity + any future transformations",
-      "status": "open",
+      "status": "closed",
       "priority": 2,
       "type": "task",
       "labels": [
@@ -3923,9 +3923,10 @@
         ]
       },
       "created_at": "2026-04-19T12:22:13.303563",
-      "updated_at": "2026-04-19T19:58:11.287691",
+      "updated_at": "2026-04-19T20:11:48.453619",
       "comments": [
-        "Claimed by planning-agent-019da7. Scope: ExUnit tests only, test/ directory only. Zero changes to lib/, config/, or user config."
+        "Claimed by planning-agent-019da7. Scope: ExUnit tests only, test/ directory only. Zero changes to lib/, config/, or user config.",
+        "Completed by planning-agent-019da7.\n\nScope delivered (test/ only, no lib/ changes):\n- NEW test/code_puppy_control/tool/behaviour_test.exs \u2014 covers CodePuppyControl.Tool behaviour: default permission_check/2, tool_schema/0 construction, execute/1 legacy delegation, defoverridable, Tool.to_llm_format/1 fallback path.\n- EXTENDED test/code_puppy_control/tool/registry_test.exs \u2014 start_link/1 already_started assertion, ToolEntry.from_module/1 field coverage, deterministic handle_info/2 tests (no Process.sleep \u2014 uses :sys.get_state + Process.monitor).\n- EXTENDED test/code_puppy_control/stream/normalizer_test.exs \u2014 arity/type guard contract tests, identity pass-through of already-wrapped {:stream, event} tuples.\n\nResults: 60 tests, 0 failures across the three files. elixir-reviewer approved after first-pass fixes to the registry_test additions.\n\nCommit: 97009068 on main. Pushed to gitlab/main."
       ]
     },
     "bd-197": {
@@ -4122,7 +4123,24 @@
       "created_at": "2026-04-19T19:45:03.122811",
       "updated_at": "2026-04-19T19:45:03.122818",
       "comments": []
+    },
+    "bd-208": {
+      "id": "bd-208",
+      "title": "Remove dead turbo_parse / native_backend remnants (already migrated to Elixir)",
+      "description": "After bd-31 (turbo_parse_bridge removed), bd-86 (native_backend.py + acceleration/ removed) and bd-93 (NativeBackend routing), several Python branches and references are now dead code or stale documentation:\n\nPYTHON (dead branches):\n- code_puppy/utils/syntax_validate.py: _validate_via_native_backend always returns PARSER_UNAVAILABLE; validate_file_sync is a no-op. Caller: code_puppy/tools/file_modifications.py lines 47-49 + 130-131.\n- code_puppy/plugins/code_skeleton/skeleton.py: _skeleton_via_treesitter unconditionally returns None; regex fallback always used. _render_symbols is unreachable.\n- code_puppy/plugins/code_explorer/register_callbacks.py: misleading 'turbo_parse' branding in docstrings/help (functionality is fine, just naming).\n\nDOCS / TESTS (stale):\n- AGENTS.md still tells agents to 'from code_puppy.native_backend import NativeBackend' \u2014 that module is gone.\n- tests/test_no_direct_bridge_imports.py refers to code_puppy/native_backend.py as the adapter and tells violators to import from it. Should forbid native_backend imports too and point at code_puppy.plugins.elixir_bridge.\n- tests/fuzz/test_symbol_extraction.py is 100% skipped via pytest.skip(allow_module_level=True). Pure dead weight.\n\nELIXIR (deprecated stub):\n- elixir/code_puppy_control/lib/code_puppy_control/turbo_parse_nif.ex is a DEPRECATED stub; every function returns {:error, :nif_removed}. Active impl is CodePuppyControl.Parsing.Parser.\n- Comments in elixir/.../indexer/symbol_extractor.ex and elixir/.../python_worker/port.ex still say 'turbo_parse NIF' \u2014 should reference Parsing.Parser.\n\nReal implementation (Elixir): CodePuppyControl.Parsing.Parser + parsers/lexers under elixir/code_puppy_control/lib/code_puppy_control/parsing/. Reachable from Python via code_puppy.plugins.elixir_bridge.call_method('code_context.*').\n\nPlan: Phases 1, 2, 4, 5 of planning-agent-019da7's roadmap (minimal cleanup, no behavior change).",
+      "status": "closed",
+      "priority": 2,
+      "type": "task",
+      "labels": [
+        "tech-debt,cleanup,elixir-migration"
+      ],
+      "dependencies": {},
+      "created_at": "2026-04-19T20:11:43.367974",
+      "updated_at": "2026-04-19T20:14:40.739186",
+      "comments": [
+        "Claimed by planning-agent-019da7. Scope: dead code removal only, no feature changes, no config/auth touched."
+      ]
     }
   },
-  "counter": 207
+  "counter": 208
 }
