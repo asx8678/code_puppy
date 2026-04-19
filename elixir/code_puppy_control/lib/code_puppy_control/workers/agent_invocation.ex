@@ -19,8 +19,18 @@ defmodule CodePuppyControl.Workers.AgentInvocation do
 
     * Max attempts: 3 (mirrors DBOS default)
     * Unique period: 300s (5 min) — prevents duplicate submissions
-    * Unique keys: [:workflow_id] — ensures one workflow per ID
+    * Unique fields: [:worker, :args] — ensures one workflow per ID at the
+      *database level* (Oban inserts a unique index on args hash)
+    * Unique states: [:available, :executing, :retryable] — covers all
+      active job states so duplicates are caught even during retries
     * Step-level idempotency via `Workflow.Step`
+
+  The Oban `unique` constraint is the authoritative idempotency guarantee —
+  it operates at the database level and prevents the read-then-write race
+  that would exist with application-level checks alone.
+  `Workflow.invoke_agent/2` also does an application-level check as a
+  fast-path to return existing jobs, but the DB constraint catches any
+  concurrent submissions that slip through.
 
   ## Cancellation
 

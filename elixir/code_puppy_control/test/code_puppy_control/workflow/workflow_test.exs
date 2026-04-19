@@ -98,6 +98,55 @@ defmodule CodePuppyControl.WorkflowTest do
         })
       end
     end
+
+    test "accepts string-keyed params (JSON-RPC compatibility)" do
+      workflow_id = "wf-string-key-#{System.unique_integer([:positive])}"
+
+      # Pre-insert the job so invoke_agent returns the existing job
+      # (avoids triggering AgentInvocation worker inline execution)
+      job =
+        insert_job!(%{
+          session_id: "sess-string",
+          agent_name: "test-agent",
+          prompt: "String key test",
+          workflow_id: workflow_id
+        })
+
+      # Call with string-keyed params (as JSON-RPC would send)
+      {:ok, returned_job} = Workflow.invoke_agent(%{
+        "session_id" => "sess-string",
+        "agent_name" => "test-agent",
+        "prompt" => "String key test",
+        "workflow_id" => workflow_id
+      })
+
+      # Idempotent: same job returned
+      assert returned_job.id == job.id
+    end
+
+    test "accepts atom-keyed params (Elixir caller compatibility)" do
+      workflow_id = "wf-atom-key-#{System.unique_integer([:positive])}"
+
+      # Pre-insert the job so invoke_agent returns the existing job
+      job =
+        insert_job!(%{
+          session_id: "sess-atom",
+          agent_name: "test-agent",
+          prompt: "Atom key test",
+          workflow_id: workflow_id
+        })
+
+      # Call with atom-keyed params (as Elixir callers would use)
+      {:ok, returned_job} = Workflow.invoke_agent(%{
+        session_id: "sess-atom",
+        agent_name: "test-agent",
+        prompt: "Atom key test",
+        workflow_id: workflow_id
+      })
+
+      # Idempotent: same job returned
+      assert returned_job.id == job.id
+    end
   end
 
   describe "get_status/1" do
@@ -152,6 +201,41 @@ defmodule CodePuppyControl.WorkflowTest do
 
       step = Step.find(workflow_id, "initialize")
       assert step.state == "cancelled"
+    end
+
+    test "cancels a running workflow (executing job with running steps)" do
+      workflow_id = "wf-cancel-running-#{System.unique_integer([:positive])}"
+
+      # Simulate a running workflow: executing Oban job + running step
+      job =
+        insert_job!(%{
+          session_id: "sess-cancel-running",
+          agent_name: "test-agent",
+          prompt: "Running workflow",
+          workflow_id: workflow_id
+        })
+
+      # Update job state to executing (simulating in-progress execution)
+      job
+      |> Ecto.Changeset.change(%{state: "executing"})
+      |> Repo.update!()
+
+      %Step{}
+      |> Step.changeset(%{workflow_id: workflow_id, step_name: "initialize", state: "running"})
+      |> Repo.insert!()
+
+      %Step{}
+      |> Step.changeset(%{workflow_id: workflow_id, step_name: "run_agent", state: "pending"})
+      |> Repo.insert!()
+
+      assert :ok == Workflow.cancel(workflow_id)
+
+      # Verify steps are cancelled
+      init_step = Step.find(workflow_id, "initialize")
+      assert init_step.state == "cancelled"
+
+      run_step = Step.find(workflow_id, "run_agent")
+      assert run_step.state == "cancelled"
     end
   end
 

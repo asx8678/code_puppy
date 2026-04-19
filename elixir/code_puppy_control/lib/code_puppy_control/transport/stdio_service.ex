@@ -2318,6 +2318,8 @@ defmodule CodePuppyControl.Transport.StdioService do
   # --- Workflow methods (bd-170: DBOS replacement) ---
 
   defp handle_request("workflow.invoke_agent", params, id) do
+    # params is string-keyed (JSON-RPC); Workflow.invoke_agent normalizes
+    # atom/string keys internally, so we pass params through as-is.
     case CodePuppyControl.Workflow.invoke_agent(params) do
       {:ok, job} ->
         Protocol.encode_response(%{
@@ -2332,29 +2334,41 @@ defmodule CodePuppyControl.Transport.StdioService do
     end
   end
 
-  defp handle_request("workflow.get_status", %{"workflow_id" => workflow_id}, id) do
-    case CodePuppyControl.Workflow.get_status(workflow_id) do
-      {:ok, status} ->
-        Protocol.encode_response(%{
-          "workflow_id" => status.workflow_id,
-          "state" => status.state,
-          "steps" => Enum.map(status.steps, fn step ->
-            %{"name" => step.step_name, "state" => step.state, "attempt" => step.attempt}
-          end)
-        }, id)
+  defp handle_request("workflow.get_status", params, id) do
+    workflow_id = params["workflow_id"]
 
-      {:error, :not_found} ->
-        Protocol.encode_error(-32_001, "Workflow not found", id)
+    if is_nil(workflow_id) or not is_binary(workflow_id) do
+      Protocol.encode_error(-32602, "Missing or invalid param: workflow_id", nil, id)
+    else
+      case CodePuppyControl.Workflow.get_status(workflow_id) do
+        {:ok, status} ->
+          Protocol.encode_response(%{
+            "workflow_id" => status.workflow_id,
+            "state" => status.state,
+            "steps" => Enum.map(status.steps, fn step ->
+              %{"name" => step.step_name, "state" => step.state, "attempt" => step.attempt}
+            end)
+          }, id)
+
+        {:error, :not_found} ->
+          Protocol.encode_error(-32_001, "Workflow not found", id)
+      end
     end
   end
 
-  defp handle_request("workflow.cancel", %{"workflow_id" => workflow_id}, id) do
-    case CodePuppyControl.Workflow.cancel(workflow_id) do
-      :ok ->
-        Protocol.encode_response(%{"cancelled" => true, "workflow_id" => workflow_id}, id)
+  defp handle_request("workflow.cancel", params, id) do
+    workflow_id = params["workflow_id"]
 
-      {:error, :not_found} ->
-        Protocol.encode_error(-32_001, "Workflow not found", id)
+    if is_nil(workflow_id) or not is_binary(workflow_id) do
+      Protocol.encode_error(-32602, "Missing or invalid param: workflow_id", nil, id)
+    else
+      case CodePuppyControl.Workflow.cancel(workflow_id) do
+        :ok ->
+          Protocol.encode_response(%{"cancelled" => true, "workflow_id" => workflow_id}, id)
+
+        {:error, :not_found} ->
+          Protocol.encode_error(-32_001, "Workflow not found", id)
+      end
     end
   end
 
@@ -2364,9 +2378,15 @@ defmodule CodePuppyControl.Transport.StdioService do
     Protocol.encode_response(%{"workflows" => workflows}, id)
   end
 
-  defp handle_request("workflow.get_history", %{"workflow_id" => workflow_id}, id) do
-    history = CodePuppyControl.Workflow.get_history(workflow_id)
-    Protocol.encode_response(%{"history" => history}, id)
+  defp handle_request("workflow.get_history", params, id) do
+    workflow_id = params["workflow_id"]
+
+    if is_nil(workflow_id) or not is_binary(workflow_id) do
+      Protocol.encode_error(-32602, "Missing or invalid param: workflow_id", nil, id)
+    else
+      history = CodePuppyControl.Workflow.get_history(workflow_id)
+      Protocol.encode_response(%{"history" => history}, id)
+    end
   end
 
   defp traverse_changeset_errors(changeset) do

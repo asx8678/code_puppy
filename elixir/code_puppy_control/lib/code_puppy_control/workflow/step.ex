@@ -181,6 +181,34 @@ defmodule CodePuppyControl.Workflow.Step do
   def fail(step, _error), do: {:ok, step}
 
   @doc """
+  Cancels a step: `pending` → `cancelled` or `running` → `cancelled`.
+
+  Used by `Workflow.cancel/1` to mark steps as cancelled during workflow
+  cancellation. Terminal states (completed, failed, cancelled) are no-ops.
+  """
+  @spec cancel(t()) :: {:ok, t()} | {:error, term()}
+  def cancel(%__MODULE__{state: "pending"} = step) do
+    now = DateTime.utc_now() |> DateTime.truncate(:second)
+
+    step
+    |> changeset(%{state: "cancelled", completed_at: now})
+    |> Repo.update()
+  end
+
+  def cancel(%__MODULE__{state: "running"} = step) do
+    now = DateTime.utc_now() |> DateTime.truncate(:second)
+
+    step
+    |> changeset(%{state: "cancelled", completed_at: now})
+    |> Repo.update()
+  end
+
+  # Terminal states — no-op (already completed, failed, or cancelled)
+  def cancel(%__MODULE__{state: state} = step) when state in ["completed", "failed", "cancelled"] do
+    {:ok, step}
+  end
+
+  @doc """
   Returns `true` if the step can be retried.
   """
   @spec retriable?(t()) :: boolean()
@@ -231,6 +259,9 @@ defmodule CodePuppyControl.Workflow.Step do
     case step.state do
       "completed" ->
         {:ok, step.result || %{}}
+
+      "cancelled" ->
+        {:error, :cancelled}
 
       state when state in ["pending", "failed"] ->
         do_execute_step(step, fun)

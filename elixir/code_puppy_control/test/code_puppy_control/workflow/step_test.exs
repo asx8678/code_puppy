@@ -148,6 +148,42 @@ defmodule CodePuppyControl.Workflow.StepTest do
       {:ok, failed} = Step.fail(running, "exhausted")
       {:error, :max_attempts_exceeded} = Step.start(failed)
     end
+
+    test "pending → cancelled via cancel/1", %{step: step} do
+      {:ok, cancelled} = Step.cancel(step)
+      assert cancelled.state == "cancelled"
+      assert cancelled.completed_at != nil
+    end
+
+    test "running → cancelled via cancel/1", %{step: step} do
+      {:ok, running} = Step.start(step)
+      {:ok, cancelled} = Step.cancel(running)
+      assert cancelled.state == "cancelled"
+      assert cancelled.completed_at != nil
+    end
+
+    test "cancel on terminal state is a no-op", %{step: step} do
+      {:ok, running} = Step.start(step)
+      {:ok, completed} = Step.complete(running, %{"done" => true})
+      {:ok, same} = Step.cancel(completed)
+      assert same.state == "completed"
+    end
+
+    test "execute returns {:error, :cancelled} for cancelled step" do
+      workflow_id = "wf-cancel-exec-#{System.unique_integer([:positive])}"
+
+      # Create and cancel a step directly
+      step =
+        %Step{}
+        |> Step.changeset(%{workflow_id: workflow_id, step_name: "cancelled_step"})
+        |> Repo.insert!()
+
+      {:ok, _} = Step.cancel(step)
+
+      # Attempting to execute should return cancelled error
+      result = Step.execute(workflow_id, "cancelled_step", fn -> {:ok, %{"should_not_run" => true}} end)
+      assert result == {:error, :cancelled}
+    end
   end
 
   describe "retriable?/1" do

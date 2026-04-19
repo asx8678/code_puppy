@@ -113,9 +113,18 @@ defmodule CodePuppyControl.Workflow do
   """
   @spec invoke_agent(map(), invoke_opts()) :: {:ok, Oban.Job.t()} | {:error, term()}
   def invoke_agent(params, opts \\ []) when is_map(params) do
-    workflow_id = Map.fetch!(params, :workflow_id)
+    # JSON-RPC params arrive string-keyed; Elixir callers may use atom keys.
+    # Normalize to support both without mutating the caller's map.
+    workflow_id =
+      Map.get(params, :workflow_id) || Map.get(params, "workflow_id") ||
+        raise KeyError, key: :workflow_id, term: params
 
-    # Check if workflow already exists (idempotent submission)
+    # Idempotency: Oban's unique constraint (period: 300, fields: [:worker, :args])
+    # provides DB-level dedup — Oban.insert/1 will return {:ok, job} even on
+    # duplicate, so we rely on the database constraint rather than a
+    # read-then-write race. The application-level check below is a fast-path
+    # to return the existing job without hitting the insert path, but it is
+    # NOT the sole idempotency guarantee.
     case find_job_by_workflow_id(workflow_id) do
       %Oban.Job{} = job ->
         Logger.info("Workflow #{workflow_id} already exists as job #{job.id}, returning existing")
@@ -143,7 +152,11 @@ defmodule CodePuppyControl.Workflow do
             scheduled_at -> Keyword.put(job_opts, :scheduled_at, scheduled_at)
           end
 
-        params
+        # Ensure args are string-keyed for consistent JSON serialization
+        # and Oban unique constraint matching.
+        normalized_params = normalize_keys(params)
+
+        normalized_params
         |> AgentInvocation.new(job_opts)
         |> Oban.insert()
     end
@@ -341,10 +354,19 @@ defmodule CodePuppyControl.Workflow do
   defp cancel_steps(steps) do
     Enum.each(steps, fn step ->
       if step.state in ["pending", "running"] do
-        step
-        |> Step.changeset(%{state: "cancelled"})
-        |> Repo.update()
+        Step.cancel(step)
       end
+    end)
+  end
+
+  # Normalizes map keys to strings for consistent JSON serialization.
+  # JSON-RPC params arrive string-keyed from the wire, but Elixir callers
+  # may pass atom-keyed maps. Oban stores args as JSON (string keys), so
+  # normalizing ensures the unique constraint matches reliably.
+  defp normalize_keys(params) when is_map(params) do
+    Map.new(params, fn
+      {key, value} when is_atom(key) -> {Atom.to_string(key), value}
+      {key, value} -> {key, value}
     end)
   end
 end
