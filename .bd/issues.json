@@ -303,7 +303,11 @@
         "in-progress",
         "done"
       ],
-      "dependencies": {},
+      "dependencies": {
+        "blocks": [
+          "bd-22"
+        ]
+      },
       "created_at": "2026-04-14T05:54:41.879420",
       "updated_at": "2026-04-14T06:39:51.343505",
       "comments": [
@@ -364,9 +368,7 @@
         "in-progress"
       ],
       "dependencies": {
-        "blocks": [
-          "bd-19"
-        ]
+        "blocks": []
       },
       "created_at": "2026-04-14T06:21:03.667472",
       "updated_at": "2026-04-14T06:27:30.488478",
@@ -444,7 +446,16 @@
         "elixir",
         "zig"
       ],
-      "dependencies": {},
+      "dependencies": {
+        "blocks": [
+          "bd-27",
+          "bd-28",
+          "bd-29",
+          "bd-34",
+          "bd-36",
+          "bd-37"
+        ]
+      },
       "created_at": "2026-04-14T08:14:43.396200",
       "updated_at": "2026-04-14T09:08:18.019617",
       "comments": [
@@ -464,9 +475,7 @@
         "python"
       ],
       "dependencies": {
-        "blocks": [
-          "bd-26"
-        ]
+        "blocks": []
       },
       "created_at": "2026-04-14T08:14:47.124130",
       "updated_at": "2026-04-14T08:26:54.283881",
@@ -485,7 +494,8 @@
       ],
       "dependencies": {
         "blocks": [
-          "bd-26"
+          "bd-30",
+          "bd-32"
         ]
       },
       "created_at": "2026-04-14T08:14:50.914947",
@@ -506,9 +516,7 @@
         "protocol"
       ],
       "dependencies": {
-        "blocks": [
-          "bd-26"
-        ]
+        "blocks": []
       },
       "created_at": "2026-04-14T08:14:56.142674",
       "updated_at": "2026-04-14T08:56:59.428351",
@@ -529,7 +537,8 @@
       ],
       "dependencies": {
         "blocks": [
-          "bd-28"
+          "bd-31",
+          "bd-33"
         ]
       },
       "created_at": "2026-04-14T08:14:59.307138",
@@ -550,9 +559,7 @@
         "elixir"
       ],
       "dependencies": {
-        "blocks": [
-          "bd-30"
-        ]
+        "blocks": []
       },
       "created_at": "2026-04-14T08:15:02.385943",
       "updated_at": "2026-04-14T09:05:51.920227",
@@ -572,9 +579,7 @@
         "elixir"
       ],
       "dependencies": {
-        "blocks": [
-          "bd-28"
-        ]
+        "blocks": []
       },
       "created_at": "2026-04-14T08:15:08.817092",
       "updated_at": "2026-04-14T09:05:55.018344",
@@ -596,8 +601,6 @@
       ],
       "dependencies": {
         "blocks": [
-          "bd-30",
-          "bd-33",
           "bd-34"
         ]
       },
@@ -620,7 +623,7 @@
       ],
       "dependencies": {
         "blocks": [
-          "bd-26"
+          "bd-35"
         ]
       },
       "created_at": "2026-04-14T08:15:19.791040",
@@ -640,9 +643,7 @@
         "mcp"
       ],
       "dependencies": {
-        "blocks": [
-          "bd-34"
-        ]
+        "blocks": []
       },
       "created_at": "2026-04-14T08:15:25.225004",
       "updated_at": "2026-04-14T08:56:59.451426",
@@ -661,9 +662,7 @@
         "mvp"
       ],
       "dependencies": {
-        "blocks": [
-          "bd-26"
-        ]
+        "blocks": []
       },
       "created_at": "2026-04-14T08:15:28.918046",
       "updated_at": "2026-04-14T09:08:18.009070",
@@ -683,9 +682,7 @@
         "planning"
       ],
       "dependencies": {
-        "blocks": [
-          "bd-26"
-        ]
+        "blocks": []
       },
       "created_at": "2026-04-14T08:15:32.290483",
       "updated_at": "2026-04-14T09:08:18.029330",
@@ -1509,7 +1506,11 @@
         "phase-2",
         "elixir"
       ],
-      "dependencies": {},
+      "dependencies": {
+        "blocks": [
+          "bd-87"
+        ]
+      },
       "created_at": "2026-04-14T22:03:33.967073",
       "updated_at": "2026-04-14T22:15:54.725574",
       "comments": [
@@ -1552,9 +1553,7 @@
         "testing"
       ],
       "dependencies": {
-        "blocks": [
-          "bd-85"
-        ]
+        "blocks": []
       },
       "created_at": "2026-04-14T22:03:33.977353",
       "updated_at": "2026-04-14T22:30:09.232096",
@@ -1598,7 +1597,11 @@
         "migration",
         "phase-3"
       ],
-      "dependencies": {},
+      "dependencies": {
+        "blocks": [
+          "bd-90"
+        ]
+      },
       "created_at": "2026-04-15T06:49:04.159604",
       "updated_at": "2026-04-15T06:54:00.776243",
       "comments": [
@@ -1619,9 +1622,7 @@
         "phase-3"
       ],
       "dependencies": {
-        "blocks": [
-          "bd-89"
-        ]
+        "blocks": []
       },
       "created_at": "2026-04-15T06:49:04.160921",
       "updated_at": "2026-04-15T06:56:01.761756",
@@ -1662,7 +1663,12 @@
         "phase-4",
         "elixir"
       ],
-      "dependencies": {},
+      "dependencies": {
+        "blocks": [
+          "bd-95",
+          "bd-96"
+        ]
+      },
       "created_at": "2026-04-15T07:03:47.491567",
       "updated_at": "2026-04-15T07:10:44.927682",
       "comments": [
@@ -1730,9 +1736,7 @@
         "testing"
       ],
       "dependencies": {
-        "blocks": [
-          "bd-92"
-        ]
+        "blocks": []
       },
       "created_at": "2026-04-15T07:03:47.530189",
       "updated_at": "2026-04-15T07:14:50.054129",
@@ -1755,9 +1759,7 @@
         "elixir"
       ],
       "dependencies": {
-        "blocks": [
-          "bd-92"
-        ]
+        "blocks": []
       },
       "created_at": "2026-04-15T07:03:47.544457",
       "updated_at": "2026-04-15T07:13:26.871488",
@@ -1842,7 +1844,11 @@
         "phase-6",
         "deferred"
       ],
-      "dependencies": {},
+      "dependencies": {
+        "blocks": [
+          "bd-101"
+        ]
+      },
       "created_at": "2026-04-15T07:03:47.609889",
       "updated_at": "2026-04-15T07:20:18.836069",
       "comments": [
@@ -1865,7 +1871,7 @@
       ],
       "dependencies": {
         "blocks": [
-          "bd-100"
+          "bd-102"
         ]
       },
       "created_at": "2026-04-15T07:03:47.649051",
@@ -1889,9 +1895,7 @@
         "deferred"
       ],
       "dependencies": {
-        "blocks": [
-          "bd-101"
-        ]
+        "blocks": []
       },
       "created_at": "2026-04-15T07:03:47.662982",
       "updated_at": "2026-04-15T07:24:27.468880",
@@ -1943,7 +1947,8 @@
       "dependencies": {
         "blocked-by": [
           "bd-103"
-        ]
+        ],
+        "blocks": []
       },
       "created_at": "2026-04-15T15:31:08.575163",
       "updated_at": "2026-04-15T15:58:09.061698",
@@ -1969,7 +1974,8 @@
       "dependencies": {
         "blocked-by": [
           "bd-103"
-        ]
+        ],
+        "blocks": []
       },
       "created_at": "2026-04-15T15:31:14.242594",
       "updated_at": "2026-04-15T15:58:09.091360",
@@ -1998,7 +2004,8 @@
         ],
         " discovered-from": [
           "bd-105"
-        ]
+        ],
+        "blocks": []
       },
       "created_at": "2026-04-15T15:31:20.825409",
       "updated_at": "2026-04-15T15:58:09.120250",
@@ -2018,7 +2025,13 @@
       "labels": [
         "migration"
       ],
-      "dependencies": {},
+      "dependencies": {
+        "blocks": [
+          "bd-108",
+          "bd-109",
+          "bd-110"
+        ]
+      },
       "created_at": "2026-04-15T16:04:11.577649",
       "updated_at": "2026-04-15T16:30:27.186672",
       "comments": [
@@ -2037,8 +2050,8 @@
       ],
       "dependencies": {
         "blocks": [
-          "bd-110",
-          "bd-107"
+          "bd-109",
+          "bd-110"
         ]
       },
       "created_at": "2026-04-15T16:04:24.645384",
@@ -2057,9 +2070,7 @@
       ],
       "dependencies": {
         "blocks": [
-          "bd-108",
-          "bd-110",
-          "bd-107"
+          "bd-110"
         ]
       },
       "created_at": "2026-04-15T16:04:29.461877",
@@ -2077,9 +2088,7 @@
         "migration,testing"
       ],
       "dependencies": {
-        "blocks": [
-          "bd-107"
-        ]
+        "blocks": []
       },
       "created_at": "2026-04-15T16:04:34.367098",
       "updated_at": "2026-04-15T16:30:27.129179",
@@ -2093,7 +2102,14 @@
       "priority": 1,
       "type": "task",
       "labels": [],
-      "dependencies": {},
+      "dependencies": {
+        "blocks": [
+          "bd-112",
+          "bd-113",
+          "bd-114",
+          "bd-115"
+        ]
+      },
       "created_at": "2026-04-18T00:41:39.168838",
       "updated_at": "2026-04-18T09:26:11.035506",
       "comments": [
@@ -2110,8 +2126,9 @@
       "labels": [],
       "dependencies": {
         "blocks": [
-          "bd-111",
-          "bd-113"
+          "bd-113",
+          "bd-114",
+          "bd-115"
         ],
         "discovered-from": [
           "bd-111"
@@ -2134,9 +2151,7 @@
         "in-progress"
       ],
       "dependencies": {
-        "blocks": [
-          "bd-111"
-        ],
+        "blocks": [],
         "discovered-from": [
           "bd-111"
         ]
@@ -2156,10 +2171,7 @@
       "type": "task",
       "labels": [],
       "dependencies": {
-        "blocks": [
-          "bd-111",
-          "bd-112"
-        ],
+        "blocks": [],
         "discovered-from": [
           "bd-111"
         ]
@@ -2179,10 +2191,7 @@
       "type": "task",
       "labels": [],
       "dependencies": {
-        "blocks": [
-          "bd-111",
-          "bd-112"
-        ],
+        "blocks": [],
         "discovered-from": [
           "bd-111"
         ]
@@ -2376,7 +2385,11 @@
         "bd-120",
         "blocker"
       ],
-      "dependencies": {},
+      "dependencies": {
+        "blocks": [
+          "bd-130"
+        ]
+      },
       "created_at": "2026-04-18T17:44:29.363793",
       "updated_at": "2026-04-18T19:26:50.916174",
       "comments": [
@@ -2394,7 +2407,11 @@
         "refactor",
         "bd-120"
       ],
-      "dependencies": {},
+      "dependencies": {
+        "blocks": [
+          "bd-128"
+        ]
+      },
       "created_at": "2026-04-18T17:44:33.120005",
       "updated_at": "2026-04-18T18:20:09.419638",
       "comments": []
@@ -2412,7 +2429,7 @@
       ],
       "dependencies": {
         "blocks": [
-          "bd-127"
+          "bd-130"
         ]
       },
       "created_at": "2026-04-18T17:44:35.661013",
@@ -2431,7 +2448,11 @@
       "labels": [
         "bd-120"
       ],
-      "dependencies": {},
+      "dependencies": {
+        "blocks": [
+          "bd-130"
+        ]
+      },
       "created_at": "2026-04-18T17:44:39.051291",
       "updated_at": "2026-04-18T19:27:08.429253",
       "comments": [
@@ -2450,18 +2471,1106 @@
         "bd-120"
       ],
       "dependencies": {
-        "blocks": [
-          "bd-126",
-          "bd-128",
-          "bd-129"
-        ]
+        "blocks": []
       },
       "created_at": "2026-04-18T17:44:43.715869",
       "updated_at": "2026-04-18T19:28:22.834589",
       "comments": [
         "Verification complete. The parallel test hang is FIXED - test suite now completes in ~55 seconds (vs 20min timeout). However, 263-359 test failures remain (previously hidden by hangs). 219 consistent failures identified across runs. 184 flaky tests remain. Sequential mode still hangs at 93%. See bd-130-verification.md for details."
       ]
+    },
+    "bd-131": {
+      "id": "bd-131",
+      "title": "test-temp-delete-me",
+      "description": "temp",
+      "status": "closed",
+      "priority": 2,
+      "type": "task",
+      "labels": [
+        "test"
+      ],
+      "dependencies": {},
+      "created_at": "2026-04-18T19:46:32.791189",
+      "updated_at": "2026-04-18T19:46:34.936858",
+      "comments": []
+    },
+    "bd-132": {
+      "id": "bd-132",
+      "title": "Rewrite Code Puppy from Python to Pure Elixir",
+      "description": "Migrate the entire Code Puppy application from the current hybrid Python + Elixir architecture to a pure Elixir implementation.\n\nCurrent state (as of 2026-04-17, per MIGRATION_STATUS.md):\n- Rust layer completely eliminated (Phase 6 done)\n- Elixir backend (~100 modules in elixir/code_puppy_control/) owns: file ops, parsing, scheduler, message core, text ops, MCP server, indexer, tools, model registry, sessions, routing\n- Python layer (~95 files + 49 plugins) still owns: pydantic-ai agent loop, Textual TUI, CLI entry points, plugin callback system, LLM provider SDKs, MCP client, browser automation, command menus, config.py (84KB), adaptive rate limiter, DBOS durable execution, OAuth flows\n\nGoal: Delete the Python tree entirely. End state is a single-binary Elixir release (Burrito) with a native TUI and feature parity with the current Python+Elixir hybrid.\n\nEstimated total effort: ~22-26 weeks across 10 phases.\n\nCRITICAL RISKS:\n- R1: pydantic-ai has no Elixir equivalent \u2014 match our usage, not the whole lib\n- R2: Textual TUI feature gap \u2014 prototype in week 1 of Phase 3 before committing\n- R3: 49 plugins = long tail \u2014 drop Tier-C for v1\n- R4: Thinner Elixir provider SDK ecosystem \u2014 roll our own on Finch\n- R5: config.py is 84KB of accrued semantics \u2014 spec before code\n- R6: Playwright dependency \u2014 keep tiny Python Port OR drop browser tools\n- R7: MCP client was pydantic-ai's job \u2014 ~1 week focused work\n- R8: Session compat \u2014 one-shot migrator on first pup-ex launch\n- R9: Plugin hot-loading UX trade-off \u2014 Elixir compiled plugins, document\n- R10: Sheer volume (~400 Python files) \u2014 turbo-executor + elixir-dev clones in parallel",
+      "status": "open",
+      "priority": 2,
+      "type": "epic",
+      "labels": [
+        "migration,python-to-elixir,rewrite"
+      ],
+      "dependencies": {},
+      "created_at": "2026-04-18T19:46:49.382810",
+      "updated_at": "2026-04-18T19:46:49.382819",
+      "comments": []
+    },
+    "bd-133": {
+      "id": "bd-133",
+      "title": "Phase 0 \u2014 Decision Gates & Prerequisites",
+      "description": "Duration: 1 week\n\nConfirm pure-Elixir scope and acceptable UI target (TUI lib vs LiveView).\nProduce per-file Python\u2192Elixir migration map (MIGRATION_MAP.md).\nBuild Elixir LLM client baseline (OpenAI + Anthropic on Finch, streaming + tools).\n\nTasks:\n  0.1 Confirm pure-Elixir scope and acceptable UI target (TUI lib vs LiveView)\n  0.2 Produce per-file Python\u2192Elixir migration map (MIGRATION_MAP.md)\n  0.3 Build Elixir LLM client baseline (OpenAI + Anthropic on Finch, streaming + tools)",
+      "status": "open",
+      "priority": 2,
+      "type": "task",
+      "labels": [
+        "migration,python-to-elixir,rewrite,phase-0"
+      ],
+      "dependencies": {
+        "discovered-from": [
+          "bd-132"
+        ],
+        "blocks": []
+      },
+      "created_at": "2026-04-18T19:46:53.771045",
+      "updated_at": "2026-04-19T00:36:50.138661",
+      "comments": []
+    },
+    "bd-134": {
+      "id": "bd-134",
+      "title": "Phase 1 \u2014 Elixir Agent Runtime (replaces pydantic-ai)",
+      "description": "Duration: 4-6 weeks\n\nBuild the core agent loop in Elixir, replacing pydantic-ai entirely.\n\nTasks:\n  1.1 Design Agent behaviour + agent loop GenServer\n  1.2 Port model_factory.py (42KB) \u2192 Elixir model registry\n  1.3 Streaming event protocol (PartStart/Delta/End)\n  1.4 Tool schema + registration (JSON Schema generation)\n  1.5 Port all remaining tools (file_modifications, skills, process_runner, subagent_context, staged_changes)\n  1.6 Adaptive rate limiter \u2192 Elixir GenServer + ETS\n  1.7 Token ledger + usage tracking\n  1.8 Compaction / message pruning integration\n  1.9 Port every agent (code-puppy, reviewer, scout, qa-kitten, qa-expert, python-programmer, security-auditor, pack-leader + 5 pack sub-agents)\n  1.10 MCP client integration (stdio, SSE, StreamableHTTP transports)\n\nExit criterion: mix test runs a code-puppy agent turn end-to-end against a real LLM with tool calls \u2014 zero Python involvement.",
+      "status": "open",
+      "priority": 2,
+      "type": "task",
+      "labels": [
+        "migration,python-to-elixir,rewrite,phase-1"
+      ],
+      "dependencies": {
+        "discovered-from": [
+          "bd-132"
+        ],
+        "blocks": [
+          "bd-150",
+          "bd-151",
+          "bd-152",
+          "bd-153",
+          "bd-154",
+          "bd-155"
+        ]
+      },
+      "created_at": "2026-04-18T19:46:59.312007",
+      "updated_at": "2026-04-19T00:56:48.246874",
+      "comments": []
+    },
+    "bd-135": {
+      "id": "bd-135",
+      "title": "Phase 2 \u2014 Plugin & Callback System",
+      "description": "Duration: 3 weeks\n\nPort the 49-plugin ecosystem to Elixir with equivalent callback merge semantics.\n\nTasks:\n  2.1 Callback registry in Elixir (20+ hooks, merge semantics)\n  2.2 Plugin discovery & loading (Elixir Plugin behaviour)\n  2.3 Port 49 plugins in 3 tiers:\n       Tier A (critical): fast_puppy, elixir_bridge (invert!), repo_compass, file_mentions, claude_code_oauth, chatgpt_oauth, pack_parallelism, shell_safety, turbo_executor\n       Tier B (important): agent_memory, agent_trace, agent_skills, loop_detection, error_classifier, scheduler, cost_estimator, git_auto_commit\n       Tier C (nice-to-have): theme_switcher, pop_command, completion_notifier, tracing_langfuse, tracing_langsmith, clean_command, ttsr, synthetic_status, frontend_emitter, proactive_guidance, remember_last_agent, example_custom_command, etc.",
+      "status": "open",
+      "priority": 2,
+      "type": "task",
+      "labels": [
+        "migration,python-to-elixir,rewrite,phase-2"
+      ],
+      "dependencies": {
+        "discovered-from": [
+          "bd-132"
+        ],
+        "blocks": [
+          "bd-134",
+          "bd-156",
+          "bd-157",
+          "bd-158"
+        ]
+      },
+      "created_at": "2026-04-18T19:47:05.044179",
+      "updated_at": "2026-04-19T00:56:48.277992",
+      "comments": []
+    },
+    "bd-136": {
+      "id": "bd-136",
+      "title": "Phase 3 \u2014 Terminal UI & REPL",
+      "description": "Duration: 3-4 weeks\n\nBuild a native Elixir TUI and interactive REPL, replacing Textual + prompt_toolkit.\n\nTasks:\n  3.1 Choose TUI library (Ratatouille vs Owl vs LiveView)\n  3.2 REPL / interactive loop (port interactive_loop.py + prompt_toolkit_completion.py)\n  3.3 Streaming renderer (port tui/stream_renderer.py + messaging/rich_renderer.py 58KB)\n  3.4 TUI screens & widgets (port tui/app.py + screens/ + widgets/)\n  3.5 Slash-command dispatch (port command_line/ ~30 files, ~300KB total)",
+      "status": "open",
+      "priority": 2,
+      "type": "task",
+      "labels": [
+        "migration,python-to-elixir,rewrite,phase-3"
+      ],
+      "dependencies": {
+        "discovered-from": [
+          "bd-132"
+        ],
+        "blocks": [
+          "bd-135",
+          "bd-159",
+          "bd-160",
+          "bd-161",
+          "bd-162",
+          "bd-163"
+        ]
+      },
+      "created_at": "2026-04-18T19:47:09.444757",
+      "updated_at": "2026-04-19T00:56:48.124878",
+      "comments": []
+    },
+    "bd-137": {
+      "id": "bd-137",
+      "title": "Phase 4 \u2014 Config, Session, Persistence, Auth",
+      "description": "Duration: 2 weeks\n\nPort config, session storage, OAuth, and secrets management to Elixir.\n\nTasks:\n  4.1 Port config.py (84KB) \u2192 Elixir (split into ~8 focused modules)\n  4.2 Session storage last mile (session_storage.py 31KB)\n  4.3 OAuth flows (Claude Code OAuth + ChatGPT OAuth + oauth_puppy_html.py)\n  4.4 Secrets / credential store (OS keychain integration)",
+      "status": "open",
+      "priority": 2,
+      "type": "task",
+      "labels": [
+        "migration,python-to-elixir,rewrite,phase-4"
+      ],
+      "dependencies": {
+        "discovered-from": [
+          "bd-132"
+        ],
+        "blocks": [
+          "bd-134",
+          "bd-164",
+          "bd-165",
+          "bd-166",
+          "bd-167"
+        ]
+      },
+      "created_at": "2026-04-18T19:47:13.329659",
+      "updated_at": "2026-04-19T00:56:48.155619",
+      "comments": []
+    },
+    "bd-138": {
+      "id": "bd-138",
+      "title": "Phase 5 \u2014 HTTP API, WebSocket & Browser Automation",
+      "description": "Duration: 2 weeks\n\nReplace FastAPI with Phoenix and resolve browser automation strategy.\n\nTasks:\n  5.1 Port FastAPI \u2192 Phoenix (app, websocket, pty_manager, security)\n  5.2 Browser automation strategy decision + execution (wallaby vs chromic_pdf vs Python Port vs drop)",
+      "status": "open",
+      "priority": 2,
+      "type": "task",
+      "labels": [
+        "migration,python-to-elixir,rewrite,phase-5"
+      ],
+      "dependencies": {
+        "discovered-from": [
+          "bd-132"
+        ],
+        "blocks": [
+          "bd-137",
+          "bd-168",
+          "bd-169"
+        ]
+      },
+      "created_at": "2026-04-18T19:47:17.340741",
+      "updated_at": "2026-04-19T00:56:48.186594",
+      "comments": []
+    },
+    "bd-139": {
+      "id": "bd-139",
+      "title": "Phase 6 \u2014 DBOS / Durable Execution Replacement",
+      "description": "Duration: 1-2 weeks\n\nReplace Python DBOS durable execution with Elixir-native equivalent.\n\nTasks:\n  6.1 Replace DBOS workflows with Oban Pro / Ecto state machine",
+      "status": "open",
+      "priority": 2,
+      "type": "task",
+      "labels": [
+        "migration,python-to-elixir,rewrite,phase-6"
+      ],
+      "dependencies": {
+        "discovered-from": [
+          "bd-132"
+        ],
+        "blocks": [
+          "bd-134",
+          "bd-170"
+        ]
+      },
+      "created_at": "2026-04-18T19:47:20.916780",
+      "updated_at": "2026-04-19T00:56:48.216808",
+      "comments": []
+    },
+    "bd-140": {
+      "id": "bd-140",
+      "title": "Phase 7 \u2014 Distribution, Packaging & Release",
+      "description": "Duration: 2 weeks\n\nSingle-binary distribution via Burrito, CLI entry points, auto-updater.\n\nTasks:\n  7.1 Burrito release (single-binary for macOS/Linux/Windows)\n  7.2 CLI entries (pup, code-puppy, gac) via mix escript or burrito\n  7.3 Port version_checker.py + uvx_detection.py (auto-updater)",
+      "status": "open",
+      "priority": 2,
+      "type": "task",
+      "labels": [
+        "migration,python-to-elixir,rewrite,phase-7"
+      ],
+      "dependencies": {
+        "discovered-from": [
+          "bd-132"
+        ],
+        "blocks": [
+          "bd-136",
+          "bd-137",
+          "bd-138",
+          "bd-139",
+          "bd-171",
+          "bd-172",
+          "bd-173"
+        ]
+      },
+      "created_at": "2026-04-18T19:47:26.144362",
+      "updated_at": "2026-04-19T00:56:48.308517",
+      "comments": []
+    },
+    "bd-141": {
+      "id": "bd-141",
+      "title": "Phase 8 \u2014 Tests, Evals & Benchmarks",
+      "description": "Duration: 2 weeks (parallel with Phase 7)\n\nPort test suite, evals, and add perf benchmarks.\n\nTasks:\n  8.1 Port/adapt test suite to ExUnit + Stream.Data\n  8.2 Port evals/ LLM evaluation suite \u2014 gate acceptance on parity\n  8.3 Perf benchmarks (startup, REPL cold/hot, agent turn latency, tool overhead, token accounting)",
+      "status": "open",
+      "priority": 2,
+      "type": "task",
+      "labels": [
+        "migration,python-to-elixir,rewrite,phase-8"
+      ],
+      "dependencies": {
+        "discovered-from": [
+          "bd-132"
+        ],
+        "blocks": [
+          "bd-134",
+          "bd-135",
+          "bd-174",
+          "bd-175",
+          "bd-176"
+        ]
+      },
+      "created_at": "2026-04-18T19:47:30.031832",
+      "updated_at": "2026-04-19T00:56:48.338897",
+      "comments": []
+    },
+    "bd-142": {
+      "id": "bd-142",
+      "title": "Phase 9 \u2014 Cutover & Python Deletion",
+      "description": "Duration: 1 week\n\nFinal dual-run validation, delete Python tree, refresh docs.\n\nTasks:\n  9.1 Dual-run validation (pup-ex alongside pup for 1-2 weeks)\n  9.2 Delete Python tree (code_puppy/, tests/, pyproject.toml, uv.lock)\n  9.3 Docs refresh (README, ARCHITECTURE, MIGRATION_STATUS, AGENTS, architecture_mermaid)\n  9.4 Final review (elixir-reviewer + security-auditor)",
+      "status": "open",
+      "priority": 2,
+      "type": "task",
+      "labels": [
+        "migration,python-to-elixir,rewrite,phase-9"
+      ],
+      "dependencies": {
+        "discovered-from": [
+          "bd-132"
+        ],
+        "blocks": [
+          "bd-140",
+          "bd-141",
+          "bd-177",
+          "bd-178",
+          "bd-179",
+          "bd-180"
+        ]
+      },
+      "created_at": "2026-04-18T19:47:34.129143",
+      "updated_at": "2026-04-18T19:47:34.129151",
+      "comments": []
+    },
+    "bd-143": {
+      "id": "bd-143",
+      "title": "0.1 Confirm pure-Elixir scope and acceptable UI target",
+      "description": "Decision gate: finalize whether the TUI will use Ratatouille, Owl, or LiveView. Document rationale in MIGRATION_MAP.md.",
+      "status": "closed",
+      "priority": 2,
+      "type": "task",
+      "labels": [
+        "migration,python-to-elixir,rewrite,phase-0",
+        "claimed-by-planning-agent"
+      ],
+      "dependencies": {
+        "discovered-from": [
+          "bd-133"
+        ]
+      },
+      "created_at": "2026-04-18T19:47:44.984919",
+      "updated_at": "2026-04-18T19:52:47.584369",
+      "comments": [
+        "Phase 0.1 decisions (autonomous, planning-agent-019da1):\\n\\n1. TUI target: RATATOUILLE (most mature Elixir TUI, termbox-based, declarative)\\n2. Cutover style: GRADUAL STRANGLER (ship pup-ex alongside pup for 1-2 weeks before deletion)\\n3. Agent contract: FRESH ELIXIR-NATIVE (OTP-idiomatic, don't inherit pydantic-ai quirks)\\n4. Browser tools: DROP for v1, re-add post-cutover (qa-kitten/terminal-qa lose browser capability temporarily)\\n5. DBOS replacement: Custom Ecto state machine + Oban free tier (no Pro license; OTP supervision already covers most durability)"
+      ]
+    },
+    "bd-144": {
+      "id": "bd-144",
+      "title": "0.2 Produce per-file Python\u2192Elixir migration map",
+      "description": "Create MIGRATION_MAP.md mapping every Python file (~95 source + 49 plugins) to its Elixir replacement module or 'drop'. Output drives all subsequent phases.",
+      "status": "closed",
+      "priority": 2,
+      "type": "task",
+      "labels": [
+        "migration,python-to-elixir,rewrite,phase-0",
+        "claimed-by-planning-agent"
+      ],
+      "dependencies": {
+        "discovered-from": [
+          "bd-133"
+        ]
+      },
+      "created_at": "2026-04-18T19:47:45.018118",
+      "updated_at": "2026-04-18T20:35:45.855799",
+      "comments": [
+        "DONE by turbo-executor (planning-agent-019da1). /Users/adam2/projects/code_puppy/MIGRATION_MAP.md expanded to 710 lines. Full 518-file mapping, plugin tiers, command menus, drop list (98 files), already-ported cross-ref (23 modules), orphans (15 TBDs). Status: 24 PORTED, 5 IN-PROGRESS, 156 TODO, 98 DROP-V1, 67 DEFER, 15 TBD."
+      ]
+    },
+    "bd-145": {
+      "id": "bd-145",
+      "title": "0.3 Build Elixir LLM client baseline",
+      "description": "Implement Elixir LLM client on Finch for OpenAI + Anthropic APIs with streaming (SSE) and tool-call support. Serves as foundation for Phase 1 agent runtime.",
+      "status": "closed",
+      "priority": 2,
+      "type": "task",
+      "labels": [
+        "migration,python-to-elixir,rewrite,phase-0",
+        "claimed-by-planning-agent"
+      ],
+      "dependencies": {
+        "discovered-from": [
+          "bd-133"
+        ]
+      },
+      "created_at": "2026-04-18T19:47:45.047817",
+      "updated_at": "2026-04-18T20:08:31.986072",
+      "comments": [
+        "DONE by elixir-dev (planning-agent-019da1 coordinated).\\n\\nDelivered:\\n- lib/code_puppy_control/llm/provider.ex (124 lines) \u2014 Provider behaviour + shared types\\n- lib/code_puppy_control/llm/providers/openai.ex (454 lines) \u2014 Chat + SSE streaming + tool calls\\n- lib/code_puppy_control/llm/providers/anthropic.ex (488 lines) \u2014 /v1/messages + SSE + tool use\\n- lib/code_puppy_control/llm.ex (223 lines) \u2014 Facade, routes via ModelRegistry\\n- test/ (5 files, 1063 lines, 31 tests, 0 failures)\\n\\nTotal: 2352 lines across 9 files.\\n\\nTODOs left (tracked inline with TODO(bd-145)):\\n- Custom endpoint env var substitution\\n- Additional provider fine-tuning (Gemini, ZAI)\\n- Rate limiting telemetry (handled by bd-151)\\n- Vision content formatting\\n\\nDeviations from plan:\\n- Used injectable :http_client pattern instead of Bypass (Ranch version conflict)\\n- Rewrote SSE parser to line-based incremental (handles chunk boundaries)"
+      ]
+    },
+    "bd-146": {
+      "id": "bd-146",
+      "title": "1.1 Design Agent behaviour + agent loop GenServer",
+      "description": "Define the Agent behaviour (callbacks for init, handle_message, tool_use, etc.) and implement the agent loop as a GenServer that drives the LLM conversation cycle.",
+      "status": "closed",
+      "priority": 2,
+      "type": "task",
+      "labels": [
+        "migration,python-to-elixir,rewrite,phase-1",
+        "claimed-by-planning-agent"
+      ],
+      "dependencies": {
+        "discovered-from": [
+          "bd-134"
+        ]
+      },
+      "created_at": "2026-04-18T19:47:56.545254",
+      "updated_at": "2026-04-18T20:08:38.742554",
+      "comments": [
+        "DONE by elixir-dev-clone-1 (planning-agent-019da1 coordinated).\\n\\nDelivered:\\n- lib/code_puppy_control/agent/behaviour.ex (108 lines) \u2014 Agent behaviour + 5 callbacks\\n- lib/code_puppy_control/agent/turn.ex (276 lines) \u2014 Pure state machine\\n- lib/code_puppy_control/agent/events.ex (190 lines) \u2014 Event type builders\\n- lib/code_puppy_control/agent/loop.ex (562 lines) \u2014 GenServer per run\\n- lib/code_puppy_control/agent/llm.ex (42 lines) \u2014 LLM behaviour placeholder (will be replaced with bd-145 LLM module)\\n- lib/code_puppy_control/agent.ex (69 lines) \u2014 High-level run/3 API\\n- lib/code_puppy_control/agent/DESIGN_NOTES.md\\n- test/ (3 files, 852 lines, 60 tests, 0 failures)\\n\\nIntegration: Reuses existing EventBus, Run.Supervisor, Run.Registry (no duplication).\\n\\nTODOs left (tracked inline):\\n- TODO(bd-145): Replace Agent.LLM placeholder with real LLM module\\n- TODO(bd-149): Replace simple tool lookup with real registry\\n- TODO(bd-151): Enforce rate limiting (option plumbed)\\n- TODO(bd-152): Real token ledger integration"
+      ]
+    },
+    "bd-147": {
+      "id": "bd-147",
+      "title": "1.2 Port model_factory.py (42KB) to Elixir model registry",
+      "description": "Port the 42KB model_factory.py to an Elixir model registry \u2014 model definitions, capability maps, provider routing, parameter defaults.",
+      "status": "closed",
+      "priority": 2,
+      "type": "task",
+      "labels": [
+        "migration,python-to-elixir,rewrite,phase-1",
+        "claimed-by-planning-agent"
+      ],
+      "dependencies": {
+        "discovered-from": [
+          "bd-134"
+        ]
+      },
+      "created_at": "2026-04-18T19:47:56.576919",
+      "updated_at": "2026-04-18T20:35:50.351343",
+      "comments": [
+        "DONE by elixir-dev-clone-3 (planning-agent-019da1). ModelFactory + Handle + Credentials. 800 lines total. 140 tests 0 failures. Supports 12 provider types, 2 OAuth stubs deferred to bd-166. LLM facade got handle-based overloads."
+      ]
+    },
+    "bd-148": {
+      "id": "bd-148",
+      "title": "1.3 Streaming event protocol (PartStart/Delta/End)",
+      "description": "Implement the streaming event protocol: PartStart, PartDelta, PartEnd, ToolCallStart, ToolCallDelta, ToolCallEnd. Must interop with the TUI renderer.",
+      "status": "closed",
+      "priority": 2,
+      "type": "task",
+      "labels": [
+        "migration,python-to-elixir,rewrite,phase-1"
+      ],
+      "dependencies": {
+        "discovered-from": [
+          "bd-134"
+        ]
+      },
+      "created_at": "2026-04-18T19:47:56.606160",
+      "updated_at": "2026-04-18T20:35:54.502957",
+      "comments": [
+        "DONE by elixir-dev (planning-agent-019da1). Canonical stream protocol: Event (11 structs, 408 LOC), Normalizer (99 LOC), Collector (254 LOC). Agent.Loop consumes canonical events. 152 tests 0 failures. JSON-wire-format-ready for TUI/WebSocket."
+      ]
+    },
+    "bd-149": {
+      "id": "bd-149",
+      "title": "1.4 Tool schema + registration (JSON Schema generation)",
+      "description": "Build the tool registration system that generates JSON Schema from Elixir function specs for LLM function-calling.",
+      "status": "closed",
+      "priority": 2,
+      "type": "task",
+      "labels": [
+        "migration,python-to-elixir,rewrite,phase-1",
+        "claimed-by-planning-agent"
+      ],
+      "dependencies": {
+        "discovered-from": [
+          "bd-134"
+        ]
+      },
+      "created_at": "2026-04-18T19:47:56.635774",
+      "updated_at": "2026-04-18T20:35:58.656713",
+      "comments": [
+        "DONE by elixir-dev-clone-3 (planning-agent-019da1). Tool registry + schema + runner. 415+150+335+278 = 1178 LOC across 4 modules. Agent.Loop TODO(bd-149) resolved \u2014 now dispatches via Runner.invoke/3. 138 tests 0 failures."
+      ]
+    },
+    "bd-150": {
+      "id": "bd-150",
+      "title": "1.5 Port all remaining tools",
+      "description": "Port remaining Python tools not yet in Elixir: file_modifications, skills, process_runner, subagent_context, staged_changes.",
+      "status": "open",
+      "priority": 2,
+      "type": "task",
+      "labels": [
+        "migration,python-to-elixir,rewrite,phase-1",
+        "claimed-by-planning-agent"
+      ],
+      "dependencies": {
+        "discovered-from": [
+          "bd-134"
+        ]
+      },
+      "created_at": "2026-04-18T19:47:56.665822",
+      "updated_at": "2026-04-19T00:56:48.401822",
+      "comments": []
+    },
+    "bd-151": {
+      "id": "bd-151",
+      "title": "1.6 Adaptive rate limiter \u2192 Elixir GenServer + ETS",
+      "description": "Replace Python adaptive rate limiter with Elixir GenServer backed by ETS for fast lookups. Must handle per-provider limits, backoff, and burst allowances.",
+      "status": "open",
+      "priority": 2,
+      "type": "task",
+      "labels": [
+        "migration,python-to-elixir,rewrite,phase-1",
+        "claimed-by-planning-agent"
+      ],
+      "dependencies": {
+        "discovered-from": [
+          "bd-134"
+        ]
+      },
+      "created_at": "2026-04-18T19:47:56.694656",
+      "updated_at": "2026-04-19T00:56:48.433408",
+      "comments": []
+    },
+    "bd-152": {
+      "id": "bd-152",
+      "title": "1.7 Token ledger + usage tracking",
+      "description": "Implement token counting, per-session usage ledger, and cost tracking. Port any Python tokenization heuristics.",
+      "status": "open",
+      "priority": 2,
+      "type": "task",
+      "labels": [
+        "migration,python-to-elixir,rewrite,phase-1",
+        "claimed-by-planning-agent"
+      ],
+      "dependencies": {
+        "discovered-from": [
+          "bd-134"
+        ]
+      },
+      "created_at": "2026-04-18T19:47:56.724085",
+      "updated_at": "2026-04-19T00:56:48.463949",
+      "comments": []
+    },
+    "bd-153": {
+      "id": "bd-153",
+      "title": "1.8 Compaction / message pruning integration",
+      "description": "Integrate message compaction/pruning into the agent loop to manage context window limits.",
+      "status": "open",
+      "priority": 2,
+      "type": "task",
+      "labels": [
+        "migration,python-to-elixir,rewrite,phase-1",
+        "claimed-by-planning-agent"
+      ],
+      "dependencies": {
+        "discovered-from": [
+          "bd-134"
+        ],
+        "blocks": [
+          "bd-152"
+        ]
+      },
+      "created_at": "2026-04-18T19:47:56.753540",
+      "updated_at": "2026-04-19T00:56:31.094038",
+      "comments": []
+    },
+    "bd-154": {
+      "id": "bd-154",
+      "title": "1.9 Port every agent",
+      "description": "Port all agents to Elixir: code-puppy, reviewer, scout, qa-kitten, qa-expert, python-programmer, security-auditor, pack-leader + 5 pack sub-agents. Each is a module implementing the Agent behaviour.",
+      "status": "open",
+      "priority": 1,
+      "type": "task",
+      "labels": [
+        "migration,python-to-elixir,rewrite,phase-1"
+      ],
+      "dependencies": {
+        "discovered-from": [
+          "bd-134"
+        ],
+        "blocks": [
+          "bd-150",
+          "bd-151",
+          "bd-152",
+          "bd-155"
+        ]
+      },
+      "created_at": "2026-04-18T19:47:56.783018",
+      "updated_at": "2026-04-19T00:56:31.124794",
+      "comments": []
+    },
+    "bd-155": {
+      "id": "bd-155",
+      "title": "1.10 MCP client integration",
+      "description": "Implement MCP client in Elixir supporting stdio, SSE, and StreamableHTTP transports. Replaces pydantic-ai's MCP client.",
+      "status": "open",
+      "priority": 2,
+      "type": "task",
+      "labels": [
+        "migration,python-to-elixir,rewrite,phase-1",
+        "claimed-by-planning-agent"
+      ],
+      "dependencies": {
+        "discovered-from": [
+          "bd-134"
+        ]
+      },
+      "created_at": "2026-04-18T19:47:56.812533",
+      "updated_at": "2026-04-19T00:56:48.494275",
+      "comments": []
+    },
+    "bd-156": {
+      "id": "bd-156",
+      "title": "2.1 Callback registry in Elixir (20+ hooks, merge semantics)",
+      "description": "Implement the callback registry matching Python's 20+ hooks with proper merge semantics (str=concat, list=extend, dict=update, bool=OR).",
+      "status": "open",
+      "priority": 2,
+      "type": "task",
+      "labels": [
+        "migration,python-to-elixir,rewrite,phase-2",
+        "claimed-by-planning-agent"
+      ],
+      "dependencies": {
+        "discovered-from": [
+          "bd-135"
+        ]
+      },
+      "created_at": "2026-04-18T19:48:03.299082",
+      "updated_at": "2026-04-19T00:56:48.555481",
+      "comments": []
+    },
+    "bd-157": {
+      "id": "bd-157",
+      "title": "2.2 Plugin discovery & loading (Elixir Plugin behaviour)",
+      "description": "Build plugin discovery (scanning plugin dirs) and loading mechanism. Define an Elixir Plugin behaviour. Support both builtin and user plugins.",
+      "status": "open",
+      "priority": 2,
+      "type": "task",
+      "labels": [
+        "migration,python-to-elixir,rewrite,phase-2",
+        "claimed-by-planning-agent"
+      ],
+      "dependencies": {
+        "discovered-from": [
+          "bd-135"
+        ],
+        "blocks": [
+          "bd-156"
+        ]
+      },
+      "created_at": "2026-04-18T19:48:03.330928",
+      "updated_at": "2026-04-19T00:56:48.586300",
+      "comments": []
+    },
+    "bd-158": {
+      "id": "bd-158",
+      "title": "2.3 Port 49 plugins (3 tiers)",
+      "description": "Port all 49 Python plugins to Elixir. Tier A (critical, 9 plugins): fast_puppy, elixir_bridge, repo_compass, file_mentions, claude_code_oauth, chatgpt_oauth, pack_parallelism, shell_safety, turbo_executor. Tier B (important, 8 plugins): agent_memory, agent_trace, agent_skills, loop_detection, error_classifier, scheduler, cost_estimator, git_auto_commit. Tier C (nice-to-have, remaining ~32): drop for v1 or port opportunistically.",
+      "status": "open",
+      "priority": 2,
+      "type": "task",
+      "labels": [
+        "migration,python-to-elixir,rewrite,phase-2"
+      ],
+      "dependencies": {
+        "discovered-from": [
+          "bd-135"
+        ],
+        "blocks": [
+          "bd-156",
+          "bd-157"
+        ]
+      },
+      "created_at": "2026-04-18T19:48:03.359737",
+      "updated_at": "2026-04-19T00:56:31.250544",
+      "comments": []
+    },
+    "bd-159": {
+      "id": "bd-159",
+      "title": "3.1 Choose TUI library (Ratatouille vs Owl vs LiveView)",
+      "description": "Prototype in Ratatouille, Owl, and LiveView. Evaluate against Textual feature checklist. Pick one. Document in MIGRATION_MAP.md.",
+      "status": "open",
+      "priority": 2,
+      "type": "task",
+      "labels": [
+        "migration,python-to-elixir,rewrite,phase-3",
+        "claimed-by-planning-agent"
+      ],
+      "dependencies": {
+        "discovered-from": [
+          "bd-136"
+        ]
+      },
+      "created_at": "2026-04-18T19:48:10.270721",
+      "updated_at": "2026-04-19T00:56:48.709567",
+      "comments": []
+    },
+    "bd-160": {
+      "id": "bd-160",
+      "title": "3.2 REPL / interactive loop",
+      "description": "Port interactive_loop.py + prompt_toolkit_completion.py to Elixir. Must support: input editing, history, tab completion, multi-line input.",
+      "status": "open",
+      "priority": 2,
+      "type": "task",
+      "labels": [
+        "migration,python-to-elixir,rewrite,phase-3"
+      ],
+      "dependencies": {
+        "discovered-from": [
+          "bd-136"
+        ],
+        "blocks": [
+          "bd-159"
+        ]
+      },
+      "created_at": "2026-04-18T19:48:10.303237",
+      "updated_at": "2026-04-19T00:56:48.771515",
+      "comments": []
+    },
+    "bd-161": {
+      "id": "bd-161",
+      "title": "3.3 Streaming renderer",
+      "description": "Port tui/stream_renderer.py + messaging/rich_renderer.py (58KB combined) to Elixir. Must handle markdown rendering, syntax highlighting, tool-call display, progress indicators.",
+      "status": "open",
+      "priority": 2,
+      "type": "task",
+      "labels": [
+        "migration,python-to-elixir,rewrite,phase-3"
+      ],
+      "dependencies": {
+        "discovered-from": [
+          "bd-136"
+        ],
+        "blocks": [
+          "bd-159"
+        ]
+      },
+      "created_at": "2026-04-18T19:48:10.333257",
+      "updated_at": "2026-04-19T00:56:48.741008",
+      "comments": []
+    },
+    "bd-162": {
+      "id": "bd-162",
+      "title": "3.4 TUI screens & widgets",
+      "description": "Port tui/app.py + screens/ + widgets/ to Elixir. Includes: main chat screen, config screen, help screen, model selector, session browser.",
+      "status": "open",
+      "priority": 2,
+      "type": "task",
+      "labels": [
+        "migration,python-to-elixir,rewrite,phase-3"
+      ],
+      "dependencies": {
+        "discovered-from": [
+          "bd-136"
+        ],
+        "blocks": [
+          "bd-159",
+          "bd-161"
+        ]
+      },
+      "created_at": "2026-04-18T19:48:10.362362",
+      "updated_at": "2026-04-19T00:56:31.372894",
+      "comments": []
+    },
+    "bd-163": {
+      "id": "bd-163",
+      "title": "3.5 Slash-command dispatch",
+      "description": "Port command_line/ (~30 files, ~300KB) to Elixir. Slash-command router + all built-in commands.",
+      "status": "open",
+      "priority": 2,
+      "type": "task",
+      "labels": [
+        "migration,python-to-elixir,rewrite,phase-3"
+      ],
+      "dependencies": {
+        "discovered-from": [
+          "bd-136"
+        ],
+        "blocks": [
+          "bd-159",
+          "bd-160"
+        ]
+      },
+      "created_at": "2026-04-18T19:48:10.390822",
+      "updated_at": "2026-04-19T00:56:31.403145",
+      "comments": []
+    },
+    "bd-164": {
+      "id": "bd-164",
+      "title": "4.1 Port config.py (84KB) to Elixir",
+      "description": "Port the 84KB config.py into ~8 focused Elixir modules. Spec the semantics first (R5 risk). Must handle: defaults, env overrides, file config, CLI flags, dynamic reload.",
+      "status": "open",
+      "priority": 1,
+      "type": "task",
+      "labels": [
+        "migration,python-to-elixir,rewrite,phase-4",
+        "claimed-by-planning-agent"
+      ],
+      "dependencies": {
+        "discovered-from": [
+          "bd-137"
+        ]
+      },
+      "created_at": "2026-04-18T19:48:17.126393",
+      "updated_at": "2026-04-19T00:56:48.833103",
+      "comments": []
+    },
+    "bd-165": {
+      "id": "bd-165",
+      "title": "4.2 Session storage last mile",
+      "description": "Port session_storage.py (31KB) to Elixir. Session CRUD, search, export. One-shot migrator for existing Python sessions (R8).",
+      "status": "open",
+      "priority": 2,
+      "type": "task",
+      "labels": [
+        "migration,python-to-elixir,rewrite,phase-4"
+      ],
+      "dependencies": {
+        "discovered-from": [
+          "bd-137"
+        ],
+        "blocks": [
+          "bd-164"
+        ]
+      },
+      "created_at": "2026-04-18T19:48:17.158145",
+      "updated_at": "2026-04-19T00:56:31.464875",
+      "comments": []
+    },
+    "bd-166": {
+      "id": "bd-166",
+      "title": "4.3 OAuth flows",
+      "description": "Port Claude Code OAuth + ChatGPT OAuth + oauth_puppy_html.py to Elixir. Must handle PKCE flow, token refresh, browser launch.",
+      "status": "open",
+      "priority": 2,
+      "type": "task",
+      "labels": [
+        "migration,python-to-elixir,rewrite,phase-4"
+      ],
+      "dependencies": {
+        "discovered-from": [
+          "bd-137"
+        ],
+        "blocks": [
+          "bd-164",
+          "bd-167"
+        ]
+      },
+      "created_at": "2026-04-18T19:48:17.188100",
+      "updated_at": "2026-04-19T00:56:31.495992",
+      "comments": []
+    },
+    "bd-167": {
+      "id": "bd-167",
+      "title": "4.4 Secrets / credential store",
+      "description": "OS keychain integration for storing API keys and tokens. Port any Python keyring usage.",
+      "status": "open",
+      "priority": 2,
+      "type": "task",
+      "labels": [
+        "migration,python-to-elixir,rewrite,phase-4"
+      ],
+      "dependencies": {
+        "discovered-from": [
+          "bd-137"
+        ]
+      },
+      "created_at": "2026-04-18T19:48:17.217798",
+      "updated_at": "2026-04-19T00:56:48.864292",
+      "comments": []
+    },
+    "bd-168": {
+      "id": "bd-168",
+      "title": "5.1 Port FastAPI to Phoenix",
+      "description": "Replace Python FastAPI server with Phoenix. Includes: REST app endpoints, WebSocket handler, PTY manager, security middleware.",
+      "status": "open",
+      "priority": 2,
+      "type": "task",
+      "labels": [
+        "migration,python-to-elixir,rewrite,phase-5"
+      ],
+      "dependencies": {
+        "discovered-from": [
+          "bd-138"
+        ]
+      },
+      "created_at": "2026-04-18T19:48:21.529960",
+      "updated_at": "2026-04-19T00:56:31.557723",
+      "comments": []
+    },
+    "bd-169": {
+      "id": "bd-169",
+      "title": "5.2 Browser automation strategy",
+      "description": "Decision + execution on browser automation. Options: Wallaby (Elixir), ChromicPDF (PDF only), tiny Python Port (keep Playwright), or drop browser tools entirely (R6).",
+      "status": "open",
+      "priority": 2,
+      "type": "task",
+      "labels": [
+        "migration,python-to-elixir,rewrite,phase-5"
+      ],
+      "dependencies": {
+        "discovered-from": [
+          "bd-138"
+        ]
+      },
+      "created_at": "2026-04-18T19:48:21.561567",
+      "updated_at": "2026-04-19T00:56:31.589342",
+      "comments": []
+    },
+    "bd-170": {
+      "id": "bd-170",
+      "title": "6.1 Replace DBOS workflows with Oban Pro / Ecto state machine",
+      "description": "Replace Python DBOS durable execution with Oban Pro (or plain Ecto state machine). Must preserve: workflow persistence, retry semantics, step-level idempotency.",
+      "status": "open",
+      "priority": 2,
+      "type": "task",
+      "labels": [
+        "migration,python-to-elixir,rewrite,phase-6",
+        "claimed-by-planning-agent"
+      ],
+      "dependencies": {
+        "discovered-from": [
+          "bd-139"
+        ]
+      },
+      "created_at": "2026-04-18T19:48:25.007959",
+      "updated_at": "2026-04-19T00:56:31.619836",
+      "comments": []
+    },
+    "bd-171": {
+      "id": "bd-171",
+      "title": "7.1 Burrito release (single-binary)",
+      "description": "Configure Burrito for single-binary releases on macOS/Linux/Windows. Must bundle runtime, deps, and assets.",
+      "status": "open",
+      "priority": 2,
+      "type": "task",
+      "labels": [
+        "migration,python-to-elixir,rewrite,phase-7"
+      ],
+      "dependencies": {
+        "discovered-from": [
+          "bd-140"
+        ],
+        "blocks": [
+          "bd-172"
+        ]
+      },
+      "created_at": "2026-04-18T19:48:29.925496",
+      "updated_at": "2026-04-19T00:56:48.924864",
+      "comments": []
+    },
+    "bd-172": {
+      "id": "bd-172",
+      "title": "7.2 CLI entries (pup, code-puppy, gac)",
+      "description": "Implement CLI entry points via mix escript or Burrito wrappers. Must preserve existing command-line interface compatibility.",
+      "status": "open",
+      "priority": 2,
+      "type": "task",
+      "labels": [
+        "migration,python-to-elixir,rewrite,phase-7"
+      ],
+      "dependencies": {
+        "discovered-from": [
+          "bd-140"
+        ]
+      },
+      "created_at": "2026-04-18T19:48:29.957006",
+      "updated_at": "2026-04-19T00:56:48.894877",
+      "comments": []
+    },
+    "bd-173": {
+      "id": "bd-173",
+      "title": "7.3 Port version_checker + uvx_detection (auto-updater)",
+      "description": "Port version_checker.py + uvx_detection.py to Elixir. Auto-update check on startup, version comparison, update prompts.",
+      "status": "open",
+      "priority": 2,
+      "type": "task",
+      "labels": [
+        "migration,python-to-elixir,rewrite,phase-7"
+      ],
+      "dependencies": {
+        "discovered-from": [
+          "bd-140"
+        ],
+        "blocks": [
+          "bd-171"
+        ]
+      },
+      "created_at": "2026-04-18T19:48:29.985724",
+      "updated_at": "2026-04-19T00:56:31.713867",
+      "comments": []
+    },
+    "bd-174": {
+      "id": "bd-174",
+      "title": "8.1 Port/adapt test suite to ExUnit + Stream.Data",
+      "description": "Port Python test suite to ExUnit. Use Stream.Data for property-based tests. Maintain coverage gates per module.",
+      "status": "open",
+      "priority": 2,
+      "type": "task",
+      "labels": [
+        "migration,python-to-elixir,rewrite,phase-8"
+      ],
+      "dependencies": {
+        "discovered-from": [
+          "bd-141"
+        ]
+      },
+      "created_at": "2026-04-18T19:48:35.152599",
+      "updated_at": "2026-04-19T00:56:48.956569",
+      "comments": []
+    },
+    "bd-175": {
+      "id": "bd-175",
+      "title": "8.2 Port evals/LLM evaluation suite",
+      "description": "Port evals/ LLM evaluation suite. Gate acceptance on parity with Python results. Run against real LLM APIs.",
+      "status": "open",
+      "priority": 2,
+      "type": "task",
+      "labels": [
+        "migration,python-to-elixir,rewrite,phase-8"
+      ],
+      "dependencies": {
+        "discovered-from": [
+          "bd-141"
+        ]
+      },
+      "created_at": "2026-04-18T19:48:35.184914",
+      "updated_at": "2026-04-19T00:56:31.776548",
+      "comments": []
+    },
+    "bd-176": {
+      "id": "bd-176",
+      "title": "8.3 Perf benchmarks",
+      "description": "Benchmark: startup time, REPL cold/hot start, agent turn latency, tool overhead, token accounting accuracy. Compare Elixir vs Python baseline.",
+      "status": "open",
+      "priority": 2,
+      "type": "task",
+      "labels": [
+        "migration,python-to-elixir,rewrite,phase-8"
+      ],
+      "dependencies": {
+        "discovered-from": [
+          "bd-141"
+        ],
+        "blocks": [
+          "bd-174"
+        ]
+      },
+      "created_at": "2026-04-18T19:48:35.213477",
+      "updated_at": "2026-04-19T00:56:31.806854",
+      "comments": []
+    },
+    "bd-177": {
+      "id": "bd-177",
+      "title": "9.1 Dual-run validation (pup-ex alongside pup)",
+      "description": "Run pup-ex (Elixir) alongside pup (Python) for 1-2 weeks. Compare outputs on real workloads. Log divergences.",
+      "status": "open",
+      "priority": 2,
+      "type": "task",
+      "labels": [
+        "migration,python-to-elixir,rewrite,phase-9"
+      ],
+      "dependencies": {
+        "discovered-from": [
+          "bd-142"
+        ]
+      },
+      "created_at": "2026-04-18T19:48:41.400133",
+      "updated_at": "2026-04-19T00:56:49.048816",
+      "comments": []
+    },
+    "bd-178": {
+      "id": "bd-178",
+      "title": "9.2 Delete Python tree",
+      "description": "Delete: code_puppy/, tests/, pyproject.toml, uv.lock, and all Python-specific files. Final commit removing ~400 Python files.",
+      "status": "open",
+      "priority": 2,
+      "type": "task",
+      "labels": [
+        "migration,python-to-elixir,rewrite,phase-9"
+      ],
+      "dependencies": {
+        "discovered-from": [
+          "bd-142"
+        ],
+        "blocks": [
+          "bd-177"
+        ]
+      },
+      "created_at": "2026-04-18T19:48:41.432783",
+      "updated_at": "2026-04-19T00:56:49.079975",
+      "comments": []
+    },
+    "bd-179": {
+      "id": "bd-179",
+      "title": "9.3 Docs refresh",
+      "description": "Update: README.md, ARCHITECTURE.md, MIGRATION_STATUS.md, AGENTS.md, architecture_mermaid.md to reflect pure-Elixir architecture.",
+      "status": "open",
+      "priority": 2,
+      "type": "task",
+      "labels": [
+        "migration,python-to-elixir,rewrite,phase-9"
+      ],
+      "dependencies": {
+        "discovered-from": [
+          "bd-142"
+        ],
+        "blocks": [
+          "bd-178"
+        ]
+      },
+      "created_at": "2026-04-18T19:48:41.462049",
+      "updated_at": "2026-04-19T00:56:49.110610",
+      "comments": []
+    },
+    "bd-180": {
+      "id": "bd-180",
+      "title": "9.4 Final review (elixir-reviewer + security-auditor)",
+      "description": "Run elixir-reviewer and security-auditor agents against the final codebase. Address all findings before declaring migration complete.",
+      "status": "open",
+      "priority": 2,
+      "type": "task",
+      "labels": [
+        "migration,python-to-elixir,rewrite,phase-9"
+      ],
+      "dependencies": {
+        "discovered-from": [
+          "bd-142"
+        ],
+        "blocks": [
+          "bd-177",
+          "bd-178",
+          "bd-179"
+        ]
+      },
+      "created_at": "2026-04-18T19:48:41.491135",
+      "updated_at": "2026-04-19T00:56:31.929626",
+      "comments": []
     }
   },
-  "counter": 130
+  "counter": 180
 }
