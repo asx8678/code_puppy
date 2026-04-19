@@ -2315,6 +2315,60 @@ defmodule CodePuppyControl.Transport.StdioService do
     Protocol.encode_response(%{"count" => count}, id)
   end
 
+  # --- Workflow methods (bd-170: DBOS replacement) ---
+
+  defp handle_request("workflow.invoke_agent", params, id) do
+    case CodePuppyControl.Workflow.invoke_agent(params) do
+      {:ok, job} ->
+        Protocol.encode_response(%{
+          "job_id" => job.id,
+          "workflow_id" => job.args["workflow_id"],
+          "state" => job.state,
+          "queue" => job.queue
+        }, id)
+
+      {:error, reason} ->
+        Protocol.encode_error(-32_000, "Workflow invocation failed: #{inspect(reason)}", id)
+    end
+  end
+
+  defp handle_request("workflow.get_status", %{"workflow_id" => workflow_id}, id) do
+    case CodePuppyControl.Workflow.get_status(workflow_id) do
+      {:ok, status} ->
+        Protocol.encode_response(%{
+          "workflow_id" => status.workflow_id,
+          "state" => status.state,
+          "steps" => Enum.map(status.steps, fn step ->
+            %{"name" => step.step_name, "state" => step.state, "attempt" => step.attempt}
+          end)
+        }, id)
+
+      {:error, :not_found} ->
+        Protocol.encode_error(-32_001, "Workflow not found", id)
+    end
+  end
+
+  defp handle_request("workflow.cancel", %{"workflow_id" => workflow_id}, id) do
+    case CodePuppyControl.Workflow.cancel(workflow_id) do
+      :ok ->
+        Protocol.encode_response(%{"cancelled" => true, "workflow_id" => workflow_id}, id)
+
+      {:error, :not_found} ->
+        Protocol.encode_error(-32_001, "Workflow not found", id)
+    end
+  end
+
+  defp handle_request("workflow.list_recent", params, id) do
+    limit = Map.get(params, "limit", 20)
+    workflows = CodePuppyControl.Workflow.list_recent(limit: limit)
+    Protocol.encode_response(%{"workflows" => workflows}, id)
+  end
+
+  defp handle_request("workflow.get_history", %{"workflow_id" => workflow_id}, id) do
+    history = CodePuppyControl.Workflow.get_history(workflow_id)
+    Protocol.encode_response(%{"history" => history}, id)
+  end
+
   defp traverse_changeset_errors(changeset) do
     Ecto.Changeset.traverse_errors(changeset, fn {msg, opts} ->
       Enum.reduce(opts, msg, fn {key, value}, acc ->

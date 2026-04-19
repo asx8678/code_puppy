@@ -13,7 +13,7 @@ config :phoenix, :json_library, Jason
 # Oban configuration with SQLite support
 config :code_puppy_control, Oban,
   engine: Oban.Engines.Lite,
-  queues: [default: 10, scheduled: 5],
+  queues: [default: 10, scheduled: 5, workflows: 5],
   repo: CodePuppyControl.Repo,
   plugins: [
     # Prune completed jobs older than 7 days

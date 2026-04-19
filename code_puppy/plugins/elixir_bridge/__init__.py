@@ -435,7 +435,41 @@ async def call_elixir_model_packs(
         return {"status": "timeout", "fallback": True}
 
 
-def _send_request_to_elixir(request: dict[str, Any]) -> None:
+async def call_elixir_workflow(
+    method: str, params: dict[str, Any], timeout: float = 30.0
+) -> dict[str, Any]:
+    """Call a workflow method on the Elixir control plane (bd-170).
+
+    Replaces DBOS workflow invocations with Oban-backed durable execution.
+    Routes through the Elixir bridge when available, falls back to
+    non-durable local execution on timeout/connection errors.
+
+    Supported methods:
+        - "workflow.invoke_agent": Start a durable agent invocation
+        - "workflow.get_status": Get workflow status
+        - "workflow.cancel": Cancel a running workflow
+        - "workflow.list_recent": List recent workflows
+        - "workflow.get_history": Get workflow step history
+
+    Args:
+        method: Workflow method name (e.g., "workflow.invoke_agent")
+        params: Method parameters dict (must include workflow_id)
+        timeout: Maximum seconds to wait for response
+
+    Returns:
+        Response result dict from Elixir, or fallback result on timeout
+
+    Raises:
+        ConnectionError: If Elixir control plane is not connected
+    """
+    if not is_connected():
+        raise ConnectionError("Elixir control plane not connected")
+
+    try:
+        return await asyncio.to_thread(call_method, method, params, timeout=timeout)
+    except TimeoutError:
+        # Return a fallback result that signals local handling
+        return {"status": "timeout", "fallback": True}(request: dict[str, Any]) -> None:
     """Send a JSON-RPC request to the Elixir control plane.
 
     bd-82: In bridge mode (CODE_PUPPY_BRIDGE=1), writes Content-Length
@@ -683,4 +717,6 @@ __all__ = [
     "call_elixir_round_robin",
     # Model packs bridge support (bd-132)
     "call_elixir_model_packs",
+    # Workflow bridge support (bd-170: DBOS replacement)
+    "call_elixir_workflow",
 ]
