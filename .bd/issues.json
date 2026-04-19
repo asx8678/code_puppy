@@ -2919,7 +2919,7 @@
       "id": "bd-150",
       "title": "1.5 Port all remaining tools",
       "description": "Port remaining Python tools not yet in Elixir: file_modifications, skills, process_runner, subagent_context, staged_changes.",
-      "status": "open",
+      "status": "closed",
       "priority": 2,
       "type": "task",
       "labels": [
@@ -2932,14 +2932,16 @@
         ]
       },
       "created_at": "2026-04-18T19:47:56.665822",
-      "updated_at": "2026-04-19T00:56:48.401822",
-      "comments": []
+      "updated_at": "2026-04-19T01:26:48.057135",
+      "comments": [
+        "Committed as 65dd370e. Ported file_modifications (5 submodules), process_runner, skills, subagent_context. staged_changes test coverage added. 266 tests, 0 failures."
+      ]
     },
     "bd-151": {
       "id": "bd-151",
       "title": "1.6 Adaptive rate limiter \u2192 Elixir GenServer + ETS",
       "description": "Replace Python adaptive rate limiter with Elixir GenServer backed by ETS for fast lookups. Must handle per-provider limits, backoff, and burst allowances.",
-      "status": "open",
+      "status": "closed",
       "priority": 2,
       "type": "task",
       "labels": [
@@ -2952,14 +2954,16 @@
         ]
       },
       "created_at": "2026-04-18T19:47:56.694656",
-      "updated_at": "2026-04-19T00:56:48.433408",
-      "comments": []
+      "updated_at": "2026-04-19T01:26:48.086832",
+      "comments": [
+        "Committed as 2727032e. Adaptive rate limiter GenServer + ETS token bucket + 3-state circuit breaker + exponential cooldown backoff. Supervisor wired in application.ex. 44 tests, 0 failures."
+      ]
     },
     "bd-152": {
       "id": "bd-152",
       "title": "1.7 Token ledger + usage tracking",
       "description": "Implement token counting, per-session usage ledger, and cost tracking. Port any Python tokenization heuristics.",
-      "status": "open",
+      "status": "closed",
       "priority": 2,
       "type": "task",
       "labels": [
@@ -2972,8 +2976,10 @@
         ]
       },
       "created_at": "2026-04-18T19:47:56.724085",
-      "updated_at": "2026-04-19T00:56:48.463949",
-      "comments": []
+      "updated_at": "2026-04-19T01:26:48.117407",
+      "comments": [
+        "Already committed as 41679e36 (pre-pack-leader). 377 LOC + cost/attempt submodules + 50 tests, 0 failures. Integrated into Agent.Loop.finalize_turn."
+      ]
     },
     "bd-153": {
       "id": "bd-153",
@@ -3047,7 +3053,7 @@
       "id": "bd-156",
       "title": "2.1 Callback registry in Elixir (20+ hooks, merge semantics)",
       "description": "Implement the callback registry matching Python's 20+ hooks with proper merge semantics (str=concat, list=extend, dict=update, bool=OR).",
-      "status": "open",
+      "status": "closed",
       "priority": 2,
       "type": "task",
       "labels": [
@@ -3060,8 +3066,10 @@
         ]
       },
       "created_at": "2026-04-18T19:48:03.299082",
-      "updated_at": "2026-04-19T00:56:48.555481",
-      "comments": []
+      "updated_at": "2026-04-19T01:26:48.147627",
+      "comments": [
+        "Committed as 5132ad4f. Callback registry with 33 hooks (>20+ spec), 4 merge strategies (concat_str/extend_list/update_map/or_bool) + :noop. Fixed 2 bugs during review: update_map direction (later wins) and :noop single-real-value preference. 109 tests, 0 failures."
+      ]
     },
     "bd-157": {
       "id": "bd-157",
@@ -3236,8 +3244,10 @@
         ]
       },
       "created_at": "2026-04-18T19:48:17.126393",
-      "updated_at": "2026-04-19T00:56:48.833103",
-      "comments": []
+      "updated_at": "2026-04-19T01:26:56.022260",
+      "comments": [
+        "Partial commit as 1930f9a2. 10-module split implemented (loader/writer/paths/models/agents/tui/cache/limits/debug/migrator). 145 tests with 9 failures in write-path (Writer/Models/Migrator). MIGRATION_MAP.md also landed.\n\nRemaining work (stays OPEN):\n1. Verify all Python config.py accessors are mapped function-by-function\n2. Fix 9 write-path persistence bugs\n3. Implement dynamic reload (file watcher)\n4. Back-compat audit across existing call sites\n\nReady for follow-up code-puppy dispatch."
+      ]
     },
     "bd-165": {
       "id": "bd-165",
@@ -3305,8 +3315,8 @@
     },
     "bd-168": {
       "id": "bd-168",
-      "title": "5.1 Port FastAPI to Phoenix",
-      "description": "Replace Python FastAPI server with Phoenix. Includes: REST app endpoints, WebSocket handler, PTY manager, security middleware.",
+      "title": "5.1 Build Phoenix server replacing FastAPI (Channels + Plug + PTY)",
+      "description": "Replace Python FastAPI server with Phoenix. Includes: REST app endpoints, WebSocket handler, PTY manager, security middleware.\n\nCLARIFICATION: This is NOT a line-by-line port of FastAPI-the-framework. It's a native Phoenix implementation providing equivalent behavior using idiomatic Elixir tools:\n\n- REST endpoints \u2192 Phoenix.Router + controllers (Plug pipeline)\n- WebSocket handler \u2192 Phoenix.Channels (topics, presence, broadcast, auto-reconnect)\n- PTY manager \u2192 Elixir Port / erlexec / NIF\n- Security middleware \u2192 Plug pipeline (auth, CORS, rate limiting)\n- Pub/sub between sessions \u2192 Phoenix.PubSub (built-in, no Redis needed)\n\nUse Phoenix-idiomatic patterns throughout. Do NOT replicate FastAPI abstractions in Elixir.\n\nRelated: see new sibling issue for Phoenix LiveView web-UI evaluation (potential scope expansion, not part of this task).",
       "status": "open",
       "priority": 2,
       "type": "task",
@@ -3316,11 +3326,16 @@
       "dependencies": {
         "discovered-from": [
           "bd-138"
+        ],
+        "related-to": [
+          "bd-181"
         ]
       },
       "created_at": "2026-04-18T19:48:21.529960",
-      "updated_at": "2026-04-19T00:56:31.557723",
-      "comments": []
+      "updated_at": "2026-04-19T01:54:23.152492",
+      "comments": [
+        "TITLE CLARIFICATION: 5.1 Build Phoenix server replacing FastAPI (Channels + Plug + PTY)\n\nThis is NOT a line-by-line port of FastAPI-the-framework. It's a native Phoenix implementation providing equivalent behavior using idiomatic Elixir tools:\n\n- REST endpoints \u2192 Phoenix.Router + controllers (Plug pipeline)\n- WebSocket handler \u2192 Phoenix.Channels (topics, presence, broadcast, auto-reconnect)\n- PTY manager \u2192 Elixir Port / erlexec / NIF\n- Security middleware \u2192 Plug pipeline (auth, CORS, rate limiting)\n- Pub/sub between sessions \u2192 Phoenix.PubSub (built-in, no Redis needed)\n\nUse Phoenix-idiomatic patterns throughout. Do NOT replicate FastAPI abstractions in Elixir.\n\nRelated: see new sibling issue for Phoenix LiveView web-UI evaluation (potential scope expansion, not part of this task)."
+      ]
     },
     "bd-169": {
       "id": "bd-169",
@@ -3570,7 +3585,32 @@
       "created_at": "2026-04-18T19:48:41.491135",
       "updated_at": "2026-04-19T00:56:31.929626",
       "comments": []
+    },
+    "bd-181": {
+      "id": "bd-181",
+      "title": "5.3 Evaluate Phoenix LiveView for optional web UI",
+      "description": "Decision task: should Code Puppy grow an optional browser-based UI powered by Phoenix LiveView?\n\nContext:\n- Today the Python app is TUI-only (Textual) plus a headless FastAPI server.\n- Once we're on Phoenix (bd-168), LiveView becomes essentially free.\n- LiveView could provide a web-accessible companion UI (remote sessions, team dashboards, browser-based REPL) without a separate SPA.\n\nOptions:\nA) In-scope for Phase 5 \u2014 ship a minimal LiveView companion alongside the Phoenix API.\nB) Defer \u2014 file follow-up issue for a later phase, ship REST/Channels only.\nC) Drop \u2014 TUI remains the only frontend; LiveView not pursued.\n\nAcceptance criteria:\n- Decision documented with rationale.\n- If A: scope + endpoints defined, separate bd issue(s) created for implementation.\n- If B: follow-up bd issue filed.\n- If C: rationale captured, issue closed as wontfix.\n\nDependencies: should be decided before or alongside bd-168 to inform Phoenix app structure.",
+      "status": "open",
+      "priority": 2,
+      "type": "task",
+      "labels": [
+        "migration",
+        "python-to-elixir",
+        "rewrite",
+        "phase-5"
+      ],
+      "dependencies": {
+        "discovered-from": [
+          "bd-138"
+        ],
+        "related-to": [
+          "bd-168"
+        ]
+      },
+      "created_at": "2026-04-19T01:54:20.280883",
+      "updated_at": "2026-04-19T01:54:23.246307",
+      "comments": []
     }
   },
-  "counter": 180
+  "counter": 181
 }
