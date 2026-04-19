@@ -1,18 +1,20 @@
-#!/usr/bin/env bash
+#!/bin/sh
 # pup - Code Puppy CLI wrapper
-# Delegates to the Elixir escript or falls back to the Python entry point.
+# Delegates to the Elixir escript in the release, or falls back to Python.
 set -euo pipefail
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-EScript="${SCRIPT_DIR}/../code_puppy_control"
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+RELEASE_DIR="${SCRIPT_DIR}/.."
 
-# Prefer the escript if it exists
-if command -v elixir &>/dev/null && [ -f "${EScript}" ]; then
-    exec elixir "${EScript}" "$@"
-fi
+# Try the release escript first (installed via overlay)
+for escript in "${RELEASE_DIR}"/lib/code_puppy_control-*/priv/bin/code_puppy_control; do
+    if [ -f "${escript}" ] && command -v elixir >/dev/null 2>&1; then
+        exec elixir "${escript}" "$@"
+    fi
+done
 
 # Fall back to the Python `pup` if available
-if command -v pup &>/dev/null; then
+if command -v pup >/dev/null 2>&1; then
     exec pup "$@"
 fi
 

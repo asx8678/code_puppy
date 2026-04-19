@@ -85,21 +85,22 @@ defmodule CodePuppyControl.CLI.Gac do
   end
 
   defp execute_gac_flow(opts) do
-    # Stage if needed
-    unless opts[:no_stage] do
-      IO.puts("📦 Staging all changes...")
-
-      case System.cmd("git", ["add", "-A"], stderr_to_stdout: true) do
-        {_, 0} -> :ok
-        {err, _} -> IO.puts("⚠️  git add: #{String.trim(err)}")
-      end
-    end
-
-    # Dry run check
+    # Dry-run guard BEFORE any git operations
     if opts[:dry_run] do
-      IO.puts("\n🏃 Dry run - not executing")
+      IO.puts("🏃 Dry run mode: would stage all files and commit")
+      IO.puts("   (no changes made)")
       0
     else
+      # Stage if needed
+      unless opts[:no_stage] do
+        IO.puts("📦 Staging all changes...")
+
+        case System.cmd("git", ["add", "-A"], stderr_to_stdout: true) do
+          {_, 0} -> :ok
+          {err, _} -> IO.puts("⚠️  git add: #{String.trim(err)}")
+        end
+      end
+
       commit_and_push(opts)
     end
   end
