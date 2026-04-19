@@ -28,6 +28,12 @@ case CodePuppyControl.Parsing.ParserRegistry.start_link(
   {:error, {:already_started, _pid}} -> :ok
 end
 
+# Start callback registry for tests (bd-156)
+case CodePuppyControl.Callbacks.Registry.start_link(name: CodePuppyControl.Callbacks.Registry) do
+  {:ok, _pid} -> :ok
+  {:error, {:already_started, _pid}} -> :ok
+end
+
 CodePuppyControl.Parsing.Parsers.register_all()
 
 # Configure ExUnit with integration and E2E tests excluded by default
