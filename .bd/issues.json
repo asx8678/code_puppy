@@ -3606,7 +3606,7 @@
       "id": "bd-181",
       "title": "5.3 Evaluate Phoenix LiveView for optional web UI",
       "description": "Decision task: should Code Puppy grow an optional browser-based UI powered by Phoenix LiveView?\n\nContext:\n- Today the Python app is TUI-only (Textual) plus a headless FastAPI server.\n- Once we're on Phoenix (bd-168), LiveView becomes essentially free.\n- LiveView could provide a web-accessible companion UI (remote sessions, team dashboards, browser-based REPL) without a separate SPA.\n\nOptions:\nA) In-scope for Phase 5 \u2014 ship a minimal LiveView companion alongside the Phoenix API.\nB) Defer \u2014 file follow-up issue for a later phase, ship REST/Channels only.\nC) Drop \u2014 TUI remains the only frontend; LiveView not pursued.\n\nAcceptance criteria:\n- Decision documented with rationale.\n- If A: scope + endpoints defined, separate bd issue(s) created for implementation.\n- If B: follow-up bd issue filed.\n- If C: rationale captured, issue closed as wontfix.\n\nDependencies: should be decided before or alongside bd-168 to inform Phoenix app structure.",
-      "status": "open",
+      "status": "closed",
       "priority": 2,
       "type": "task",
       "labels": [
@@ -3624,9 +3624,10 @@
         ]
       },
       "created_at": "2026-04-19T01:54:20.280883",
-      "updated_at": "2026-04-19T20:24:57.579915",
+      "updated_at": "2026-04-19T20:31:57.182728",
       "comments": [
-        "Claimed by planning-agent-019da7. Scope: decision doc only. Creates NEW docs/decisions/bd-181-liveview-evaluation.md. No edits to existing (purged) docs."
+        "Claimed by planning-agent-019da7. Scope: decision doc only. Creates NEW docs/decisions/bd-181-liveview-evaluation.md. No edits to existing (purged) docs.",
+        "Decision doc delivered by planning-agent-019da7. Recommendation: Option B (defer LiveView to Phase 6+).\n\nFull doc: docs/decisions/bd-181-liveview-evaluation.md (151 lines, commit 0894ab29).\n\nKey points:\n- TUI-primary user base, zero web-UI demand signal\n- bd-168 Phoenix server migration is already Phase 5's largest work\n- Deferring costs nothing; LiveView integrates trivially post-v1\n- Option C (drop) rejected as too aggressive\n- R7-Low and R8-Low risks accepted and documented in the doc\n\n(Note: a previous close attempt via a sub-agent corrupted the working copy of .bd/issues.json and claimed to have created bd-111/bd-112 as replacements \u2014 those were hallucinations. bd-111 and bd-112 are pre-existing unrelated issues. The issues.json has been restored from HEAD and this is the real close.)"
       ]
     },
     "bd-182": {
@@ -4152,7 +4153,22 @@
         "Claimed by planning-agent-019da7. Scope: dead code removal only, no feature changes, no config/auth touched.",
         "Completed. Verified by planning-agent-019da7 on commit 275893fb.\n\nAll 5 phases satisfied across two commits:\n- 24a8c202 \"bd-208: Remove dead native-backend branches, fix stale docs\" \u2014 Phases 1-2 (Python dead branches + docs + test guard).\n- 275893fb \"bd-208: Remove deprecated turbo_parse_nif.ex stub (Elixir side)\" \u2014 Phases 4-5 (Elixir stub removal + comment cleanup).\n\nVerification results:\n- `grep -rn turbo_parse elixir/code_puppy_control/lib/` \u2192 0 matches\n- `turbo_parse_nif.ex` \u2192 deleted\n- `tests/fuzz/test_symbol_extraction.py` \u2192 deleted (was 100% skipped)\n- `test_no_direct_bridge_imports.py` \u2192 now forbids native_backend/acceleration imports with elixir_bridge guidance\n- AGENTS.md \u2192 Phase 4 section rewritten\n\nMinor optional follow-ups (not blockers, not filing separate issues unless requested):\n- `code_puppy/config.py:2557` has a stale comment mentioning `fast_puppy.native_backend` (different package \u2014 may be intentional).\n- `code_puppy/plugins/elixir_bridge/__init__.py` has 3 docstring references to \"NativeBackend\" as legacy context."
       ]
+    },
+    "bd-209": {
+      "id": "bd-209",
+      "title": "Revisit Phoenix LiveView after v1 ships (deferred from bd-181)",
+      "description": "Follow-up from bd-181 (Phoenix LiveView evaluation \u2014 deferred).\n\nbd-181 decided to defer LiveView to Phase 6+ rather than drop it outright.\nThis issue is a placeholder to revisit the decision after v1 ships, with\nexplicit criteria to trigger re-evaluation.\n\nRevisit criteria (any ONE triggers re-evaluation):\n1. >=3 users request a web dashboard or browser-based monitoring UI\n2. Team/enterprise deployment scenario emerges where TUI-only is insufficient\n3. Phase 6 scope allows it without crowding higher-priority items\n\nWork required if re-opened:\n- Add :phoenix_live_view (~> 0.20), :phoenix_live_reload (dev), :esbuild, :tailwind to mix.exs\n- Wire LiveView socket in router and endpoint\n- Design auth model for browser sessions\n- Build initial LiveViews: health dashboard, run monitor, session browser\n- Asset pipeline setup (esbuild + tailwind)\n\nReference: docs/decisions/bd-181-liveview-evaluation.md\nRelated: bd-181, bd-168",
+      "status": "open",
+      "priority": 3,
+      "type": "task",
+      "labels": [
+        "migration,python-to-elixir,rewrite,phase-6,deferred-from-bd-181"
+      ],
+      "dependencies": {},
+      "created_at": "2026-04-19T20:32:02.787371",
+      "updated_at": "2026-04-19T20:32:02.787378",
+      "comments": []
     }
   },
-  "counter": 208
+  "counter": 209
 }
