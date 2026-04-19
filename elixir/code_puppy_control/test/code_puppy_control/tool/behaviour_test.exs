@@ -238,7 +238,10 @@ defmodule CodePuppyControl.Tool.BehaviourTest do
     test "can override permission_check/2" do
       # CustomPermissionTool has custom permission check
       assert CustomPermissionTool.permission_check(%{"allowed" => true}, %{}) == :ok
-      assert CustomPermissionTool.permission_check(%{"allowed" => false}, %{}) == {:deny, "Not allowed"}
+
+      assert CustomPermissionTool.permission_check(%{"allowed" => false}, %{}) ==
+               {:deny, "Not allowed"}
+
       assert CustomPermissionTool.permission_check(%{}, %{}) == {:deny, "Not allowed"}
     end
 

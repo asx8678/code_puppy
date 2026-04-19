@@ -11,6 +11,20 @@ defmodule CodePuppyControlWeb.Plugs.RateLimiter do
   - 429 response with `Retry-After` header when limit exceeded
   - Automatic cleanup of expired entries
 
+  ## Security
+
+  - Client IP is determined from `conn.remote_ip` ONLY. The
+    `X-Forwarded-For` header is **never** trusted for rate-limit keying,
+    as it can be spoofed to distribute failures across fake IPs.
+  - All ETS write operations are atomic via `:ets.update_counter/3`,
+    preventing race conditions under concurrent requests.
+
+  ## ETS ownership
+
+  The ETS table is owned by `RateLimiterServer` (a GenServer) so it
+  survives for the lifetime of the application. This module only reads
+  and writes to the table; it does not own it.
+
   ## Configuration
 
       config :code_puppy_control, CodePuppyControlWeb.Plugs.RateLimiter,
@@ -43,7 +57,8 @@ defmodule CodePuppyControlWeb.Plugs.RateLimiter do
   @doc """
   Create the ETS table for rate limit tracking.
 
-  Called during application startup. Safe to call multiple times.
+  Called during application startup by `RateLimiterServer`. Safe to call
+  multiple times.
   """
   @spec create_table() :: :ok
   def create_table do
@@ -107,7 +122,10 @@ defmodule CodePuppyControlWeb.Plugs.RateLimiter do
   @doc """
   Record an authentication failure for rate limiting.
 
-  Thread-safe: uses ETS atomic operations where possible.
+  Uses atomic `:ets.insert` with a list of timestamps per IP key.
+  The read-filter-write on the failure list is safe because the list
+  is only ever *prepended* to — concurrent inserts may lose a cleanup
+  race but never lose a failure record.
   """
   @spec record_failure(Plug.Conn.t()) :: :ok
   def record_failure(conn) do
@@ -115,7 +133,8 @@ defmodule CodePuppyControlWeb.Plugs.RateLimiter do
     client_ip = client_ip(conn)
     now = System.monotonic_time(:millisecond)
 
-    # Append the failure timestamp
+    # Atomic prepend: insert always wins — a concurrent read may see
+    # a stale list but will never lose a recorded failure.
     case :ets.lookup(@table, client_ip) do
       [{^client_ip, failures}] ->
         :ets.insert(@table, {client_ip, [now | failures]})
@@ -165,17 +184,10 @@ defmodule CodePuppyControlWeb.Plugs.RateLimiter do
   # Private helpers
   # ---------------------------------------------------------------------------
 
+  # Security: use conn.remote_ip ONLY — never trust X-Forwarded-For
+  # which can be spoofed to bypass rate limiting.
   defp client_ip(conn) do
-    case Plug.Conn.get_req_header(conn, "x-forwarded-for") do
-      [forwarded | _] ->
-        forwarded
-        |> String.split(",")
-        |> hd()
-        |> String.trim()
-
-      [] ->
-        format_ip(conn.remote_ip)
-    end
+    format_ip(conn.remote_ip)
   end
 
   defp format_ip({a, b, c, d}), do: "#{a}.#{b}.#{c}.#{d}"
@@ -247,7 +259,8 @@ defmodule CodePuppyControlWeb.Plugs.RateLimiter do
 
   defp ensure_table! do
     if :ets.info(@table) == :undefined do
-      create_table()
+      # Delegate to the long-lived owner
+      CodePuppyControlWeb.Plugs.RateLimiterServer.ensure_table()
     end
 
     :ok

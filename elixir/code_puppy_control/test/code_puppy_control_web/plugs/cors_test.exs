@@ -1,5 +1,5 @@
 defmodule CodePuppyControlWeb.Plugs.CORSTest do
-  use ExUnit.Case, async: true
+  use ExUnit.Case, async: false
 
   import Phoenix.ConnTest
 
@@ -117,14 +117,32 @@ defmodule CodePuppyControlWeb.Plugs.CORSTest do
       assert result.status == 204
     end
 
-    test "does not add CORS headers for disallowed origins" do
+    test "halts with 403 for disallowed origins on regular requests" do
       conn =
         build_conn(:get, "/")
         |> Plug.Conn.put_req_header("origin", "http://evil.example.com")
 
       result = CORS.call(conn, CORS.init([]))
-      # No CORS headers for disallowed origins
+      assert result.halted
+      assert result.status == 403
+      # No CORS headers should be set for disallowed origins
       assert Plug.Conn.get_resp_header(result, "access-control-allow-origin") == []
+    end
+
+    test "halts with 403 for disallowed origins on preflight OPTIONS" do
+      conn =
+        build_conn(:options, "/")
+        |> Plug.Conn.put_req_header("origin", "http://evil.example.com")
+
+      result = CORS.call(conn, CORS.init([]))
+      assert result.halted
+      assert result.status == 403
+    end
+
+    test "same-origin request (no Origin header) passes through unchecked" do
+      conn = build_conn(:post, "/api/runs")
+      result = CORS.call(conn, CORS.init([]))
+      refute result.halted
     end
   end
 

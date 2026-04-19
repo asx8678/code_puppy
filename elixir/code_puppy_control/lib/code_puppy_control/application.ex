@@ -79,8 +79,9 @@ defmodule CodePuppyControl.Application do
 
       # Shell command runner process tracking (bd-64)
       CodePuppyControl.Tools.CommandRunner.ProcessManager,
-      # Auth rate limiter ETS table (bd-218)
-      {Task, fn -> CodePuppyControlWeb.Plugs.RateLimiter.create_table() end},
+      # Auth rate limiter ETS table owner (bd-218)
+      # Must be a long-lived GenServer, not a Task, so the ETS table survives.
+      CodePuppyControlWeb.Plugs.RateLimiterServer,
       # Oban job processing with SQLite engine
       {Oban, Application.fetch_env!(:code_puppy_control, Oban)},
       # Periodic scheduler for cron tasks

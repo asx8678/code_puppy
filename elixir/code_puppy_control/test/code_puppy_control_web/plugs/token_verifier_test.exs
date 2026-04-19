@@ -1,31 +1,64 @@
 defmodule CodePuppyControlWeb.Plugs.TokenVerifierTest do
-  use ExUnit.Case, async: true
+  use ExUnit.Case, async: false
 
   import Phoenix.ConnTest
 
   alias CodePuppyControlWeb.Plugs.TokenVerifier
 
-  describe "is_loopback?/1" do
+  describe "is_loopback_ip?/1" do
+    test "recognizes IPv4 loopback" do
+      assert TokenVerifier.is_loopback_ip?({127, 0, 0, 1})
+      assert TokenVerifier.is_loopback_ip?({127, 255, 255, 255})
+      assert TokenVerifier.is_loopback_ip?({127, 0, 0, 42})
+    end
+
+    test "recognizes IPv6 loopback" do
+      assert TokenVerifier.is_loopback_ip?({0, 0, 0, 0, 0, 0, 0, 1})
+    end
+
+    test "rejects non-loopback IPs" do
+      refute TokenVerifier.is_loopback_ip?({192, 168, 1, 1})
+      refute TokenVerifier.is_loopback_ip?({10, 0, 0, 1})
+      refute TokenVerifier.is_loopback_ip?({172, 16, 0, 1})
+    end
+  end
+
+  describe "is_loopback_host?/1" do
     test "recognizes loopback addresses" do
-      assert TokenVerifier.is_loopback?("127.0.0.1")
-      assert TokenVerifier.is_loopback?("::1")
-      assert TokenVerifier.is_loopback?("localhost")
+      assert TokenVerifier.is_loopback_host?("127.0.0.1")
+      assert TokenVerifier.is_loopback_host?("::1")
+      assert TokenVerifier.is_loopback_host?("localhost")
     end
 
     test "rejects non-loopback addresses" do
-      refute TokenVerifier.is_loopback?("192.168.1.1")
-      refute TokenVerifier.is_loopback?("10.0.0.1")
-      refute TokenVerifier.is_loopback?("example.com")
+      refute TokenVerifier.is_loopback_host?("192.168.1.1")
+      refute TokenVerifier.is_loopback_host?("10.0.0.1")
+      refute TokenVerifier.is_loopback_host?("example.com")
     end
 
     test "handles nil" do
-      refute TokenVerifier.is_loopback?(nil)
+      refute TokenVerifier.is_loopback_host?(nil)
     end
   end
 
   describe "verify_token/2 — loopback bypass" do
-    test "allows loopback clients without token" do
-      # Ensure strict mode is off
+    test "allows loopback clients without token (boolean form)" do
+      original_require = System.get_env("PUP_REQUIRE_TOKEN")
+      original_require_legacy = System.get_env("CODE_PUPPY_REQUIRE_TOKEN")
+      System.delete_env("PUP_REQUIRE_TOKEN")
+      System.delete_env("CODE_PUPPY_REQUIRE_TOKEN")
+
+      try do
+        assert TokenVerifier.verify_token(nil, true) == :ok
+      after
+        if original_require, do: System.put_env("PUP_REQUIRE_TOKEN", original_require)
+
+        if original_require_legacy,
+          do: System.put_env("CODE_PUPPY_REQUIRE_TOKEN", original_require_legacy)
+      end
+    end
+
+    test "allows loopback clients without token (string form)" do
       original_require = System.get_env("PUP_REQUIRE_TOKEN")
       original_require_legacy = System.get_env("CODE_PUPPY_REQUIRE_TOKEN")
       System.delete_env("PUP_REQUIRE_TOKEN")
@@ -50,6 +83,7 @@ defmodule CodePuppyControlWeb.Plugs.TokenVerifierTest do
       System.delete_env("CODE_PUPPY_API_TOKEN")
 
       try do
+        assert TokenVerifier.verify_token(nil, false) == {:error, :forbidden}
         assert TokenVerifier.verify_token(nil, "192.168.1.1") == {:error, :forbidden}
       after
         if original, do: System.put_env("PUP_API_TOKEN", original)
@@ -208,6 +242,50 @@ defmodule CodePuppyControlWeb.Plugs.TokenVerifierTest do
         if original,
           do: System.put_env("PUP_API_TOKEN", original),
           else: System.delete_env("PUP_API_TOKEN")
+      end
+    end
+  end
+
+  describe "verify/1 — X-Forwarded-For bypass prevention" do
+    test "X-Forwarded-For: 127.0.0.1 from non-loopback remote_ip does NOT bypass auth" do
+      original = System.get_env("PUP_REQUIRE_TOKEN")
+      original_token = System.get_env("PUP_API_TOKEN")
+      System.delete_env("PUP_REQUIRE_TOKEN")
+      System.delete_env("PUP_API_TOKEN")
+
+      try do
+        # A remote client (10.0.0.1) spoofing X-Forwarded-For must NOT
+        # be treated as loopback.
+        conn =
+          %{build_conn() | remote_ip: {10, 0, 0, 1}}
+          |> Plug.Conn.put_req_header("x-forwarded-for", "127.0.0.1")
+
+        # Without a token configured, non-loopback should get :forbidden
+        assert TokenVerifier.verify(conn) == {:error, :forbidden}
+      after
+        if original, do: System.put_env("PUP_REQUIRE_TOKEN", original)
+        if original_token, do: System.put_env("PUP_API_TOKEN", original_token)
+        if is_nil(original_token), do: System.delete_env("PUP_API_TOKEN")
+      end
+    end
+
+    test "X-Forwarded-For spoofing does not grant loopback bypass even with token configured" do
+      original = System.get_env("PUP_REQUIRE_TOKEN")
+      original_token = System.get_env("PUP_API_TOKEN")
+      System.delete_env("PUP_REQUIRE_TOKEN")
+      System.put_env("PUP_API_TOKEN", "secret-123")
+
+      try do
+        conn =
+          %{build_conn() | remote_ip: {10, 0, 0, 1}}
+          |> Plug.Conn.put_req_header("x-forwarded-for", "127.0.0.1")
+
+        # Spoofed header should not bypass — remote IP is non-loopback
+        assert TokenVerifier.verify(conn) == {:error, :unauthorized}
+      after
+        if original, do: System.put_env("PUP_REQUIRE_TOKEN", original)
+        if original_token, do: System.put_env("PUP_API_TOKEN", original_token)
+        if is_nil(original_token), do: System.delete_env("PUP_API_TOKEN")
       end
     end
   end

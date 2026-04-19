@@ -29,7 +29,9 @@ defmodule CodePuppyControl.Config.ImporterTest do
   # ── Dry-run mode ────────────────────────────────────────────────────────
 
   describe "dry-run mode (--confirm absent)" do
-    test "writes ZERO files; returns report listing what would be copied", %{legacy_fixture: legacy_fixture} do
+    test "writes ZERO files; returns report listing what would be copied", %{
+      legacy_fixture: legacy_fixture
+    } do
       setup_legacy_fixture(legacy_fixture)
 
       result = Importer.run(__legacy_home__: legacy_fixture)
@@ -43,8 +45,10 @@ defmodule CodePuppyControl.Config.ImporterTest do
       assert result.mode == :dry_run
 
       # Report should have items
-      total = length(result.copied) + length(result.skipped) +
-                length(result.refused) + length(result.errors)
+      total =
+        length(result.copied) + length(result.skipped) +
+          length(result.refused) + length(result.errors)
+
       assert total >= 0
     end
   end
@@ -52,7 +56,10 @@ defmodule CodePuppyControl.Config.ImporterTest do
   # ── Copy mode (--confirm) ───────────────────────────────────────────────
 
   describe "copy mode (--confirm)" do
-    test "copies allowlisted files and verifies contents match", %{tmp_home: tmp_home, legacy_fixture: legacy_fixture} do
+    test "copies allowlisted files and verifies contents match", %{
+      tmp_home: tmp_home,
+      legacy_fixture: legacy_fixture
+    } do
       setup_legacy_fixture(legacy_fixture)
 
       Isolation.with_sandbox([tmp_home], fn ->
@@ -90,7 +97,10 @@ defmodule CodePuppyControl.Config.ImporterTest do
   # ── Forbidden files ─────────────────────────────────────────────────────
 
   describe "forbidden files" do
-    test "OAuth files are never copied even with --force", %{tmp_home: tmp_home, legacy_fixture: legacy_fixture} do
+    test "OAuth files are never copied even with --force", %{
+      tmp_home: tmp_home,
+      legacy_fixture: legacy_fixture
+    } do
       # Create the legacy fixture directory first
       File.mkdir_p!(legacy_fixture)
 
@@ -116,6 +126,7 @@ defmodule CodePuppyControl.Config.ImporterTest do
 
         # They should appear in refused
         refused_basenames = Enum.map(result.refused, fn {p, _} -> Path.basename(p) end)
+
         assert "oauth_token.json" in refused_basenames or
                  "github_auth.json" in refused_basenames or
                  "dbos_store.sqlite" in refused_basenames or
@@ -127,7 +138,10 @@ defmodule CodePuppyControl.Config.ImporterTest do
   # ── INI parsing (puppy.cfg) ────────────────────────────────────────────
 
   describe "puppy.cfg import" do
-    test "only [ui] section keys are copied; auth keys are ignored", %{tmp_home: tmp_home, legacy_fixture: legacy_fixture} do
+    test "only [ui] section keys are copied; auth keys are ignored", %{
+      tmp_home: tmp_home,
+      legacy_fixture: legacy_fixture
+    } do
       File.mkdir_p!(legacy_fixture)
 
       cfg_content = """
@@ -171,7 +185,10 @@ defmodule CodePuppyControl.Config.ImporterTest do
   # ── Idempotency ────────────────────────────────────────────────────────
 
   describe "idempotency" do
-    test "running --confirm twice reports already-imported on second run", %{tmp_home: tmp_home, legacy_fixture: legacy_fixture} do
+    test "running --confirm twice reports already-imported on second run", %{
+      tmp_home: tmp_home,
+      legacy_fixture: legacy_fixture
+    } do
       setup_legacy_fixture(legacy_fixture)
 
       Isolation.with_sandbox([tmp_home], fn ->
@@ -213,7 +230,9 @@ defmodule CodePuppyControl.Config.ImporterTest do
 
   describe "no legacy home" do
     test "returns no-op result when legacy home is absent" do
-      nonexistent = Path.join(System.tmp_dir!(), "no_such_dir_#{:erlang.unique_integer([:positive])}")
+      nonexistent =
+        Path.join(System.tmp_dir!(), "no_such_dir_#{:erlang.unique_integer([:positive])}")
+
       File.rm_rf(nonexistent)
 
       result = Importer.run(__legacy_home__: nonexistent)

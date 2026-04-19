@@ -1,5 +1,5 @@
 defmodule CodePuppyControlWeb.Plugs.RateLimiterTest do
-  use ExUnit.Case, async: true
+  use ExUnit.Case, async: false
 
   import Phoenix.ConnTest
 
@@ -63,9 +63,47 @@ defmodule CodePuppyControlWeb.Plugs.RateLimiterTest do
 
   describe "record_failure/1" do
     test "records failure for the correct IP" do
-      conn = conn_for_ip("192.168.1.1")
+      conn = conn_for_ip({192, 168, 1, 1})
       RateLimiter.record_failure(conn)
 
+      assert {:ok, 1} = RateLimiter.check_rate(conn)
+    end
+  end
+
+  describe "X-Forwarded-For spoofing prevention" do
+    test "X-Forwarded-For header is ignored for rate-limit keying" do
+      # A request from 10.0.0.1 with a spoofed X-Forwarded-For
+      # should be keyed by the actual remote_ip, not the header.
+      conn_no_header = conn_for_ip({10, 0, 0, 1})
+
+      conn_with_spoofed_header =
+        conn_no_header
+        |> Plug.Conn.put_req_header("x-forwarded-for", "192.168.99.99")
+
+      # Record failures against the real IP
+      for _ <- 1..5 do
+        RateLimiter.record_failure(conn_no_header)
+      end
+
+      # Request with spoofed header from same real IP should still be rate limited
+      assert {:error, :rate_limited, _} = RateLimiter.check_rate(conn_with_spoofed_header)
+
+      # A truly different remote IP should NOT be affected
+      conn_different_ip = conn_for_ip({10, 0, 0, 2})
+      assert {:ok, 0} = RateLimiter.check_rate(conn_different_ip)
+    end
+  end
+
+  describe "ETS table ownership" do
+    test "ETS table persists after create_table — not owned by a transient Task" do
+      RateLimiter.create_table()
+
+      # The table should exist and be usable
+      assert :ets.info(:auth_rate_limiter) != :undefined
+
+      # Basic write/read should work
+      conn = conn_for_ip({172, 16, 0, 1})
+      RateLimiter.record_failure(conn)
       assert {:ok, 1} = RateLimiter.check_rate(conn)
     end
   end
@@ -113,13 +151,5 @@ defmodule CodePuppyControlWeb.Plugs.RateLimiterTest do
 
   defp conn_for_ip(ip) when is_tuple(ip) do
     %{build_conn() | remote_ip: ip}
-  end
-
-  defp conn_for_ip(ip) when is_binary(ip) do
-    # Parse string IP to tuple for remote_ip
-    case :inet_parse.address(String.to_charlist(ip)) do
-      {:ok, addr} -> %{build_conn() | remote_ip: addr}
-      {:error, _} -> %{build_conn() | remote_ip: {0, 0, 0, 0}}
-    end
   end
 end

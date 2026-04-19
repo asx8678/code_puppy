@@ -46,10 +46,22 @@ defmodule CodePuppyControl.Stream.IntegrationExtendedTest do
         [
           {:part_start, %{type: :tool_call, index: 0, id: "tc-1"}},
           {:part_delta, %{type: :tool_call, index: 0, text: nil, name: "exec", arguments: nil}},
-          {:part_delta, %{type: :tool_call, index: 0, text: nil, name: nil,
-            arguments: Jason.encode!(%{"cmd" => "ls"})}},
-          {:part_end, %{type: :tool_call, index: 0, id: "tc-1", name: "exec",
-            arguments: Jason.encode!(%{"cmd" => "ls"})}},
+          {:part_delta,
+           %{
+             type: :tool_call,
+             index: 0,
+             text: nil,
+             name: nil,
+             arguments: Jason.encode!(%{"cmd" => "ls"})
+           }},
+          {:part_end,
+           %{
+             type: :tool_call,
+             index: 0,
+             id: "tc-1",
+             name: "exec",
+             arguments: Jason.encode!(%{"cmd" => "ls"})
+           }},
           {:done, %{id: "msg-2", model: "gpt-4o", finish_reason: "stop"}}
         ]
         |> Enum.map(&Normalizer.convert/1)
@@ -113,7 +125,11 @@ defmodule CodePuppyControl.Stream.IntegrationExtendedTest do
       collector =
         Collector.new()
         |> Collector.collect(%Event.TextDelta{index: 0, text: "Hi"})
-        |> Collector.collect(%Event.UsageUpdate{prompt_tokens: 100, completion_tokens: 50, total_tokens: 150})
+        |> Collector.collect(%Event.UsageUpdate{
+          prompt_tokens: 100,
+          completion_tokens: 50,
+          total_tokens: 150
+        })
         |> Collector.collect(%Event.Done{id: "1", model: "m", finish_reason: "stop", usage: nil})
 
       response = Collector.to_response(collector)
@@ -150,7 +166,10 @@ defmodule CodePuppyControl.Stream.IntegrationExtendedTest do
       collector =
         Collector.new()
         |> Collector.collect(%Event.ToolCallStart{index: 0, id: "tc-1", name: "exec"})
-        |> Collector.collect(%Event.ToolCallArgsDelta{index: 0, arguments: Jason.encode!(%{"cmd" => "ls"})})
+        |> Collector.collect(%Event.ToolCallArgsDelta{
+          index: 0,
+          arguments: Jason.encode!(%{"cmd" => "ls"})
+        })
         |> Collector.collect(%Event.ToolCallEnd{
           index: 0,
           id: "tc-1",
@@ -168,7 +187,10 @@ defmodule CodePuppyControl.Stream.IntegrationExtendedTest do
       collector =
         Collector.new()
         |> Collector.collect(%Event.ToolCallStart{index: 0, id: "tc-1", name: "exec"})
-        |> Collector.collect(%Event.ToolCallArgsDelta{index: 0, arguments: Jason.encode!(%{"cmd" => "ls"})})
+        |> Collector.collect(%Event.ToolCallArgsDelta{
+          index: 0,
+          arguments: Jason.encode!(%{"cmd" => "ls"})
+        })
         |> Collector.collect(%Event.ToolCallEnd{
           index: 0,
           id: "tc-1",
@@ -271,8 +293,7 @@ defmodule CodePuppyControl.Stream.IntegrationExtendedTest do
     test "tool_call delta with empty name and empty arguments is skipped" do
       assert :skip =
                Event.from_llm(
-                 {:part_delta,
-                  %{type: :tool_call, index: 0, text: nil, name: "", arguments: ""}}
+                 {:part_delta, %{type: :tool_call, index: 0, text: nil, name: "", arguments: ""}}
                )
     end
   end

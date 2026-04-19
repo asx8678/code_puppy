@@ -68,12 +68,14 @@ defmodule CodePuppyControl.Config.IsolationGatesTest do
 
         # 3b. Isolation.safe_write!/2 to a path under PUP_EX_HOME
         test_file = Path.join(pup_ex_home, "gate1_write_test.txt")
+
         Isolation.with_sandbox([pup_ex_home], fn ->
           assert :ok = Isolation.safe_write!(test_file, "gate1 data")
         end)
 
         # 3c. Isolation.safe_mkdir_p!/1 under PUP_EX_HOME
         test_dir = Path.join(pup_ex_home, "gate1_mkdir_test")
+
         Isolation.with_sandbox([pup_ex_home], fn ->
           assert :ok = Isolation.safe_mkdir_p!(test_dir)
         end)
@@ -201,6 +203,7 @@ defmodule CodePuppyControl.Config.IsolationGatesTest do
 
         # Elixir home must be unchanged (no files written)
         ex_after = snapshot_directory(pup_ex_home)
+
         assert ex_before == ex_after,
                "GATE-3 FAILED: import without --confirm wrote files to Elixir home"
       after
@@ -235,6 +238,7 @@ defmodule CodePuppyControl.Config.IsolationGatesTest do
 
         # No :fail statuses
         failures = Enum.filter(checks, &(&1.status == :fail))
+
         assert failures == [],
                "GATE-4 FAILED: doctor found failures: #{inspect(failures)}"
 
@@ -356,6 +360,7 @@ defmodule CodePuppyControl.Config.IsolationGatesTest do
     # agents/ — agent definitions
     agents_dir = Path.join(legacy_dir, "agents")
     File.mkdir_p!(agents_dir)
+
     File.write!(
       Path.join(agents_dir, "default.json"),
       Jason.encode!(%{"name" => "default", "model" => "gpt-4o"})
@@ -365,6 +370,7 @@ defmodule CodePuppyControl.Config.IsolationGatesTest do
     skills_dir = Path.join(legacy_dir, "skills")
     skill_dir = Path.join(skills_dir, "my_skill")
     File.mkdir_p!(skill_dir)
+
     File.write!(
       Path.join(skill_dir, "SKILL.md"),
       "# My Skill\n\nA test skill for gate verification.\n"
@@ -378,6 +384,7 @@ defmodule CodePuppyControl.Config.IsolationGatesTest do
 
     sessions_dir = Path.join(legacy_dir, "sessions")
     File.mkdir_p!(sessions_dir)
+
     File.write!(
       Path.join(sessions_dir, "session_1.json"),
       Jason.encode!(%{"id" => "sess_1", "state" => "active"})

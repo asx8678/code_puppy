@@ -97,7 +97,12 @@ defmodule CodePuppyControl.Messaging.CoreTest do
         "kind" => "response",
         "role" => "assistant",
         "parts" => [
-          %{"part_kind" => "tool-call", "tool_name" => "read_file", "tool_call_id" => "call_123", "args" => %{"file_path" => "test.py"}},
+          %{
+            "part_kind" => "tool-call",
+            "tool_name" => "read_file",
+            "tool_call_id" => "call_123",
+            "args" => %{"file_path" => "test.py"}
+          },
           %{"part_kind" => "text", "content" => "Here's the file"}
         ]
       }
@@ -106,7 +111,12 @@ defmodule CodePuppyControl.Messaging.CoreTest do
         "kind" => "response",
         "role" => "assistant",
         "parts" => [
-          %{"part_kind" => "tool-call", "tool_name" => "read_file", "tool_call_id" => "call_123", "args" => %{"file_path" => "test.py"}},
+          %{
+            "part_kind" => "tool-call",
+            "tool_name" => "read_file",
+            "tool_call_id" => "call_123",
+            "args" => %{"file_path" => "test.py"}
+          },
           %{"part_kind" => "text", "content" => "Here's the file"}
         ]
       }
@@ -152,7 +162,11 @@ defmodule CodePuppyControl.Messaging.CoreTest do
           "kind" => "response",
           "role" => "assistant",
           "parts" => [
-            %{"part_kind" => "tool-call", "tool_call_id" => "orphan-123", "tool_name" => "test_tool"}
+            %{
+              "part_kind" => "tool-call",
+              "tool_call_id" => "orphan-123",
+              "tool_name" => "test_tool"
+            }
           ]
         }
       ]
@@ -189,7 +203,11 @@ defmodule CodePuppyControl.Messaging.CoreTest do
           "kind" => "response",
           "role" => "assistant",
           "parts" => [
-            %{"part_kind" => "tool-call", "tool_call_id" => "orphan-123", "tool_name" => "orphaned_tool"}
+            %{
+              "part_kind" => "tool-call",
+              "tool_call_id" => "orphan-123",
+              "tool_name" => "orphaned_tool"
+            }
           ]
         },
         text_msg("Third message - must survive")
@@ -202,8 +220,12 @@ defmodule CodePuppyControl.Messaging.CoreTest do
       assert 1 not in result.surviving_indices
 
       surviving = Enum.map(result.surviving_indices, &Enum.at(messages, &1))
-      assert hd(surviving)["parts"] |> hd() |> Map.get("content") == "First message - must survive"
-      assert List.last(surviving)["parts"] |> hd() |> Map.get("content") == "Third message - must survive"
+
+      assert hd(surviving)["parts"] |> hd() |> Map.get("content") ==
+               "First message - must survive"
+
+      assert List.last(surviving)["parts"] |> hd() |> Map.get("content") ==
+               "Third message - must survive"
     end
 
     test "complete tool conversation preserves all messages" do

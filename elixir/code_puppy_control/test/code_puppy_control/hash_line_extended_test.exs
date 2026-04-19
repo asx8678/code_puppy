@@ -173,7 +173,7 @@ defmodule CodePuppyControl.HashLineExtendedTest do
 
       # Flip one character
       wrong =
-        (if String.at(h, 0) != "A", do: "A", else: "B") <>
+        if(String.at(h, 0) != "A", do: "A", else: "B") <>
           String.at(h, 1)
 
       if wrong != h do

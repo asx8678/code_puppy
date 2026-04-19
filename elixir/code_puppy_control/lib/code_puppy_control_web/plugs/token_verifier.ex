@@ -8,7 +8,9 @@ defmodule CodePuppyControlWeb.Plugs.TokenVerifier do
 
   ## Security model (mirrors Python `api/security.py`)
 
-  1. Loopback clients (`127.0.0.1`, `::1`, `localhost`) are allowed by default.
+  1. Loopback clients (`127.x.x.x`, `::1`) are allowed by default,
+     detected **only** from `conn.remote_ip` — the `X-Forwarded-For`
+     header is NEVER trusted (it can be spoofed).
   2. If `PUP_REQUIRE_TOKEN` (or legacy `CODE_PUPPY_REQUIRE_TOKEN`) is set,
      even loopback clients must present a valid token (strict mode).
   3. Non-loopback clients always need a valid token.
@@ -53,6 +55,10 @@ defmodule CodePuppyControlWeb.Plugs.TokenVerifier do
   the configured API token. Loopback clients are exempt unless strict
   mode is enabled.
 
+  **Security:** Loopback detection uses `conn.remote_ip` directly —
+  the `X-Forwarded-For` header is NEVER trusted, as it can be spoofed
+  by any client to bypass authentication.
+
   Returns:
   - `:ok` — authentication passed
   - `{:error, :unauthorized}` — token required but missing or invalid
@@ -60,10 +66,10 @@ defmodule CodePuppyControlWeb.Plugs.TokenVerifier do
   """
   @spec verify(Plug.Conn.t()) :: :ok | {:error, :unauthorized | :forbidden}
   def verify(conn) do
-    client_host = extract_client_host(conn)
+    loopback = is_loopback_ip?(conn.remote_ip)
     token = extract_bearer_token(conn)
 
-    verify_token(token, client_host)
+    verify_token(token, loopback)
   end
 
   @doc """
@@ -72,45 +78,55 @@ defmodule CodePuppyControlWeb.Plugs.TokenVerifier do
   This is the core verification logic, reusable by both HTTP plugs
   and WebSocket `:connect` callbacks.
 
+  The second argument can be either:
+  - A boolean (`true` if the client is loopback) — used by `verify/1`
+  - A string host (e.g. `"127.0.0.1"`) — used by WebSocket `:connect`
+
   Returns:
   - `:ok` — authentication passed
   - `{:error, :unauthorized}` — token required but missing or invalid
   - `{:error, :forbidden}` — no token configured for non-loopback client
   """
-  @spec verify_token(String.t() | nil, String.t()) ::
+  @spec verify_token(String.t() | nil, boolean() | String.t()) ::
           :ok | {:error, :unauthorized | :forbidden}
-  def verify_token(token, client_host) do
+  def verify_token(token, loopback?) when is_boolean(loopback?) do
     strict_mode = strict_mode?()
 
     # Loopback access without explicit token requirement
-    if is_loopback?(client_host) and not strict_mode do
+    if loopback? and not strict_mode do
       :ok
     else
-      # Token required — validate it
-      expected_token = api_token()
-
-      cond do
-        is_nil(expected_token) ->
-          {:error, :forbidden}
-
-        is_nil(token) ->
-          {:error, :unauthorized}
-
-        not constant_time_equal?(token, expected_token) ->
-          {:error, :unauthorized}
-
-        true ->
-          :ok
-      end
+      validate_token(token)
     end
   end
 
+  # Legacy string-based overload for WebSocket connect callbacks
+  @spec verify_token(String.t() | nil, String.t()) ::
+          :ok | {:error, :unauthorized | :forbidden}
+  def verify_token(token, client_host) when is_binary(client_host) do
+    verify_token(token, is_loopback_host?(client_host))
+  end
+
   @doc """
-  Check if a host is a loopback address.
+  Check if a `conn.remote_ip` tuple is a loopback address.
+
+  **Security:** This uses the BEAM-assigned `remote_ip` directly,
+  never the `X-Forwarded-For` header which can be spoofed.
   """
-  @spec is_loopback?(String.t() | nil) :: boolean()
-  def is_loopback?(nil), do: false
-  def is_loopback?(host), do: MapSet.member?(@local_hosts, host)
+  @spec is_loopback_ip?({integer(), integer(), integer(), integer()} | tuple()) :: boolean()
+  def is_loopback_ip?({127, _, _, _}), do: true
+  def is_loopback_ip?({0, 0, 0, 0, 0, 0, 0, 1}), do: true
+  def is_loopback_ip?(_), do: false
+
+  @doc """
+  Check if a host string is a loopback address.
+
+  Used by WebSocket `:connect` callbacks where only a host string
+  is available (not a conn struct with `remote_ip`).
+  """
+  @spec is_loopback_host?(String.t() | nil) :: boolean()
+  def is_loopback_host?(nil), do: false
+  def is_loopback_host?(host), do: MapSet.member?(@local_hosts, host)
 
   @doc """
   Get the configured API token.
@@ -139,36 +155,21 @@ defmodule CodePuppyControlWeb.Plugs.TokenVerifier do
   # Private helpers
   # ---------------------------------------------------------------------------
 
-  defp extract_client_host(conn) do
-    # Check X-Forwarded-For header (if behind proxy)
-    case Plug.Conn.get_req_header(conn, "x-forwarded-for") do
-      [forwarded | _] ->
-        forwarded
-        |> String.split(",")
-        |> hd()
-        |> String.trim()
+  defp validate_token(token) do
+    expected_token = api_token()
 
-      [] ->
-        # remote_ip is a tuple like {127, 0, 0, 1} or {0, 0, 0, 0, 0, 0, 0, 1}
-        format_ip(conn.remote_ip)
-    end
-  end
+    cond do
+      is_nil(expected_token) ->
+        {:error, :forbidden}
 
-  defp format_ip({a, b, c, d}), do: "#{a}.#{b}.#{c}.#{d}"
-  defp format_ip({a, b, c, d, e, f, g, h}), do: format_ipv6({a, b, c, d, e, f, g, h})
-  defp format_ip(other), do: to_string(other)
+      is_nil(token) ->
+        {:error, :unauthorized}
 
-  defp format_ipv6({a, b, c, d, e, f, g, h}) do
-    # Format as compressed IPv6
-    groups =
-      [a, b, c, d, e, f, g, h]
-      |> Enum.map(&Integer.to_string(&1, 16))
-      |> Enum.join(":")
+      not constant_time_equal?(token, expected_token) ->
+        {:error, :unauthorized}
 
-    # Special case: loopback
-    case groups do
-      ["0", "0", "0", "0", "0", "0", "0", "1"] -> "::1"
-      _ -> groups
+      true ->
+        :ok
     end
   end
 

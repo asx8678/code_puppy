@@ -17,7 +17,11 @@ defmodule CodePuppyControl.Compaction.PrunerExtendedTest do
   # ---------------------------------------------------------------------------
 
   defp text_msg(content) do
-    %{"kind" => "request", "role" => "user", "parts" => [%{"part_kind" => "text", "content" => content}]}
+    %{
+      "kind" => "request",
+      "role" => "user",
+      "parts" => [%{"part_kind" => "text", "content" => content}]
+    }
   end
 
   defp tool_call_msg(tool_name, call_id, args \\ %{}) do
@@ -25,7 +29,12 @@ defmodule CodePuppyControl.Compaction.PrunerExtendedTest do
       "kind" => "response",
       "role" => "assistant",
       "parts" => [
-        %{"part_kind" => "tool-call", "tool_name" => tool_name, "tool_call_id" => call_id, "args" => args}
+        %{
+          "part_kind" => "tool-call",
+          "tool_name" => tool_name,
+          "tool_call_id" => call_id,
+          "args" => args
+        }
       ]
     }
   end
@@ -34,7 +43,9 @@ defmodule CodePuppyControl.Compaction.PrunerExtendedTest do
     %{
       "kind" => "request",
       "role" => "tool",
-      "parts" => [%{"part_kind" => "tool-return", "tool_call_id" => call_id, "content" => content}]
+      "parts" => [
+        %{"part_kind" => "tool-return", "tool_call_id" => call_id, "content" => content}
+      ]
     }
   end
 
@@ -92,6 +103,7 @@ defmodule CodePuppyControl.Compaction.PrunerExtendedTest do
 
     test "oversized message dropped, others preserved intact" do
       huge = String.duplicate("x", 60_000)
+
       messages = [
         text_msg("Small message 1"),
         text_msg(huge),

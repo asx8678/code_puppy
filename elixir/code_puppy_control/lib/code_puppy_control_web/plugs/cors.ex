@@ -82,7 +82,7 @@ defmodule CodePuppyControlWeb.Plugs.CORS do
     origin = get_req_header(conn, "origin") |> List.first()
 
     if is_nil(origin) do
-      # No Origin header — not a CORS request, pass through
+      # No Origin header — not a CORS request (same-origin or non-browser), pass through
       conn
     else
       if is_allowed_origin?(origin) do
@@ -90,9 +90,12 @@ defmodule CodePuppyControlWeb.Plugs.CORS do
         |> put_cors_headers(origin, opts)
         |> maybe_preflight_response()
       else
-        # Origin not allowed — reject CORS but still pass through
-        # (the Auth plug will handle unauthorized access)
+        # Origin not allowed — reject with 403 immediately
+        # This prevents cross-origin attacks: a browser visiting an untrusted
+        # site must NOT be able to drive our endpoints.
         conn
+        |> send_resp(403, "CORS forbidden")
+        |> halt()
       end
     end
   end
