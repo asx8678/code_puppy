@@ -9,6 +9,9 @@ defmodule CodePuppyControlWeb.UserSocket do
 
   - `"session:*"` - SessionChannel: Events for all runs in a session
   - `"run:*"` - RunChannel: Events for a specific run only
+  - `"events:*"` - EventsChannel: Real-time event streaming (replaces `/ws/events`)
+  - `"terminal:*"` - TerminalChannel: Interactive PTY sessions (replaces `/ws/terminal`)
+  - `"health"` - HealthChannel: Health monitoring and echo (replaces `/ws/health`)
 
   ## Authentication
 
@@ -67,6 +70,9 @@ defmodule CodePuppyControlWeb.UserSocket do
 
   channel "session:*", CodePuppyControlWeb.SessionChannel
   channel "run:*", CodePuppyControlWeb.RunChannel
+  channel "events:*", CodePuppyControlWeb.EventsChannel
+  channel "terminal:*", CodePuppyControlWeb.TerminalChannel
+  channel "health", CodePuppyControlWeb.HealthChannel
 
   # ============================================================================
   # Connection

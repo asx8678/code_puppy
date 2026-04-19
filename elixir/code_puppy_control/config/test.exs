@@ -6,6 +6,7 @@ config :code_puppy_control, CodePuppyControlWeb.Endpoint,
   http: [ip: {127, 0, 0, 1}, port: 4002],
   secret_key_base:
     "test_secret_key_base_that_is_at_least_64_bytes_long_123456789012345678901234567890",
+  pubsub_server: CodePuppyControl.PubSub,
   server: false
 
 # Print only warnings and errors during test
