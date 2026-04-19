@@ -34,10 +34,12 @@ defmodule CodePuppyControl.Tools.UniversalConstructor.Registry do
 
   require Logger
 
+  alias CodePuppyControl.Config.Isolation
+  alias CodePuppyControl.Config.Paths
   alias CodePuppyControl.Tools.UniversalConstructor.Models
   alias CodePuppyControl.Tools.UniversalConstructor.Validator
 
-  @default_tools_dir "~/.code_puppy/plugins/universal_constructor"
+
 
   # ============================================================================
   # Client API
@@ -130,7 +132,7 @@ defmodule CodePuppyControl.Tools.UniversalConstructor.Registry do
     tools_dir =
       Keyword.get(opts, :tools_dir) ||
         Application.get_env(:code_puppy_control, :uc_tools_dir) ||
-        @default_tools_dir
+        Paths.universal_constructor_dir()
 
     expanded_dir = Path.expand(tools_dir)
 
@@ -197,7 +199,7 @@ defmodule CodePuppyControl.Tools.UniversalConstructor.Registry do
   @impl true
   def handle_call(:ensure_tools_dir, _from, state) do
     unless File.dir?(state.tools_dir) do
-      File.mkdir_p!(state.tools_dir)
+      Isolation.safe_mkdir_p!(state.tools_dir)
       Logger.info("Created UC tools directory: #{state.tools_dir}")
     end
 

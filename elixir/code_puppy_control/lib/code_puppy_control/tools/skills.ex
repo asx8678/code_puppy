@@ -19,6 +19,7 @@ defmodule CodePuppyControl.Tools.Skills do
 
   require Logger
 
+  alias CodePuppyControl.Config.Paths
   alias CodePuppyControl.Tool.Registry
 
   defmodule ListSkills do
@@ -70,10 +71,7 @@ defmodule CodePuppyControl.Tools.Skills do
     end
 
     defp get_skill_dirs do
-      home_dir = System.user_home!()
-      project_dir = File.cwd!()
-
-      [Path.join(home_dir, ".code_puppy/skills"), Path.join(project_dir, "skills")]
+      [Paths.skills_dir(), Path.join(File.cwd!(), "skills")]
       |> Enum.filter(&File.dir?/1)
     end
 
@@ -235,10 +233,7 @@ defmodule CodePuppyControl.Tools.Skills do
     end
 
     defp get_skill_dirs do
-      home_dir = System.user_home!()
-      project_dir = File.cwd!()
-
-      [Path.join(home_dir, ".code_puppy/skills"), Path.join(project_dir, "skills")]
+      [Paths.skills_dir(), Path.join(File.cwd!(), "skills")]
       |> Enum.filter(&File.dir?/1)
     end
   end

@@ -3,7 +3,7 @@ defmodule CodePuppyControl.PolicyConfig do
   Policy configuration loader for the PolicyEngine.
 
   Loads policy rules from standard locations:
-    - `~/.code_puppy/policy.json`  (user-level, lower priority)
+    - `~/.code_puppy_ex/config/policy.json`  (user-level, lower priority)
     - `.code_puppy/policy.json`    (project-level, higher priority)
 
   ## Usage
@@ -38,18 +38,13 @@ defmodule CodePuppyControl.PolicyConfig do
 
   require Logger
 
+  alias CodePuppyControl.Config.Isolation
+  alias CodePuppyControl.Config.Paths
   alias CodePuppyControl.PolicyEngine
 
-  # Standard search paths (user then project; project rules win because
-  # they are loaded last and can have higher priority values).
-  # Note: User path is compile-time constant, project path is runtime via function.
-  @user_policy_path [System.user_home!(), ".code_puppy", "policy.json"]
-
-  @doc false
-  defp project_policy_path_segments do
-    # Runtime resolution to avoid compile-time working directory capture
-    [File.cwd!(), ".code_puppy", "policy.json"]
-  end
+  # Path resolution is delegated to Paths module (ADR-003).
+  # User path: ~/.code_puppy_ex/config/policy.json (isolated from Python pup)
+  # Project path: .code_puppy/policy.json (project-local, not subject to isolation)
 
   @typedoc "Policy engine process or module reference"
   @type engine :: pid() | atom()
@@ -85,8 +80,8 @@ defmodule CodePuppyControl.PolicyConfig do
   """
   @spec load_policy_rules(engine(), keyword()) :: non_neg_integer()
   def load_policy_rules(engine, opts \\ []) when is_pid(engine) or is_atom(engine) do
-    user_path = Keyword.get(opts, :user_policy, Path.join(@user_policy_path))
-    project_path = Keyword.get(opts, :project_policy, Path.join(project_policy_path_segments()))
+    user_path = Keyword.get(opts, :user_policy, Paths.user_policy_file())
+    project_path = Keyword.get(opts, :project_policy, Paths.project_policy_file())
 
     total = 0
     total = total + PolicyEngine.load_rules_from_file(user_path, "user")
@@ -102,12 +97,12 @@ defmodule CodePuppyControl.PolicyConfig do
   ## Examples
 
       iex> PolicyConfig.user_policy_path()
-      "/home/username/.code_puppy/policy.json"
+      "/home/username/.code_puppy_ex/config/policy.json"
 
   """
   @spec user_policy_path() :: String.t()
   def user_policy_path do
-    Path.join(@user_policy_path)
+    Paths.user_policy_file()
   end
 
   @doc """
@@ -121,7 +116,7 @@ defmodule CodePuppyControl.PolicyConfig do
   """
   @spec project_policy_path() :: String.t()
   def project_policy_path do
-    Path.join(project_policy_path_segments())
+    Paths.project_policy_file()
   end
 
   @doc """
@@ -160,7 +155,9 @@ defmodule CodePuppyControl.PolicyConfig do
     else
       dir = Path.dirname(path)
 
-      with :ok <- File.mkdir_p(dir) do
+      try do
+        Isolation.safe_mkdir_p!(dir)
+
         sample = %{
           "rules" => [
             %{
@@ -185,10 +182,11 @@ defmodule CodePuppyControl.PolicyConfig do
           ]
         }
 
-        case File.write(path, Jason.encode!(sample, pretty: true)) do
-          :ok -> :ok
-          error -> error
-        end
+        Isolation.safe_write!(path, Jason.encode!(sample, pretty: true))
+        :ok
+      rescue
+        e in File.Error ->
+          {:error, Exception.message(e)}
       end
     end
   end

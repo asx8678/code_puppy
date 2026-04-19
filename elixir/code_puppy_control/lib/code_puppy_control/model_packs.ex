@@ -59,12 +59,14 @@ defmodule CodePuppyControl.ModelPacks do
 
   require Logger
 
+  alias CodePuppyControl.Config.Isolation
+  alias CodePuppyControl.Config.Paths
+
   alias CodePuppyControl.ModelPacks.ModelPack
   alias CodePuppyControl.ModelPacks.RoleConfig
 
   @table :model_packs
   @meta_table :model_packs_meta
-  @packs_filename "model_packs.json"
   @default_pack "single"
 
   # ============================================================================
@@ -189,10 +191,7 @@ defmodule CodePuppyControl.ModelPacks do
     end
   end
 
-  defp get_packs_file_path do
-    home = System.get_env("HOME", "~")
-    Path.join([home, ".code_puppy", @packs_filename])
-  end
+
 
   # ============================================================================
   # Server Callbacks
@@ -491,7 +490,7 @@ defmodule CodePuppyControl.ModelPacks do
   # ============================================================================
 
   defp load_user_packs_from_disk do
-    packs_file = get_packs_file_path()
+    packs_file = Paths.model_packs_file()
 
     case File.read(packs_file) do
       {:ok, content} ->
@@ -539,7 +538,7 @@ defmodule CodePuppyControl.ModelPacks do
   end
 
   defp persist_user_packs(table) do
-    packs_file = get_packs_file_path()
+    packs_file = Paths.model_packs_file()
 
     # Get all non-built-in packs
     all_packs = :ets.tab2list(table)
@@ -569,23 +568,24 @@ defmodule CodePuppyControl.ModelPacks do
     # Ensure directory exists
     packs_file
     |> Path.dirname()
-    |> File.mkdir_p!()
+    |> Isolation.safe_mkdir_p!()
 
     # Write atomically (write to temp file then rename)
     temp_file = packs_file <> ".tmp"
 
-    case File.write(temp_file, Jason.encode!(data, pretty: true)) do
-      :ok ->
-        case File.rename(temp_file, packs_file) do
-          :ok ->
-            Logger.debug("ModelPacks: persisted user packs to #{packs_file}")
+    try do
+      Isolation.safe_write!(temp_file, Jason.encode!(data, pretty: true))
 
-          {:error, reason} ->
-            Logger.error("ModelPacks: rename failed (#{inspect(reason)}), data in #{temp_file}")
-        end
+      case File.rename(temp_file, packs_file) do
+        :ok ->
+          Logger.debug("ModelPacks: persisted user packs to #{packs_file}")
 
-      {:error, reason} ->
-        Logger.error("ModelPacks: failed to persist user packs: #{inspect(reason)}")
+        {:error, reason} ->
+          Logger.error("ModelPacks: rename failed (#{inspect(reason)}), data in #{temp_file}")
+      end
+    rescue
+      e in File.Error ->
+        Logger.error("ModelPacks: failed to persist user packs: #{Exception.message(e)}")
     end
   end
 end

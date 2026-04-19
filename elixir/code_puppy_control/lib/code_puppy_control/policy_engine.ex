@@ -41,7 +41,7 @@ defmodule CodePuppyControl.PolicyEngine do
   use GenServer
 
   require Logger
-
+  alias CodePuppyControl.Config.Paths
   alias CodePuppyControl.PolicyEngine.PolicyRule
   alias CodePuppyControl.PolicyEngine.PolicyRule.{Allow, Deny, AskUser}
   @typedoc "Possible decision atoms"
@@ -566,8 +566,8 @@ defmodule CodePuppyControl.PolicyEngine do
 
   @doc false
   defp do_load_default_rules(state) do
-    user_path = Path.join([System.user_home!(), ".code_puppy", "policy.json"])
-    project_path = Path.join([File.cwd!(), ".code_puppy", "policy.json"])
+    user_path = Paths.user_policy_file()
+    project_path = Paths.project_policy_file()
 
     {count1, state1} = do_load_rules_from_file_and_update(state, user_path, "user")
     {count2, state2} = do_load_rules_from_file_and_update(state1, project_path, "project")

@@ -72,6 +72,8 @@ defmodule CodePuppyControl.ModelRegistry do
 
   require Logger
 
+  alias CodePuppyControl.Config.Paths
+
   @table :model_configs
 
   # Known model types from Python model_config.py
@@ -355,18 +357,14 @@ defmodule CodePuppyControl.ModelRegistry do
   end
 
   defp load_overlay_files do
-    home_dir = System.get_env("HOME", "~")
-    base_path = Path.join(home_dir, ".code_puppy")
-
-    overlay_files = [
-      {"extra_models.json", "extra models"},
-      {"chatgpt_models.json", "ChatGPT OAuth models"},
-      {"claude_models.json", "Claude Code OAuth models"}
+    overlay_specs = [
+      {Paths.extra_models_file(), "extra models"},
+      {Paths.chatgpt_models_file(), "ChatGPT OAuth models"},
+      {Paths.claude_models_file(), "Claude Code OAuth models"}
     ]
 
-    overlay_files
-    |> Enum.reduce([], fn {filename, label}, acc ->
-      path = Path.join(base_path, filename)
+    overlay_specs
+    |> Enum.reduce([], fn {path, label}, acc ->
 
       case File.read(path) do
         {:ok, content} ->

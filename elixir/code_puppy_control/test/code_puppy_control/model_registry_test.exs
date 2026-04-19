@@ -420,11 +420,7 @@ defmodule CodePuppyControl.ModelRegistryTest do
 
   describe "overlay file loading" do
     @tag :tmp_dir
-    test "loads overlay models from ~/.code_puppy/extra_models.json", %{tmp_dir: tmp_dir} do
-      # Create overlay directory and file
-      code_puppy_dir = Path.join(tmp_dir, ".code_puppy")
-      File.mkdir_p!(code_puppy_dir)
-
+    test "loads overlay models from extra_models.json via Paths", %{tmp_dir: tmp_dir} do
       overlay_content =
         Jason.encode!(%{
           "test-overlay-model" => %{
@@ -435,36 +431,26 @@ defmodule CodePuppyControl.ModelRegistryTest do
           }
         })
 
-      overlay_path = Path.join(code_puppy_dir, "extra_models.json")
-      File.write!(overlay_path, overlay_content)
+      File.write!(Path.join(tmp_dir, "extra_models.json"), overlay_content)
 
-      # Start a new registry instance with the custom HOME
-      old_home = System.get_env("HOME")
-      System.put_env("HOME", tmp_dir)
+      old_home = System.get_env("PUP_EX_HOME")
+      System.put_env("PUP_EX_HOME", tmp_dir)
 
       try do
-        # Reload to pick up the overlay
         assert :ok = ModelRegistry.reload()
 
-        # Verify overlay model is loaded
         config = ModelRegistry.get_config("test-overlay-model")
         assert is_map(config)
         assert config["type"] == "openai"
         assert config["provider"] == "test"
       after
-        System.put_env("HOME", old_home || "~")
-        # Reload to restore original state
+        if old_home, do: System.put_env("PUP_EX_HOME", old_home), else: System.delete_env("PUP_EX_HOME")
         ModelRegistry.reload()
       end
     end
 
     @tag :tmp_dir
     test "later overlays win on key conflicts (merge precedence)", %{tmp_dir: tmp_dir} do
-      # Create overlay directory
-      code_puppy_dir = Path.join(tmp_dir, ".code_puppy")
-      File.mkdir_p!(code_puppy_dir)
-
-      # First overlay file (earlier in declaration order)
       first_overlay =
         Jason.encode!(%{
           "conflict-model" => %{
@@ -475,7 +461,6 @@ defmodule CodePuppyControl.ModelRegistryTest do
           }
         })
 
-      # Second overlay file (later in declaration order, should win)
       second_overlay =
         Jason.encode!(%{
           "conflict-model" => %{
@@ -486,37 +471,29 @@ defmodule CodePuppyControl.ModelRegistryTest do
           }
         })
 
-      File.write!(Path.join(code_puppy_dir, "extra_models.json"), first_overlay)
-      File.write!(Path.join(code_puppy_dir, "claude_models.json"), second_overlay)
+      File.write!(Path.join(tmp_dir, "extra_models.json"), first_overlay)
+      File.write!(Path.join(tmp_dir, "claude_models.json"), second_overlay)
 
-      old_home = System.get_env("HOME")
-      System.put_env("HOME", tmp_dir)
+      old_home = System.get_env("PUP_EX_HOME")
+      System.put_env("PUP_EX_HOME", tmp_dir)
 
       try do
-        # Reload to pick up the overlays
         assert :ok = ModelRegistry.reload()
 
-        # The later overlay (claude_models.json) should win
         config = ModelRegistry.get_config("conflict-model")
         assert config["type"] == "anthropic"
         assert config["provider"] == "second"
         assert config["context_length"] == 2000
       after
-        System.put_env("HOME", old_home || "~")
-        # Reload to restore original state
+        if old_home, do: System.put_env("PUP_EX_HOME", old_home), else: System.delete_env("PUP_EX_HOME")
         ModelRegistry.reload()
       end
     end
 
     @tag :tmp_dir
     test "malformed overlay JSON is skipped without crashing", %{tmp_dir: tmp_dir} do
-      code_puppy_dir = Path.join(tmp_dir, ".code_puppy")
-      File.mkdir_p!(code_puppy_dir)
+      File.write!(Path.join(tmp_dir, "extra_models.json"), "not valid json {[")
 
-      # Write invalid JSON
-      File.write!(Path.join(code_puppy_dir, "extra_models.json"), "not valid json {[")
-
-      # Write a valid overlay that should still be loaded
       valid_overlay =
         Jason.encode!(%{
           "valid-model" => %{
@@ -527,56 +504,40 @@ defmodule CodePuppyControl.ModelRegistryTest do
           }
         })
 
-      File.write!(Path.join(code_puppy_dir, "claude_models.json"), valid_overlay)
+      File.write!(Path.join(tmp_dir, "claude_models.json"), valid_overlay)
 
-      old_home = System.get_env("HOME")
-      System.put_env("HOME", tmp_dir)
+      old_home = System.get_env("PUP_EX_HOME")
+      System.put_env("PUP_EX_HOME", tmp_dir)
 
       try do
-        # Should reload successfully even with malformed JSON
         assert :ok = ModelRegistry.reload()
 
-        # Valid overlay should still be loaded
         assert ModelRegistry.get_config("valid-model") != nil
-
-        # Malformed file should not cause crash
         assert ModelRegistry.get_all_configs() != nil
       after
-        System.put_env("HOME", old_home || "~")
-        # Reload to restore original state
+        if old_home, do: System.put_env("PUP_EX_HOME", old_home), else: System.delete_env("PUP_EX_HOME")
         ModelRegistry.reload()
       end
     end
 
     @tag :tmp_dir
     test "non-object JSON in overlay is skipped", %{tmp_dir: tmp_dir} do
-      code_puppy_dir = Path.join(tmp_dir, ".code_puppy")
-      File.mkdir_p!(code_puppy_dir)
+      File.write!(Path.join(tmp_dir, "extra_models.json"), "[\"not\", \"an\", \"object\"]")
 
-      # Write JSON array instead of object
-      File.write!(Path.join(code_puppy_dir, "extra_models.json"), "[\"not\", \"an\", \"object\"]")
-
-      old_home = System.get_env("HOME")
-      System.put_env("HOME", tmp_dir)
+      old_home = System.get_env("PUP_EX_HOME")
+      System.put_env("PUP_EX_HOME", tmp_dir)
 
       try do
-        # Should reload successfully (non-object skipped, no crash)
         assert :ok = ModelRegistry.reload()
-
-        # Bundled models should still be present
         assert ModelRegistry.get_config("zai-glm-5-turbo-coding") != nil
       after
-        System.put_env("HOME", old_home || "~")
-        # Reload to restore original state
+        if old_home, do: System.put_env("PUP_EX_HOME", old_home), else: System.delete_env("PUP_EX_HOME")
         ModelRegistry.reload()
       end
     end
 
     @tag :tmp_dir
     test "loads claude_code models from claude_models.json overlay", %{tmp_dir: tmp_dir} do
-      code_puppy_dir = Path.join(tmp_dir, ".code_puppy")
-      File.mkdir_p!(code_puppy_dir)
-
       claude_overlay =
         Jason.encode!(%{
           "claude-code-claude-opus-4-7" => %{
@@ -592,10 +553,10 @@ defmodule CodePuppyControl.ModelRegistryTest do
           }
         })
 
-      File.write!(Path.join(code_puppy_dir, "claude_models.json"), claude_overlay)
+      File.write!(Path.join(tmp_dir, "claude_models.json"), claude_overlay)
 
-      old_home = System.get_env("HOME")
-      System.put_env("HOME", tmp_dir)
+      old_home = System.get_env("PUP_EX_HOME")
+      System.put_env("PUP_EX_HOME", tmp_dir)
 
       try do
         assert :ok = ModelRegistry.reload()
@@ -613,7 +574,7 @@ defmodule CodePuppyControl.ModelRegistryTest do
         assert config["custom_endpoint"]["url"] == "https://api.anthropic.com"
         assert config["custom_endpoint"]["api_key"] == "test-key"
       after
-        System.put_env("HOME", old_home || "~")
+        if old_home, do: System.put_env("PUP_EX_HOME", old_home), else: System.delete_env("PUP_EX_HOME")
         ModelRegistry.reload()
       end
     end

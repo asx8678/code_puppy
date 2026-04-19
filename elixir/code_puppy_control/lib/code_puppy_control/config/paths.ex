@@ -152,6 +152,65 @@ defmodule CodePuppyControl.Config.Paths do
   @spec contexts_dir() :: String.t()
   def contexts_dir, do: Path.join(data_dir(), "contexts")
 
+  # ── Plugin / policy paths ──────────────────────────────────────────────
+
+  @doc """
+  Path to the model packs JSON file.
+
+  Used by `ModelPacks` to persist user-defined model packs.
+  """
+  @spec model_packs_file() :: String.t()
+  def model_packs_file, do: Path.join(data_dir(), "model_packs.json")
+
+  @doc """
+  Path to the user plugins directory.
+
+  Used by `Plugins.Loader` for runtime plugin discovery.
+  """
+  @spec plugins_dir() :: String.t()
+  def plugins_dir, do: Path.join(home_dir(), "plugins")
+
+  @doc """
+  Path to the user-level policy JSON file.
+
+  Used by `PolicyConfig` and `PolicyEngine` for user-wide policy rules.
+  """
+  @spec user_policy_file() :: String.t()
+  def user_policy_file, do: Path.join(config_dir(), "policy.json")
+
+  @doc """
+  Path to the project-local policy JSON file.
+
+  Resolved relative to the current working directory (`.code_puppy/policy.json`).
+  This is per-project config, NOT subject to the isolation guard.
+  """
+  @spec project_policy_file() :: String.t()
+  def project_policy_file, do: Path.join([File.cwd!(), ".code_puppy", "policy.json"])
+
+  @doc """
+  Path to the Universal Constructor tools directory.
+
+  Used by UC create_action, registry, and facade modules.
+  """
+  @spec universal_constructor_dir() :: String.t()
+  def universal_constructor_dir, do: Path.join(plugins_dir(), "universal_constructor")
+
+  @doc """
+  Path to the ChatGPT models overlay JSON file.
+
+  Used by `ModelRegistry` to load ChatGPT OAuth model definitions.
+  """
+  @spec chatgpt_models_file() :: String.t()
+  def chatgpt_models_file, do: Path.join(data_dir(), "chatgpt_models.json")
+
+  @doc """
+  Path to the Claude models overlay JSON file.
+
+  Used by `ModelRegistry` to load Claude Code OAuth model definitions.
+  """
+  @spec claude_models_file() :: String.t()
+  def claude_models_file, do: Path.join(data_dir(), "claude_models.json")
+
   # ── Cache files ─────────────────────────────────────────────────────────
 
   @doc "Path to the autosaves directory."

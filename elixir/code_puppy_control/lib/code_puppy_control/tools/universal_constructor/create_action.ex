@@ -8,11 +8,13 @@ defmodule CodePuppyControl.Tools.UniversalConstructor.CreateAction do
 
   require Logger
 
+  alias CodePuppyControl.Config.Isolation
+  alias CodePuppyControl.Config.Paths
   alias CodePuppyControl.Tools.UniversalConstructor.Models
   alias CodePuppyControl.Tools.UniversalConstructor.Registry
   alias CodePuppyControl.Tools.UniversalConstructor.Validator
 
-  @default_tools_dir "~/.code_puppy/plugins/universal_constructor"
+
 
   @doc """
   Handles the create action for creating a new UC tool.
@@ -115,7 +117,7 @@ defmodule CodePuppyControl.Tools.UniversalConstructor.CreateAction do
   # ============================================================================
 
   defp build_file_path(final_namespace, final_name) do
-    tools_dir = Path.expand(@default_tools_dir)
+    tools_dir = Paths.universal_constructor_dir()
 
     file_dir =
       if final_namespace != "" do
@@ -179,8 +181,10 @@ defmodule CodePuppyControl.Tools.UniversalConstructor.CreateAction do
   # ============================================================================
 
   defp write_tool_file(file_dir, file_path, final_code, final_name, final_namespace) do
-    with :ok <- File.mkdir_p(file_dir),
-         :ok <- File.write(file_path, final_code) do
+    try do
+      Isolation.safe_mkdir_p!(file_dir)
+      Isolation.safe_write!(file_path, final_code)
+
       # Read back for preview
       preview = Validator.generate_preview(final_code)
 
@@ -199,9 +203,9 @@ defmodule CodePuppyControl.Tools.UniversalConstructor.CreateAction do
         )
 
       build_output("create", true, nil, create_result: create_output)
-    else
-      {:error, reason} ->
-        build_output("create", false, "Failed to write tool file: #{inspect(reason)}")
+    rescue
+      e in File.Error ->
+        build_output("create", false, "Failed to write tool file: #{Exception.message(e)}")
     end
   end
 
