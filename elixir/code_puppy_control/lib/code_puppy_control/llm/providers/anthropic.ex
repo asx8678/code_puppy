@@ -114,11 +114,13 @@ defmodule CodePuppyControl.LLM.Providers.Anthropic do
 
     url = "#{base_url}/v1/messages"
 
-    headers = [
-      {"x-api-key", api_key},
-      {"anthropic-version", @api_version},
-      {"content-type", "application/json"}
-    ]
+    headers =
+      [
+        {"x-api-key", api_key},
+        {"anthropic-version", @api_version},
+        {"content-type", "application/json"}
+      ]
+      |> merge_extra_headers(opts)
 
     {system_text, chat_messages} = extract_system_messages(messages)
 
@@ -539,6 +541,16 @@ defmodule CodePuppyControl.LLM.Providers.Anthropic do
   end
 
   # ── Private: Config ───────────────────────────────────────────────────────
+
+  # Merge extra_headers from opts into the header list.
+  # extra_headers is a list of {key, value} tuples from Handle.to_provider_opts/1.
+  defp merge_extra_headers(headers, opts) do
+    case Keyword.get(opts, :extra_headers) do
+      nil -> headers
+      extra when is_list(extra) -> headers ++ extra
+      _ -> headers
+    end
+  end
 
   defp resolve_api_key do
     System.get_env("ANTHROPIC_API_KEY") || ""

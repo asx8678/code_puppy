@@ -278,4 +278,61 @@ defmodule CodePuppyControl.LLM.Providers.AnthropicTest do
     :ets.delete(events)
     result
   end
+
+  # ── Extra Headers Tests (bd-223) ─────────────────────────────────────────
+
+  describe "extra_headers forwarding" do
+    test "custom endpoint headers are included in request" do
+      test_pid = self()
+
+      MockLLMHTTP.register(fn :post, url, opts ->
+        if url =~ "/messages" do
+          send(test_pid, {:request_headers, opts[:headers]})
+
+          {:ok,
+           %{
+             status: 200,
+             body: MockLLMHTTP.anthropic_chat_fixture(),
+             headers: []
+           }}
+        else
+          {:passthrough}
+        end
+      end)
+
+      opts =
+        @opts
+        |> Keyword.put(:extra_headers, [{"x-custom-header", "anthropic-value"}, {"x-another", "99"}])
+
+      Anthropic.chat(@messages, [], opts)
+
+      assert_received {:request_headers, headers}
+
+      # Standard headers should be present
+      assert List.keyfind(headers, "x-api-key", 0) != nil
+      assert List.keyfind(headers, "anthropic-version", 0) != nil
+
+      # Extra headers should be appended
+      assert List.keyfind(headers, "x-custom-header", 0) == {"x-custom-header", "anthropic-value"}
+      assert List.keyfind(headers, "x-another", 0) == {"x-another", "99"}
+    end
+
+    test "works without extra_headers (backward compatible)" do
+      MockLLMHTTP.register(fn :post, url, _opts ->
+        if url =~ "/messages" do
+          {:ok,
+           %{
+             status: 200,
+             body: MockLLMHTTP.anthropic_chat_fixture(),
+             headers: []
+           }}
+        else
+          {:passthrough}
+        end
+      end)
+
+      # No extra_headers in opts — should work fine
+      assert {:ok, _} = Anthropic.chat(@messages, [], @opts)
+    end
+  end
 end

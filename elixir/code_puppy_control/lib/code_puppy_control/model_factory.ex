@@ -61,7 +61,8 @@ defmodule CodePuppyControl.ModelFactory do
     "openrouter" => OpenAI,
     "gemini" => OpenAI,
     "gemini_oauth" => OpenAI,
-    "custom_gemini" => OpenAI
+    "custom_gemini" => OpenAI,
+    "claude_code" => Anthropic
   }
 
   # Default API base URLs per provider type

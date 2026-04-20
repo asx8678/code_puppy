@@ -62,8 +62,10 @@ defmodule CodePuppyControl.ModelFactory.Handle do
     handle.model_opts
     |> maybe_put_opt(:api_key, handle.api_key)
     |> maybe_put_opt(:base_url, handle.base_url)
+    |> maybe_put_opt(:extra_headers, handle.extra_headers)
   end
 
   defp maybe_put_opt(opts, _key, nil), do: opts
+  defp maybe_put_opt(opts, :extra_headers, []), do: opts
   defp maybe_put_opt(opts, key, value), do: Keyword.put(opts, key, value)
 end

@@ -104,6 +104,30 @@ defmodule CodePuppyControl.ModelFactory.HandleTest do
       assert opts[:base_url] == "https://my-proxy.com"
       assert opts[:model] == "gpt-4"
       assert opts[:max_tokens] == 1000
+      assert opts[:extra_headers] == [{"x-custom", "value"}]
+    end
+
+    test "includes extra_headers when present (bd-223)" do
+      handle = %Handle{
+        model_name: "custom-model",
+        provider_module: OpenAI,
+        provider_config: %{},
+        extra_headers: [{"x-api-source", "custom"}, {"x-trace-id", "abc123"}]
+      }
+
+      opts = Handle.to_provider_opts(handle)
+      assert opts[:extra_headers] == [{"x-api-source", "custom"}, {"x-trace-id", "abc123"}]
+    end
+
+    test "does not include empty extra_headers" do
+      handle = %Handle{
+        model_name: "test",
+        provider_module: OpenAI,
+        provider_config: %{}
+      }
+
+      opts = Handle.to_provider_opts(handle)
+      refute Keyword.has_key?(opts, :extra_headers)
     end
   end
 end

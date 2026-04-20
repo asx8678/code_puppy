@@ -268,6 +268,144 @@ defmodule CodePuppyControl.LLM.Providers.OpenAITest do
     end
   end
 
+  # ── URL Building Tests (bd-222) ─────────────────────────────────────────
+
+  describe "URL building" do
+    test "does not duplicate /v1 in path when base_url already ends with /v1" do
+      test_pid = self()
+
+      MockLLMHTTP.register(fn :post, url, _opts ->
+        if url =~ "/chat/completions" do
+          send(test_pid, {:request_url, url})
+
+          {:ok,
+           %{
+             status: 200,
+             body: MockLLMHTTP.openai_chat_fixture(),
+             headers: []
+           }}
+        else
+          {:passthrough}
+        end
+      end)
+
+      opts = Keyword.put(@opts, :base_url, "https://example.com/v1")
+      OpenAI.chat(@messages, [], opts)
+
+      assert_received {:request_url, url}
+      assert url == "https://example.com/v1/chat/completions"
+      refute url =~ "/v1/v1/", "URL should not contain duplicate /v1: #{url}"
+    end
+
+    test "does not duplicate /v1 when base_url ends with /v1/" do
+      test_pid = self()
+
+      MockLLMHTTP.register(fn :post, url, _opts ->
+        if url =~ "/chat/completions" do
+          send(test_pid, {:request_url, url})
+
+          {:ok,
+           %{
+             status: 200,
+             body: MockLLMHTTP.openai_chat_fixture(),
+             headers: []
+           }}
+        else
+          {:passthrough}
+        end
+      end)
+
+      opts = Keyword.put(@opts, :base_url, "https://example.com/v1/")
+      OpenAI.chat(@messages, [], opts)
+
+      assert_received {:request_url, url}
+      assert url == "https://example.com/v1/chat/completions"
+      refute url =~ "/v1/v1/", "URL should not contain duplicate /v1: #{url}"
+    end
+
+    test "builds correct URL for base_url without /v1" do
+      test_pid = self()
+
+      MockLLMHTTP.register(fn :post, url, _opts ->
+        if url =~ "/chat/completions" do
+          send(test_pid, {:request_url, url})
+
+          {:ok,
+           %{
+             status: 200,
+             body: MockLLMHTTP.openai_chat_fixture(),
+             headers: []
+           }}
+        else
+          {:passthrough}
+        end
+      end)
+
+      opts = Keyword.put(@opts, :base_url, "https://api.openai.com")
+      OpenAI.chat(@messages, [], opts)
+
+      assert_received {:request_url, url}
+      assert url == "https://api.openai.com/v1/chat/completions"
+    end
+  end
+
+  # ── Extra Headers Tests (bd-223) ─────────────────────────────────────────
+
+  describe "extra_headers forwarding" do
+    test "custom endpoint headers are included in request" do
+      test_pid = self()
+
+      MockLLMHTTP.register(fn :post, url, opts ->
+        if url =~ "/chat/completions" do
+          send(test_pid, {:request_headers, opts[:headers]})
+
+          {:ok,
+           %{
+             status: 200,
+             body: MockLLMHTTP.openai_chat_fixture(),
+             headers: []
+           }}
+        else
+          {:passthrough}
+        end
+      end)
+
+      opts =
+        @opts
+        |> Keyword.put(:extra_headers, [{"x-custom-header", "my-value"}, {"x-another", "42"}])
+
+      OpenAI.chat(@messages, [], opts)
+
+      assert_received {:request_headers, headers}
+
+      # Standard headers should be present
+      assert List.keyfind(headers, "authorization", 0) != nil
+      assert List.keyfind(headers, "content-type", 0) != nil
+
+      # Extra headers should be appended
+      assert List.keyfind(headers, "x-custom-header", 0) == {"x-custom-header", "my-value"}
+      assert List.keyfind(headers, "x-another", 0) == {"x-another", "42"}
+    end
+
+    test "works without extra_headers (backward compatible)" do
+      MockLLMHTTP.register(fn :post, url, _opts ->
+        if url =~ "/chat/completions" do
+          {:ok,
+           %{
+             status: 200,
+             body: MockLLMHTTP.openai_chat_fixture(),
+             headers: []
+           }}
+        else
+          {:passthrough}
+        end
+      end)
+
+      # No extra_headers in opts — should work fine
+      assert {:ok, _} = OpenAI.chat(@messages, [], @opts)
+    end
+  end
+
   # ── Helpers ───────────────────────────────────────────────────────────────
 
   defp capture_stream_events(callback_fn) do

@@ -109,12 +109,14 @@ defmodule CodePuppyControl.LLM.Providers.OpenAI do
     api_key = Keyword.get(opts, :api_key) || resolve_api_key()
     stream = Keyword.get(opts, :stream, false)
 
-    url = "#{base_url}/v1/chat/completions"
+    url = build_url(base_url)
 
-    headers = [
-      {"authorization", "Bearer #{api_key}"},
-      {"content-type", "application/json"}
-    ]
+    headers =
+      [
+        {"authorization", "Bearer #{api_key}"},
+        {"content-type", "application/json"}
+      ]
+      |> merge_extra_headers(opts)
 
     body =
       %{
@@ -482,6 +484,30 @@ defmodule CodePuppyControl.LLM.Providers.OpenAI do
     }
 
     callback_fn.({:done, response})
+  end
+
+  # ── Private: URL Building ─────────────────────────────────────────────────
+
+  # Strip trailing /v1 or /v1/ from base_url to avoid duplication when
+  # appending /v1/chat/completions. Custom endpoints often already include /v1.
+  defp build_url(base_url) do
+    # Strip trailing /v1 or /v1/ to avoid duplication when
+    # appending /v1/chat/completions. Custom endpoints often already include /v1.
+    normalized = String.replace_trailing(base_url, "/v1/", "")
+    normalized = String.replace_trailing(normalized, "/v1", "")
+    # Remove any trailing slash left after stripping
+    normalized = String.replace_trailing(normalized, "/", "")
+    "#{normalized}/v1/chat/completions"
+  end
+
+  # Merge extra_headers from opts into the header list.
+  # extra_headers is a list of {key, value} tuples from Handle.to_provider_opts/1.
+  defp merge_extra_headers(headers, opts) do
+    case Keyword.get(opts, :extra_headers) do
+      nil -> headers
+      extra when is_list(extra) -> headers ++ extra
+      _ -> headers
+    end
   end
 
   # ── Private: Config ───────────────────────────────────────────────────────

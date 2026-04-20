@@ -59,6 +59,9 @@ defmodule CodePuppyControl.LLM do
     "zai_coding" => CodePuppyControl.LLM.Providers.OpenAI,
     "zai_api" => CodePuppyControl.LLM.Providers.OpenAI,
     "openrouter" => CodePuppyControl.LLM.Providers.OpenAI,
+    "gemini" => CodePuppyControl.LLM.Providers.OpenAI,
+    "gemini_oauth" => CodePuppyControl.LLM.Providers.OpenAI,
+    "custom_gemini" => CodePuppyControl.LLM.Providers.OpenAI,
     "claude_code" => CodePuppyControl.LLM.Providers.Anthropic
   }
 
