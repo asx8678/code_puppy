@@ -266,6 +266,41 @@ defmodule CodePuppyControl.RoundRobinModel do
     end
   end
 
+  @doc """
+  Returns a human-readable name for the round-robin configuration.
+
+  Format: `round_robin:m1,m2,m3` when `rotate_every=1`,
+  or `round_robin:m1,m2,m3:rotate_every=N` when `rotate_every > 1`.
+
+  This mirrors the Python `RoundRobinModel.model_name` property.
+
+  ## Examples
+
+      iex> RoundRobinModel.configure(models: ["m1", "m2", "m3"])
+      iex> RoundRobinModel.model_name()
+      "round_robin:m1,m2,m3"
+
+      iex> RoundRobinModel.configure(models: ["m1", "m2"], rotate_every: 5)
+      iex> RoundRobinModel.model_name()
+      "round_robin:m1,m2:rotate_every=5"
+  """
+  @spec model_name() :: String.t()
+  def model_name do
+    case :ets.lookup(@table, :state) do
+      [{:state, state}] ->
+        names = Enum.join(state.models, ",")
+
+        if state.rotate_every > 1 do
+          "round_robin:#{names}:rotate_every=#{state.rotate_every}"
+        else
+          "round_robin:#{names}"
+        end
+
+      [] ->
+        "round_robin:"
+    end
+  end
+
   # ============================================================================
   # Server Callbacks
   # ============================================================================
