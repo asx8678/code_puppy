@@ -294,7 +294,10 @@ defmodule CodePuppyControl.Stream.ParserTest do
 
   describe "parse_jsonl_lenient/1" do
     test "valid JSONL" do
-      text = Jason.encode!(%{"a" => 1}) <> "\n" <> Jason.encode!(%{"b" => 2}) <> "\n" <> Jason.encode!(%{"c" => 3})
+      text =
+        Jason.encode!(%{"a" => 1}) <>
+          "\n" <> Jason.encode!(%{"b" => 2}) <> "\n" <> Jason.encode!(%{"c" => 3})
+
       assert parse_jsonl(text) == [%{"a" => 1}, %{"b" => 2}, %{"c" => 3}]
     end
 
@@ -420,12 +423,14 @@ defmodule CodePuppyControl.Stream.ParserTest do
         cond do
           String.trim(line) == "" ->
             if st.data_lines != [] do
-              event = new_sse_event(
-                event: st.event_type,
-                data: Enum.join(Enum.reverse(st.data_lines), "\n"),
-                id: st.last_id,
-                retry: st.retry_val
-              )
+              event =
+                new_sse_event(
+                  event: st.event_type,
+                  data: Enum.join(Enum.reverse(st.data_lines), "\n"),
+                  id: st.last_id,
+                  retry: st.retry_val
+                )
+
               {[event | acc], %{st | event_type: "message", data_lines: [], retry_val: nil}}
             else
               {acc, %{st | event_type: "message", data_lines: [], retry_val: nil}}

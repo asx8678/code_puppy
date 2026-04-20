@@ -164,10 +164,26 @@ defmodule CodePuppyControl.Plugins.LoaderTest do
 
   describe "security: user plugin validation" do
     test "skips user plugins with suspicious names (path traversal)" do
-      # The loader should skip plugins with "..", "/", "\\", or null bytes
-      # This is tested implicitly through the load_user_plugin path
-      # which validates plugin names before processing
-      assert true
+      tmp_dir = System.tmp_dir!()
+      uniq = :erlang.unique_integer([:positive])
+      plugins_base = Path.join(tmp_dir, "cp_symlink_test_#{uniq}")
+
+      File.mkdir_p!(plugins_base)
+
+      # Create a file OUTSIDE the plugins dir
+      outside_file = Path.join(tmp_dir, "evil_#{uniq}.ex")
+      File.write!(outside_file, "defmodule Evil do end")
+
+      # Create a symlink FROM inside plugins dir TO the outside file
+      symlink_path = Path.join(plugins_base, "evil_link.ex")
+      File.ln_s!(outside_file, symlink_path)
+
+      # The safe_plugin_path? check must reject the symlinked file
+      refute Loader.safe_plugin_path?(symlink_path, plugins_base)
+
+      # Clean up
+      File.rm_rf!(plugins_base)
+      File.rm(outside_file)
     end
 
     test "rejects symlinked plugin files that escape the plugins directory" do

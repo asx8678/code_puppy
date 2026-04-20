@@ -47,7 +47,13 @@ defmodule Mix.Tasks.PupEx.Import do
     Mix.shell().info("No legacy home to import from.")
   end
 
-  defp format_report_and_exit(%{mode: mode, copied: copied, skipped: skipped, refused: refused, errors: errors}) do
+  defp format_report_and_exit(%{
+         mode: mode,
+         copied: copied,
+         skipped: skipped,
+         refused: refused,
+         errors: errors
+       }) do
     mode_label = if mode == :dry_run, do: "DRY RUN", else: "COPY"
 
     Mix.shell().info("\n📦 pup-ex import (#{mode_label} mode)")
@@ -87,7 +93,9 @@ defmodule Mix.Tasks.PupEx.Import do
 
     total = length(copied) + length(skipped) + length(refused) + length(errors)
 
-    Mix.shell().info("\n  #{total} items: #{length(copied)} copied, #{length(skipped)} skipped, #{length(refused)} refused, #{length(errors)} errors")
+    Mix.shell().info(
+      "\n  #{total} items: #{length(copied)} copied, #{length(skipped)} skipped, #{length(refused)} refused, #{length(errors)} errors"
+    )
 
     if mode == :dry_run and total > 0 do
       Mix.shell().info("\n  Run with --confirm to actually copy files.")

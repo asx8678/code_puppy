@@ -211,7 +211,9 @@ defmodule CodePuppyControl.Config.DoctorTest do
 
   describe "failure detection" do
     test "detects missing Elixir home" do
-      nonexistent = Path.join(System.tmp_dir!(), "no_such_doctor_#{:erlang.unique_integer([:positive])}")
+      nonexistent =
+        Path.join(System.tmp_dir!(), "no_such_doctor_#{:erlang.unique_integer([:positive])}")
+
       System.put_env("PUP_EX_HOME", nonexistent)
       File.rm_rf(nonexistent)
 

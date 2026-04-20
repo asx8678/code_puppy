@@ -444,7 +444,10 @@ defmodule CodePuppyControl.ModelRegistryTest do
         assert config["type"] == "openai"
         assert config["provider"] == "test"
       after
-        if old_home, do: System.put_env("PUP_EX_HOME", old_home), else: System.delete_env("PUP_EX_HOME")
+        if old_home,
+          do: System.put_env("PUP_EX_HOME", old_home),
+          else: System.delete_env("PUP_EX_HOME")
+
         ModelRegistry.reload()
       end
     end
@@ -485,7 +488,10 @@ defmodule CodePuppyControl.ModelRegistryTest do
         assert config["provider"] == "second"
         assert config["context_length"] == 2000
       after
-        if old_home, do: System.put_env("PUP_EX_HOME", old_home), else: System.delete_env("PUP_EX_HOME")
+        if old_home,
+          do: System.put_env("PUP_EX_HOME", old_home),
+          else: System.delete_env("PUP_EX_HOME")
+
         ModelRegistry.reload()
       end
     end
@@ -515,7 +521,10 @@ defmodule CodePuppyControl.ModelRegistryTest do
         assert ModelRegistry.get_config("valid-model") != nil
         assert ModelRegistry.get_all_configs() != nil
       after
-        if old_home, do: System.put_env("PUP_EX_HOME", old_home), else: System.delete_env("PUP_EX_HOME")
+        if old_home,
+          do: System.put_env("PUP_EX_HOME", old_home),
+          else: System.delete_env("PUP_EX_HOME")
+
         ModelRegistry.reload()
       end
     end
@@ -531,7 +540,10 @@ defmodule CodePuppyControl.ModelRegistryTest do
         assert :ok = ModelRegistry.reload()
         assert ModelRegistry.get_config("zai-glm-5-turbo-coding") != nil
       after
-        if old_home, do: System.put_env("PUP_EX_HOME", old_home), else: System.delete_env("PUP_EX_HOME")
+        if old_home,
+          do: System.put_env("PUP_EX_HOME", old_home),
+          else: System.delete_env("PUP_EX_HOME")
+
         ModelRegistry.reload()
       end
     end
@@ -574,7 +586,10 @@ defmodule CodePuppyControl.ModelRegistryTest do
         assert config["custom_endpoint"]["url"] == "https://api.anthropic.com"
         assert config["custom_endpoint"]["api_key"] == "test-key"
       after
-        if old_home, do: System.put_env("PUP_EX_HOME", old_home), else: System.delete_env("PUP_EX_HOME")
+        if old_home,
+          do: System.put_env("PUP_EX_HOME", old_home),
+          else: System.delete_env("PUP_EX_HOME")
+
         ModelRegistry.reload()
       end
     end

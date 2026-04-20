@@ -27,7 +27,13 @@ defmodule CodePuppyControl.Config.EnvResolutionPropertyTest do
 
   defp with_clean_env(do: block) do
     # Save and clear relevant env vars
-    env_vars = ["PUP_MODEL", "PUPPY_DEFAULT_MODEL", "PUP_AGENT", "PUPPY_DEFAULT_AGENT", "PUP_DEBUG"]
+    env_vars = [
+      "PUP_MODEL",
+      "PUPPY_DEFAULT_MODEL",
+      "PUP_AGENT",
+      "PUPPY_DEFAULT_AGENT",
+      "PUP_DEBUG"
+    ]
 
     saved =
       Map.new(env_vars, fn var ->
@@ -52,9 +58,11 @@ defmodule CodePuppyControl.Config.EnvResolutionPropertyTest do
 
   describe "env var overrides config file value" do
     property "PUP_MODEL env var takes precedence over file model" do
-      check all file_model <- string(:alphanumeric, min_length: 1),
-                env_model <- string(:alphanumeric, min_length: 1),
-                max_runs: 50 do
+      check all(
+              file_model <- string(:alphanumeric, min_length: 1),
+              env_model <- string(:alphanumeric, min_length: 1),
+              max_runs: 50
+            ) do
         with_clean_env do
           path = tmp_cfg_path()
           File.write!(path, "model = #{file_model}\n")
@@ -78,9 +86,11 @@ defmodule CodePuppyControl.Config.EnvResolutionPropertyTest do
     end
 
     property "PUP_AGENT env var takes precedence over file default_agent" do
-      check all file_agent <- string(:alphanumeric, min_length: 1),
-                env_agent <- string(:alphanumeric, min_length: 1),
-                max_runs: 50 do
+      check all(
+              file_agent <- string(:alphanumeric, min_length: 1),
+              env_agent <- string(:alphanumeric, min_length: 1),
+              max_runs: 50
+            ) do
         with_clean_env do
           path = tmp_cfg_path()
           File.write!(path, "default_agent = #{file_agent}\n")
@@ -103,8 +113,10 @@ defmodule CodePuppyControl.Config.EnvResolutionPropertyTest do
 
   describe "empty env var falls through to config" do
     property "empty PUP_MODEL does not override file value" do
-      check all file_model <- string(:alphanumeric, min_length: 1),
-                max_runs: 50 do
+      check all(
+              file_model <- string(:alphanumeric, min_length: 1),
+              max_runs: 50
+            ) do
         with_clean_env do
           path = tmp_cfg_path()
           File.write!(path, "model = #{file_model}\n")
@@ -128,8 +140,10 @@ defmodule CodePuppyControl.Config.EnvResolutionPropertyTest do
 
   describe "legacy PUPPY_ env vars are fallback" do
     property "PUPPY_DEFAULT_MODEL is used when PUP_MODEL is not set" do
-      check all legacy_model <- string(:alphanumeric, min_length: 1),
-                max_runs: 50 do
+      check all(
+              legacy_model <- string(:alphanumeric, min_length: 1),
+              max_runs: 50
+            ) do
         with_clean_env do
           path = tmp_cfg_path()
           File.write!(path, "")
@@ -151,9 +165,11 @@ defmodule CodePuppyControl.Config.EnvResolutionPropertyTest do
     # order applies PUPPY_ second, overwriting PUP_. This test documents
     # actual behavior until the bug is fixed.
     property "PUPPY_DEFAULT_MODEL overwrites PUP_MODEL due to merge order" do
-      check all new_model <- string(:alphanumeric, min_length: 1),
-                legacy_model <- string(:alphanumeric, min_length: 1),
-                max_runs: 50 do
+      check all(
+              new_model <- string(:alphanumeric, min_length: 1),
+              legacy_model <- string(:alphanumeric, min_length: 1),
+              max_runs: 50
+            ) do
         with_clean_env do
           path = tmp_cfg_path()
           File.write!(path, "")
@@ -175,8 +191,10 @@ defmodule CodePuppyControl.Config.EnvResolutionPropertyTest do
     end
 
     property "PUPPY_DEFAULT_AGENT is used when PUP_AGENT is not set" do
-      check all legacy_agent <- string(:alphanumeric, min_length: 1),
-                max_runs: 50 do
+      check all(
+              legacy_agent <- string(:alphanumeric, min_length: 1),
+              max_runs: 50
+            ) do
         with_clean_env do
           path = tmp_cfg_path()
           File.write!(path, "")
@@ -199,9 +217,11 @@ defmodule CodePuppyControl.Config.EnvResolutionPropertyTest do
 
   describe "config file value provides default when env vars absent" do
     property "file value is returned when no env var is set" do
-      check all key <- string(:alphanumeric, min_length: 1),
-                value <- string(:alphanumeric, min_length: 1),
-                max_runs: 50 do
+      check all(
+              key <- string(:alphanumeric, min_length: 1),
+              value <- string(:alphanumeric, min_length: 1),
+              max_runs: 50
+            ) do
         with_clean_env do
           path = tmp_cfg_path()
           File.write!(path, "#{key} = #{value}\n")
@@ -218,8 +238,10 @@ defmodule CodePuppyControl.Config.EnvResolutionPropertyTest do
     end
 
     property "get_value returns nil for missing keys" do
-      check all key <- string(:alphanumeric, min_length: 1),
-                max_runs: 50 do
+      check all(
+              key <- string(:alphanumeric, min_length: 1),
+              max_runs: 50
+            ) do
         with_clean_env do
           path = tmp_cfg_path()
           File.write!(path, "")
@@ -241,8 +263,10 @@ defmodule CodePuppyControl.Config.EnvResolutionPropertyTest do
 
   describe "load idempotency" do
     property "loading the same config twice produces identical results" do
-      check all model <- string(:alphanumeric, min_length: 1),
-                max_runs: 50 do
+      check all(
+              model <- string(:alphanumeric, min_length: 1),
+              max_runs: 50
+            ) do
         with_clean_env do
           path = tmp_cfg_path()
           File.write!(path, "model = #{model}\n")
@@ -264,10 +288,12 @@ defmodule CodePuppyControl.Config.EnvResolutionPropertyTest do
 
   describe "multi-section INI parsing" do
     property "sections are preserved and isolated" do
-      check all section_name <- string(:alphanumeric, min_length: 1, max_length: 20),
-                key <- string(:alphanumeric, min_length: 1),
-                value <- string(:alphanumeric, min_length: 1),
-                max_runs: 50 do
+      check all(
+              section_name <- string(:alphanumeric, min_length: 1, max_length: 20),
+              key <- string(:alphanumeric, min_length: 1),
+              value <- string(:alphanumeric, min_length: 1),
+              max_runs: 50
+            ) do
         with_clean_env do
           path = tmp_cfg_path()
           content = "[#{section_name}]\n#{key} = #{value}\n"

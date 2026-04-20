@@ -210,8 +210,8 @@ defmodule CodePuppyControl.Config.Importer do
               merged_json = Jason.encode!(merged, pretty: true)
 
               if not force and File.exists?(dst) do
-                {copied, [{dst, "already exists; use --force to overwrite"} | skipped],
-                 refused, errors}
+                {copied, [{dst, "already exists; use --force to overwrite"} | skipped], refused,
+                 errors}
               else
                 case maybe_write(dst, merged_json, mode) do
                   :ok -> {[dst | copied], skipped, refused, errors}
@@ -382,8 +382,11 @@ defmodule CodePuppyControl.Config.Importer do
                 case read_from_legacy(src_path) do
                   {:ok, content} ->
                     case maybe_write(dst_path, content, mode) do
-                      :ok -> {[dst_path | copied], skipped, refused, errors}
-                      {:error, reason} -> {copied, skipped, refused, [{dst_path, reason} | errors]}
+                      :ok ->
+                        {[dst_path | copied], skipped, refused, errors}
+
+                      {:error, reason} ->
+                        {copied, skipped, refused, [{dst_path, reason} | errors]}
                     end
 
                   {:error, reason} ->
@@ -486,7 +489,8 @@ defmodule CodePuppyControl.Config.Importer do
     end
   end
 
-  defp deep_merge_preserving_existing(existing, legacy) when is_map(existing) and is_map(legacy) do
+  defp deep_merge_preserving_existing(existing, legacy)
+       when is_map(existing) and is_map(legacy) do
     Map.merge(legacy, existing, fn _k, v_existing, _v_legacy -> v_existing end)
   end
 

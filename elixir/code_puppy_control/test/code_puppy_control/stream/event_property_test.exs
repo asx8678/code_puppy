@@ -29,84 +29,106 @@ defmodule CodePuppyControl.Stream.EventPropertyTest do
   defp non_empty_string_gen, do: string(:alphanumeric, min_length: 1)
 
   defp text_start_gen do
-    gen all index <- index_gen(),
-            id <- maybe_id_gen() do
+    gen all(
+          index <- index_gen(),
+          id <- maybe_id_gen()
+        ) do
       %TextStart{index: index, id: id}
     end
   end
 
   defp text_delta_gen do
-    gen all index <- index_gen(),
-            text <- text_gen() do
+    gen all(
+          index <- index_gen(),
+          text <- text_gen()
+        ) do
       %TextDelta{index: index, text: text}
     end
   end
 
   defp text_end_gen do
-    gen all index <- index_gen(),
-            id <- maybe_id_gen() do
+    gen all(
+          index <- index_gen(),
+          id <- maybe_id_gen()
+        ) do
       %TextEnd{index: index, id: id}
     end
   end
 
   defp tool_call_start_gen do
-    gen all index <- index_gen(),
-            id <- maybe_id_gen(),
-            name <- maybe_id_gen() do
+    gen all(
+          index <- index_gen(),
+          id <- maybe_id_gen(),
+          name <- maybe_id_gen()
+        ) do
       %ToolCallStart{index: index, id: id, name: name}
     end
   end
 
   defp tool_call_args_delta_gen do
-    gen all index <- index_gen(),
-            arguments <- text_gen() do
+    gen all(
+          index <- index_gen(),
+          arguments <- text_gen()
+        ) do
       %ToolCallArgsDelta{index: index, arguments: arguments}
     end
   end
 
   defp tool_call_end_gen do
-    gen all index <- index_gen(),
-            id <- non_empty_string_gen(),
-            name <- non_empty_string_gen(),
-            arguments <- non_empty_string_gen() do
+    gen all(
+          index <- index_gen(),
+          id <- non_empty_string_gen(),
+          name <- non_empty_string_gen(),
+          arguments <- non_empty_string_gen()
+        ) do
       %ToolCallEnd{index: index, id: id, name: name, arguments: arguments}
     end
   end
 
   defp thinking_start_gen do
-    gen all index <- index_gen(),
-            id <- maybe_id_gen() do
+    gen all(
+          index <- index_gen(),
+          id <- maybe_id_gen()
+        ) do
       %ThinkingStart{index: index, id: id}
     end
   end
 
   defp thinking_delta_gen do
-    gen all index <- index_gen(),
-            text <- text_gen() do
+    gen all(
+          index <- index_gen(),
+          text <- text_gen()
+        ) do
       %ThinkingDelta{index: index, text: text}
     end
   end
 
   defp thinking_end_gen do
-    gen all index <- index_gen(),
-            id <- maybe_id_gen() do
+    gen all(
+          index <- index_gen(),
+          id <- maybe_id_gen()
+        ) do
       %ThinkingEnd{index: index, id: id}
     end
   end
 
   defp usage_update_gen do
-    gen all prompt <- non_negative_integer(),
-            completion <- non_negative_integer(),
-            total <- non_negative_integer() do
+    gen all(
+          prompt <- non_negative_integer(),
+          completion <- non_negative_integer(),
+          total <- non_negative_integer()
+        ) do
       %UsageUpdate{prompt_tokens: prompt, completion_tokens: completion, total_tokens: total}
     end
   end
 
   defp done_gen do
-    gen all id <- maybe_id_gen(),
-            model <- maybe_id_gen(),
-            finish_reason <- maybe_id_gen(),
-            usage <- one_of([constant(nil), usage_update_gen()]) do
+    gen all(
+          id <- maybe_id_gen(),
+          model <- maybe_id_gen(),
+          finish_reason <- maybe_id_gen(),
+          usage <- one_of([constant(nil), usage_update_gen()])
+        ) do
       %Done{id: id, model: model, finish_reason: finish_reason, usage: usage}
     end
   end
@@ -131,7 +153,7 @@ defmodule CodePuppyControl.Stream.EventPropertyTest do
 
   describe "to_wire/from_wire round-trip" do
     property "from_wire(to_wire(event)) == {:ok, event} for all event types" do
-      check all event <- event_gen(), max_runs: 100 do
+      check all(event <- event_gen(), max_runs: 100) do
         assert {:ok, ^event} = event |> Event.to_wire() |> Event.from_wire()
       end
     end
@@ -141,7 +163,7 @@ defmodule CodePuppyControl.Stream.EventPropertyTest do
 
   describe "JSON serialization round-trip" do
     property "event survives Jason.encode!/decode! via wire form" do
-      check all event <- event_gen(), max_runs: 100 do
+      check all(event <- event_gen(), max_runs: 100) do
         wire = Event.to_wire(event)
         json = Jason.encode!(wire)
         decoded = Jason.decode!(json)
@@ -169,7 +191,7 @@ defmodule CodePuppyControl.Stream.EventPropertyTest do
 
   describe "index invariant" do
     property "index is non-negative after wire round-trip" do
-      check all event <- indexed_event_gen(), max_runs: 100 do
+      check all(event <- indexed_event_gen(), max_runs: 100) do
         {:ok, restored} = event |> Event.to_wire() |> Event.from_wire()
         assert restored.index >= 0
       end

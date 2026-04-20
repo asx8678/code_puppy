@@ -105,9 +105,10 @@ defmodule CodePuppyControl.Messaging.ExtendedTest do
       {:ok, data} = Serializer.serialize_session(msgs)
       {:ok, restored} = Serializer.deserialize_session(data)
 
-      contents = Enum.map(restored, fn m ->
-        m["parts"] |> hd() |> Map.get("content")
-      end)
+      contents =
+        Enum.map(restored, fn m ->
+          m["parts"] |> hd() |> Map.get("content")
+        end)
 
       assert contents == ["Msg 1", "Msg 2", "Msg 3"]
     end
@@ -139,9 +140,11 @@ defmodule CodePuppyControl.Messaging.ExtendedTest do
 
       assert length(restored) == 2
       # Check content survives
-      contents = Enum.map(restored, fn m ->
-        m["parts"] |> hd() |> Map.get("content")
-      end)
+      contents =
+        Enum.map(restored, fn m ->
+          m["parts"] |> hd() |> Map.get("content")
+        end)
+
       assert "Buffered message 1" in contents
       assert "Buffered message 2" in contents
     end
@@ -152,9 +155,10 @@ defmodule CodePuppyControl.Messaging.ExtendedTest do
       {:ok, data} = Serializer.serialize_session(msgs)
       {:ok, restored} = Serializer.deserialize_session(data)
 
-      contents = Enum.map(restored, fn m ->
-        m["parts"] |> hd() |> Map.get("content")
-      end)
+      contents =
+        Enum.map(restored, fn m ->
+          m["parts"] |> hd() |> Map.get("content")
+        end)
 
       expected = Enum.map(1..10, &"Message #{&1}")
       assert contents == expected
@@ -217,6 +221,7 @@ defmodule CodePuppyControl.Messaging.ExtendedTest do
 
     test "prune drops oversized messages" do
       huge_content = String.duplicate("x", 60_000)
+
       msgs = [
         sample_message("info", huge_content),
         sample_message("info", "Small message")
