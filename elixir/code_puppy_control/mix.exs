@@ -10,6 +10,7 @@ defmodule CodePuppyControl.MixProject do
       start_permanent: Mix.env() == :prod,
       compilers: [:leex, :yecc] ++ Mix.compilers(),
       escript: escript(),
+      releases: releases(),
       aliases: aliases(),
       deps: deps()
     ]
@@ -56,7 +57,28 @@ defmodule CodePuppyControl.MixProject do
       # OS process management with PTY support (bd-217)
       {:erlexec, "~> 2.0"},
       # TUI rendering with Owl (bd-161)
-      {:owl, "~> 0.11"}
+      {:owl, "~> 0.11"},
+      # Burrito single-binary packaging (bd-171)
+      {:burrito, "~> 1.3", runtime: false}
+    ]
+  end
+
+  defp releases do
+    [
+      code_puppy_control: [
+        steps: [:assemble, &Burrito.wrap/1],
+        include_erts: true,
+        strip_beams: true,
+        burrito: [
+          targets: [
+            macos_arm64: [os: :darwin, cpu: :aarch64],
+            macos_x86_64: [os: :darwin, cpu: :x86_64],
+            linux_x86_64: [os: :linux, cpu: :x86_64],
+            linux_arm64: [os: :linux, cpu: :aarch64],
+            windows_x86_64: [os: :windows, cpu: :x86_64]
+          ]
+        ]
+      ]
     ]
   end
 

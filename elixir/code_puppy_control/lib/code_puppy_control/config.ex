@@ -96,25 +96,134 @@ defmodule CodePuppyControl.Config do
   @doc """
   Return the secret key base for Phoenix endpoint.
 
-  Required in production. Must be at least 64 bytes.
+  In production, checks `PUP_SECRET_KEY_BASE` env var first, then falls back
+  to `default_secret_key_base/0` if running under Burrito. Raises if neither
+  is available and not running as a Burrito binary.
+  Must be at least 64 bytes.
   """
   @spec secret_key_base() :: String.t()
   def secret_key_base do
-    get_required_string(:secret_key_base, "PUP_SECRET_KEY_BASE", "SECRET_KEY_BASE")
+    case get_string_with_legacy("PUP_SECRET_KEY_BASE", "SECRET_KEY_BASE", nil) do
+      value when is_binary(value) and byte_size(value) >= 64 ->
+        Application.put_env(:code_puppy_control, :secret_key_base, value)
+        value
+
+      value when is_binary(value) and byte_size(value) > 0 ->
+        # Non-empty but too short — always an error, regardless of Burrito mode
+        raise """
+        PUP_SECRET_KEY_BASE is set but shorter than 64 bytes (got #{byte_size(value)}).
+        Phoenix requires at least 64 bytes for secret_key_base.
+        """
+
+      _ ->
+        # nil or empty string — fall through to Burrito default or error
+        if burrito_binary?() do
+          default_secret_key_base()
+        else
+          raise """
+          Required environment variable PUP_SECRET_KEY_BASE is missing.
+
+          You can set it via:
+            export PUP_SECRET_KEY_BASE="your-value"
+
+          Note: The legacy name SECRET_KEY_BASE is also supported but deprecated.
+
+          Alternatively, run as a Burrito binary which auto-generates a key.
+          """
+        end
+    end
+  end
+
+  @doc """
+  Auto-generated secret key base for Burrito single-binary releases.
+
+  On first run, generates 48 random bytes via `:crypto.strong_rand_bytes/1`
+  and Base64-encodes them to a 64-byte string, then persists it to
+  `<user_data>/secret_key_base` so the same key is used across restarts.
+
+  Uses `:filename.basedir(:user_data, "code_puppy")` — NOT `~/.code_puppy/`.
+  """
+  @spec default_secret_key_base() :: String.t()
+  def default_secret_key_base do
+    user_data = :filename.basedir(:user_data, "code_puppy") |> to_string()
+    File.mkdir_p!(user_data)
+    key_file = Path.join(user_data, "secret_key_base")
+
+    case File.read(key_file) do
+      {:ok, key} when byte_size(key) >= 64 ->
+        key
+
+      _ ->
+        key = :crypto.strong_rand_bytes(48) |> Base.encode64()
+        File.write!(key_file, key)
+        key
+    end
+  end
+
+  @doc """
+  Returns `true` if running inside a Burrito-wrapped binary.
+
+  Burrito sets the `__BURRITO` environment variable at launch.
+  """
+  @spec burrito_binary?() :: boolean()
+  def burrito_binary? do
+    System.get_env("__BURRITO") != nil
   end
 
   @doc """
   Return the database path for SQLite.
-  Required in production. Defaults to `priv/dev.db` in dev/test.
+
+  In production, checks `PUP_DATABASE_PATH` env var first, then falls back
+  to `default_database_path/0` if running under Burrito (detected via
+  `__BURRITO` env var). Raises if neither is available.
+  Defaults to `priv/dev.db` in dev/test.
   """
   @spec database_path() :: String.t()
   def database_path do
     if prod?() do
-      get_required_string(:database_path, "PUP_DATABASE_PATH", "DATABASE_PATH")
+      case get_string_with_legacy("PUP_DATABASE_PATH", "DATABASE_PATH", nil) do
+        value when is_binary(value) and byte_size(value) > 0 ->
+          Application.put_env(:code_puppy_control, :database_path, value)
+          value
+
+        _ ->
+          # nil or empty string — fall through to Burrito default or error
+          if burrito_binary?() do
+            default_database_path()
+          else
+            raise """
+            Required environment variable PUP_DATABASE_PATH is missing.
+
+            You can set it via:
+              export PUP_DATABASE_PATH="your-value"
+
+            Note: The legacy name DATABASE_PATH is also supported but deprecated.
+
+            Alternatively, run as a Burrito binary which provides a sensible default.
+            """
+          end
+      end
     else
       Application.get_env(:code_puppy_control, CodePuppyControl.Repo)[:database] ||
         get_string_with_legacy("PUP_DATABASE_PATH", "DATABASE_PATH", "priv/dev.db")
     end
+  end
+
+  @doc """
+  Default database path for Burrito single-binary releases.
+
+  Uses `:filename.basedir(:user_data, "code_puppy")` for cross-platform
+  resolution (macOS: ~/Library/Application Support/code_puppy,
+  Linux: ~/.local/share/code_puppy, Windows: %LOCALAPPDATA%\code_puppy).
+
+  This path is intentionally outside `~/.code_puppy/` to respect
+  ADR-003 config isolation — the Python pup owns that directory.
+  """
+  @spec default_database_path() :: String.t()
+  def default_database_path do
+    user_data = :filename.basedir(:user_data, "code_puppy") |> to_string()
+    File.mkdir_p!(user_data)
+    Path.join(user_data, "data.sqlite")
   end
 
   @doc """

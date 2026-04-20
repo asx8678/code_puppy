@@ -176,6 +176,14 @@ This runs the 8 gate tests (GATE-1 through GATE-5) in under a second. The gates
 also run automatically on every PR that touches config, pup_ex tasks, or the
 workflow itself (see `.github/workflows/elixir-isolation-gates.yml`).
 
+## Building a Single-Binary Release (Burrito)
+
+For self-contained distribution without requiring Erlang/Elixir on the target
+machine, use Burrito via `scripts/build-burrito.sh`. Requires Zig on PATH.
+
+See [docs/burrito-release.md](docs/burrito-release.md) for prerequisites,
+platform matrix, and troubleshooting.
+
 ## License
 
 Same as the main code_puppy project.

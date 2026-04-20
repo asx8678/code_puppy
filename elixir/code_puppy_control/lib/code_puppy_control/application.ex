@@ -98,12 +98,73 @@ defmodule CodePuppyControl.Application do
     # tests. Production retains OTP defaults (3 restarts / 5 seconds).
     opts = [strategy: :one_for_one, name: CodePuppyControl.Supervisor] ++ @test_supervisor_opts
 
-    Supervisor.start_link(children, opts)
+    result = Supervisor.start_link(children, opts)
+
+    # When running inside a Burrito-wrapped binary, dispatch the CLI
+    # after the supervision tree is up, then halt the VM. This lets
+    # pup/code-puppy/gac behave identically under Burrito and escript.
+    #
+    # We spawn a separate process so the OTP start/2 contract (must
+    # return {:ok, pid}) is preserved — the CLI runner calls
+    # System.halt/1 when done.
+    if burrito_cli_mode?() do
+      args = burrito_argv()
+
+      spawn(fn ->
+        try do
+          CodePuppyControl.CLI.main(args)
+          System.halt(0)
+        rescue
+          e ->
+            IO.puts(:stderr, "Burrito CLI crashed: #{Exception.format(:error, e, __STACKTRACE__)}")
+            System.halt(1)
+        catch
+          :exit, {:shutdown, code} when is_integer(code) ->
+            System.halt(code)
+          kind, reason ->
+            IO.puts(:stderr, "Burrito CLI aborted (#{kind}): #{inspect(reason)}")
+            System.halt(1)
+        end
+      end)
+    end
+
+    result
   end
 
   @impl true
   def config_change(changed, _new, removed) do
     CodePuppyControlWeb.Endpoint.config_change(changed, removed)
     :ok
+  end
+
+  # ── Burrito CLI dispatch helpers (bd-171) ────────────────────────────────
+
+  # Detect Burrito runtime context. Burrito sets `__BURRITO` at launch.
+  defp burrito_cli_mode? do
+    System.get_env("__BURRITO") != nil
+  end
+
+  # Read CLI arguments passed through the Burrito wrapper.
+  #
+  # We use `:init.get_plain_arguments/1` directly instead of
+  # `Burrito.Util.Args.argv/0` because the :burrito dependency is
+  # declared `runtime: false` — it's only needed at build time for
+  # `mix release`. Calling Burrito modules at runtime would raise
+  # UndefinedFunctionError.
+  #
+  # This mirrors exactly what `Burrito.Util.Args.argv/0` does internally
+  # when running inside a Burrito binary (it delegates to
+  # `:init.get_plain_arguments/0`). Outside Burrito, `System.argv/0` is
+  # the correct source, so we fall back to that.
+  #
+  # TODO(bd-171): verify :init.get_plain_arguments captures Burrito argv
+  # in all cases; fall back to Burrito.Util.Args.argv/0 if needed
+  # (would require removing runtime: false from mix.exs dep).
+  defp burrito_argv do
+    if burrito_cli_mode?() do
+      :init.get_plain_arguments() |> Enum.map(&to_string/1)
+    else
+      System.argv()
+    end
   end
 end

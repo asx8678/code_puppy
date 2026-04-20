@@ -3428,7 +3428,7 @@
       "id": "bd-171",
       "title": "7.1 Burrito release (single-binary)",
       "description": "Configure Burrito for single-binary releases on macOS/Linux/Windows. Must bundle runtime, deps, and assets.",
-      "status": "open",
+      "status": "closed",
       "priority": 2,
       "type": "task",
       "labels": [
@@ -3443,8 +3443,11 @@
         ]
       },
       "created_at": "2026-04-18T19:48:29.925496",
-      "updated_at": "2026-04-19T00:56:48.924864",
-      "comments": []
+      "updated_at": "2026-04-21T00:38:10.188189",
+      "comments": [
+        "Claimed by planning-agent-019dac",
+        "Delivered by planning-agent-019dac on 2026-04-21:\n\n## What was delivered\n- Burrito 1.3 dep added to mix.exs with 5 targets (macOS arm64/x86_64, Linux x86_64/arm64, Windows x86_64)\n- releases/0 config with :assemble + &Burrito.wrap/1 steps, include_erts: true\n- CLI dispatch from CodePuppyControl.Application.start/2 on __BURRITO detection\n- Auto-defaults for PUP_SECRET_KEY_BASE and PUP_DATABASE_PATH when running under Burrito \u2014 respects ADR-003 (writes to :user_data basedir, NOT ~/.code_puppy/)\n- scripts/build-burrito.sh helper with --host-only and --target flags\n- docs/burrito-release.md covering prerequisites, build, first-run, known issues\n- Release config test suite with Burrito.wrap identity check, target OS/CPU assertions, ADR-003 isolation check, __BURRITO env var contract tests\n- Mix release overlays (rel/overlays/bin/code-puppy, gac) annotated as Mix-release-only\n- README 'Building a Single-Binary Release' section\n\n## What was deferred (follow-up issues)\n- A: macOS codesigning + notarization \u2192 bd-241\n- B: Windows Authenticode signing \u2192 bd-240\n- C: linux_musl target for Alpine \u2192 bd-239\n- D: CI matrix build + artifact publishing \u2192 bd-236\n- E: verify :init.get_plain_arguments captures Burrito argv on real binary \u2192 bd-238\n- F: harden release_config_test isolation \u2192 bd-237\n\n## Review status\nCode-reviewed by elixir-reviewer: \u2705 APPROVED WITH NITS (both nits fixed in follow-up commit).\nTests not run \u2014 /auto-test off is active."
+      ]
     },
     "bd-172": {
       "id": "bd-172",
@@ -4712,7 +4715,121 @@
       "created_at": "2026-04-21T00:05:18.646767",
       "updated_at": "2026-04-21T00:05:20.737358",
       "comments": []
+    },
+    "bd-236": {
+      "id": "bd-236",
+      "title": "Burrito: CI matrix build + artifact publishing",
+      "description": "Out of scope for bd-171 (core Burrito config only). Set up .github/workflows/burrito-release.yml with:\n- Matrix: macos-latest, ubuntu-latest, windows-latest\n- Trigger: git tags (v*) + workflow_dispatch\n- Artifacts: upload burrito_out/* to GitHub Release\n- Depends on: follow-ups for codesigning (A, B) to produce signed artifacts",
+      "status": "open",
+      "priority": 2,
+      "type": "task",
+      "labels": [
+        "migration,python-to-elixir,rewrite,phase-7,ci"
+      ],
+      "dependencies": {
+        "discovered-from": [
+          "bd-171"
+        ]
+      },
+      "created_at": "2026-04-21T00:37:44.996224",
+      "updated_at": "2026-04-21T00:37:58.428772",
+      "comments": []
+    },
+    "bd-237": {
+      "id": "bd-237",
+      "title": "Burrito: harden release_config_test for CI (isolate side effects)",
+      "description": "test/code_puppy_control/release_config_test.exs is currently async: false because it mutates __BURRITO env var globally and writes secret_key_base to :user_data basedir. This works but leaves:\n- A persisted secret_key_base file in the CI runner's user home\n- No isolation between test runs\n\nHarden by:\n- Override :user_data basedir via temp dir in test setup (see ADR-003 isolation test patterns)\n- Use Mix Task-style env isolation or setup_all with on_exit cleanup\n- Consider restoring async: true after isolation is in place",
+      "status": "open",
+      "priority": 3,
+      "type": "task",
+      "labels": [
+        "migration,python-to-elixir,rewrite,phase-7,tests"
+      ],
+      "dependencies": {
+        "discovered-from": [
+          "bd-171"
+        ]
+      },
+      "created_at": "2026-04-21T00:37:44.998153",
+      "updated_at": "2026-04-21T00:37:58.443973",
+      "comments": []
+    },
+    "bd-238": {
+      "id": "bd-238",
+      "title": "Burrito: verify :init.get_plain_arguments captures argv in Burrito runtime",
+      "description": "TODO left in lib/code_puppy_control/application.ex by bd-171:\n\n    defp burrito_argv do\n      if burrito_cli_mode?() do\n        :init.get_plain_arguments() |> Enum.map(&to_string/1)\n      else\n        System.argv()\n      end\n    end\n\nThis assumes  captures the CLI args Burrito forwards from its Zig wrapper. This should be true (Burrito boots BEAM via erl_start which sets plain_arguments), but it has NOT been verified on an actual Burrito binary yet.\n\nOnce a Burrito build is performed and tested:\n- If argv comes through correctly: close this issue, remove TODO\n- If argv is missing/mangled: remove  from the :burrito dep in mix.exs and revert to Burrito.Util.Args.argv/0",
+      "status": "open",
+      "priority": 2,
+      "type": "task",
+      "labels": [
+        "migration,python-to-elixir,rewrite,phase-7,verification"
+      ],
+      "dependencies": {
+        "discovered-from": [
+          "bd-171"
+        ]
+      },
+      "created_at": "2026-04-21T00:37:45.025543",
+      "updated_at": "2026-04-21T00:37:58.461458",
+      "comments": []
+    },
+    "bd-239": {
+      "id": "bd-239",
+      "title": "Burrito: add linux_musl target for Alpine/musl distros",
+      "description": "Out of scope for bd-171. Current Linux Burrito targets link against glibc,\nwhich excludes Alpine Linux and other musl-based distros. Add a\nlinux_musl_x86_64 target using a musl-cross Zig toolchain.\n\nSee docs/burrito-release.md Linux musl Alpine section.",
+      "status": "open",
+      "priority": 3,
+      "type": "task",
+      "labels": [
+        "migration,python-to-elixir,rewrite,phase-7,distribution,linux"
+      ],
+      "dependencies": {
+        "discovered-from": [
+          "bd-171"
+        ]
+      },
+      "created_at": "2026-04-21T00:37:50.366556",
+      "updated_at": "2026-04-21T00:37:58.453845",
+      "comments": []
+    },
+    "bd-240": {
+      "id": "bd-240",
+      "title": "Burrito: Windows Authenticode signing",
+      "description": "Out of scope for bd-171. Sign windows_x86_64 Burrito binary with an\nAuthenticode code-signing cert to avoid SmartScreen unrecognized app warnings.\n\nRequires:\n- EV or OV code-signing certificate\n- signtool.exe integration in build pipeline\n- CI secret for cert + password\n\nSee docs/burrito-release.md Windows SmartScreen section.",
+      "status": "open",
+      "priority": 3,
+      "type": "task",
+      "labels": [
+        "migration,python-to-elixir,rewrite,phase-7,distribution,windows"
+      ],
+      "dependencies": {
+        "discovered-from": [
+          "bd-171"
+        ]
+      },
+      "created_at": "2026-04-21T00:37:50.375350",
+      "updated_at": "2026-04-21T00:37:58.410027",
+      "comments": []
+    },
+    "bd-241": {
+      "id": "bd-241",
+      "title": "Burrito: macOS codesigning + notarization",
+      "description": "Out of scope for bd-171. Sign and notarize macOS Burrito binaries with Apple Developer ID so users do not need to bypass Gatekeeper. Requires: Apple Developer ID certificate, codesign step in build script, notarytool submission, CI secrets.",
+      "status": "open",
+      "priority": 3,
+      "type": "task",
+      "labels": [
+        "migration,python-to-elixir,rewrite,phase-7,distribution,macos"
+      ],
+      "dependencies": {
+        "discovered-from": [
+          "bd-171"
+        ]
+      },
+      "created_at": "2026-04-21T00:37:55.336169",
+      "updated_at": "2026-04-21T00:37:58.401383",
+      "comments": []
     }
   },
-  "counter": 235
+  "counter": 241
 }
