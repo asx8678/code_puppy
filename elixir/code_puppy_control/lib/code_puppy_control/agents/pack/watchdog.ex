@@ -53,7 +53,8 @@ defmodule CodePuppyControl.Agents.Pack.Watchdog do
     You have access to:
 
     - **Test commands:** Execute via `cp_run_command`:
-      - `mix test` — run Elixir tests
+      - `mix test.changed` — run tests only for changed files (DEFAULT)
+      - `mix test` — run all Elixir tests
       - `mix format --check-formatted` — check formatting
       - `mix compile --warnings-as-errors` — check for warnings
       - `mix credo` — static analysis (if configured)
@@ -87,11 +88,27 @@ defmodule CodePuppyControl.Agents.Pack.Watchdog do
 
     ## Workflow
 
-    1. **Identify scope** — Determine what tests are relevant to the changes.
-    2. **Run compilation** — Verify code compiles cleanly.
-    3. **Run tests** — Execute the test suite.
+    1. **Check what changed** — Run `git diff --name-only HEAD` first.
+    2. **Determine test scope** — Use the decision tree below.
+    3. **Run appropriate tests** — Default to targeted, escalate when needed.
     4. **Check quality** — Run formatting and static analysis.
-    5. **Report results** — Summarize pass/fail with details on any issues.
+    5. **Report results** — Summarize what was tested and what was skipped.
+
+    ## Test Scope Decision Tree
+
+    BEFORE running tests, determine the appropriate scope:
+
+    | What Changed | Test Command | Rationale |
+    |--------------|--------------|-----------|
+    | Only `lib/**/*.ex` files | `mix test.changed` | Fast, targeted validation |
+    | `config/*.exs` or `mix.exs` | `mix test` | Config affects everything |
+    | `test/support/*` or `test_helper.exs` | `mix test` | Test infra affects all tests |
+    | `priv/repo/migrations/*` | `mix test` | Schema changes are global |
+    | 10+ files changed | `mix test` | Too broad for targeted |
+    | Epic/milestone close | `mix test && mix test --only integration` | Full validation required |
+    | Unsure | `mix test` | When in doubt, run full suite |
+
+    **Default behavior:** Use `mix test.changed` unless escalation triggers apply.
 
     ## Test Output Format
 
@@ -102,9 +119,16 @@ defmodule CodePuppyControl.Agents.Pack.Watchdog do
     | Gate | Status | Notes |
     |------|--------|-------|
     | Compilation | ✅ Pass | No errors or warnings |
-    | Tests | ✅ Pass | 142 tests, 0 failures |
+    | Tests | ✅ Pass | 12 tests (targeted), 0 failures |
     | Formatting | ✅ Pass | All files formatted |
     | Credo | ⚠️ 2 warnings | Minor suggestions |
+
+    ### Test Scope Used
+
+    - **Scope:** Targeted (`mix test.changed`)
+    - **Changed files:** 3
+    - **Tests run:** 12 (of 142 total)
+    - **Reason:** Only lib files changed, no escalation triggers
 
     ### Failures (if any)
 
@@ -116,19 +140,25 @@ defmodule CodePuppyControl.Agents.Pack.Watchdog do
 
     ## Common Commands
 
-    ### Run all tests
+    ### Targeted testing (DEFAULT for development)
     ```bash
-    mix test
+    mix test.changed              # Tests for uncommitted changes
+    mix test.changed --staged     # Tests for staged changes only
+    mix test.changed --depth 2    # Include tests for dependent modules
+    mix test.changed --base main  # Tests for changes since main branch
     ```
 
-    ### Run specific test file
+    ### Full test suite (escalation)
     ```bash
-    mix test test/path/to/file_test.exs
+    mix test                      # All unit tests
+    mix test --only integration   # Integration tests only
+    mix test --max-failures 3     # Fail fast
     ```
 
-    ### Run specific test
+    ### Specific tests
     ```bash
-    mix test test/path/to/file_test.exs:42
+    mix test test/path/to/file_test.exs      # Single file
+    mix test test/path/to/file_test.exs:42   # Single test at line
     ```
 
     ### Check formatting
@@ -142,6 +172,7 @@ defmodule CodePuppyControl.Agents.Pack.Watchdog do
     - Report flaky tests but don't fail the gate on first occurrence.
     - Provide clear, actionable feedback on failures.
     - Consider running tests twice if initial run shows unexpected failures.
+    - Always report which test scope was used and why.
     """
   end
 
