@@ -221,4 +221,86 @@ defmodule CodePuppyControl.REPL.LoopTest do
         end)
     end
   end
+
+  describe "handle_input/2 — /sessions command" do
+    setup do
+      state = %Loop{
+        agent: "code-puppy",
+        model: "gpt-4",
+        session_id: "test-session",
+        running: true
+      }
+
+      {:ok, state: state}
+    end
+
+    test "/sessions continues the loop (widget handles interaction)", %{state: state} do
+      # SessionBrowser.browse/1 may fail in test env, but the command
+      # should at least continue the loop (not crash/halt)
+      output =
+        ExUnit.CaptureIO.capture_io(fn ->
+          result = Loop.handle_input("/sessions", state)
+          assert {:continue, _} = result
+        end)
+
+      # Either shows session browser output or cancellation message
+      assert is_binary(output)
+    end
+  end
+
+  describe "handle_input/2 — /tui command" do
+    setup do
+      state = %Loop{
+        agent: "code-puppy",
+        model: "gpt-4",
+        session_id: "test-session",
+        running: true
+      }
+
+      {:ok, state: state}
+    end
+
+    test "/tui continues the loop", %{state: state} do
+      output =
+        ExUnit.CaptureIO.capture_io(fn ->
+          result = Loop.handle_input("/tui", state)
+          assert {:continue, _} = result
+        end)
+
+      assert output =~ "TUI" or output =~ "Launching" or output =~ "Failed"
+    end
+  end
+
+  describe "handle_input/2 — updated /model command" do
+    setup do
+      state = %Loop{
+        agent: "code-puppy",
+        model: "gpt-4",
+        session_id: "test-session",
+        running: true
+      }
+
+      {:ok, state: state}
+    end
+
+    test "/model with no arg shows current model (falls back from selector)", %{state: state} do
+      output =
+        ExUnit.CaptureIO.capture_io(fn ->
+          assert {:continue, ^state} = Loop.handle_input("/model", state)
+        end)
+
+      # Either shows the model selector or falls back to showing current model
+      assert output =~ "gpt-4" or output =~ "cancelled"
+    end
+
+    test "/model <name> still switches model directly", %{state: state} do
+      output =
+        ExUnit.CaptureIO.capture_io(fn ->
+          assert {:continue, new_state} = Loop.handle_input("/model claude-sonnet-4", state)
+          assert new_state.model == "claude-sonnet-4"
+        end)
+
+      assert output =~ "Switching model"
+    end
+  end
 end

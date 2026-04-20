@@ -23,10 +23,12 @@ defmodule CodePuppyControl.REPL.Loop do
     * `/help`    — Show available commands
     * `/quit`    — Exit the REPL
     * `/exit`    — Alias for /quit
-    * `/model`   — Show current model
-    * `/model <name>` — Switch model
+    * `/model`   — Interactive model selection
+    * `/model <name>` — Switch model directly
     * `/agent`   — Show current agent
     * `/agent <name>` — Switch agent
+    * `/sessions` — Browse and switch sessions
+    * `/tui`     — Launch full TUI interface
     * `/clear`   — Clear the terminal screen
     * `/history` — Show command history
 
@@ -41,6 +43,9 @@ defmodule CodePuppyControl.REPL.Loop do
   alias CodePuppyControl.REPL.Input
   alias CodePuppyControl.REPL.History
   alias CodePuppyControl.Config.Models
+  alias CodePuppyControl.TUI.Widgets.ModelSelector
+  alias CodePuppyControl.TUI.Widgets.SessionBrowser
+  alias CodePuppyControl.TUI.App
 
   # ── State ──────────────────────────────────────────────────────────────────
 
@@ -214,6 +219,12 @@ defmodule CodePuppyControl.REPL.Loop do
       "/agent" ->
         handle_agent_command(args, state)
 
+      "/sessions" ->
+        handle_sessions_command(args, state)
+
+      "/tui" ->
+        handle_tui_command(state)
+
       "/clear" ->
         # ANSI clear screen + cursor home
         IO.write("\e[2J\e[H")
@@ -233,9 +244,31 @@ defmodule CodePuppyControl.REPL.Loop do
   # ── Command Handlers ──────────────────────────────────────────────────────
 
   defp handle_model_command("", state) do
-    # Show current model
-    IO.puts("Current model: #{state.model}")
-    {:continue, state}
+    # Interactive model selection via ModelSelector widget
+    # Falls back to showing current model if selection is unavailable
+    try do
+      case ModelSelector.select(default: state.model) do
+        {:ok, model_name} ->
+          IO.puts("Switching model: #{state.model} → #{model_name}")
+
+          try do
+            :ok = Models.set_global_model(model_name)
+          catch
+            :exit, _ -> :ok
+          end
+
+          {:continue, %{state | model: model_name}}
+
+        :cancelled ->
+          IO.puts("Model selection cancelled.")
+          {:continue, state}
+      end
+    rescue
+      _ ->
+        # ModelSelector may fail in non-TTY environments
+        IO.puts("Current model: #{state.model}")
+        {:continue, state}
+    end
   end
 
   defp handle_model_command(model_name, state) do
@@ -262,6 +295,82 @@ defmodule CodePuppyControl.REPL.Loop do
     agent_name = String.trim(agent_name)
     IO.puts("Switching agent: #{state.agent} → #{agent_name}")
     {:continue, %{state | agent: agent_name}}
+  end
+
+  # ── Sessions Command ────────────────────────────────────────────────────
+
+  defp handle_sessions_command("", state) do
+    # Launch interactive session browser
+    try do
+      case SessionBrowser.browse() do
+        {:ok, session_name} ->
+          IO.puts("Switching to session: #{session_name}")
+          {:continue, %{state | session_id: session_name}}
+
+        {:delete, session_name} ->
+          IO.puts("Session deletion requested: #{session_name}")
+          {:continue, state}
+
+        {:preview, session_name} ->
+          IO.puts("Session preview: #{session_name}")
+          {:continue, state}
+
+        :cancelled ->
+          IO.puts("Session browser cancelled.")
+          {:continue, state}
+      end
+    rescue
+      _ ->
+        IO.puts("Session browser unavailable (database not ready).")
+        {:continue, state}
+    end
+  end
+
+  defp handle_sessions_command(_args, state) do
+    # With arguments, just invoke browse with filter
+    try do
+      case SessionBrowser.browse(filter: String.trim(_args)) do
+        {:ok, session_name} ->
+          IO.puts("Switching to session: #{session_name}")
+          {:continue, %{state | session_id: session_name}}
+
+        {:delete, _name} ->
+          {:continue, state}
+
+        {:preview, _name} ->
+          {:continue, state}
+
+        :cancelled ->
+          {:continue, state}
+      end
+    rescue
+      _ ->
+        IO.puts("Session browser unavailable (database not ready).")
+        {:continue, state}
+    end
+  end
+
+  # ── TUI Command ────────────────────────────────────────────────────────
+
+  defp handle_tui_command(state) do
+    IO.puts("Launching TUI...")
+
+    try do
+      {:ok, _pid} =
+        App.start_link(
+          screen: CodePuppyControl.TUI.Screens.Chat,
+          screen_opts: %{
+            session_id: state.session_id,
+            model: state.model
+          }
+        )
+
+      {:continue, state}
+    catch
+      :exit, reason ->
+        IO.puts(IO.ANSI.red() <> "Failed to launch TUI: #{inspect(reason)}" <> IO.ANSI.reset())
+        {:continue, state}
+    end
   end
 
   # ── Shell Passthrough ─────────────────────────────────────────────────────
@@ -345,10 +454,13 @@ defmodule CodePuppyControl.REPL.Loop do
     Available commands:
       /help              Show this help message
       /quit, /exit       Exit the REPL
-      /model             Show current model
+      /model             Interactive model selection
       /model <name>      Switch to a different model
       /agent             Show current agent
       /agent <name>      Switch to a different agent
+      /sessions          Browse and switch sessions
+      /sessions <filter> Browse sessions matching filter
+      /tui               Launch full TUI interface
       /clear             Clear the terminal screen
       /history           Show command history
       !<command>         Run a shell command (e.g., !git status)

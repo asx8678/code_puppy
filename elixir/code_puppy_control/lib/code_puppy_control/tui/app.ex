@@ -77,9 +77,11 @@ defmodule CodePuppyControl.TUI.App do
   The previous screen is **discarded** (its `cleanup/1` is called).
   Use `push_screen/2` if you want to return later.
   """
-  @spec switch_screen(module(), Screen.opts()) :: :ok
-  def switch_screen(module, opts \\ %{}) do
-    GenServer.call(__MODULE__, {:switch_screen, module, opts})
+  @spec switch_screen(module(), Screen.opts(), GenServer.server()) :: :ok
+  def switch_screen(module, opts \\ %{}, server \\ __MODULE__)
+
+  def switch_screen(module, opts, server) do
+    GenServer.call(server, {:switch_screen, module, opts})
   end
 
   @doc """
@@ -87,9 +89,11 @@ defmodule CodePuppyControl.TUI.App do
 
   The current screen is suspended and will be restored by `pop_screen/0`.
   """
-  @spec push_screen(module(), Screen.opts()) :: :ok
-  def push_screen(module, opts \\ %{}) do
-    GenServer.call(__MODULE__, {:push_screen, module, opts})
+  @spec push_screen(module(), Screen.opts(), GenServer.server()) :: :ok
+  def push_screen(module, opts \\ %{}, server \\ __MODULE__)
+
+  def push_screen(module, opts, server) do
+    GenServer.call(server, {:push_screen, module, opts})
   end
 
   @doc """
@@ -97,9 +101,9 @@ defmodule CodePuppyControl.TUI.App do
 
   Does nothing if there is only one screen on the stack.
   """
-  @spec pop_screen() :: :ok
-  def pop_screen do
-    GenServer.call(__MODULE__, :pop_screen)
+  @spec pop_screen(GenServer.server()) :: :ok
+  def pop_screen(server \\ __MODULE__) do
+    GenServer.call(server, :pop_screen)
   end
 
   @doc """
@@ -110,25 +114,25 @@ defmodule CodePuppyControl.TUI.App do
     * `{:switch, mod, opts}` — navigate to new screen
     * `:quit` — stop the GenServer
   """
-  @spec send_input(String.t()) :: :ok
-  def send_input(input) do
-    GenServer.cast(__MODULE__, {:input, input})
+  @spec send_input(String.t(), GenServer.server()) :: :ok
+  def send_input(input, server \\ __MODULE__) do
+    GenServer.cast(server, {:input, input})
   end
 
   @doc """
   Return the module of the currently active screen.
   """
-  @spec current_screen() :: module() | nil
-  def current_screen do
-    GenServer.call(__MODULE__, :current_screen)
+  @spec current_screen(GenServer.server()) :: module() | nil
+  def current_screen(server \\ __MODULE__) do
+    GenServer.call(server, :current_screen)
   end
 
   @doc """
   Return the full screen stack (for diagnostics).
   """
-  @spec stack() :: [screen_entry()]
-  def stack do
-    GenServer.call(__MODULE__, :stack)
+  @spec stack(GenServer.server()) :: [screen_entry()]
+  def stack(server \\ __MODULE__) do
+    GenServer.call(server, :stack)
   end
 
   # ── GenServer Callbacks ──────────────────────────────────────────────────
@@ -275,6 +279,10 @@ defmodule CodePuppyControl.TUI.App do
 
   # Heuristic: detect if we're on a real terminal
   defp tty? do
-    :stdio |> :file.isatty()
+    if function_exported?(:file, :isatty, 1) do
+      :stdio |> :file.isatty()
+    else
+      false
+    end
   end
 end
