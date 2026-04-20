@@ -63,6 +63,7 @@ defmodule CodePuppyControl.LLM.Providers.Anthropic do
     initial_acc = %{
       line_buf: "",
       current_event: nil,
+      current_data: "",
       id: nil,
       model: nil,
       content_blocks: %{},
@@ -71,30 +72,30 @@ defmodule CodePuppyControl.LLM.Providers.Anthropic do
       stop_reason: nil
     }
 
-    {result, _acc} =
-      Enum.reduce(stream, {:ok, initial_acc}, fn
-        {:data, chunk}, {:ok, acc} ->
-          {events, acc} = parse_anthropic_sse_chunk(chunk, acc)
+    case Enum.reduce(stream, {:ok, initial_acc}, fn
+      {:data, chunk}, {:ok, acc} ->
+        {events, acc} = parse_anthropic_sse_chunk(chunk, acc)
 
-          Enum.reduce_while(events, {:ok, acc}, fn {event_type, data}, {:ok, acc} ->
-            case handle_sse_event(event_type, data, acc, callback_fn) do
-              {:ok, acc} -> {:cont, {:ok, acc}}
-              {:error, reason} -> {:halt, {:error, reason}}
-            end
-          end)
+        Enum.reduce_while(events, {:ok, acc}, fn {event_type, data}, {:ok, acc} ->
+          case handle_sse_event(event_type, data, acc, callback_fn) do
+            {:ok, acc} -> {:cont, {:ok, acc}}
+            {:error, reason} -> {:halt, {:error, reason}}
+          end
+        end)
 
-        {:done, _metadata}, {:ok, acc} ->
-          emit_done(acc, callback_fn)
-          {:ok, acc}
+      {:done, _metadata}, {:ok, acc} ->
+        emit_done(acc, callback_fn)
+        {:ok, acc}
 
-        {:error, msg}, {:ok, _acc} ->
-          {:error, msg}
+      {:error, msg}, {:ok, _acc} ->
+        {:error, msg}
 
-        _event, {:error, reason} ->
-          {:error, reason}
-      end)
-
-    result
+      _event, {:error, reason} ->
+        {:error, reason}
+    end) do
+      {:ok, _acc} -> :ok
+      {:error, reason} -> {:error, reason}
+    end
   end
 
   @impl Provider
@@ -309,20 +310,22 @@ defmodule CodePuppyControl.LLM.Providers.Anthropic do
   #
   # Line-based parser that tracks current event type and data lines.
   defp parse_anthropic_sse_chunk(chunk, acc) do
-    lines = String.split(acc.line_buf <> chunk, "\n")
+    combined = acc.line_buf <> chunk
+    lines = String.split(combined, "\n", trim: false)
 
     {complete, remaining} =
-      case List.last(lines) do
-        "" -> {lines, ""}
-        _ -> {Enum.drop(lines, -1), List.last(lines)}
+      if String.ends_with?(combined, "\n") do
+        {Enum.drop(lines, -1), ""}
+      else
+        {Enum.drop(lines, -1), List.last(lines)}
       end
 
     {events, state} =
-      Enum.reduce(complete, {[], %{event: acc.current_event, data: ""}}, fn line,
-                                                                            {events, state} ->
+      Enum.reduce(complete, {[], %{event: acc.current_event, data: acc.current_data}}, fn line,
+                                                                                          {events,
+                                                                                           state} ->
         case line do
           "" ->
-            # Event boundary — yield completed event if we have both event type and data
             cond do
               state.event != nil and state.data != "" ->
                 case Jason.decode(state.data) do
@@ -331,11 +334,10 @@ defmodule CodePuppyControl.LLM.Providers.Anthropic do
                 end
 
               state.event != nil ->
-                # Event type set but no data — might be a ping
                 {[{state.event, %{}} | events], %{event: nil, data: ""}}
 
               true ->
-                {events, state}
+                {events, %{state | data: ""}}
             end
 
           "event: " <> event_type ->
@@ -350,7 +352,8 @@ defmodule CodePuppyControl.LLM.Providers.Anthropic do
         end
       end)
 
-    {Enum.reverse(events), %{acc | line_buf: remaining, current_event: state.event}}
+    {Enum.reverse(events),
+     %{acc | line_buf: remaining, current_event: state.event, current_data: state.data}}
   end
 
   defp handle_sse_event("message_start", data, acc, _callback_fn) do

@@ -69,30 +69,30 @@ defmodule CodePuppyControl.LLM.Providers.OpenAI do
       finish_reason: nil
     }
 
-    {result, _acc} =
-      Enum.reduce(stream, {:ok, initial_acc}, fn
-        {:data, chunk}, {:ok, acc} ->
-          {events, acc} = parse_sse_chunk(chunk, acc)
+    case Enum.reduce(stream, {:ok, initial_acc}, fn
+      {:data, chunk}, {:ok, acc} ->
+        {events, acc} = parse_sse_chunk(chunk, acc)
 
-          Enum.reduce_while(events, {:ok, acc}, fn event, {:ok, acc} ->
-            case handle_sse_event(event, acc, callback_fn) do
-              {:ok, acc} -> {:cont, {:ok, acc}}
-              {:error, reason} -> {:halt, {:error, reason}}
-            end
-          end)
+        Enum.reduce_while(events, {:ok, acc}, fn event, {:ok, acc} ->
+          case handle_sse_event(event, acc, callback_fn) do
+            {:ok, acc} -> {:cont, {:ok, acc}}
+            {:error, reason} -> {:halt, {:error, reason}}
+          end
+        end)
 
-        {:done, _metadata}, {:ok, acc} ->
-          emit_done(acc, callback_fn)
-          {:ok, acc}
+      {:done, _metadata}, {:ok, acc} ->
+        emit_done(acc, callback_fn)
+        {:ok, acc}
 
-        {:error, msg}, {:ok, _acc} ->
-          {:error, msg}
+      {:error, msg}, {:ok, _acc} ->
+        {:error, msg}
 
-        _event, {:error, reason} ->
-          {:error, reason}
-      end)
-
-    result
+      _event, {:error, reason} ->
+        {:error, reason}
+    end) do
+      {:ok, _acc} -> :ok
+      {:error, reason} -> {:error, reason}
+    end
   end
 
   @impl Provider
@@ -216,7 +216,7 @@ defmodule CodePuppyControl.LLM.Providers.OpenAI do
          }}
 
       {:ok, %{"error" => error}} ->
-        {:error, %{status: 200, body: error}}
+        {:error, %{body: error}}
 
       {:error, reason} ->
         {:error, {:json_decode_error, reason}}

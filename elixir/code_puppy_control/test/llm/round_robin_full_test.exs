@@ -14,13 +14,9 @@ defmodule CodePuppyControl.LLM.RoundRobinFullTest do
   - G29: Strategy.select with context (equivalent of request_stream + run_context)
 
   Deferred (G30–G35): OpenTelemetry span attribute tests.
-  Elixir does not currently integrate OpenTelemetry. When OTel is added,
-  port test_set_span_attributes_recording_matching_model,
-  test_set_span_attributes_recording_non_matching_model,
-  test_set_span_attributes_not_recording,
-  test_set_span_attributes_no_attributes, and
-  test_set_span_attributes_exception_suppressed from
-  tests/test_round_robin_model_full_coverage.py.
+  Now ported to test/llm/otel_span_test.exs (bd-227).
+  Tests are tagged @moduletag :otel and @moduletag skip: until OTel
+  is integrated into the Elixir stack.
   """
 
   use ExUnit.Case, async: false
@@ -360,29 +356,10 @@ defmodule CodePuppyControl.LLM.RoundRobinFullTest do
     end
   end
 
-  # ── G30–G35: Deferred — OpenTelemetry Span Attributes ────────────────────
+  # ── G30–G35: OpenTelemetry Span Attributes ─────────────────────────────────
   #
-  # The following Python tests are DEFERRED until Elixir integrates
-  # OpenTelemetry:
-  #
-  # - test_set_span_attributes_recording_matching_model
-  #   When span is recording and gen_ai.request.model matches round_robin
-  #   name, set gen_ai.response.model to the actual model used.
-  #
-  # - test_set_span_attributes_recording_non_matching_model
-  #   When span's gen_ai.request.model doesn't match, don't set attributes.
-  #
-  # - test_set_span_attributes_not_recording
-  #   When span is not recording, don't set attributes.
-  #
-  # - test_set_span_attributes_no_attributes
-  #   When span has no attributes, should not crash.
-  #
-  # - test_set_span_attributes_exception_suppressed
-  #   Exceptions in _set_span_attributes are suppressed (Python's
-  #   `with suppress(Exception)` pattern).
-  #
-  # TODO(bd-212): Port OTel span attribute tests when Elixir OTel is available.
+  # Ported to test/llm/otel_span_test.exs (bd-227).
+  # Tests are tagged :otel and :skip until OTel is integrated.
 
   describe "validation edge cases" do
     test "configure rejects empty models list" do

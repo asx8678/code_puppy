@@ -35,6 +35,8 @@ defmodule CodePuppyControl.Application do
 
   use Application
 
+  @test_supervisor_opts if Mix.env() == :test, do: [max_restarts: 100, max_seconds: 1], else: []
+
   @impl true
   def start(_type, _args) do
     children = [
@@ -92,7 +94,10 @@ defmodule CodePuppyControl.Application do
       CodePuppyControlWeb.Endpoint
     ]
 
-    opts = [strategy: :one_for_one, name: CodePuppyControl.Supervisor]
+    # Relax restart intensity in test to tolerate repeated kills in OTP lifecycle
+    # tests. Production retains OTP defaults (3 restarts / 5 seconds).
+    opts = [strategy: :one_for_one, name: CodePuppyControl.Supervisor] ++ @test_supervisor_opts
+
     Supervisor.start_link(children, opts)
   end
 
