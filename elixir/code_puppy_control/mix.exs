@@ -54,7 +54,9 @@ defmodule CodePuppyControl.MixProject do
       # xxhash for pure Elixir HashLine implementation (bd-147)
       {:xxhash, "~> 0.3"},
       # OS process management with PTY support (bd-217)
-      {:erlexec, "~> 2.0"}
+      {:erlexec, "~> 2.0"},
+      # TUI rendering with Owl (bd-161)
+      {:owl, "~> 0.11"}
     ]
   end
 
