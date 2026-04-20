@@ -174,6 +174,7 @@ defmodule CodePuppyControl.TestSupport.OtpLifecycleHelpers do
   Spawn N workers that call `fun` repeatedly, then kill the target module mid-flight.
   Workers trap exits and catch errors, so they never crash.
   Returns {success_count, error_count} from all worker invocations.
+  Only non-nil, non-exit results count as successes.
   """
   @spec spawn_workers_and_kill(pos_integer(), pos_integer(), module(), (-> term())) ::
           {non_neg_integer(), non_neg_integer()}
@@ -188,8 +189,10 @@ defmodule CodePuppyControl.TestSupport.OtpLifecycleHelpers do
 
         for _j <- 1..iterations do
           try do
-            fun.()
-            :atomics.add(success_count, 1, 1)
+            case fun.() do
+              nil -> :atomics.add(error_count, 1, 1)
+              _ -> :atomics.add(success_count, 1, 1)
+            end
           catch
             :exit, _ -> :atomics.add(error_count, 1, 1)
             _, _ -> :atomics.add(error_count, 1, 1)

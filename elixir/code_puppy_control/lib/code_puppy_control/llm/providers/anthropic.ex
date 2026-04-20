@@ -73,26 +73,26 @@ defmodule CodePuppyControl.LLM.Providers.Anthropic do
     }
 
     case Enum.reduce(stream, {:ok, initial_acc}, fn
-      {:data, chunk}, {:ok, acc} ->
-        {events, acc} = parse_anthropic_sse_chunk(chunk, acc)
+           {:data, chunk}, {:ok, acc} ->
+             {events, acc} = parse_anthropic_sse_chunk(chunk, acc)
 
-        Enum.reduce_while(events, {:ok, acc}, fn {event_type, data}, {:ok, acc} ->
-          case handle_sse_event(event_type, data, acc, callback_fn) do
-            {:ok, acc} -> {:cont, {:ok, acc}}
-            {:error, reason} -> {:halt, {:error, reason}}
-          end
-        end)
+             Enum.reduce_while(events, {:ok, acc}, fn {event_type, data}, {:ok, acc} ->
+               case handle_sse_event(event_type, data, acc, callback_fn) do
+                 {:ok, acc} -> {:cont, {:ok, acc}}
+                 {:error, reason} -> {:halt, {:error, reason}}
+               end
+             end)
 
-      {:done, _metadata}, {:ok, acc} ->
-        emit_done(acc, callback_fn)
-        {:ok, acc}
+           {:done, _metadata}, {:ok, acc} ->
+             emit_done(acc, callback_fn)
+             {:ok, acc}
 
-      {:error, msg}, {:ok, _acc} ->
-        {:error, msg}
+           {:error, msg}, {:ok, _acc} ->
+             {:error, msg}
 
-      _event, {:error, reason} ->
-        {:error, reason}
-    end) do
+           _event, {:error, reason} ->
+             {:error, reason}
+         end) do
       {:ok, _acc} -> :ok
       {:error, reason} -> {:error, reason}
     end
@@ -295,6 +295,29 @@ defmodule CodePuppyControl.LLM.Providers.Anthropic do
     }
   end
 
+  defp merge_usage(existing_usage, usage) when is_map(usage) do
+    existing = existing_usage || %{prompt_tokens: 0, completion_tokens: 0, total_tokens: 0}
+    parsed = parse_usage(usage)
+
+    prompt_tokens =
+      if Map.has_key?(usage, "input_tokens"),
+        do: parsed.prompt_tokens,
+        else: existing.prompt_tokens
+
+    completion_tokens =
+      if Map.has_key?(usage, "output_tokens"),
+        do: parsed.completion_tokens,
+        else: existing.completion_tokens
+
+    %{
+      prompt_tokens: prompt_tokens,
+      completion_tokens: completion_tokens,
+      total_tokens: prompt_tokens + completion_tokens
+    }
+  end
+
+  defp merge_usage(existing_usage, _), do: existing_usage
+
   defp parse_error_body(body) do
     case Jason.decode(body) do
       {:ok, %{"error" => error}} -> error
@@ -311,10 +334,11 @@ defmodule CodePuppyControl.LLM.Providers.Anthropic do
   # Line-based parser that tracks current event type and data lines.
   defp parse_anthropic_sse_chunk(chunk, acc) do
     combined = acc.line_buf <> chunk
-    lines = String.split(combined, "\n", trim: false)
+    lines = :binary.split(combined, "\n", [:global])
+    ends_with_newline = byte_size(combined) > 0 and :binary.last(combined) == ?\n
 
     {complete, remaining} =
-      if String.ends_with?(combined, "\n") do
+      if ends_with_newline do
         {Enum.drop(lines, -1), ""}
       else
         {Enum.drop(lines, -1), List.last(lines)}
@@ -358,7 +382,14 @@ defmodule CodePuppyControl.LLM.Providers.Anthropic do
 
   defp handle_sse_event("message_start", data, acc, _callback_fn) do
     message = data["message"] || %{}
-    {:ok, %{acc | id: message["id"] || acc.id, model: message["model"] || acc.model}}
+
+    {:ok,
+     %{
+       acc
+       | id: message["id"] || acc.id,
+         model: message["model"] || acc.model,
+         usage: merge_usage(acc.usage, message["usage"] || %{})
+     }}
   end
 
   defp handle_sse_event("content_block_start", data, acc, callback_fn) do
@@ -487,7 +518,7 @@ defmodule CodePuppyControl.LLM.Providers.Anthropic do
       |> then(fn acc ->
         case data["usage"] do
           nil -> acc
-          usage -> %{acc | usage: parse_usage(usage)}
+          usage -> %{acc | usage: merge_usage(acc.usage, usage)}
         end
       end)
 

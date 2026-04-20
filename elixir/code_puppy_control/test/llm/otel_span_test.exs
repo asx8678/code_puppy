@@ -136,45 +136,16 @@ defmodule CodePuppyControl.LLM.OtelSpanTest do
   end
 
   # ---------------------------------------------------------------------------
-  # Helper: the function under test (placeholder)
+  # Helper: delegate to the real production integration point
   # ---------------------------------------------------------------------------
-  # When the real implementation exists, this will delegate to
-  # CodePuppyControl.Telemetry.set_span_attributes/2 or similar.
-  # For now, we implement the expected logic locally so the tests
-  # are meaningful once the real module is wired up.
+  # These tests intentionally target the future production API so they cannot
+  # go green against a test-local placeholder implementation.
 
-  @doc """
-  Sets span attributes following the Python _set_span_attributes contract.
-
-  - Only sets attributes if the span is recording
-  - Only sets `gen_ai.response.model` if `gen_ai.request.model`
-    matches `round_robin_name`
-  - Never raises (all exceptions are suppressed)
-  """
-  def set_span_attributes(span, round_robin_name, response_model_name) do
-    try do
-      if span.__struct__.is_recording(span) do
-        request_model = get_request_model(span)
-
-        if request_model == round_robin_name do
-          span.__struct__.set_attributes(span, %{
-            "gen_ai.response.model" => response_model_name
-          })
-        else
-          span
-        end
-      else
-        span
-      end
-    rescue
-      _ -> span
-    end
-  end
-
-  defp get_request_model(span) do
-    case Map.fetch(span, :attributes) do
-      {:ok, attrs} when is_map(attrs) -> Map.get(attrs, "gen_ai.request.model")
-      _ -> nil
+  defp set_span_attributes(span, round_robin_name, response_model_name) do
+    if function_exported?(CodePuppyControl.Telemetry, :set_span_attributes, 3) do
+      CodePuppyControl.Telemetry.set_span_attributes(span, round_robin_name, response_model_name)
+    else
+      raise "CodePuppyControl.Telemetry.set_span_attributes/3 is not implemented yet"
     end
   end
 
@@ -350,18 +321,6 @@ defmodule CodePuppyControl.LLM.OtelSpanTest do
       result = set_span_attributes(span, "round_robin:x", "x")
 
       assert result != nil
-    end
-
-    test "does not propagate exceptions from attributes access" do
-      # A span whose :attributes key raises on access (e.g. a Python property).
-      # In Elixir, we can't easily make Map.fetch/2 raise on a struct key,
-      # so this test documents the contract from Python's `with suppress(Exception)`.
-      #
-      # The rescue clause in set_span_attributes catches _any_ exception.
-      # This is already proven by the two tests above (ExplodingSpan and
-      # LateExplodingSpan). Here we verify the invariant directly:
-      # observability must never crash the request.
-      assert true
     end
   end
 

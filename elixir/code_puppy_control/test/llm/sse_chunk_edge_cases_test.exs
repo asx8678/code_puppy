@@ -170,7 +170,31 @@ defmodule CodePuppyControl.LLM.SSEChunkEdgeCasesTest do
           assert done_response(events).content == "line1\nline2"
 
         :nomatch ->
-          flunk("Could not find escaped content in SSE body (searched for JSON-escaped backslash-n)")
+          flunk(
+            "Could not find escaped content in SSE body (searched for JSON-escaped backslash-n)"
+          )
+      end
+    end
+
+    test "split inside multibyte UTF-8 content bytes" do
+      body = MockLLMHTTP.openai_stream_fixture(chunks: ["🙂漢字"])
+
+      case :binary.match(body, "🙂") do
+        {pos, _len} ->
+          chunks = split_at_points(body, [pos + 1])
+          mock = SSEChunkHelpers.build_chunked_mock(chunks)
+
+          {_result, events} =
+            collect_stream(OpenAI, @default_messages, @default_tools,
+              http_client: mock,
+              api_key: "test-key",
+              model: "gpt-4o"
+            )
+
+          assert done_response(events).content == "🙂漢字"
+
+        :nomatch ->
+          flunk("Could not find UTF-8 content in OpenAI SSE body")
       end
     end
   end
@@ -281,6 +305,28 @@ defmodule CodePuppyControl.LLM.SSEChunkEdgeCasesTest do
       end
     end
 
+    test "split inside multibyte UTF-8 content bytes" do
+      body = MockLLMHTTP.anthropic_stream_fixture(chunks: ["🙂世界"])
+
+      case :binary.match(body, "🙂") do
+        {pos, _len} ->
+          chunks = split_at_points(body, [pos + 1])
+          mock = SSEChunkHelpers.build_chunked_mock(chunks)
+
+          {_result, events} =
+            collect_stream(Anthropic, @default_messages, @default_tools,
+              http_client: mock,
+              api_key: "test-key",
+              model: "claude-sonnet-4-20250514"
+            )
+
+          assert done_response(events).content == "🙂世界"
+
+        :nomatch ->
+          flunk("Could not find UTF-8 content in Anthropic SSE body")
+      end
+    end
+
     test "different event types arriving in rapid succession" do
       body = MockLLMHTTP.anthropic_stream_fixture(chunks: ["A", "B"])
 
@@ -319,6 +365,9 @@ defmodule CodePuppyControl.LLM.SSEChunkEdgeCasesTest do
       resp = done_response(events)
       assert resp.content == "Hello"
       assert resp.finish_reason == "end_turn"
+      assert resp.usage.prompt_tokens == 10
+      assert resp.usage.completion_tokens == 1
+      assert resp.usage.total_tokens == 11
     end
 
     test "multiple text deltas concatenate in order" do

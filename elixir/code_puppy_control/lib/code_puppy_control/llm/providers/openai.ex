@@ -61,6 +61,7 @@ defmodule CodePuppyControl.LLM.Providers.OpenAI do
 
     initial_acc = %{
       line_buf: "",
+      current_data: "",
       id: nil,
       model: nil,
       content_parts: %{},
@@ -70,26 +71,26 @@ defmodule CodePuppyControl.LLM.Providers.OpenAI do
     }
 
     case Enum.reduce(stream, {:ok, initial_acc}, fn
-      {:data, chunk}, {:ok, acc} ->
-        {events, acc} = parse_sse_chunk(chunk, acc)
+           {:data, chunk}, {:ok, acc} ->
+             {events, acc} = parse_sse_chunk(chunk, acc)
 
-        Enum.reduce_while(events, {:ok, acc}, fn event, {:ok, acc} ->
-          case handle_sse_event(event, acc, callback_fn) do
-            {:ok, acc} -> {:cont, {:ok, acc}}
-            {:error, reason} -> {:halt, {:error, reason}}
-          end
-        end)
+             Enum.reduce_while(events, {:ok, acc}, fn event, {:ok, acc} ->
+               case handle_sse_event(event, acc, callback_fn) do
+                 {:ok, acc} -> {:cont, {:ok, acc}}
+                 {:error, reason} -> {:halt, {:error, reason}}
+               end
+             end)
 
-      {:done, _metadata}, {:ok, acc} ->
-        emit_done(acc, callback_fn)
-        {:ok, acc}
+           {:done, _metadata}, {:ok, acc} ->
+             emit_done(acc, callback_fn)
+             {:ok, acc}
 
-      {:error, msg}, {:ok, _acc} ->
-        {:error, msg}
+           {:error, msg}, {:ok, _acc} ->
+             {:error, msg}
 
-      _event, {:error, reason} ->
-        {:error, reason}
-    end) do
+           _event, {:error, reason} ->
+             {:error, reason}
+         end) do
       {:ok, _acc} -> :ok
       {:error, reason} -> {:error, reason}
     end
@@ -266,20 +267,21 @@ defmodule CodePuppyControl.LLM.Providers.OpenAI do
   # Line-based SSE parser. Accumulates lines in line_buf, yields complete
   # data values when an empty line (event boundary) is encountered.
   defp parse_sse_chunk(chunk, acc) do
-    lines = String.split(acc.line_buf <> chunk, "\n")
+    combined = acc.line_buf <> chunk
+    lines = :binary.split(combined, "\n", [:global])
+    ends_with_newline = byte_size(combined) > 0 and :binary.last(combined) == ?\n
 
-    # Last element may be incomplete line
     {complete, remaining} =
-      case List.last(lines) do
-        "" -> {lines, ""}
-        _ -> {Enum.drop(lines, -1), List.last(lines)}
+      if ends_with_newline do
+        {Enum.drop(lines, -1), ""}
+      else
+        {Enum.drop(lines, -1), List.last(lines)}
       end
 
-    {events, _data_buf} =
-      Enum.reduce(complete, {[], ""}, fn line, {events, data_buf} ->
+    {events, data_buf} =
+      Enum.reduce(complete, {[], acc.current_data}, fn line, {events, data_buf} ->
         case line do
           "" ->
-            # Empty line = event boundary. If we have data, yield it.
             if data_buf != "" do
               {[data_buf | events], ""}
             else
@@ -287,18 +289,15 @@ defmodule CodePuppyControl.LLM.Providers.OpenAI do
             end
 
           "data: " <> data ->
-            # Accumulate data lines (SSE spec allows multi-line data)
             new_buf = if data_buf == "", do: data, else: data_buf <> "\n" <> data
             {events, new_buf}
 
           _ ->
-            # Ignore other SSE fields (event:, id:, etc.) for now
             {events, data_buf}
         end
       end)
 
-    # Reverse events to get chronological order
-    {Enum.reverse(events), %{acc | line_buf: remaining}}
+    {Enum.reverse(events), %{acc | line_buf: remaining, current_data: data_buf}}
   end
 
   defp handle_sse_event("DONE", acc, _callback_fn) do
