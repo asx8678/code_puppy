@@ -91,18 +91,7 @@ defmodule CodePuppyControl.CLI do
   # ---------------------------------------------------------------------------
 
   defp run_interactive(opts) do
-    # TODO(bd-172): Wire to CodePuppyControl interactive loop
-    # Currently a placeholder that echoes intent.
-    model = Map.get(opts, :model)
-    agent = Map.get(opts, :agent, "code-puppy")
-
-    if model do
-      IO.puts("[cli] Interactive mode (agent=#{agent}, model=#{model})")
-    else
-      IO.puts("[cli] Interactive mode (agent=#{agent}, model=from config)")
-    end
-
-    IO.puts("[cli] Interactive loop not yet implemented - exiting")
+    CodePuppyControl.REPL.Loop.run(opts)
   end
 
   defp run_single_prompt(opts) do
