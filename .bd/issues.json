@@ -4558,7 +4558,7 @@
       "id": "bd-229",
       "title": "Duplicate source tree at repo root (lib/, test/) shadows real project under elixir/code_puppy_control/",
       "description": "Commit e66e4272 copied files into BOTH locations. Fix 70e6576e only updated root copy, leaving elixir/ copy stale (30 lines behind). Problems: 1) Agent output inconsistency, 2) Tool path confusion made bd-167 harder, 3) Future drift risk. Scope: decide canonical location (elixir/), diff pairs and port newer content, delete duplicates, add CI gate/pre-commit, document layout. Evidence: root watchdog.ex has 2 commits (e66e4272, 70e6576e), elixir/ copy has only e66e4272. Blob diff: bloodhound.ex, retriever.ex, shepherd.ex, terrier.ex match; watchdog.ex differs (f146e8c4 vs fca9ae4f). Out of scope for bd-167.",
-      "status": "open",
+      "status": "closed",
       "priority": 1,
       "type": "task",
       "labels": [
@@ -4568,9 +4568,10 @@
       ],
       "dependencies": {},
       "created_at": "2026-04-20T21:06:20.727500",
-      "updated_at": "2026-04-20T21:54:49.578245",
+      "updated_at": "2026-04-20T22:17:35.985806",
       "comments": [
-        "Claimed by planning-agent-019dac. Starting Phase 1 reconnaissance: (1) confirm on-disk state of elixir/code_puppy_control/, (2) inspect commits e66e4272 and 70e6576e, (3) diff the two trees if both exist, (4) inventory all path references. Drift report will follow before any destructive operations."
+        "Claimed by planning-agent-019dac. Starting Phase 1 reconnaissance: (1) confirm on-disk state of elixir/code_puppy_control/, (2) inspect commits e66e4272 and 70e6576e, (3) diff the two trees if both exist, (4) inventory all path references. Drift report will follow before any destructive operations.",
+        "Implementation complete. Merged 30-line watchdog.ex drift (mix test.changed decision tree + targeted-test commands) from root orphan into canonical elixir/code_puppy_control/lib/. Deleted 5 orphan files + empty root /test/ dir. Added no-shadow-tree CI job that fails if lib/ or test/ reappear at repo root. mix compile passes (pre-existing --warnings-as-errors failures in stdio_service.ex/limits.ex/port.ex are unrelated). Tests NOT run (auto-test off)."
       ]
     }
   },
