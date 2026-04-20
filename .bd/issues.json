@@ -4400,7 +4400,7 @@
       "id": "bd-221",
       "title": "LLM facade provider-type parity with ModelFactory",
       "description": "ModelFactory supports provider types (gemini, gemini_oauth, custom_gemini) that LLM.provider_for/1 doesn't handle. Add facade tests for all provider variants.",
-      "status": "open",
+      "status": "closed",
       "priority": 0,
       "type": "task",
       "labels": [
@@ -4408,14 +4408,16 @@
       ],
       "dependencies": {},
       "created_at": "2026-04-20T12:16:34.818968",
-      "updated_at": "2026-04-20T12:16:34.818977",
-      "comments": []
+      "updated_at": "2026-04-20T12:32:21.209856",
+      "comments": [
+        "Fixed: Added gemini, gemini_oauth, custom_gemini to LLM @provider_map. Added claude_code to ModelFactory. Created provider_parity_test.exs with 5 tests ensuring maps stay in sync."
+      ]
     },
     "bd-222": {
       "id": "bd-222",
       "title": "Fix duplicate /v1 path for custom OpenAI endpoints",
       "description": "Custom endpoint URL gets /v1 appended twice. Fix path assembly and add regression test.",
-      "status": "open",
+      "status": "closed",
       "priority": 0,
       "type": "task",
       "labels": [
@@ -4423,14 +4425,14 @@
       ],
       "dependencies": {},
       "created_at": "2026-04-20T12:16:34.832611",
-      "updated_at": "2026-04-20T12:16:34.832623",
+      "updated_at": "2026-04-20T12:32:17.543786",
       "comments": []
     },
     "bd-223": {
       "id": "bd-223",
       "title": "Custom endpoint headers/API key propagation tests",
       "description": "Handle.to_provider_opts/1 doesn't forward extra_headers. Add end-to-end tests for custom proxy endpoints.",
-      "status": "open",
+      "status": "closed",
       "priority": 0,
       "type": "task",
       "labels": [
@@ -4438,8 +4440,10 @@
       ],
       "dependencies": {},
       "created_at": "2026-04-20T12:16:34.835042",
-      "updated_at": "2026-04-20T12:16:34.835053",
-      "comments": []
+      "updated_at": "2026-04-20T12:32:21.211635",
+      "comments": [
+        "Fixed: Handle.to_provider_opts/1 now includes extra_headers. Both OpenAI and Anthropic providers merge extra_headers into requests. Added end-to-end tests proving header propagation."
+      ]
     },
     "bd-224": {
       "id": "bd-224",
