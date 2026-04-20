@@ -1,0 +1,178 @@
+defmodule CodePuppyControl.TUI.Progress do
+  @moduledoc """
+  Progress indicators backed by Owl.Spinner and Owl.ProgressBar.
+
+  Provides a thin, puppy-friendly wrapper around Owl's live-updating
+  terminal widgets. Use this module (not Owl directly) so the rest of
+  the codebase stays decoupled from the rendering backend.
+
+  ## Usage
+
+      # Spinner
+      {:ok, pid} = Progress.spinner("Compiling...")
+      :timer.sleep(2000)
+      Progress.stop(pid)
+
+      # Progress bar
+      Progress.bar(50, 100, label: "Downloading")
+      Progress.bar(100, 100, label: "Downloading")
+
+  ## Design notes
+
+  * `spinner/1` returns `{:ok, pid}` — callers should **not** store the
+    pid across async boundaries without monitoring. For GenServer-managed
+    spinners (e.g. the Renderer's tool-call spinners), use the internal
+    `Owl.Spinner` API directly with reference tracking.
+  * `bar/3` is fire-and-forget — it renders inline and returns `:ok`.
+  * All functions are safe to call when Owl is unavailable (e.g. in CI
+    with no TTY); they return `{:error, :no_tty}` in that case.
+  """
+
+  alias Owl.Data
+
+  # ── Constants ─────────────────────────────────────────────────────────────
+
+  # Owl.Spinner refresh interval (ms)
+  @default_refresh_ms 80
+
+  # Progress bar width in terminal columns
+  @default_bar_width 40
+
+  # ── Spinner ────────────────────────────────────────────────────────────────
+
+  @doc """
+  Starts a labelled spinner in the terminal.
+
+  Returns `{:ok, pid}` on success, `{:error, reason}` on failure.
+  When no TTY is available, returns `{:error, :no_tty}`.
+
+  ## Options
+
+    * `:refresh_every` — frame interval in ms (default 80)
+    * `:frames` — list of frame strings (defaults to Owl's braille dots)
+
+  ## Examples
+
+      {:ok, pid} = Progress.spinner("Fetching results...")
+      Progress.stop(pid)
+  """
+  @spec spinner(String.t(), keyword()) :: {:ok, pid()} | {:error, term()}
+  def spinner(label, opts \\ []) do
+    if tty_available?() do
+      refresh = Keyword.get(opts, :refresh_every, @default_refresh_ms)
+
+      spinner_opts = [
+        labels: [processing: Data.tag(label, :faint)],
+        refresh_every: refresh
+      ]
+
+      case Owl.Spinner.start(spinner_opts) do
+        {:ok, pid} ->
+          Owl.Spinner.update(pid, labels: [processing: Data.tag(label, :faint)])
+          {:ok, pid}
+
+        {:error, reason} ->
+          {:error, reason}
+      end
+    else
+      {:error, :no_tty}
+    end
+  end
+
+  @doc """
+  Stops a running spinner.
+
+  Accepts the pid returned by `spinner/1`. The spinner is removed from
+  the terminal and the line is cleared.
+
+  ## Options
+
+    * `:resolution` — `:ok` (default) or `:error`, controls the final
+      icon displayed before removal.
+
+  ## Examples
+
+      Progress.stop(pid)
+      Progress.stop(pid, resolution: :error)
+  """
+  @spec stop(pid(), keyword()) :: :ok
+  def stop(pid, opts \\ []) do
+    resolution = Keyword.get(opts, :resolution, :ok)
+
+    try do
+      Owl.Spinner.stop(pid, resolution: resolution)
+    catch
+      :exit, _ -> :ok
+    end
+
+    :ok
+  end
+
+  # ── Progress Bar ────────────────────────────────────────────────────────────
+
+  @doc """
+  Renders an inline progress bar to the terminal.
+
+  This is a **one-shot** render — it does not start a live-updating
+  widget. For live progress, use `Owl.ProgressBar` directly or
+  integrate with `Owl.LiveScreen`.
+
+  ## Parameters
+
+    * `current` — items completed so far
+    * `total` — total items
+    * `opts` — keyword options below
+
+  ## Options
+
+    * `:label` — text shown before the bar (default `""`)
+    * `:width` — bar width in columns (default 40)
+    * `:color` — ANSI colour atom for the filled portion (default `:cyan`)
+
+  ## Examples
+
+      Progress.bar(25, 100, label: "Files")
+      Progress.bar(100, 100, label: "Done")
+  """
+  @spec bar(non_neg_integer(), non_neg_integer(), keyword()) :: :ok | {:error, :no_tty}
+  def bar(current, total, opts \\ []) do
+    if tty_available?() do
+      label = Keyword.get(opts, :label, "")
+      width = Keyword.get(opts, :width, @default_bar_width)
+      color = Keyword.get(opts, :color, :cyan)
+
+      ratio = if total > 0, do: current / total, else: 1.0
+      filled = trunc(ratio * width)
+      empty = width - filled
+
+      bar_inner =
+        Data.tag(String.duplicate("█", filled), color) <>
+          String.duplicate("░", empty)
+
+      pct = Float.round(ratio * 100, 1)
+
+      line =
+        if label != "" do
+          "#{label} [#{bar_inner}] #{pct}% (#{current}/#{total})"
+        else
+          "[#{bar_inner}] #{pct}% (#{current}/#{total})"
+        end
+
+      Owl.IO.puts(line)
+      :ok
+    else
+      {:error, :no_tty}
+    end
+  end
+
+  # ── Helpers ────────────────────────────────────────────────────────────────
+
+  # Detect whether we have a real TTY. Owl gracefully handles no-TTY
+  # scenarios, but we short-circuit to avoid visual glitches in CI.
+  defp tty_available? do
+    case :os.type() do
+      {:win32, _} -> true
+      _ -> System.get_env("TERM") != nil or System.get_env("COLORTERM") != nil
+    end
+  end
+end

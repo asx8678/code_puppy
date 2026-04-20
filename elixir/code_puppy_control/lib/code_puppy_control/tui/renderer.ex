@@ -186,6 +186,36 @@ defmodule CodePuppyControl.TUI.Renderer do
     GenServer.stop(server, :normal)
   end
 
+  # ── Supervision ────────────────────────────────────────────────────────────
+
+  @doc """
+  Returns a child spec suitable for a Supervisor.
+
+  The renderer is `:transient` — it won't restart unless it crashes
+  abnormally. Add it to your supervision tree like so:
+
+      children = [
+        {Renderer, session_id: "sess-123"}
+      ]
+
+  ## Options
+
+    * `:id` — custom child id (default `__MODULE__`)
+    * All other options are forwarded to `start_link/1`.
+  """
+  @spec child_spec(keyword()) :: Supervisor.child_spec()
+  def child_spec(opts) do
+    id = Keyword.get(opts, :id, __MODULE__)
+    init_args = Keyword.delete(opts, :id)
+
+    %{
+      id: id,
+      start: {__MODULE__, :start_link, [init_args]},
+      restart: :transient,
+      type: :worker
+    }
+  end
+
   # ── GenServer Callbacks ────────────────────────────────────────────────────
 
   @impl true
@@ -257,20 +287,21 @@ defmodule CodePuppyControl.TUI.Renderer do
   # ── Stream.Event Handlers ─────────────────────────────────────────────────
 
   defp handle_stream_event(%Event.TextStart{index: idx}, state) do
-    state
-    |> update_in([:streaming_parts], &MapSet.put(&1, idx))
-    |> update_in([:text_parts], &MapSet.put(&1, idx))
-    |> put_in([:text_buffer, idx], [])
-    |> print_banner("AGENT RESPONSE", :blue, "💬")
-    |> update_in([:banner_printed], &MapSet.put(&1, idx))
+    state = %{state |
+      streaming_parts: MapSet.put(state.streaming_parts, idx),
+      text_parts: MapSet.put(state.text_parts, idx),
+      text_buffer: Map.put(state.text_buffer, idx, []),
+      banner_printed: MapSet.put(state.banner_printed, idx)
+    }
+    print_banner(state, "AGENT RESPONSE", :blue, "💬")
   end
 
   defp handle_stream_event(%Event.TextDelta{index: idx, text: text}, state) do
-    state = update_in(state, [:token_count], &(&1 + 1))
+    state = %{state | token_count: state.token_count + 1}
 
     # Append to buffer
     existing = Map.get(state.text_buffer, idx, [])
-    state = put_in(state, [:text_buffer, idx], existing ++ [text])
+    state = %{state | text_buffer: Map.put(state.text_buffer, idx, existing ++ [text])}
 
     # Flush on newlines or when buffer exceeds threshold
     chunks = Map.get(state.text_buffer, idx, [])
@@ -278,7 +309,7 @@ defmodule CodePuppyControl.TUI.Renderer do
 
     if String.contains?(buf, "\n") or byte_size(buf) > @flush_threshold do
       owl_puts(Markdown.render(buf))
-      state = put_in(state, [:text_buffer, idx], [])
+      state = %{state | text_buffer: Map.put(state.text_buffer, idx, [])}
       update_rate(state)
     else
       state
@@ -292,17 +323,18 @@ defmodule CodePuppyControl.TUI.Renderer do
   end
 
   defp handle_stream_event(%Event.ThinkingStart{index: idx}, state) do
-    state
-    |> update_in([:streaming_parts], &MapSet.put(&1, idx))
-    |> update_in([:thinking_parts], &MapSet.put(&1, idx))
-    |> put_in([:thinking_buffer, idx], [])
-    |> print_banner("THINKING", :yellow, "⚡")
-    |> update_in([:banner_printed], &MapSet.put(&1, idx))
+    state = %{state |
+      streaming_parts: MapSet.put(state.streaming_parts, idx),
+      thinking_parts: MapSet.put(state.thinking_parts, idx),
+      thinking_buffer: Map.put(state.thinking_buffer, idx, []),
+      banner_printed: MapSet.put(state.banner_printed, idx)
+    }
+    print_banner(state, "THINKING", :yellow, "⚡")
   end
 
   defp handle_stream_event(%Event.ThinkingDelta{index: idx, text: text}, state) do
     existing = Map.get(state.thinking_buffer, idx, [])
-    put_in(state, [:thinking_buffer, idx], existing ++ [text])
+    %{state | thinking_buffer: Map.put(state.thinking_buffer, idx, existing ++ [text])}
   end
 
   defp handle_stream_event(%Event.ThinkingEnd{index: idx}, state) do
@@ -314,18 +346,18 @@ defmodule CodePuppyControl.TUI.Renderer do
       owl_puts(Owl.Data.tag(Markdown.render(text), :faint))
     end
 
-    state
-    |> put_in([:thinking_buffer, idx], nil)
-    |> cleanup_part(idx)
+    state = %{state | thinking_buffer: Map.put(state.thinking_buffer, idx, nil)}
+    cleanup_part(state, idx)
   end
 
   defp handle_stream_event(%Event.ToolCallStart{index: idx, name: name}, state) do
-    state
-    |> update_in([:streaming_parts], &MapSet.put(&1, idx))
-    |> update_in([:tool_parts], &MapSet.put(&1, idx))
-    |> print_tool_banner(name)
-    |> update_in([:banner_printed], &MapSet.put(&1, idx))
-    |> start_tool_spinner(idx, name)
+    state = %{state |
+      streaming_parts: MapSet.put(state.streaming_parts, idx),
+      tool_parts: MapSet.put(state.tool_parts, idx),
+      banner_printed: MapSet.put(state.banner_printed, idx)
+    }
+    state = print_tool_banner(state, name)
+    start_tool_spinner(state, idx, name)
   end
 
   defp handle_stream_event(%Event.ToolCallArgsDelta{}, state) do
@@ -406,7 +438,7 @@ defmodule CodePuppyControl.TUI.Renderer do
       owl_puts(Markdown.render(text))
     end
 
-    put_in(state, [:text_buffer, idx], [])
+    %{state | text_buffer: Map.put(state.text_buffer, idx, [])}
   end
 
   defp flush_all_text_buffers(state) do
@@ -483,9 +515,10 @@ defmodule CodePuppyControl.TUI.Renderer do
 
     case Owl.Spinner.start(spinner_opts) do
       {:ok, _pid} ->
-        state
-        |> put_in([:spinner_ids, idx], ref)
-        |> update_in([:loading_index], &(&1 + 1))
+        %{state |
+          spinner_ids: Map.put(state.spinner_ids, idx, ref),
+          loading_index: state.loading_index + 1
+        }
 
       {:error, reason} ->
         Logger.debug("TUI.Renderer: spinner start failed: #{inspect(reason)}")
@@ -533,7 +566,7 @@ defmodule CodePuppyControl.TUI.Renderer do
         # TODO(bd-161): Phase 2 — wire rate to a status bar / Owl.LiveScreen block
       end
 
-      put_in(state, [:last_rate_update], now)
+      %{state | last_rate_update: now}
     else
       state
     end
