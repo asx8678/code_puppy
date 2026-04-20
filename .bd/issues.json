@@ -3077,7 +3077,7 @@
       "id": "bd-157",
       "title": "2.2 Plugin discovery & loading (Elixir Plugin behaviour)",
       "description": "Build plugin discovery (scanning plugin dirs) and loading mechanism. Define an Elixir Plugin behaviour. Support both builtin and user plugins.",
-      "status": "open",
+      "status": "closed",
       "priority": 2,
       "type": "task",
       "labels": [
@@ -3093,7 +3093,7 @@
         ]
       },
       "created_at": "2026-04-18T19:48:03.330928",
-      "updated_at": "2026-04-19T00:56:48.586300",
+      "updated_at": "2026-04-19T23:19:43.747788",
       "comments": []
     },
     "bd-158": {

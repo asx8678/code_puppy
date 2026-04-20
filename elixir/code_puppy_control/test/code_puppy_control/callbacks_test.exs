@@ -192,6 +192,26 @@ defmodule CodePuppyControl.CallbacksTest do
     end
   end
 
+  describe "on/2 (Python-compatible alias)" do
+    test "on/2 delegates to trigger/2" do
+      Callbacks.register(:load_prompt, fn -> "## via on" end)
+
+      result = Callbacks.on(:load_prompt)
+      assert result == "## via on"
+    end
+
+    test "on/2 passes args to callbacks" do
+      Callbacks.register(:custom_command, fn cmd, name -> {:handled, cmd, name} end)
+
+      result = Callbacks.on(:custom_command, ["/echo hello", "echo"])
+      assert {:handled, "/echo hello", "echo"} = result
+    end
+
+    test "on/2 returns nil when no callbacks" do
+      assert nil == Callbacks.on(:load_prompt)
+    end
+  end
+
   describe "clear/1" do
     test "clears all callbacks" do
       Callbacks.register(:startup, fn -> :ok end)

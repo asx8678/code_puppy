@@ -146,18 +146,121 @@ defmodule CodePuppyControl.Plugins.Loader do
   defp load_builtin_plugins do
     ensure_ets_table()
 
-    # Find all compiled modules that implement PluginBehaviour
-    # and aren't already loaded
-    loaded_names = list_loaded() |> Enum.map(& &1.name)
+    loaded_names =
+      list_loaded()
+      |> Enum.map(& &1.name)
+      |> normalize_names()
 
-    :code.all_loaded()
-    |> Enum.map(fn {mod, _} -> mod end)
-    |> Enum.filter(&plugin_behaviour?/1)
-    |> Enum.reject(fn mod -> mod.name() in loaded_names end)
-    |> Enum.map(fn mod ->
-      register_plugin(mod, :builtin)
-      mod.name()
-    end)
+    # Discover compiled modules implementing PluginBehaviour
+    module_names =
+      :code.all_loaded()
+      |> Enum.map(fn {mod, _} -> mod end)
+      |> Enum.filter(&plugin_behaviour?/1)
+      |> Enum.reject(&already_loaded?(&1, loaded_names))
+      |> Enum.map(fn mod ->
+        register_plugin(mod, :builtin)
+        mod.name()
+      end)
+
+    # Discover builtin plugins in priv/plugins/
+    priv_names = load_priv_plugins(loaded_names)
+
+    module_names ++ priv_names
+  end
+
+  @doc false
+  @spec load_priv_plugins(MapSet.t()) :: [atom()]
+  defp load_priv_plugins(loaded_names) do
+    priv_dir = priv_plugins_dir()
+
+    unless File.dir?(priv_dir) do
+      []
+    else
+      priv_dir
+      |> File.ls!()
+      |> Enum.filter(fn name ->
+        dir = Path.join(priv_dir, name)
+
+        File.dir?(dir) and
+          not String.starts_with?(name, "_") and
+          not String.starts_with?(name, ".")
+      end)
+      |> Enum.flat_map(fn plugin_name ->
+        # Skip if already loaded by name (compare as strings)
+        normalized =
+          plugin_name
+          |> String.replace("-", "_")
+
+        if MapSet.member?(loaded_names, normalized) do
+          []
+        else
+          load_priv_plugin(plugin_name, priv_dir)
+        end
+      end)
+    end
+  end
+
+  @doc false
+  @spec load_priv_plugin(String.t(), String.t()) :: [atom()]
+  defp load_priv_plugin(plugin_name, plugins_dir) do
+    plugin_dir = Path.join(plugins_dir, plugin_name)
+
+    # Try register_callbacks.ex first, then any .ex file
+    ex_files =
+      [Path.join(plugin_dir, "register_callbacks.ex")]
+      |> Enum.filter(&File.exists?/1)
+      |> case do
+        [] ->
+          plugin_dir
+          |> File.ls!()
+          |> Enum.filter(&String.ends_with?(&1, ".ex"))
+          |> Enum.map(&Path.join(plugin_dir, &1))
+
+        files ->
+          files
+      end
+
+    case ex_files do
+      [] ->
+        Logger.debug("No .ex files found in priv plugin: #{plugin_name}")
+        []
+
+      files ->
+        Enum.flat_map(files, fn file ->
+          try do
+            modules_before = loaded_modules()
+            Code.compile_file(file)
+            modules_after = loaded_modules()
+            new_modules = modules_after -- modules_before
+
+            plugin_modules = Enum.filter(new_modules, &plugin_behaviour?/1)
+
+            Enum.map(plugin_modules, fn mod ->
+              register_plugin(mod, :builtin)
+              mod.name()
+            end)
+          rescue
+            e ->
+              Logger.error("Failed to load priv plugin '#{plugin_name}': #{Exception.message(e)}")
+
+              []
+          end
+        end)
+    end
+  end
+
+  @doc """
+  Returns the path to the priv/plugins/ directory for builtin plugins.
+  """
+  @spec priv_plugins_dir() :: String.t()
+  def priv_plugins_dir do
+    :code.priv_dir(:code_puppy_control)
+    |> to_string()
+    |> Path.join("plugins")
+  rescue
+    _ ->
+      # Fallback for development: priv/plugins/ relative to the project
+      Path.join([File.cwd!(), "priv", "plugins"])
   end
 
   # ── User Plugin Discovery ───────────────────────────────────────
@@ -172,7 +275,10 @@ defmodule CodePuppyControl.Plugins.Loader do
     unless File.dir?(plugins_dir) do
       []
     else
-      loaded_names = list_loaded() |> Enum.map(& &1.name)
+      loaded_names =
+        list_loaded()
+        |> Enum.map(& &1.name)
+        |> normalize_names()
 
       plugins_dir
       |> File.ls!()
@@ -183,7 +289,7 @@ defmodule CodePuppyControl.Plugins.Loader do
           not String.starts_with?(name, ".")
       end)
       |> Enum.flat_map(fn plugin_name ->
-        if plugin_name in loaded_names do
+        if MapSet.member?(loaded_names, to_string(plugin_name)) do
           []
         else
           load_user_plugin(plugin_name, plugins_dir)
@@ -197,7 +303,7 @@ defmodule CodePuppyControl.Plugins.Loader do
   defp load_user_plugin(plugin_name, plugins_dir) do
     plugin_dir = Path.join(plugins_dir, plugin_name)
 
-    # SECURITY: Validate no path traversal
+    # SECURITY: Validate no path traversal in the plugin name
     if String.contains?(plugin_name, ["..", "/", "\\", <<0>>]) do
       Logger.warning("SECURITY: Skipping user plugin with suspicious name: #{plugin_name}")
       []
@@ -217,7 +323,21 @@ defmodule CodePuppyControl.Plugins.Loader do
             files
         end
 
-      case ex_files do
+      # SECURITY: Reject any file whose canonical path escapes the plugins base dir
+      safe_ex_files =
+        Enum.filter(ex_files, fn file ->
+          if safe_plugin_path?(file, plugins_dir) do
+            true
+          else
+            Logger.warning(
+              "SECURITY: Skipping user plugin file #{file} — canonical path escapes plugins directory"
+            )
+
+            false
+          end
+        end)
+
+      case safe_ex_files do
         [] ->
           Logger.warning("No .ex files found in user plugin: #{plugin_name}")
           []
@@ -269,19 +389,43 @@ defmodule CodePuppyControl.Plugins.Loader do
 
     :ets.insert(__MODULE__, {module.name(), plugin_info})
 
-    # Register callbacks from the plugin
-    callbacks = module.register_callbacks()
+    # Prefer register/0 over register_callbacks/0
+    cond do
+      function_exported?(module, :register, 0) ->
+        case module.register() do
+          :ok ->
+            :ok
 
-    Enum.each(callbacks, fn {hook_name, fun} ->
-      try do
-        Callbacks.register(hook_name, fun)
-      rescue
-        ArgumentError ->
-          Logger.warning(
-            "Plugin #{module.name()} registered callback for unknown hook: #{hook_name}"
-          )
-      end
-    end)
+          {:error, reason} ->
+            Logger.warning(
+              "Plugin #{module.name()} register/0 returned error: #{inspect(reason)}"
+            )
+
+          other ->
+            Logger.warning(
+              "Plugin #{module.name()} register/0 returned unexpected: #{inspect(other)}"
+            )
+        end
+
+      function_exported?(module, :register_callbacks, 0) ->
+        callbacks = module.register_callbacks()
+
+        Enum.each(callbacks, fn {hook_name, fun} ->
+          try do
+            Callbacks.register(hook_name, fun)
+          rescue
+            ArgumentError ->
+              Logger.warning(
+                "Plugin #{module.name()} registered callback for unknown hook: #{hook_name}"
+              )
+          end
+        end)
+
+      true ->
+        Logger.warning(
+          "Plugin #{module.name()} implements neither register/0 nor register_callbacks/0"
+        )
+    end
 
     # Call startup
     if function_exported?(module, :startup, 0) do
@@ -293,6 +437,56 @@ defmodule CodePuppyControl.Plugins.Loader do
   end
 
   # ── Helpers ─────────────────────────────────────────────────────
+
+  @doc false
+  @spec normalize_names([atom() | String.t()]) :: MapSet.t(String.t())
+  defp normalize_names(names) do
+    MapSet.new(names, &to_string/1)
+  end
+
+  @doc false
+  @spec already_loaded?(module(), MapSet.t(String.t())) :: boolean()
+  defp already_loaded?(module, loaded_names) do
+    name = to_string(module.name())
+    MapSet.member?(loaded_names, name)
+  end
+
+  @doc """
+  Checks that the canonical (resolved) path of `path` stays within `base_dir`.
+
+  This prevents path-traversal attacks via symlinks that point outside the
+  expected directory tree. Symlinks are followed recursively so that a
+  symlink inside the plugins dir pointing to a file outside is rejected.
+  """
+  @spec safe_plugin_path?(String.t(), String.t()) :: boolean()
+  def safe_plugin_path?(path, base_dir) do
+    canonical = canonicalize_path(path)
+    canonical_base = canonicalize_path(base_dir)
+    String.starts_with?(canonical, canonical_base <> "/")
+  end
+
+  @doc false
+  @spec canonicalize_path(String.t()) :: String.t()
+  defp canonicalize_path(path) do
+    expanded = Path.expand(path)
+
+    case File.read_link(expanded) do
+      {:ok, target} ->
+        # Resolve symlink target relative to link's directory
+        target_path =
+          if Path.type(target) == :absolute do
+            target
+          else
+            Path.expand(target, Path.dirname(expanded))
+          end
+
+        # Recurse for chained symlinks
+        canonicalize_path(target_path)
+
+      {:error, _} ->
+        expanded
+    end
+  end
 
   @doc false
   @spec plugin_behaviour?(module()) :: boolean()

@@ -34,9 +34,9 @@ defmodule CodePuppyControl.Plugins do
   ## Lifecycle
 
   1. `load_all()` discovers builtin and user plugins
-  2. Each plugin's `register_callbacks/0` is called to register hooks
-  3. Each plugin's `startup/0` is called
-  4. On shutdown, each plugin's `shutdown/0` is called
+  2. Each plugin's `register/0` is called to register callbacks with the system
+  3. Each plugin's `startup/0` is called (if defined)
+  4. On shutdown, each plugin's `shutdown/0` is called (if defined)
 
   ## Example Plugin Structure
 
@@ -46,14 +46,19 @@ defmodule CodePuppyControl.Plugins do
         use CodePuppyControl.Plugins.PluginBehaviour
 
         @impl true
-        def name, do: :my_plugin
+        def name, do: "my_plugin"
 
         @impl true
-        def register_callbacks do
-          [
-            {:startup, fn -> IO.puts("MyPlugin loaded!") end},
-            {:load_prompt, fn -> "## My Instructions" end}
-          ]
+        def register do
+          CodePuppyControl.Callbacks.register(:startup, fn ->
+            IO.puts("MyPlugin loaded!")
+          end)
+
+          CodePuppyControl.Callbacks.register(:load_prompt, fn ->
+            "## My Instructions"
+          end)
+
+          :ok
         end
       end
   """

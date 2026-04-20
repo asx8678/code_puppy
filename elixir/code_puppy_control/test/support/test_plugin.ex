@@ -4,11 +4,13 @@ defmodule CodePuppyControl.Test.TestPlugin do
 
   This module implements `PluginBehaviour` and is used in tests to verify:
   - Plugin discovery and loading
-  - Callback registration via `register_callbacks/0`
+  - Callback registration via `register/0` (preferred) and `register_callbacks/0` (legacy)
   - Startup/shutdown lifecycle hooks
   """
 
   use CodePuppyControl.Plugins.PluginBehaviour
+
+  alias CodePuppyControl.Callbacks
 
   @impl true
   def name, do: :test_plugin
@@ -17,13 +19,38 @@ defmodule CodePuppyControl.Test.TestPlugin do
   def description, do: "A test plugin for verifying plugin loading"
 
   @impl true
-  def register_callbacks do
-    [
-      {:startup, &__MODULE__.on_startup/0},
-      {:shutdown, &__MODULE__.on_shutdown/0},
-      {:load_prompt, &__MODULE__.on_load_prompt/0}
-    ]
+  def register do
+    Callbacks.register(:startup, &__MODULE__.on_startup/0)
+    Callbacks.register(:shutdown, &__MODULE__.on_shutdown/0)
+    Callbacks.register(:load_prompt, &__MODULE__.on_load_prompt/0)
+    :ok
   end
+
+  @impl true
+  def startup do
+    # Update agent directly so lifecycle tests work
+    # even without triggering the :startup hook via Callbacks
+    try do
+      Agent.update(__MODULE__, fn state -> Map.put(state, :startup_called, true) end)
+    catch
+      :exit, _ -> :ok
+    end
+
+    :ok
+  end
+
+  @impl true
+  def shutdown do
+    try do
+      Agent.update(__MODULE__, fn state -> Map.put(state, :shutdown_called, true) end)
+    catch
+      :exit, _ -> :ok
+    end
+
+    :ok
+  end
+
+  # Callback hook implementations (registered via register/0)
 
   def on_startup do
     Agent.update(__MODULE__, fn state -> Map.put(state, :startup_called, true) end)

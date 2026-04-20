@@ -143,6 +143,24 @@ defmodule CodePuppyControl.Callbacks do
     end
   end
 
+  # ── Python-Compatible Alias ─────────────────────────────────────
+
+  @doc """
+  Triggers all callbacks for a hook (alias for `trigger/2`).
+
+  This provides a Python-compatible API matching the `on(hook, args)`
+  pattern from `code_puppy.callbacks`.
+
+  ## Examples
+
+      CodePuppyControl.Callbacks.on(:startup)
+      CodePuppyControl.Callbacks.on(:custom_command, ["/echo hello", "echo"])
+  """
+  @spec on(atom(), [term()]) :: term()
+  def on(hook_name, args \\ []) when is_atom(hook_name) and is_list(args) do
+    trigger(hook_name, args)
+  end
+
   # ── Introspection ───────────────────────────────────────────────
 
   @doc """
