@@ -4583,7 +4583,7 @@
       "id": "bd-230",
       "title": "1.9b Port planning agent to Elixir (bd-134 follow-up)",
       "description": "bd-134 audit found 13/14 target agents ported to lib/code_puppy_control/agents/ \u2014 missing: planning agent. Either port it or formally drop from v1 scope.\n\nScope:\n- Decide: port or drop\n- If port: mirror the Python planning-agent JSON config; implement as agents/planning.ex\n- If drop: document in MIGRATION_MAP.md and update agent catalogue\n\nParent: bd-134",
-      "status": "open",
+      "status": "closed",
       "priority": 2,
       "type": "task",
       "labels": [
@@ -4591,8 +4591,10 @@
       ],
       "dependencies": {},
       "created_at": "2026-04-20T22:45:51.465754",
-      "updated_at": "2026-04-20T22:45:51.465759",
-      "comments": []
+      "updated_at": "2026-04-20T22:50:01.440237",
+      "comments": [
+        "## Decision: DEFER to v1.1\n\nEvidence: bd-230-decision.md\n\nPlanning agent IS real + user-facing (/plan shortcut, onboarding, agent menu), but:\n- 0 internal invocations (no invoke_agent('planning-agent') anywhere)\n- Functional overlap with code-puppy and pack-leader (both do implicit planning)\n- Python fallback remains fully functional during v1\n\nDeferred to v1.1. Follow-up: bd-232\n\nClosing."
+      ]
     },
     "bd-231": {
       "id": "bd-231",
@@ -4608,7 +4610,22 @@
       "created_at": "2026-04-20T22:45:54.996181",
       "updated_at": "2026-04-20T22:45:54.996190",
       "comments": []
+    },
+    "bd-232": {
+      "id": "bd-232",
+      "title": "Port planning-agent to Elixir (v1.1, deferred from bd-230)",
+      "description": "Planning agent deferred from v1 Elixir runtime per bd-230 decision (see bd-230-decision.md).\n\nSource: code_puppy/agents/agent_planning.py (171 lines, 7 tools)\nTarget: elixir/code_puppy_control/lib/code_puppy_control/agents/planning.ex\nEstimated effort: ~1 day (similar complexity to code_scout.ex at 316 lines)\n\nScope:\n- Port 7 tools: list_files, read_file, grep, ask_user_question, list_agents, invoke_agent, list_or_search_skills\n- Port ~140-line system prompt with 5-step planning process + output template + agent delegation map\n- Add to agents/catalogue.ex\n- Ensure /plan shortcut routes correctly in Elixir command dispatch (see bd-163)\n\nDuring v1: Users can still invoke /plan via the Python agent manager fallback. Not a blocker for v1 ship.",
+      "status": "open",
+      "priority": 3,
+      "type": "task",
+      "labels": [
+        "migration,python-to-elixir,deferred-post-v1,agents"
+      ],
+      "dependencies": {},
+      "created_at": "2026-04-20T22:49:45.665667",
+      "updated_at": "2026-04-20T22:49:45.665677",
+      "comments": []
     }
   },
-  "counter": 231
+  "counter": 232
 }
