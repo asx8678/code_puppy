@@ -1,0 +1,280 @@
+defmodule CodePuppyControl.TUI.App do
+  @moduledoc """
+  TUI application managing screen navigation.
+
+  The App GenServer owns a stack of screens and drives the render/input
+  cycle. Navigation uses a **stack model**:
+
+    * `switch_screen/2` — replace the current screen (like navigating
+      to a new page — the previous screen is discarded)
+    * `push_screen/2` — push a screen on top (for modals / overlays)
+    * `pop_screen/0` — return to the previous screen on the stack
+
+  ## Architecture
+
+  The App delegates rendering and input handling to the active screen
+  module (see `CodePuppyControl.TUI.Screen` behaviour). It manages
+  the screen state internally so that screen modules stay pure.
+
+  When Owl.LiveScreen is available, the App renders into a live block
+  for flicker-free updates. Otherwise it falls back to `Owl.IO.puts/2`.
+
+  ## Usage
+
+      # Start the app with an initial screen
+      {:ok, pid} = App.start_link(screen: MyApp.HomeScreen)
+
+      # Navigate
+      App.switch_screen(MyApp.SettingsScreen, %{section: :models})
+      App.push_screen(MyApp.HelpScreen, %{})
+      App.pop_screen()
+      App.current_screen()  #=> MyApp.SettingsScreen
+
+  ## State
+
+      %{
+        screen_stack: [{module, opts, state}, ...],
+        live_block_id: atom() | nil
+      }
+
+  The head of `screen_stack` is the active screen. The rest are
+  suspended screens waiting for `pop_screen/0`.
+  """
+
+  use GenServer
+
+  require Logger
+
+  alias CodePuppyControl.TUI.Screen
+
+  # ── State ────────────────────────────────────────────────────────────────
+
+  defstruct screen_stack: [], live_block_id: nil
+
+  @type screen_entry :: {module(), Screen.opts(), Screen.state()}
+  @type t :: %__MODULE__{screen_stack: [screen_entry()], live_block_id: atom() | nil}
+
+  # ── Client API ───────────────────────────────────────────────────────────
+
+  @doc """
+  Start the App GenServer.
+
+  ## Options
+
+    * `:screen` (required) — initial screen module
+    * `:screen_opts` — options passed to `screen.init/1` (default: `%{}`)
+    * `:name` — GenServer name registration (default: `__MODULE__`)
+  """
+  @spec start_link(keyword()) :: GenServer.on_start()
+  def start_link(opts) do
+    name = Keyword.get(opts, :name, __MODULE__)
+    GenServer.start_link(__MODULE__, opts, name: name)
+  end
+
+  @doc """
+  Replace the current screen with a new one.
+
+  The previous screen is **discarded** (its `cleanup/1` is called).
+  Use `push_screen/2` if you want to return later.
+  """
+  @spec switch_screen(module(), Screen.opts()) :: :ok
+  def switch_screen(module, opts \\ %{}) do
+    GenServer.call(__MODULE__, {:switch_screen, module, opts})
+  end
+
+  @doc """
+  Push a new screen on top of the stack (modal / overlay).
+
+  The current screen is suspended and will be restored by `pop_screen/0`.
+  """
+  @spec push_screen(module(), Screen.opts()) :: :ok
+  def push_screen(module, opts \\ %{}) do
+    GenServer.call(__MODULE__, {:push_screen, module, opts})
+  end
+
+  @doc """
+  Pop the current screen and return to the previous one.
+
+  Does nothing if there is only one screen on the stack.
+  """
+  @spec pop_screen() :: :ok
+  def pop_screen do
+    GenServer.call(__MODULE__, :pop_screen)
+  end
+
+  @doc """
+  Send a line of input to the active screen.
+
+  The App delegates to `screen.handle_input/2` and acts on the result:
+    * `{:ok, state}` — update state and re-render
+    * `{:switch, mod, opts}` — navigate to new screen
+    * `:quit` — stop the GenServer
+  """
+  @spec send_input(String.t()) :: :ok
+  def send_input(input) do
+    GenServer.cast(__MODULE__, {:input, input})
+  end
+
+  @doc """
+  Return the module of the currently active screen.
+  """
+  @spec current_screen() :: module() | nil
+  def current_screen do
+    GenServer.call(__MODULE__, :current_screen)
+  end
+
+  @doc """
+  Return the full screen stack (for diagnostics).
+  """
+  @spec stack() :: [screen_entry()]
+  def stack do
+    GenServer.call(__MODULE__, :stack)
+  end
+
+  # ── GenServer Callbacks ──────────────────────────────────────────────────
+
+  @impl true
+  def init(opts) do
+    screen_mod = Keyword.fetch!(opts, :screen)
+    screen_opts = Keyword.get(opts, :screen_opts, %{})
+
+    {:ok, state} = screen_mod.init(screen_opts)
+    entry = {screen_mod, screen_opts, state}
+
+    live_block_id = maybe_add_live_block()
+
+    render_active(%__MODULE__{screen_stack: [entry], live_block_id: live_block_id})
+    {:ok, %__MODULE__{screen_stack: [entry], live_block_id: live_block_id}}
+  end
+
+  @impl true
+  def handle_call({:switch_screen, mod, opts}, _from, %{screen_stack: stack} = s) do
+    # Cleanup current screen, preserve the rest of the stack
+    {rest, cur_mod, cur_state} =
+      case stack do
+        [{cm, _, cs} | r] -> {r, cm, cs}
+        [] -> {[], nil, nil}
+      end
+
+    if cur_mod, do: maybe_cleanup(cur_mod, cur_state)
+
+    {:ok, new_state} = mod.init(opts)
+    new_stack = [{mod, opts, new_state} | rest]
+    new_s = %{s | screen_stack: new_stack}
+    render_active(new_s)
+    {:reply, :ok, new_s}
+  end
+
+  @impl true
+  def handle_call({:push_screen, mod, opts}, _from, %{screen_stack: stack} = s) do
+    {:ok, new_state} = mod.init(opts)
+    new_stack = [{mod, opts, new_state} | stack]
+    new_s = %{s | screen_stack: new_stack}
+    render_active(new_s)
+    {:reply, :ok, new_s}
+  end
+
+  @impl true
+  def handle_call(:pop_screen, _from, %{screen_stack: stack} = s) do
+    case stack do
+      [{mod, _, state} | rest] when rest != [] ->
+        maybe_cleanup(mod, state)
+        new_s = %{s | screen_stack: rest}
+        render_active(new_s)
+        {:reply, :ok, new_s}
+
+      _ ->
+        # Single screen or empty — ignore
+        {:reply, :ok, s}
+    end
+  end
+
+  @impl true
+  def handle_call(:current_screen, _from, %{screen_stack: [{mod, _, _} | _]} = s) do
+    {:reply, mod, s}
+  end
+
+  @impl true
+  def handle_call(:current_screen, _from, s) do
+    {:reply, nil, s}
+  end
+
+  @impl true
+  def handle_call(:stack, _from, s) do
+    {:reply, s.screen_stack, s}
+  end
+
+  @impl true
+  def handle_cast({:input, input}, %{screen_stack: [{mod, opts, state} | rest]} = s) do
+    case mod.handle_input(input, state) do
+      {:ok, new_state} ->
+        new_s = %{s | screen_stack: [{mod, opts, new_state} | rest]}
+        render_active(new_s)
+        {:noreply, new_s}
+
+      {:switch, next_mod, next_opts} ->
+        maybe_cleanup(mod, state)
+        {:ok, next_state} = next_mod.init(next_opts)
+        new_stack = [{next_mod, next_opts, next_state} | rest]
+        new_s = %{s | screen_stack: new_stack}
+        render_active(new_s)
+        {:noreply, new_s}
+
+      :quit ->
+        maybe_cleanup(mod, state)
+        {:stop, :normal, %{s | screen_stack: []}}
+    end
+  end
+
+  @impl true
+  def handle_cast({:input, _input}, s) do
+    # No active screen — ignore
+    {:noreply, s}
+  end
+
+  @impl true
+  def terminate(_reason, %{screen_stack: stack}) do
+    Enum.each(stack, fn {mod, _, state} -> maybe_cleanup(mod, state) end)
+    :ok
+  end
+
+  # ── Private ──────────────────────────────────────────────────────────────
+
+  defp render_active(%{screen_stack: [{mod, _, state} | _], live_block_id: block_id}) do
+    data = mod.render(state)
+
+    if block_id && function_exported?(Owl.LiveScreen, :update, 2) do
+      Owl.LiveScreen.update(block_id, data)
+    else
+      Owl.IO.puts(data)
+    end
+  end
+
+  defp render_active(_), do: :ok
+
+  defp maybe_add_live_block do
+    if tty?() and function_exported?(Owl.LiveScreen, :add_block, 2) do
+      try do
+        Owl.LiveScreen.add_block(:tui_app, render: &Function.identity/1)
+        :tui_app
+      rescue
+        _ -> nil
+      end
+    else
+      nil
+    end
+  end
+
+  defp maybe_cleanup(mod, state) do
+    if function_exported?(mod, :cleanup, 1) do
+      mod.cleanup(state)
+    end
+
+    :ok
+  end
+
+  # Heuristic: detect if we're on a real terminal
+  defp tty? do
+    :stdio |> :file.isatty()
+  end
+end
