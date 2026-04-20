@@ -3010,7 +3010,7 @@
       "id": "bd-154",
       "title": "1.9 Port every agent",
       "description": "Port all agents to Elixir: code-puppy, reviewer, scout, qa-kitten, qa-expert, python-programmer, security-auditor, pack-leader + 5 pack sub-agents. Each is a module implementing the Agent behaviour.",
-      "status": "open",
+      "status": "closed",
       "priority": 1,
       "type": "task",
       "labels": [
@@ -3028,9 +3028,10 @@
         ]
       },
       "created_at": "2026-04-18T19:47:56.783018",
-      "updated_at": "2026-04-20T03:47:44.991272",
+      "updated_at": "2026-04-20T04:15:54.272853",
       "comments": [
-        "Claimed by planning-agent-019da8 - creating execution plan"
+        "Claimed by planning-agent-019da8 - creating execution plan",
+        "Completed: Ported 13 agents to Elixir - code_puppy, pack_leader, 5 pack sub-agents (bloodhound, retriever, shepherd, terrier, watchdog), code_reviewer, security_auditor, qa_expert, code_scout, qa_kitten, python_programmer. All modules implement Agent.Behaviour and are auto-discovered by AgentCatalogue."
       ]
     },
     "bd-155": {
@@ -3118,8 +3119,10 @@
         ]
       },
       "created_at": "2026-04-18T19:48:03.359737",
-      "updated_at": "2026-04-19T00:56:31.250544",
-      "comments": []
+      "updated_at": "2026-04-20T07:07:44.541324",
+      "comments": [
+        "Claimed by planning-agent-019da8 - creating execution plan for 49 plugin ports"
+      ]
     },
     "bd-159": {
       "id": "bd-159",
@@ -3162,8 +3165,10 @@
         ]
       },
       "created_at": "2026-04-18T19:48:10.303237",
-      "updated_at": "2026-04-19T00:56:48.771515",
-      "comments": []
+      "updated_at": "2026-04-20T07:07:44.544459",
+      "comments": [
+        "Claimed by planning-agent-019da8 - creating execution plan for REPL/interactive loop"
+      ]
     },
     "bd-161": {
       "id": "bd-161",
@@ -3893,9 +3898,12 @@
         ]
       },
       "created_at": "2026-04-19T10:58:56.571204",
-      "updated_at": "2026-04-19T21:35:25.656130",
+      "updated_at": "2026-04-20T07:42:30.551944",
       "comments": [
-        "pack-leader-019da7: Worktree created at /Users/adam2/projects/bd-193 (feature/bd-193-isolation-fix off main). Sub-agent hit request limit before starting work. Next session: read docs/adr/ADR-003-dual-home-config-isolation.md and code_puppy/config/paths.py to find _is_pup_ex() bypass holes."
+        "pack-leader-019da7: Worktree created at /Users/adam2/projects/bd-193 (feature/bd-193-isolation-fix off main). Sub-agent hit request limit before starting work. Next session: read docs/adr/ADR-003-dual-home-config-isolation.md and code_puppy/config/paths.py to find _is_pup_ex() bypass holes.",
+        "pack-leader-019da9: Resuming bd-193 in /Users/adam2/projects/bd-193. Shepherd pre-review requested changes: remove stale import-time path capture, harden persistence symlink/alias guard, route config-home writes through guarded helpers, fix XDG handling per ADR-003, fix canonicalization (~ and env expansion), and stop implicit legacy history mutation in pup-ex.",
+        "pack-leader-019da9: Initial code-puppy execution attempt failed due to provider stream error (httpx.RemoteProtocolError: incomplete chunked read). Worktree preserved at /Users/adam2/projects/bd-193; retrying with alternate executor.",
+        "pack-leader-019da9: Alternate executor failed inside local tool stack (replace_in_file KeyError: old_str) before completion. Worktree still preserved; continuing manually from current diff state."
       ]
     },
     "bd-194": {
@@ -4236,7 +4244,7 @@
       "id": "bd-212",
       "title": "bd-174 Wave 4: Port LLM layer tests (provider, Anthropic, OpenAI, model_factory) to ExUnit",
       "description": "Wave 4 of bd-174 test-suite port.\n\nScope: ~40 files covering LLM adapters.\n- tests/test_anthropic_provider.py, tests/test_openai_provider.py\n- tests/test_model_factory.py, tests/test_model_registry.py\n- tests/test_model_packs.py, tests/test_round_robin_model.py\n- tests/test_credentials.py, tests/test_model_availability.py\n\nUse mock_llm_http.ex (already in test/support) for provider tests.\nProperty tests for model_pack invariants (no model appears in two roles simultaneously, etc.).\n\nPrereq: Wave 3 complete.",
-      "status": "open",
+      "status": "closed",
       "priority": 2,
       "type": "task",
       "labels": [
@@ -4250,7 +4258,7 @@
         ]
       },
       "created_at": "2026-04-19T20:37:32.995137",
-      "updated_at": "2026-04-19T20:37:32.995145",
+      "updated_at": "2026-04-20T11:20:28.415646",
       "comments": []
     },
     "bd-213": {

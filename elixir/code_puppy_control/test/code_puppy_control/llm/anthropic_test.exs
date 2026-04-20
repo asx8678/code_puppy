@@ -11,7 +11,8 @@ defmodule CodePuppyControl.LLM.Providers.AnthropicTest do
   alias CodePuppyControl.Test.MockLLMHTTP
 
   setup do
-    {:ok, _} = MockLLMHTTP.start_link()
+    # Ensure MockLLMHTTP is started under test supervision for proper isolation
+    start_supervised!(MockLLMHTTP)
     MockLLMHTTP.reset()
     :ok
   end

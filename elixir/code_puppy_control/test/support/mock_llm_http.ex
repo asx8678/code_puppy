@@ -22,7 +22,16 @@ defmodule CodePuppyControl.Test.MockLLMHTTP do
 
   use Agent
 
-  def start_link do
+  def child_spec(opts) do
+    %{
+      id: __MODULE__,
+      start: {__MODULE__, :start_link, [opts]},
+      type: :worker,
+      restart: :transient
+    }
+  end
+
+  def start_link(_opts \\ []) do
     Agent.start_link(fn -> [] end, name: __MODULE__)
   end
 
