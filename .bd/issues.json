@@ -3343,7 +3343,7 @@
         ]
       },
       "created_at": "2026-04-18T19:48:17.217798",
-      "updated_at": "2026-04-19T09:43:02.759048",
+      "updated_at": "2026-04-20T20:48:40.033832",
       "comments": [
         "\n## \u26a0\ufe0f Isolation Requirement (added per bd-186)\n\nThis task MUST:\n- Write only to ~/.code_puppy_ex/ (never ~/.code_puppy/)\n- Pass the bd-186 CI gates (no-writes-to-python-home, fresh-install-works, existing-install-untouched)\n- Run all tests against temp directories, never the user's real home\n- Respect the Python freeze policy (bd-187) \u2014 do not modify code_puppy/**/*.py\n\nDependency: bd-186 now blocks this issue.",
         "bd-186 isolation infrastructure has landed. This issue's implementation MUST:\n\n1. Write only to ~/.code_puppy_ex/ via Paths.* helpers\n   (never hardcode ~/.code_puppy/ paths)\n2. Use Isolation.safe_write! / safe_mkdir_p! / safe_rm! / safe_rm_rf!\n   for ALL filesystem mutations on user-home paths\n3. Use Isolation.read_only_legacy/1 if reading from ~/.code_puppy/\n   during one-time migration imports (and only then)\n\nRelevant commits:\n- 86b05f29 \u2014 Config.Paths extension + Config.Isolation guard module\n- 2ea04ea9 \u2014 8 hardcoded callsites routed through Paths\n- 438685ac \u2014 FirstRun + pup_ex.import/doctor/auth.login CLI\n- b692dfdb \u2014 5 ADR CI gates + GitHub Actions workflow\n\nADR-003 is the canonical design doc:\ndocs/adr/ADR-003-dual-home-config-isolation.md\n\nAny PR touching config, session, OAuth, secrets, or compat tests will\nhave to pass `mix gates.isolation` in CI. Start there."
@@ -4552,7 +4552,24 @@
         "Claimed by planning-agent-019dac (2026-04-20). Plan: deepen StreamData generators in round_trip_property_test.exs per ticket: (a) recursive maps/lists via StreamData.tree, (b) UTF-8 incl RTL + multi-byte, (c) numeric edges (0, negatives, large ints). Keep keys as binaries (canonical_json requires string keys). Raise max_runs to 100 for nested-generator properties. INI block stays fixture-bound (untouched).",
         "Completed by planning-agent-019dac. Commit pushed to main. Summary: deepened StreamData generators with nested maps/lists (StreamData.tree), UTF-8 incl RTL/CJK/emoji, numeric edge cases (0, negatives, 2^53 boundary, large ints, bounded floats). canonical_json and normalize idempotency properties now run at max_runs: 100 on nested domain; original flat-scalar properties retained at max_runs: 50. Added deterministic RTL property that guarantees RTL/multi-byte codepoint coverage per run. INI block untouched. Reviewed by elixir-reviewer (APPROVED). Tests NOT run locally (/auto-test off)."
       ]
+    },
+    "bd-229": {
+      "id": "bd-229",
+      "title": "Duplicate source tree at repo root (lib/, test/) shadows real project under elixir/code_puppy_control/",
+      "description": "Commit e66e4272 copied files into BOTH locations. Fix 70e6576e only updated root copy, leaving elixir/ copy stale (30 lines behind). Problems: 1) Agent output inconsistency, 2) Tool path confusion made bd-167 harder, 3) Future drift risk. Scope: decide canonical location (elixir/), diff pairs and port newer content, delete duplicates, add CI gate/pre-commit, document layout. Evidence: root watchdog.ex has 2 commits (e66e4272, 70e6576e), elixir/ copy has only e66e4272. Blob diff: bloodhound.ex, retriever.ex, shepherd.ex, terrier.ex match; watchdog.ex differs (f146e8c4 vs fca9ae4f). Out of scope for bd-167.",
+      "status": "open",
+      "priority": 1,
+      "type": "task",
+      "labels": [
+        "cleanup",
+        "tooling",
+        "tech-debt"
+      ],
+      "dependencies": {},
+      "created_at": "2026-04-20T21:06:20.727500",
+      "updated_at": "2026-04-20T21:06:20.727508",
+      "comments": []
     }
   },
-  "counter": 228
+  "counter": 229
 }

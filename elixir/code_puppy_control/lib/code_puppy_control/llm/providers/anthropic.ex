@@ -587,6 +587,6 @@ defmodule CodePuppyControl.LLM.Providers.Anthropic do
   end
 
   defp resolve_api_key do
-    System.get_env("ANTHROPIC_API_KEY") || ""
+    CodePuppyControl.ModelFactory.Credentials.env_or_store("ANTHROPIC_API_KEY") || ""
   end
 end

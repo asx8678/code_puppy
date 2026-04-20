@@ -512,6 +512,6 @@ defmodule CodePuppyControl.LLM.Providers.OpenAI do
   # ── Private: Config ───────────────────────────────────────────────────────
 
   defp resolve_api_key do
-    System.get_env("OPENAI_API_KEY") || ""
+    CodePuppyControl.ModelFactory.Credentials.env_or_store("OPENAI_API_KEY") || ""
   end
 end

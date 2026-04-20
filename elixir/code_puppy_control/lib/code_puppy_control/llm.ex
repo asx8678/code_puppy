@@ -226,7 +226,7 @@ defmodule CodePuppyControl.LLM do
     else
       config = ModelRegistry.get_config(model_name) || %{}
       api_key_env = config["api_key_env"] || default_api_key_env(provider_mod)
-      api_key = System.get_env(api_key_env)
+      api_key = CodePuppyControl.ModelFactory.Credentials.env_or_store(api_key_env)
       Keyword.put(opts, :api_key, api_key)
     end
   end

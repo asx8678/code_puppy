@@ -53,20 +53,57 @@ defmodule CodePuppyControl.ModelFactory.Credentials do
   """
   @spec resolve_api_key(String.t(), map()) :: String.t() | nil
   def resolve_api_key(provider_type, model_config \\ %{}) do
-    # 1. Check model-specific api_key_env
-    env_var =
+    # 1. Check model-specific api_key_env (env first, then credential store)
+    custom =
       case Map.get(model_config, "api_key_env") do
         nil -> nil
-        var_name -> System.get_env(var_name)
+        var_name -> env_or_store(var_name)
       end
 
-    # 2. Fall back to provider default
-    # 3. Check encrypted credential store
-    env_var ||
+    # 2. Fall back to the provider's default env var (env first, then store)
+    custom ||
       case Map.get(@provider_env_vars, provider_type) do
         nil -> nil
-        default_var -> System.get_env(default_var) || credential_store_get(default_var)
+        default_var -> env_or_store(default_var)
       end
+  end
+
+  @doc """
+  Resolve a named credential by looking at the environment first, then the
+  encrypted credential store, then `nil`.
+
+  This is the canonical lookup path for API keys and tokens. It lets users
+  either export the env var (e.g. `OPENAI_API_KEY=sk-...`) or save it in
+  the credential store with `mix pup_ex.auth.set OPENAI_API_KEY` — both
+  work without any code changes at the call site.
+
+  Returns `nil` when neither source provides a value. An empty-string env
+  var is treated as "unset" so the store still gets a chance.
+
+  ## Examples
+
+      # Environment wins if set
+      System.put_env("OPENAI_API_KEY", "sk-env")
+      Credentials.env_or_store("OPENAI_API_KEY")
+      #=> "sk-env"
+
+      # Store fallback when env is unset
+      System.delete_env("OPENAI_API_KEY")
+      CodePuppyControl.Credentials.set("OPENAI_API_KEY", "sk-store")
+      Credentials.env_or_store("OPENAI_API_KEY")
+      #=> "sk-store"
+
+      # Nil if neither is set
+      Credentials.env_or_store("NEVER_SET_KEY")
+      #=> nil
+  """
+  @spec env_or_store(String.t()) :: String.t() | nil
+  def env_or_store(key_name) when is_binary(key_name) do
+    case System.get_env(key_name) do
+      nil -> credential_store_get(key_name)
+      "" -> credential_store_get(key_name)
+      value -> value
+    end
   end
 
   @doc """
