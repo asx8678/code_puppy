@@ -3028,8 +3028,10 @@
         ]
       },
       "created_at": "2026-04-18T19:47:56.783018",
-      "updated_at": "2026-04-19T00:56:31.124794",
-      "comments": []
+      "updated_at": "2026-04-20T03:47:44.991272",
+      "comments": [
+        "Claimed by planning-agent-019da8 - creating execution plan"
+      ]
     },
     "bd-155": {
       "id": "bd-155",
@@ -4375,14 +4377,16 @@
       "id": "bd-220",
       "title": "Flaky test: compaction/facade_test.exs:84 intermittent failure",
       "description": "test/code_puppy_control/compaction/facade_test.exs line 84 occasionally fails (likely timing/async race). Observed once during bd-211 QA run, passed on immediate re-run. Investigate and add async: false or proper wait if needed.",
-      "status": "open",
+      "status": "closed",
       "priority": 3,
       "type": "task",
       "labels": [],
       "dependencies": {},
       "created_at": "2026-04-19T22:48:06.132224",
-      "updated_at": "2026-04-19T22:48:06.132235",
-      "comments": []
+      "updated_at": "2026-04-20T03:37:39.630898",
+      "comments": [
+        "Fixed by changing async: true to async: false in facade_test.exs. Test now runs in isolation, eliminating potential race conditions. Verified stable across 6 runs with different seeds."
+      ]
     }
   },
   "counter": 220

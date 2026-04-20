@@ -152,4 +152,149 @@ defmodule CodePuppyControl.Tools.AgentCatalogueTest do
       assert json =~ "Description"
     end
   end
+
+  describe "discover_agent_modules/0" do
+    test "discovers agent modules in the Agents namespace" do
+      results = AgentCatalogue.discover_agent_modules()
+
+      assert length(results) >= 8
+
+      names = Enum.map(results, fn {_mod, name, _display, _desc} -> name end)
+
+      # Core agents
+      assert :code_puppy in names
+      assert :pack_leader in names
+      assert :code_reviewer in names
+      assert :code_scout in names
+      assert :security_auditor in names
+      assert :qa_expert in names
+      assert :qa_kitten in names
+      assert :python_programmer in names
+
+      # Pack sub-agents
+      assert :bloodhound in names
+      assert :retriever in names
+      assert :shepherd in names
+      assert :terrier in names
+      assert :watchdog in names
+    end
+
+    test "each discovered module has correct structure" do
+      for {mod, name, display_name, description} <- AgentCatalogue.discover_agent_modules() do
+        assert is_atom(mod)
+        assert is_atom(name)
+        assert is_binary(display_name)
+        assert is_binary(description)
+        assert String.length(display_name) > 0
+        assert String.length(description) > 0
+
+        # The module should actually implement the callbacks
+        assert function_exported?(mod, :name, 0)
+        assert function_exported?(mod, :system_prompt, 1)
+        assert mod.name() == name
+      end
+    end
+
+    test "derives display names correctly from atom" do
+      results = AgentCatalogue.discover_agent_modules()
+      result_map = Map.new(results, fn {_mod, name, display, _desc} -> {name, display} end)
+
+      assert result_map[:code_puppy] == "Code Puppy"
+      assert result_map[:pack_leader] == "Pack Leader"
+      assert result_map[:qa_expert] == "QA Expert"
+      assert result_map[:code_reviewer] == "Code Reviewer"
+      assert result_map[:python_programmer] == "Python Programmer"
+      assert result_map[:security_auditor] == "Security Auditor"
+    end
+
+    test "descriptions are extracted from moduledoc" do
+      results = AgentCatalogue.discover_agent_modules()
+      result_map = Map.new(results, fn {_mod, name, _display, desc} -> {name, desc} end)
+
+      # Code Puppy: "The Code Puppy — a helpful, friendly AI coding assistant."
+      assert result_map[:code_puppy] =~ "helpful"
+      assert result_map[:code_puppy] =~ "AI"
+
+      # Pack Leader: "The Pack Leader — orchestration agent that coordinates..."
+      assert result_map[:pack_leader] =~ "Orchestration"
+
+      # QA Expert preserves "QA" acronym
+      assert result_map[:qa_expert] =~ "QA"
+    end
+  end
+
+  describe "get_agent_module/1" do
+    alias CodePuppyControl.Tools.AgentCatalogue.AgentInfo
+
+    setup do
+      # Clear catalogue and re-register a known agent with a module
+      # (auto-discovered agents are cleared by the shared setup, so we
+      # manually insert one for testing)
+      AgentCatalogue.clear_catalogue()
+
+      info =
+        AgentInfo.new("test_mod_agent", "Test Agent", "Test", CodePuppyControl.Agents.CodePuppy)
+
+      :ets.insert(:agent_catalogue, {"test_mod_agent", info})
+
+      :ok
+    end
+
+    test "returns module for atom name" do
+      assert {:ok, CodePuppyControl.Agents.CodePuppy} =
+               AgentCatalogue.get_agent_module(:test_mod_agent)
+    end
+
+    test "returns module for string name" do
+      assert {:ok, CodePuppyControl.Agents.CodePuppy} =
+               AgentCatalogue.get_agent_module("test_mod_agent")
+    end
+
+    test "returns :not_found for unknown agent" do
+      assert :not_found = AgentCatalogue.get_agent_module(:nonexistent_agent)
+      assert :not_found = AgentCatalogue.get_agent_module("nonexistent_agent")
+    end
+
+    test "returns error for manually registered agent without module" do
+      AgentCatalogue.register_agent("manual_agent", "Manual", "No module here")
+
+      assert {:error, :no_module} = AgentCatalogue.get_agent_module(:manual_agent)
+    end
+  end
+
+  describe "get_agent_info/1 with atom" do
+    test "accepts atom name and looks up by string" do
+      # Register with underscored string (matching to_string(:atom_test))
+      AgentCatalogue.register_agent("atom_test", "Atom Test", "Atom lookup test")
+
+      assert {:ok, info} = AgentCatalogue.get_agent_info(:atom_test)
+      assert info.name == "atom_test"
+    end
+  end
+
+  describe "AgentInfo with module field" do
+    alias CodePuppyControl.Tools.AgentCatalogue.AgentInfo
+
+    test "can be created with module" do
+      info =
+        AgentInfo.new("mod-agent", "Mod Agent", "Has module", CodePuppyControl.Agents.CodePuppy)
+
+      assert info.module == CodePuppyControl.Agents.CodePuppy
+    end
+
+    test "module defaults to nil" do
+      info = AgentInfo.new("no-mod-agent", "No Mod Agent", "No module")
+      assert info.module == nil
+    end
+
+    test "is JSON encodable even with module" do
+      info =
+        AgentInfo.new("json-agent", "JSON Agent", "JSON test", CodePuppyControl.Agents.CodePuppy)
+
+      json = Jason.encode!(info)
+      assert is_binary(json)
+      assert json =~ "json-agent"
+      assert json =~ "JSON Agent"
+    end
+  end
 end

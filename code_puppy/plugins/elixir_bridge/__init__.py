@@ -469,7 +469,10 @@ async def call_elixir_workflow(
         return await asyncio.to_thread(call_method, method, params, timeout=timeout)
     except TimeoutError:
         # Return a fallback result that signals local handling
-        return {"status": "timeout", "fallback": True}(request: dict[str, Any]) -> None:
+        return {"status": "timeout", "fallback": True}
+
+
+def send_request_to_elixir(request: dict[str, Any]) -> None:
     """Send a JSON-RPC request to the Elixir control plane.
 
     bd-82: In bridge mode (CODE_PUPPY_BRIDGE=1), writes Content-Length
