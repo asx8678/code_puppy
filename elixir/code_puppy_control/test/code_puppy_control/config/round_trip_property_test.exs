@@ -6,6 +6,9 @@ defmodule CodePuppyControl.Config.RoundTripPropertyTest do
   under re-serialization. These complement the golden-file tests by
   exploring a wider input space.
 
+  Generators deepened in bd-228 to cover nested structures, UTF-8
+  (incl. RTL), and numeric edge cases.
+
   **How to run:**
       mix test --only config_compat
       # or specifically:
@@ -55,6 +58,81 @@ defmodule CodePuppyControl.Config.RoundTripPropertyTest do
       max_length: 6
     )
 
+  ################################################################################
+  # Deepened generators (bd-228)
+  ################################################################################
+
+  # Binary-key generator: only string keys (canonical_json requirement).
+  # Mix ASCII + UTF-8 to exercise unicode key handling.
+  string_key =
+    StreamData.one_of([
+      StreamData.string(:ascii, min_length: 1, max_length: 8),
+      StreamData.string(:utf8, min_length: 1, max_length: 8)
+    ])
+
+  # UTF-8-aware string generator covering ASCII, multi-byte, and RTL.
+  # `StreamData.string(:utf8, ...)` already covers multi-byte codepoints;
+  # the explicit exemplars below make RTL/CJK/emoji cases likely to be exercised.
+  utf8_string =
+    StreamData.one_of([
+      StreamData.string(:ascii, max_length: 16),
+      StreamData.string(:utf8, max_length: 16),
+      StreamData.member_of([
+        # Hebrew (RTL)
+        "שלום",
+        # Arabic (RTL)
+        "مرحبا",
+        # CJK (multi-byte)
+        "日本語",
+        # emoji + ASCII mix
+        "🐶 puppy",
+        # empty string edge case
+        ""
+      ])
+    ])
+
+  # Numeric edge cases: 0, negatives, very large ints, finite floats.
+  # Floats kept bounded so Jason.encode! never raises on NaN/Infinity.
+  numeric =
+    StreamData.one_of([
+      StreamData.constant(0),
+      StreamData.constant(-1),
+      StreamData.integer(-1_000_000..1_000_000),
+      StreamData.member_of([
+        # 2^53 (JSON safe-int boundary)
+        9_007_199_254_740_992,
+        -9_007_199_254_740_992,
+        # large positive
+        1_000_000_000_000_000
+      ]),
+      StreamData.float(min: -1.0e6, max: 1.0e6)
+    ])
+
+  # Scalar leaf for any nested tree.
+  scalar =
+    StreamData.one_of([
+      utf8_string,
+      numeric,
+      StreamData.boolean(),
+      StreamData.constant(nil)
+    ])
+
+  # Recursive nested map/list tree via StreamData.tree.
+  # Shape is bounded by StreamData's generation size, and tree/2 shrinks
+  # toward shallower terms. `max_length: 4` keeps each level manageable.
+  nested_term =
+    StreamData.tree(scalar, fn child ->
+      StreamData.one_of([
+        StreamData.list_of(child, max_length: 4),
+        StreamData.map_of(string_key, child, max_length: 4)
+      ])
+    end)
+
+  # Top-level term for canonical_json/normalize properties: must be a map
+  # (since the production code paths consume map roots).
+  nested_map =
+    StreamData.map_of(string_key, nested_term, max_length: 6)
+
   # ===========================================================================
   # INI Round-Trip
   # ===========================================================================
@@ -62,8 +140,10 @@ defmodule CodePuppyControl.Config.RoundTripPropertyTest do
   describe "INI round-trip stability" do
     property "parse(serialize(parse(fixture))) == parse(fixture)" do
       # Pick one of the two real INI fixtures at random
-      check all variant <- StreamData.member_of([:minimal, :realistic]),
-                max_runs: 20 do
+      check all(
+              variant <- StreamData.member_of([:minimal, :realistic]),
+              max_runs: 20
+            ) do
         raw = ConfigFixtures.read_raw(variant, "puppy.cfg")
         parsed = Loader.parse_string(raw)
         reserialized = serialize_ini(parsed)
@@ -80,8 +160,39 @@ defmodule CodePuppyControl.Config.RoundTripPropertyTest do
   # ===========================================================================
 
   describe "canonical_json idempotency" do
-    property "canonical_json is idempotent" do
-      check all m <- ^map_of_scalars, max_runs: 50 do
+    property "canonical_json is idempotent (nested + utf8 + numeric edges)" do
+      check all(m <- ^nested_map, max_runs: 100) do
+        once = ConfigFixtures.canonical_json(m)
+        twice = ConfigFixtures.canonical_json(Jason.decode!(once))
+        assert once == twice
+      end
+    end
+
+    property "canonical_json is idempotent (flat scalars)" do
+      check all(m <- ^map_of_scalars, max_runs: 50) do
+        once = ConfigFixtures.canonical_json(m)
+        twice = ConfigFixtures.canonical_json(Jason.decode!(once))
+        assert once == twice
+      end
+    end
+
+    # Deterministic RTL/multi-byte coverage (bd-228 explicit gate).
+    # Uses member_of for BOTH key and value, so every run exercises at least
+    # one RTL or multi-byte codepoint in both positions.
+    property "canonical_json is idempotent for explicit RTL/multi-byte keys and values" do
+      check all(
+              key <- StreamData.member_of(["שלום", "مرحبا", "日本語", "🐶"]),
+              value <-
+                StreamData.member_of([
+                  "שלום",
+                  "مرحبا",
+                  "日本語",
+                  "🐶 puppy",
+                  ""
+                ]),
+              max_runs: 20
+            ) do
+        m = %{key => value}
         once = ConfigFixtures.canonical_json(m)
         twice = ConfigFixtures.canonical_json(Jason.decode!(once))
         assert once == twice
@@ -94,8 +205,16 @@ defmodule CodePuppyControl.Config.RoundTripPropertyTest do
   # ===========================================================================
 
   describe "normalize idempotency" do
-    property "normalize is idempotent" do
-      check all m <- ^map_of_scalars, max_runs: 50 do
+    property "normalize is idempotent (nested + utf8 + numeric edges)" do
+      check all(m <- ^nested_map, max_runs: 100) do
+        once = ConfigFixtures.normalize(m)
+        twice = m |> ConfigFixtures.normalize() |> ConfigFixtures.normalize()
+        assert once == twice
+      end
+    end
+
+    property "normalize is idempotent (flat scalars)" do
+      check all(m <- ^map_of_scalars, max_runs: 50) do
         once = ConfigFixtures.normalize(m)
         twice = m |> ConfigFixtures.normalize() |> ConfigFixtures.normalize()
         assert once == twice

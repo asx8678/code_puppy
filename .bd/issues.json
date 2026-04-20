@@ -4547,8 +4547,10 @@
       "labels": [],
       "dependencies": {},
       "created_at": "2026-04-20T20:04:50.320102",
-      "updated_at": "2026-04-20T20:04:50.320113",
-      "comments": []
+      "updated_at": "2026-04-20T20:12:29.869844",
+      "comments": [
+        "Claimed by planning-agent-019dac (2026-04-20). Plan: deepen StreamData generators in round_trip_property_test.exs per ticket: (a) recursive maps/lists via StreamData.tree, (b) UTF-8 incl RTL + multi-byte, (c) numeric edges (0, negatives, large ints). Keep keys as binaries (canonical_json requires string keys). Raise max_runs to 100 for nested-generator properties. INI block stays fixture-bound (untouched)."
+      ]
     }
   },
   "counter": 228
