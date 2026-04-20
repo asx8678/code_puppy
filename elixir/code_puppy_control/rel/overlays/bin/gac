@@ -1,0 +1,29 @@
+#!/bin/sh
+# gac - Git Auto Commit CLI wrapper
+# Invokes the Elixir Mix task or falls back to the Python CLI.
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+RELEASE_DIR="${SCRIPT_DIR}/.."
+
+# Try the release escript first
+for escript in "${RELEASE_DIR}"/lib/code_puppy_control-*/priv/bin/code_puppy_control; do
+    if [ -f "${escript}" ] && command -v elixir >/dev/null 2>&1; then
+        exec elixir "${escript}" gac "$@"
+    fi
+done
+
+# If we're inside a dev checkout with mix, use the Mix task
+MIX_PROJECT_DIR="${SCRIPT_DIR}/../.."
+if [ -f "${MIX_PROJECT_DIR}/mix.exs" ] && command -v mix >/dev/null 2>&1; then
+    cd "${MIX_PROJECT_DIR}"
+    exec mix gac "$@"
+fi
+
+# Fall back to the Python `gac` if available
+if command -v gac >/dev/null 2>&1; then
+    exec gac "$@"
+fi
+
+echo "Error: Neither the Elixir Mix task nor the Python 'gac' command is available." >&2
+exit 1

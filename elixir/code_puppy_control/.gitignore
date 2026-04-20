@@ -41,3 +41,5 @@ npm-debug.log
 
 # Generated parser files
 /src/*.erl
+# Escript build artifact
+/pup
