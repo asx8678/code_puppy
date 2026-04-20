@@ -4283,7 +4283,7 @@
       "id": "bd-213",
       "title": "bd-174 Wave 5: Port runtime tests (agent loop, run_manager, scheduler, MCP) to ExUnit",
       "description": "Wave 5 of bd-174 test-suite port.\n\nScope: ~50 files covering runtime orchestration.\n- tests/test_agent_loop.py, tests/test_run_manager.py\n- tests/test_scheduler.py, tests/test_scheduler_tools.py\n- tests/test_mcp_*.py\n- tests/test_event_bus.py, tests/test_event_store.py\n\nMost complex wave. Integration-heavy. Use async: false for GenServer-backed tests.\nProperty tests for scheduler cron invariants and rate-limiter token-bucket invariants.\n\nPrereq: Wave 4 complete.",
-      "status": "open",
+      "status": "closed",
       "priority": 2,
       "type": "task",
       "labels": [
@@ -4297,8 +4297,10 @@
         ]
       },
       "created_at": "2026-04-19T20:37:36.321031",
-      "updated_at": "2026-04-19T20:37:36.321039",
-      "comments": []
+      "updated_at": "2026-04-20T22:32:24.179736",
+      "comments": [
+        "Close-out audit (planning-agent-019dac, 2026-04-20):\n\nAll acceptance criteria met on main:\n- Merge commit: 5248c27a 'Merge bd-213: ExUnit Wave 5 runtime tests'\n- Work commits: 585e798c (initial port, 13 files / 186 tests + 14 property tests) and 1e4dd16e (review-response: disabled-task bug, EventStore assertions, CronScheduler sandbox isolation)\n- Parent bd-174 and siblings bd-210/bd-211/bd-212 all closed; this was the lone open Wave\n\nScope verification (all present under test/runtime/):\n- agent_loop_test.exs (331 L), run_manager_test.exs (103 L)\n- scheduler_task_test.exs (358 L), scheduler_api_test.exs (248 L), cron_scheduler_test.exs (135 L)\n- mcp_manager_test.exs (79 L), mcp_tool_index_test.exs (146 L)\n- event_bus_test.exs (236 L), event_store_test.exs (367 L)\n- rate_limiter_test.exs (307 L), concurrency_limiter_test.exs (183 L)\n- runtime_state_test.exs (140 L), property_test.exs (306 L)\nTotal: 2939 LOC of ExUnit tests.\n\nDesign compliance:\n- async: false on 10/13 GenServer-backed files (3 pure-data tests are async: true, appropriate)\n- Property tests cover scheduler cron invariants + rate-limiter token-bucket invariants as required by ticket\n- Tests were not re-run during this audit because /auto-test is off; merge landed 9h ago and was not reverted, CI signal trusted."
+      ]
     },
     "bd-214": {
       "id": "bd-214",
