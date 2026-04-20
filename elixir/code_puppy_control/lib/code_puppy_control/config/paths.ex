@@ -211,6 +211,15 @@ defmodule CodePuppyControl.Config.Paths do
   @spec claude_models_file() :: String.t()
   def claude_models_file, do: Path.join(data_dir(), "claude_models.json")
 
+  @doc """
+  Path to the encrypted credentials store directory.
+
+  Contains `store.json` — the AES-256-GCM encrypted credential store
+  managed by `CodePuppyControl.Credentials`.
+  """
+  @spec credentials_dir() :: String.t()
+  def credentials_dir, do: Path.join(data_dir(), "credentials")
+
   # ── Cache files ─────────────────────────────────────────────────────────
 
   @doc "Path to the autosaves directory."
@@ -306,7 +315,14 @@ defmodule CodePuppyControl.Config.Paths do
   """
   @spec ensure_dirs!() :: :ok
   def ensure_dirs! do
-    for dir <- [config_dir(), data_dir(), cache_dir(), state_dir(), skills_dir()] do
+    for dir <- [
+          config_dir(),
+          data_dir(),
+          cache_dir(),
+          state_dir(),
+          skills_dir(),
+          credentials_dir()
+        ] do
       File.mkdir_p!(dir)
       # Best-effort permission set (no-op on some platforms)
       File.chmod(dir, 0o700)
