@@ -3204,7 +3204,7 @@
       "id": "bd-162",
       "title": "3.4 TUI screens & widgets",
       "description": "Port tui/app.py + screens/ + widgets/ to Elixir. Includes: main chat screen, config screen, help screen, model selector, session browser.",
-      "status": "open",
+      "status": "closed",
       "priority": 2,
       "type": "task",
       "labels": [
@@ -3220,8 +3220,11 @@
         ]
       },
       "created_at": "2026-04-18T19:48:10.362362",
-      "updated_at": "2026-04-19T00:56:31.372894",
-      "comments": []
+      "updated_at": "2026-04-20T19:02:01.366161",
+      "comments": [
+        "Claimed by planning-agent-019dab. Implementing TUI screens (chat, config, help) and widgets (model selector, session browser) using Owl.LiveScreen.",
+        "TUI screens & widgets complete. Infrastructure (12.4 KB): screen.ex, app.ex. Screens (14.7 KB): chat.ex, help.ex, config.ex. Widgets (17.1 KB): model_selector.ex, session_browser.ex. REPL Integration: /sessions, /model, /tui commands. Tests (79 passing). Ports Python tui/app.py + screens/ + widgets/ to Elixir."
+      ]
     },
     "bd-163": {
       "id": "bd-163",
