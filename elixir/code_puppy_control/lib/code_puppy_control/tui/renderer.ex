@@ -47,6 +47,7 @@ defmodule CodePuppyControl.TUI.Renderer do
 
   alias CodePuppyControl.EventBus
   alias CodePuppyControl.Stream.Event
+  alias CodePuppyControl.TUI.Markdown
 
   # ── Constants ─────────────────────────────────────────────────────────────
 
@@ -276,7 +277,7 @@ defmodule CodePuppyControl.TUI.Renderer do
     buf = IO.iodata_to_binary(chunks)
 
     if String.contains?(buf, "\n") or byte_size(buf) > @flush_threshold do
-      owl_puts(buf)
+      owl_puts(Markdown.render(buf))
       state = put_in(state, [:text_buffer, idx], [])
       update_rate(state)
     else
@@ -310,7 +311,7 @@ defmodule CodePuppyControl.TUI.Renderer do
 
     if chunks != [] do
       text = IO.iodata_to_binary(chunks)
-      owl_puts(Owl.Data.tag(text, :faint))
+      owl_puts(Owl.Data.tag(Markdown.render(text), :faint))
     end
 
     state
@@ -402,7 +403,7 @@ defmodule CodePuppyControl.TUI.Renderer do
 
     if chunks != [] do
       text = IO.iodata_to_binary(chunks)
-      owl_puts(text)
+      owl_puts(Markdown.render(text))
     end
 
     put_in(state, [:text_buffer, idx], [])
@@ -413,7 +414,7 @@ defmodule CodePuppyControl.TUI.Renderer do
     |> Enum.each(fn {_idx, chunks} ->
       if chunks != [] do
         text = IO.iodata_to_binary(chunks)
-        owl_puts(text)
+        owl_puts(Markdown.render(text))
       end
     end)
 
@@ -425,7 +426,7 @@ defmodule CodePuppyControl.TUI.Renderer do
     |> Enum.each(fn {_idx, chunks} ->
       if chunks != [] do
         text = IO.iodata_to_binary(chunks)
-        owl_puts(Owl.Data.tag(text, :faint))
+        owl_puts(Owl.Data.tag(Markdown.render(text), :faint))
       end
     end)
 
