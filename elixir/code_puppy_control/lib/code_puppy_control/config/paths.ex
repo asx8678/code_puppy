@@ -365,9 +365,7 @@ defmodule CodePuppyControl.Config.Paths do
     unless :persistent_term.get(key, false) do
       :persistent_term.put(key, true)
 
-      Logger.warning(
-        "#{env_var} is deprecated for Elixir pup-ex. Use PUP_EX_HOME instead."
-      )
+      Logger.warning("#{env_var} is deprecated for Elixir pup-ex. Use PUP_EX_HOME instead.")
     end
 
     :ok

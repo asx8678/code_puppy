@@ -56,8 +56,11 @@ defmodule CodePuppyControl.Config.Doctor do
         "Status: ISOLATED ✅"
       end
 
-    Enum.join(["🩺 pup-ex doctor — checking isolation health", "" | lines] ++
-              ["", summary, status], "\n")
+    Enum.join(
+      ["🩺 pup-ex doctor — checking isolation health", "" | lines] ++
+        ["", summary, status],
+      "\n"
+    )
   end
 
   @doc "Return the exit code: 0 if all :pass or :info, 1 if any :fail."
@@ -86,9 +89,17 @@ defmodule CodePuppyControl.Config.Doctor do
         perm_bits = Bitwise.band(mode, 0o777)
 
         if perm_bits == 0o700 do
-          %{name: "Home permissions 0700", status: :pass, detail: "permissions are #{octal(perm_bits)}"}
+          %{
+            name: "Home permissions 0700",
+            status: :pass,
+            detail: "permissions are #{octal(perm_bits)}"
+          }
         else
-          %{name: "Home permissions 0700", status: :warn, detail: "permissions are #{octal(perm_bits)} (expected 0700)"}
+          %{
+            name: "Home permissions 0700",
+            status: :warn,
+            detail: "permissions are #{octal(perm_bits)} (expected 0700)"
+          }
         end
 
       {:error, reason} ->
@@ -111,7 +122,8 @@ defmodule CodePuppyControl.Config.Doctor do
       %{
         name: "Isolation guard blocks writes to legacy home",
         status: :fail,
-        detail: "GUARD FAILURE: write to #{probe_path} was NOT blocked! Cleaned up, but isolation is compromised."
+        detail:
+          "GUARD FAILURE: write to #{probe_path} was NOT blocked! Cleaned up, but isolation is compromised."
       }
     rescue
       Isolation.IsolationViolation ->
@@ -205,14 +217,19 @@ defmodule CodePuppyControl.Config.Doctor do
         %{name: "OAuth isolation", status: :pass, detail: "auth state only in Elixir home"}
 
       legacy_has_oauth and not elixir_has_oauth ->
-        %{name: "OAuth isolation", status: :pass, detail: "auth state only in legacy home (not shared)"}
+        %{
+          name: "OAuth isolation",
+          status: :pass,
+          detail: "auth state only in legacy home (not shared)"
+        }
 
       true ->
         # Both homes have auth files — potential shared state
         %{
           name: "OAuth isolation",
           status: :warn,
-          detail: "both homes have auth files — verify they are independent (full check in bd-166)"
+          detail:
+            "both homes have auth files — verify they are independent (full check in bd-166)"
         }
     end
   end

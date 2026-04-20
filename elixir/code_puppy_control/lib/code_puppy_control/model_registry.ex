@@ -365,7 +365,6 @@ defmodule CodePuppyControl.ModelRegistry do
 
     overlay_specs
     |> Enum.reduce([], fn {path, label}, acc ->
-
       case File.read(path) do
         {:ok, content} ->
           case Jason.decode(content) do

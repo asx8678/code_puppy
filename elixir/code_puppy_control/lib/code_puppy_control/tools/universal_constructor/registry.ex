@@ -39,8 +39,6 @@ defmodule CodePuppyControl.Tools.UniversalConstructor.Registry do
   alias CodePuppyControl.Tools.UniversalConstructor.Models
   alias CodePuppyControl.Tools.UniversalConstructor.Validator
 
-
-
   # ============================================================================
   # Client API
   # ============================================================================

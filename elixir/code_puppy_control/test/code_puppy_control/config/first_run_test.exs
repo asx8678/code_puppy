@@ -60,7 +60,12 @@ defmodule CodePuppyControl.Config.FirstRunTest do
       File.rm_rf(tmp_home)
 
       # Create a marker file in legacy home to prove we don't touch it
-      legacy_marker = Path.join(@home, ".code_puppy/_first_run_test_marker_#{:erlang.unique_integer([:positive])}")
+      legacy_marker =
+        Path.join(
+          @home,
+          ".code_puppy/_first_run_test_marker_#{:erlang.unique_integer([:positive])}"
+        )
+
       legacy_marker_dir = Path.dirname(legacy_marker)
 
       File.mkdir_p!(legacy_marker_dir)
@@ -185,7 +190,9 @@ defmodule CodePuppyControl.Config.FirstRunTest do
     end
 
     test "returns false when Elixir home directory does not exist" do
-      tmp_home = Path.join(System.tmp_dir!(), "fr_nonexistent_#{:erlang.unique_integer([:positive])}")
+      tmp_home =
+        Path.join(System.tmp_dir!(), "fr_nonexistent_#{:erlang.unique_integer([:positive])}")
+
       System.put_env("PUP_EX_HOME", tmp_home)
       File.rm_rf(tmp_home)
 

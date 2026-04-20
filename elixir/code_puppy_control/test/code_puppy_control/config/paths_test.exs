@@ -229,7 +229,9 @@ defmodule CodePuppyControl.Config.PathsTest do
 
     test "returns expanded path for non-existent paths" do
       # Use home dir to avoid macOS /tmp → /private/tmp symlink issues
-      non_existent = Path.join(@home, "nonexistent_path_xyz_#{:erlang.unique_integer([:positive])}/file.txt")
+      non_existent =
+        Path.join(@home, "nonexistent_path_xyz_#{:erlang.unique_integer([:positive])}/file.txt")
+
       expected = non_existent
       resolved = Paths.canonical_resolve(non_existent)
       assert resolved == expected

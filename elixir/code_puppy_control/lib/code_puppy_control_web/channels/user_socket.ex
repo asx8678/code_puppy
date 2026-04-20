@@ -87,42 +87,62 @@ defmodule CodePuppyControlWeb.UserSocket do
   def connect(params, socket, connect_info) do
     Logger.debug("UserSocket: client connecting with params #{inspect(params)}")
 
-    token = params["token"]
+    # Verify Origin header for CORS protection (bd-218)
+    # Phoenix provides headers in connect_info[:x_headers] as [{key, value}, ...]
+    origin =
+      case connect_info[:x_headers] do
+        headers when is_list(headers) ->
+          Enum.find_value(headers, fn
+            {"origin", value} -> value
+            {"Origin", value} -> value
+            _ -> nil
+          end)
 
-    case authenticate(token) do
-      {:ok, session_id} ->
-        Logger.debug("UserSocket: authenticated session #{session_id}")
+        _ ->
+          nil
+      end
 
-        socket =
-          socket
-          |> assign(:connected_at, DateTime.utc_now())
-          |> assign(:connect_info, connect_info)
-          |> assign(:client_params, params)
-          |> assign(:verified_session_id, session_id)
+    if origin && !CodePuppyControlWeb.Plugs.CORS.is_allowed_origin?(origin) do
+      Logger.warning("UserSocket: origin not allowed - #{inspect(origin)}")
+      {:error, :origin_not_allowed}
+    else
+      token = params["token"]
 
-        # Emit WebSocket connect telemetry
-        Telemetry.websocket_connect(socket.id, connect_info[:transport], params)
+      case authenticate(token) do
+        {:ok, session_id} ->
+          Logger.debug("UserSocket: authenticated session #{session_id}")
 
-        {:ok, socket}
+          socket =
+            socket
+            |> assign(:connected_at, DateTime.utc_now())
+            |> assign(:connect_info, connect_info)
+            |> assign(:client_params, params)
+            |> assign(:verified_session_id, session_id)
 
-      {:error, :dev_mode} ->
-        Logger.debug("UserSocket: no secret configured, accepting connection (dev mode)")
+          # Emit WebSocket connect telemetry
+          Telemetry.websocket_connect(socket.id, connect_info[:transport], params)
 
-        socket =
-          socket
-          |> assign(:connected_at, DateTime.utc_now())
-          |> assign(:connect_info, connect_info)
-          |> assign(:client_params, params)
-          |> assign(:verified_session_id, nil)
+          {:ok, socket}
 
-        # Emit WebSocket connect telemetry
-        Telemetry.websocket_connect(socket.id, connect_info[:transport], params)
+        {:error, :dev_mode} ->
+          Logger.debug("UserSocket: no secret configured, accepting connection (dev mode)")
 
-        {:ok, socket}
+          socket =
+            socket
+            |> assign(:connected_at, DateTime.utc_now())
+            |> assign(:connect_info, connect_info)
+            |> assign(:client_params, params)
+            |> assign(:verified_session_id, nil)
 
-      {:error, reason} ->
-        Logger.warning("UserSocket: authentication failed - #{inspect(reason)}")
-        {:error, :invalid_token}
+          # Emit WebSocket connect telemetry
+          Telemetry.websocket_connect(socket.id, connect_info[:transport], params)
+
+          {:ok, socket}
+
+        {:error, reason} ->
+          Logger.warning("UserSocket: authentication failed - #{inspect(reason)}")
+          {:error, :invalid_token}
+      end
     end
   end
 

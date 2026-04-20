@@ -190,7 +190,9 @@ defmodule CodePuppyControl.Config.IsolationTest do
 
   describe "with_sandbox/2" do
     test "lifts the guard for whitelisted paths" do
-      unique_dir = Path.join(@home, ".code_puppy/_isolation_test_#{:erlang.unique_integer([:positive])}")
+      unique_dir =
+        Path.join(@home, ".code_puppy/_isolation_test_#{:erlang.unique_integer([:positive])}")
+
       test_file = Path.join(unique_dir, "test.txt")
 
       File.mkdir_p!(unique_dir)
@@ -379,7 +381,12 @@ defmodule CodePuppyControl.Config.IsolationTest do
     end
 
     test "reads file from legacy home when it exists" do
-      unique_dir = Path.join(@home, ".code_puppy/_isolation_read_test_#{:erlang.unique_integer([:positive])}")
+      unique_dir =
+        Path.join(
+          @home,
+          ".code_puppy/_isolation_read_test_#{:erlang.unique_integer([:positive])}"
+        )
+
       File.mkdir_p!(unique_dir)
       test_file = Path.join(unique_dir, "read_test.txt")
       File.write!(test_file, "legacy content")
@@ -392,7 +399,8 @@ defmodule CodePuppyControl.Config.IsolationTest do
     end
 
     test "returns error for non-existent file in legacy home" do
-      legacy_path = Path.join(@home, ".code_puppy/nonexistent_#{:erlang.unique_integer([:positive])}.txt")
+      legacy_path =
+        Path.join(@home, ".code_puppy/nonexistent_#{:erlang.unique_integer([:positive])}.txt")
 
       assert {:error, :enoent} = Isolation.read_only_legacy(legacy_path)
     end

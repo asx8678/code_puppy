@@ -23,7 +23,13 @@ defmodule CodePuppyControl.Config.TruthyParsingTest do
     on_exit(fn ->
       Loader.invalidate()
 
-      for var <- ["PUP_MODEL", "PUPPY_DEFAULT_MODEL", "PUP_AGENT", "PUPPY_DEFAULT_AGENT", "PUP_DEBUG"] do
+      for var <- [
+            "PUP_MODEL",
+            "PUPPY_DEFAULT_MODEL",
+            "PUP_AGENT",
+            "PUPPY_DEFAULT_AGENT",
+            "PUP_DEBUG"
+          ] do
         System.delete_env(var)
       end
     end)
@@ -43,6 +49,7 @@ defmodule CodePuppyControl.Config.TruthyParsingTest do
 
         try do
           Loader.load(path)
+
           assert Debug.yolo_mode?() == true,
                  "Expected yolo_mode? to be true for value #{inspect(val)}"
         after
@@ -58,6 +65,7 @@ defmodule CodePuppyControl.Config.TruthyParsingTest do
 
         try do
           Loader.load(path)
+
           assert Debug.streaming_enabled?() == true,
                  "Expected streaming_enabled? to be true for value #{inspect(val)}"
         after
@@ -95,6 +103,7 @@ defmodule CodePuppyControl.Config.TruthyParsingTest do
 
         try do
           Loader.load(path)
+
           assert Debug.yolo_mode?() == false,
                  "Expected yolo_mode? to be false for unrecognized value #{inspect(val)}"
         after

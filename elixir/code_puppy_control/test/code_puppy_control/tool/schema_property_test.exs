@@ -23,7 +23,7 @@ defmodule CodePuppyControl.Tool.SchemaPropertyTest do
 
   describe "validate + cast consistency" do
     property "valid string data passes both validate and cast" do
-      check all value <- string(:alphanumeric, min_length: 1), max_runs: 100 do
+      check all(value <- string(:alphanumeric, min_length: 1), max_runs: 100) do
         schema = %{"type" => "string"}
         assert {:ok, ^value} = Schema.validate(schema, value)
         assert {:ok, ^value} = Schema.cast("string", value)
@@ -31,7 +31,7 @@ defmodule CodePuppyControl.Tool.SchemaPropertyTest do
     end
 
     property "valid integer data passes both validate and cast" do
-      check all value <- integer(), max_runs: 100 do
+      check all(value <- integer(), max_runs: 100) do
         schema = %{"type" => "integer"}
         assert {:ok, ^value} = Schema.validate(schema, value)
         assert {:ok, ^value} = Schema.cast("integer", value)
@@ -39,7 +39,7 @@ defmodule CodePuppyControl.Tool.SchemaPropertyTest do
     end
 
     property "valid boolean data passes validate" do
-      check all value <- boolean(), max_runs: 100 do
+      check all(value <- boolean(), max_runs: 100) do
         schema = %{"type" => "boolean"}
         assert {:ok, ^value} = Schema.validate(schema, value)
       end
@@ -50,9 +50,11 @@ defmodule CodePuppyControl.Tool.SchemaPropertyTest do
 
   describe "enum constraint" do
     property "value in enum always validates; value not in enum always fails" do
-      check all allowed <- list_of(string(:alphanumeric, min_length: 1), min_length: 1),
-                test_val <- string(:alphanumeric, min_length: 1),
-                max_runs: 100 do
+      check all(
+              allowed <- list_of(string(:alphanumeric, min_length: 1), min_length: 1),
+              test_val <- string(:alphanumeric, min_length: 1),
+              max_runs: 100
+            ) do
         schema = %{"type" => "string", "enum" => allowed}
 
         if test_val in allowed do
@@ -68,9 +70,11 @@ defmodule CodePuppyControl.Tool.SchemaPropertyTest do
 
   describe "string length constraints" do
     property "minLength rejects short strings, accepts long ones" do
-      check all min_len <- non_negative_integer(),
-                value <- string(:alphanumeric),
-                max_runs: 200 do
+      check all(
+              min_len <- non_negative_integer(),
+              value <- string(:alphanumeric),
+              max_runs: 200
+            ) do
         schema = %{"type" => "string", "minLength" => min_len}
 
         if String.length(value) >= min_len do
@@ -82,9 +86,11 @@ defmodule CodePuppyControl.Tool.SchemaPropertyTest do
     end
 
     property "maxLength rejects long strings, accepts short ones" do
-      check all max_len <- positive_integer(),
-                value <- string(:alphanumeric),
-                max_runs: 200 do
+      check all(
+              max_len <- positive_integer(),
+              value <- string(:alphanumeric),
+              max_runs: 200
+            ) do
         schema = %{"type" => "string", "maxLength" => max_len}
 
         if String.length(value) <= max_len do
@@ -100,9 +106,11 @@ defmodule CodePuppyControl.Tool.SchemaPropertyTest do
 
   describe "numeric range constraints" do
     property "minimum constraint for integers" do
-      check all min_val <- integer(-1000..1000),
-                value <- integer(-2000..2000),
-                max_runs: 200 do
+      check all(
+              min_val <- integer(-1000..1000),
+              value <- integer(-2000..2000),
+              max_runs: 200
+            ) do
         schema = %{"type" => "integer", "minimum" => min_val}
 
         if value >= min_val do
@@ -114,9 +122,11 @@ defmodule CodePuppyControl.Tool.SchemaPropertyTest do
     end
 
     property "maximum constraint for integers" do
-      check all max_val <- integer(-1000..1000),
-                value <- integer(-2000..2000),
-                max_runs: 200 do
+      check all(
+              max_val <- integer(-1000..1000),
+              value <- integer(-2000..2000),
+              max_runs: 200
+            ) do
         schema = %{"type" => "integer", "maximum" => max_val}
 
         if value <= max_val do
@@ -132,9 +142,13 @@ defmodule CodePuppyControl.Tool.SchemaPropertyTest do
 
   describe "required field enforcement" do
     property "object with all required fields passes; missing required fails" do
-      check all raw_keys <- list_of(string(:alphanumeric, min_length: 1), min_length: 1, max_length: 5),
-              max_runs: 100 do
+      check all(
+              raw_keys <-
+                list_of(string(:alphanumeric, min_length: 1), min_length: 1, max_length: 5),
+              max_runs: 100
+            ) do
         required_keys = Enum.uniq(raw_keys)
+
         properties =
           Map.new(required_keys, fn key ->
             {key, %{"type" => "string"}}
@@ -163,8 +177,10 @@ defmodule CodePuppyControl.Tool.SchemaPropertyTest do
 
   describe "array item validation" do
     property "arrays of matching item type pass; mismatched items fail" do
-      check all items <- list_of(integer(), min_length: 1, max_length: 10),
-                max_runs: 100 do
+      check all(
+              items <- list_of(integer(), min_length: 1, max_length: 10),
+              max_runs: 100
+            ) do
         schema = %{
           "type" => "array",
           "items" => %{"type" => "integer"}
@@ -176,9 +192,11 @@ defmodule CodePuppyControl.Tool.SchemaPropertyTest do
     end
 
     property "array minItems/maxItems constraints" do
-      check all min_items <- non_negative_integer(),
-                max_items <- positive_integer(),
-                max_runs: 100 do
+      check all(
+              min_items <- non_negative_integer(),
+              max_items <- positive_integer(),
+              max_runs: 100
+            ) do
         # Ensure max >= min
         max_items = max(max_items, min_items + 1)
 
@@ -209,25 +227,25 @@ defmodule CodePuppyControl.Tool.SchemaPropertyTest do
 
   describe "cast round-trip for stringifiable types" do
     property "cast('integer', n) for integer n always succeeds" do
-      check all n <- integer(), max_runs: 200 do
+      check all(n <- integer(), max_runs: 200) do
         assert {:ok, ^n} = Schema.cast("integer", n)
       end
     end
 
     property "cast('string', s) for string s always succeeds" do
-      check all s <- string(:alphanumeric), max_runs: 200 do
+      check all(s <- string(:alphanumeric), max_runs: 200) do
         assert {:ok, ^s} = Schema.cast("string", s)
       end
     end
 
     property "cast('boolean', b) for boolean b always succeeds" do
-      check all b <- boolean(), max_runs: 100 do
+      check all(b <- boolean(), max_runs: 100) do
         assert {:ok, ^b} = Schema.cast("boolean", b)
       end
     end
 
     property "cast('number', f) for float f always succeeds" do
-      check all f <- float(min: -1000.0, max: 1000.0), max_runs: 100 do
+      check all(f <- float(min: -1000.0, max: 1000.0), max_runs: 100) do
         assert {:ok, ^f} = Schema.cast("number", f)
       end
     end
@@ -237,32 +255,40 @@ defmodule CodePuppyControl.Tool.SchemaPropertyTest do
 
   describe "type mismatch always produces errors" do
     property "non-string value fails string validation" do
-      check all value <- one_of([integer(), boolean(), constant(%{}), constant([])]),
-                max_runs: 100 do
+      check all(
+              value <- one_of([integer(), boolean(), constant(%{}), constant([])]),
+              max_runs: 100
+            ) do
         assert {:error, violations} = Schema.validate(%{"type" => "string"}, value)
         assert length(violations) >= 1
       end
     end
 
     property "non-integer value fails integer validation" do
-      check all value <- one_of([string(:alphanumeric), boolean(), constant(%{}), constant([])]),
-                max_runs: 100 do
+      check all(
+              value <- one_of([string(:alphanumeric), boolean(), constant(%{}), constant([])]),
+              max_runs: 100
+            ) do
         assert {:error, violations} = Schema.validate(%{"type" => "integer"}, value)
         assert length(violations) >= 1
       end
     end
 
     property "non-array value fails array validation" do
-      check all value <- one_of([integer(), string(:alphanumeric), boolean(), constant(%{})]),
-                max_runs: 100 do
+      check all(
+              value <- one_of([integer(), string(:alphanumeric), boolean(), constant(%{})]),
+              max_runs: 100
+            ) do
         assert {:error, violations} = Schema.validate(%{"type" => "array"}, value)
         assert length(violations) >= 1
       end
     end
 
     property "non-object value fails object validation" do
-      check all value <- one_of([integer(), string(:alphanumeric), boolean(), constant([])]),
-                max_runs: 100 do
+      check all(
+              value <- one_of([integer(), string(:alphanumeric), boolean(), constant([])]),
+              max_runs: 100
+            ) do
         assert {:error, violations} = Schema.validate(%{"type" => "object"}, value)
         assert length(violations) >= 1
       end
@@ -273,14 +299,14 @@ defmodule CodePuppyControl.Tool.SchemaPropertyTest do
 
   describe "violations/2 returns consistent list" do
     property "empty list for valid data, non-empty list for invalid data" do
-      check all value <- string(:alphanumeric, min_length: 1), max_runs: 100 do
+      check all(value <- string(:alphanumeric, min_length: 1), max_runs: 100) do
         # Valid: string type with string data
         assert [] = Schema.violations(%{"type" => "string"}, value)
       end
     end
 
     property "non-empty list for type mismatch" do
-      check all value <- integer(), max_runs: 100 do
+      check all(value <- integer(), max_runs: 100) do
         violations = Schema.violations(%{"type" => "string"}, value)
         assert is_list(violations)
         assert length(violations) >= 1
@@ -292,7 +318,7 @@ defmodule CodePuppyControl.Tool.SchemaPropertyTest do
 
   describe "nested object validation" do
     property "deeply nested required fields are enforced" do
-      check all inner_val <- string(:alphanumeric, min_length: 1), max_runs: 100 do
+      check all(inner_val <- string(:alphanumeric, min_length: 1), max_runs: 100) do
         schema = %{
           "type" => "object",
           "properties" => %{
@@ -323,7 +349,7 @@ defmodule CodePuppyControl.Tool.SchemaPropertyTest do
 
   describe "validate!/2 consistency" do
     property "validate!/2 returns value when validate/2 returns {:ok, value}" do
-      check all value <- string(:alphanumeric, min_length: 1), max_runs: 100 do
+      check all(value <- string(:alphanumeric, min_length: 1), max_runs: 100) do
         schema = %{"type" => "string"}
         assert {:ok, ^value} = Schema.validate(schema, value)
         assert ^value = Schema.validate!(schema, value)
@@ -331,7 +357,7 @@ defmodule CodePuppyControl.Tool.SchemaPropertyTest do
     end
 
     property "validate!/2 raises ArgumentError when validate/2 returns {:error, _}" do
-      check all value <- integer(), max_runs: 100 do
+      check all(value <- integer(), max_runs: 100) do
         assert_raise ArgumentError, ~r/Schema validation failed/, fn ->
           Schema.validate!(%{"type" => "string"}, value)
         end

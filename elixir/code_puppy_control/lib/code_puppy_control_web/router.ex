@@ -27,6 +27,13 @@ defmodule CodePuppyControlWeb.Router do
     plug :accepts, ["json"]
   end
 
+  # Authenticated API pipeline — mutating operations require auth
+  pipeline :authenticated_api do
+    plug :accepts, ["json"]
+    plug CodePuppyControlWeb.Plugs.Auth
+  end
+
+  # Public endpoints — no auth required
   scope "/", CodePuppyControlWeb do
     pipe_through :api
 
@@ -34,8 +41,9 @@ defmodule CodePuppyControlWeb.Router do
     get "/health", HealthController, :index
   end
 
+  # Authenticated API endpoints — mutating operations
   scope "/api", CodePuppyControlWeb do
-    pipe_through :api
+    pipe_through :authenticated_api
 
     resources "/runs", RunController, only: [:create, :show, :delete]
     post "/runs/:id/execute", RunController, :execute

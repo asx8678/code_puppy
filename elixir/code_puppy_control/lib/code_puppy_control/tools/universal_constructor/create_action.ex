@@ -14,8 +14,6 @@ defmodule CodePuppyControl.Tools.UniversalConstructor.CreateAction do
   alias CodePuppyControl.Tools.UniversalConstructor.Registry
   alias CodePuppyControl.Tools.UniversalConstructor.Validator
 
-
-
   @doc """
   Handles the create action for creating a new UC tool.
 
