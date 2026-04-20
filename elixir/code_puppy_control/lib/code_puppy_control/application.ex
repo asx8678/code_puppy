@@ -28,7 +28,7 @@ defmodule CodePuppyControl.Application do
   20. CodePuppyControl.RequestTracker - Tracks JSON-RPC request/response correlation
   21. CodePuppyControl.Tools.CommandRunner.ProcessManager - Shell process tracking (bd-64)
   22. CodePuppyControl.PtyManager - PTY session manager for interactive terminals (bd-217)
-  23. Oban - Job processing engine with SQLite Lite engine
+  23. Oban - Job processing engine with SQLite Lite engine (queues: default, scheduled, workflows)
   23. CodePuppyControl.Scheduler.CronScheduler - Periodic scheduler for cron tasks
   24. CodePuppyControlWeb.Endpoint - HTTP API endpoint
   """
