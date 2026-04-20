@@ -90,3 +90,46 @@ Note: the `python-freeze-check.yml` workflow posts advisory warnings only; enfor
 > Reach out via:
 > - bd issues for feature requests and bugs
 - Pack Leader agents for architectural questions
+
+## Testing Tiers
+
+During development, use tiered testing to minimize feedback time while maintaining quality.
+
+### Test Commands by Context
+
+| Context | Command | Scope |
+|---------|---------|-------|
+| Active development | `mix test.changed` | Changed files + their tests |
+| Before commit | `mix test.changed --depth 2` | + dependent modules |
+| Closing a bd issue | `mix test` | Full unit suite |
+| Closing an epic | `mix test && mix test --only integration` | Everything |
+| CI pipeline | Full suite | Always runs everything |
+
+### Escalation Triggers
+
+Always run the **full test suite** (`mix test`) when:
+
+- **Config files changed:** `config/*.exs`, `mix.exs`
+- **Test infrastructure changed:** `test/support/*`, `test_helper.exs`
+- **Database migrations added/modified:** `priv/repo/migrations/*`
+- **Many files changed:** 10+ files in a single change
+- **Cross-cutting modules touched:** `application.ex`, `telemetry.ex`, `repo.ex`
+
+### Quick Reference
+
+```bash
+# Development (fast)
+mix test.changed              # Tests for uncommitted changes
+mix test.changed --staged     # Tests for staged changes only
+mix test.changed --base main  # Tests since branching from main
+
+# Deeper analysis
+mix test.changed --depth 2    # Include tests for dependent modules
+
+# Full validation
+mix test                      # All unit tests
+mix test --only integration   # Integration tests
+mix test --only e2e           # End-to-end tests
+```
+
+**Rule:** Agents default to `mix test.changed` during development. Full suite runs on issue/epic close.
