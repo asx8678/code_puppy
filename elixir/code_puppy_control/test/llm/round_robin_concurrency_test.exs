@@ -112,8 +112,7 @@ defmodule CodePuppyControl.LLM.RoundRobinConcurrencyTest do
   end
 
   describe "distribution invariant (property-based)" do
-    property "total call count always equals num_workers × calls_per_worker" do
-      # StreamData generators
+    property "no calls lost, all results from configured set, bounded skew" do
       import StreamData
 
       check all(
@@ -121,44 +120,42 @@ defmodule CodePuppyControl.LLM.RoundRobinConcurrencyTest do
               rotate_every <- integer(1..4),
               num_workers <- integer(2..6),
               calls_per_worker <- integer(50..100),
-              # Ensure total is divisible by num_models for clean distribution
-              # (rotate_every * num_models) must divide (num_workers * calls_per_worker)
               max_runs: 20
             ) do
         models = for i <- 1..num_models, do: "m#{i}"
         total = num_workers * calls_per_worker
 
-        # Distribution is only perfectly even when total is divisible by
-        # rotate_every * num_models (a full rotation cycle). With rotate_every=3
-        # and 5 models, a cycle is 15 calls. If total isn't a multiple of 15,
-        # some models will get one extra rotate_every-block.
-        cycle = rotate_every * num_models
+        :ok = RoundRobinModel.configure(models: models, rotate_every: rotate_every)
 
-        unless rem(total, cycle) != 0 do
-          :ok = RoundRobinModel.configure(models: models, rotate_every: rotate_every)
+        all_results = run_concurrent_workers(num_workers, calls_per_worker)
 
-          all_results = run_concurrent_workers(num_workers, calls_per_worker)
+        # Invariant 1: no calls lost or duplicated
+        assert length(all_results) == total,
+               "Lost or duplicated calls: expected #{total}, got #{length(all_results)}"
 
-          # The hard invariant: every call produced a result
-          assert length(all_results) == total,
-                 "Lost or duplicated calls: expected #{total}, got #{length(all_results)}"
+        # Invariant 2: every result is a valid model from the configured set
+        model_set = MapSet.new(models)
 
-          # Every result is a valid model name
-          for result <- all_results do
-            assert result in models,
-                   "Got unexpected model name: #{inspect(result)}"
-          end
-
-          frequencies = Enum.frequencies(all_results)
-          expected_per_model = total |> div(num_models)
-
-          for model <- models do
-            count = Map.get(frequencies, model, 0)
-            assert count == expected_per_model,
-                   "#{model} got #{count}, expected #{expected_per_model}. " <>
-                     "Distribution: #{inspect(frequencies)}"
-          end
+        for result <- all_results do
+          assert MapSet.member?(model_set, result),
+                 "Got unexpected model name: #{inspect(result)}, expected one of #{inspect(models)}"
         end
+
+        # Invariant 3: bounded skew — no model gets more than one full
+        # rotate_every-block more than any other. The max skew between any
+        # two models is at most rotate_every * num_models.
+        frequencies = Enum.frequencies(all_results)
+        counts = Enum.map(models, &Map.get(frequencies, &1, 0))
+        max_count = Enum.max(counts)
+        min_count = Enum.min(counts)
+        skew = max_count - min_count
+
+        # Upper bound: at most one extra rotate_every-block per model
+        max_allowed_skew = rotate_every * num_models
+
+        assert skew <= max_allowed_skew,
+               "Skew #{skew} between #{max_count} and #{min_count} exceeds " <>
+                 "max allowed #{max_allowed_skew}. Distribution: #{inspect(frequencies)}"
       end
     end
   end

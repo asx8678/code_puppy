@@ -133,30 +133,56 @@ defmodule CodePuppyControl.LLM.ModelFactoryErrorsTest do
     end
 
     test "gracefully handles malformed JSON in extra models overlay" do
-      # The overlay loader logs warnings but doesn't crash — verify reload
-      # still succeeds with the base config even if an overlay is broken.
-      tmp_path =
-        Path.join(System.tmp_dir!(), "bad_extra_#{System.unique_integer()}.json")
+      # Route through PUP_EX_HOME so that Paths.extra_models_file() resolves
+      # to a directory we control. Write malformed JSON there, then verify
+      # that ModelRegistry.reload/0 logs a warning but still succeeds
+      # (base config loads; only the overlay is skipped).
+      tmp_home = Path.join(System.tmp_dir!(), "pup_ex_overlay_#{System.unique_integer()}")
+      File.mkdir_p!(tmp_home)
 
-      File.write!(tmp_path, "not valid json")
+      extra_path = Path.join(tmp_home, "extra_models.json")
+      File.write!(extra_path, "not valid json")
 
-      # We can't easily swap the overlay path (it's hardcoded in Paths module),
-      # but we CAN verify that a reload with a valid bundled path still works
-      # even if overlays fail. The key invariant: reload doesn't crash.
-      result = ModelRegistry.reload()
-      assert result == :ok or match?({:error, _}, result)
-    after
-      # Clean up temp file if we created it
-      File.rm(Path.join(System.tmp_dir!(), "bad_extra_#{System.unique_integer()}.json"))
+      saved_home = System.get_env("PUP_EX_HOME")
+
+      try do
+        System.put_env("PUP_EX_HOME", tmp_home)
+
+        log =
+          ExUnit.CaptureLog.capture_log(fn ->
+            result = ModelRegistry.reload()
+            # Reload must succeed — base config always loads
+            assert result == :ok
+          end)
+
+        # The overlay loader must log a warning about the malformed file
+        assert log =~ "failed to parse extra models" or log =~ "failed to read extra models",
+               "Expected warning about malformed overlay, got:\n#{log}"
+      after
+        if saved_home do
+          System.put_env("PUP_EX_HOME", saved_home)
+        else
+          System.delete_env("PUP_EX_HOME")
+        end
+
+        File.rm_rf!(tmp_home)
+        ModelRegistry.reload()
+      end
     end
   end
 
   # ── Missing Required Fields ──────────────────────────────────────────
 
-  describe "resolve/1 — missing required fields" do
-    test "openai model missing 'name' field still resolves (uses model_name)" do
-      # In the Elixir port, missing "name" falls back to model_name in build_handle
-      # This is different from Python which raises KeyError
+  # ── Characterization: Permissive Resolution ─────────────────────────
+  #
+  # The Elixir port is intentionally more permissive than Python: missing
+  # fields (name, endpoint, api_key) produce {:ok, handle} with nil/nil
+  # fallbacks rather than {:error, _}. These tests document the ACTUAL
+  # behavior so regressions are caught, even though the names sound like
+  # they should error.
+
+  describe "resolve/1 — permissive resolution (characterization)" do
+    test "openai model missing 'name' field resolves with registry key fallback" do
       with_env([{"OPENAI_API_KEY", "test-key"}], fn ->
         :ets.insert(:model_configs, {"openai-no-name", %{"type" => "openai"}})
 
@@ -168,7 +194,7 @@ defmodule CodePuppyControl.LLM.ModelFactoryErrorsTest do
       :ets.delete(:model_configs, "openai-no-name")
     end
 
-    test "anthropic model missing 'name' field still resolves (uses model_name)" do
+    test "anthropic model missing 'name' field resolves with registry key fallback" do
       with_env([{"ANTHROPIC_API_KEY", "test-key"}], fn ->
         :ets.insert(:model_configs, {"anthropic-no-name", %{"type" => "anthropic"}})
 
@@ -182,7 +208,7 @@ defmodule CodePuppyControl.LLM.ModelFactoryErrorsTest do
 
   # ── Azure OpenAI Missing Required Configs ─────────────────────────────
 
-  describe "resolve/1 — azure_openai missing required configs" do
+  describe "resolve/1 — azure_openai permissive resolution (characterization)" do
     test "missing azure_endpoint resolves with nil base_url" do
       :ets.insert(
         :model_configs,
@@ -202,7 +228,7 @@ defmodule CodePuppyControl.LLM.ModelFactoryErrorsTest do
       :ets.delete(:model_configs, "azure-no-endpoint")
     end
 
-    test "missing api_version still resolves" do
+    test "missing api_version resolves with nil base_url" do
       with_env([{"AZURE_OPENAI_API_KEY", "azure-key"}], fn ->
         :ets.insert(
           :model_configs,
@@ -249,8 +275,8 @@ defmodule CodePuppyControl.LLM.ModelFactoryErrorsTest do
 
   # ── Custom Endpoint Errors ───────────────────────────────────────────
 
-  describe "resolve/1 — custom endpoint errors" do
-    test "custom_openai without custom_endpoint config resolves with default base_url" do
+  describe "resolve/1 — custom endpoint permissive resolution (characterization)" do
+    test "custom_openai without custom_endpoint config resolves with nil base_url" do
       # Elixir port: missing custom_endpoint falls back to provider default URL
       # (Python raises ValueError — Elixir is more permissive)
       :ets.insert(

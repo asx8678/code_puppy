@@ -79,6 +79,52 @@ All changes require review. The Python freeze policy (above) will be strictly en
 
 Note: the `python-freeze-check.yml` workflow posts advisory warnings only; enforcement is reviewer-driven.
 
+### Automated Code Review for Test Files
+
+All new and modified test files must pass automated review before merge. This ensures test quality, coverage, and idiomatic patterns.
+
+#### Review Agents
+
+| Language | Agent | Focus |
+|----------|-------|-------|
+| Elixir | `elixir-reviewer` | Anti-patterns, OTP idioms, Python-isms, supervision tree correctness |
+| Python | `python-reviewer` | Idiomatic patterns, type safety, async correctness |
+| Any | `qa-expert` | Coverage gaps, assertion quality, test isolation, risk assessment |
+
+> **Note:** Review agents use strong models (GPT-5.4, Claude Sonnet) for high-quality analysis.
+
+#### Running Reviews Manually
+
+```bash
+# Review specific test files or directories
+./scripts/review-tests.sh elixir/code_puppy_control/test/llm/
+./scripts/review-tests.sh tests/test_config.py
+
+# Multiple paths
+./scripts/review-tests.sh elixir/code_puppy_control/test/ tests/plugins/
+
+# Treat findings as blocking (for CI gates)
+REVIEW_BLOCKING=1 ./scripts/review-tests.sh tests/
+
+# Or invoke agents directly for more control
+code-puppy --agent elixir-reviewer --prompt "Review test file: path/to/test.exs"
+code-puppy --agent python-reviewer --prompt "Review test file: path/to/test.py"
+code-puppy --agent qa-expert --prompt "Analyze test coverage for: path/to/tests/"
+```
+
+#### When Reviews Are Required
+
+- **All new test files** must be reviewed by the appropriate language reviewer
+- **Test suite changes** (adding/removing tests, modifying test infrastructure) require `qa-expert` coverage analysis
+- **Pre-push hook** runs advisory review on `.exs` test files automatically
+- **CI workflow** (`.github/workflows/test-review.yml`) posts review comments on PRs
+
+#### Current Status
+
+Reviews are **advisory** — they won't block merge yet. Once the review agents are validated against the codebase, they'll be promoted to blocking gates.
+
+To make reviews blocking in CI, set `REVIEW_BLOCKING=1` in the environment or add `--blocking` to the script invocation.
+
 ### Testing
 
 - Add tests for bug fixes

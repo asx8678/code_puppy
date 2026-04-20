@@ -80,13 +80,40 @@ defmodule CodePuppyControl.Test.MockLLMHTTP do
     )
   end
 
+  @doc """
+  Starts the mock under a supervisor. Preferred in test setup:
+
+      setup do
+        MockLLMHTTP.start_supervised()
+        :ok
+      end
+  """
+  @spec start_supervised() :: :ok
+  def start_supervised do
+    case Process.whereis(__MODULE__) do
+      nil ->
+        {:ok, _pid} =
+          ExUnit.Callbacks.start_supervised(%{
+            id: __MODULE__,
+            start: {__MODULE__, :start_link, [[]]},
+            type: :worker,
+            restart: :transient
+          })
+
+        :ok
+
+      _pid ->
+        :ok
+    end
+  end
+
   defp ensure_started do
     case Process.whereis(__MODULE__) do
       nil ->
-        case start_link() do
-          {:ok, _} -> :ok
-          {:error, {:already_started, _}} -> :ok
-        end
+        raise "MockLLMHTTP not started under supervision. " <>
+                "Add MockLLMHTTP.start_supervised() to your test setup, " <>
+                "or start it under your own supervisor. " <>
+                "Unsupervised starts are forbidden to prevent test leaks."
 
       _ ->
         :ok

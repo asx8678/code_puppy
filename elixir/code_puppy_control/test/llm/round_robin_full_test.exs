@@ -216,18 +216,18 @@ defmodule CodePuppyControl.LLM.RoundRobinFullTest do
     end
 
     test "global strategy returns error when no models configured" do
-      # Reset to empty state (configure rejects empty, so we simulate
-      # by checking the error path through the strategy)
+      # Drive the actual no-models-configured path by configuring and then
+      # clearing the ETS state to simulate an unconfigured GenServer.
       :ok = RoundRobinModel.configure(models: ["temp"])
-      :ok = RoundRobinModel.reset()
+      # Clear the ETS state to simulate no-models condition
+      :ets.delete(:round_robin_state, :state)
 
-      # Even after reset, models are still configured — just index reset.
-      # The real error path is when RoundRobinModel.advance_and_get returns nil.
-      # We test the strategy's error handling:
       strategy = %RoundRobin{use_global: true}
 
-      # With a configured model, it should work
-      assert {:ok, "temp"} = Strategy.select(strategy, %{})
+      assert {:error, :no_models_configured} = Strategy.select(strategy, %{})
+    after
+      # Restore valid state for subsequent tests
+      :ok = RoundRobinModel.configure(models: ["temp"])
     end
 
     test "non-global strategy with models list returns first available" do

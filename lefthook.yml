@@ -55,3 +55,22 @@ pre-commit:
       fail_text: "Plugin tests found issues (not blocking commit)"
 
 # pre-push hook removed - tests run in CI only
+# (except for advisory test review — see below)
+
+pre-push:
+  commands:
+    test-review:
+      glob: "**/test/**_test.exs"
+      run: |
+        echo "📋 Advisory: Test file review"
+        echo "─────────────────────────────────────"
+        if [[ -x scripts/review-tests.sh ]]; then
+          scripts/review-tests.sh {push_files} 2>&1 || echo "⚠ Review found issues (advisory, not blocking push)"
+        else
+          echo "review-tests.sh not found — skipping automated review"
+          echo "Run manually: ./scripts/review-tests.sh <test_files>"
+        fi
+        echo "─────────────────────────────────────"
+        # Always exit 0 — advisory only, never blocks push
+        exit 0
+      fail_text: "Test review completed with findings (advisory — push continues)"

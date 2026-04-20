@@ -22,13 +22,10 @@ defmodule CodePuppyControl.Test.ProviderContract do
   alias CodePuppyControl.LLM.Provider
   alias CodePuppyControl.Test.ContractViolation
 
-  # Callbacks that every Provider MUST implement.
-  @required_callbacks [
-    {:chat, 3},
-    {:stream_chat, 4},
-    {:supports_tools?, 0},
-    {:supports_vision?, 0}
-  ]
+  # Derive required callbacks from the Provider behaviour itself so that
+  # adding a new @callback to Provider automatically updates contract
+  # checks — no manual sync needed.
+  @required_callbacks Provider.behaviour_info(:callbacks)
 
   # Fields that every model config map MUST contain.
   @required_config_fields ["model_name", "provider"]
