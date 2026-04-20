@@ -39,12 +39,8 @@ defmodule CodePuppyControl.REPL.Loop do
   require Logger
 
   alias CodePuppyControl.REPL.Input
+  alias CodePuppyControl.REPL.History
   alias CodePuppyControl.Config.Models
-
-  # ── Constants ─────────────────────────────────────────────────────────────
-
-  # Maximum history entries to keep in-memory
-  @max_history 1000
 
   # ── State ──────────────────────────────────────────────────────────────────
 
@@ -52,8 +48,6 @@ defmodule CodePuppyControl.REPL.Loop do
     :session_id,
     agent: "code-puppy",
     model: nil,
-    history: [],
-    history_index: 0,
     running: true
   ]
 
@@ -61,8 +55,6 @@ defmodule CodePuppyControl.REPL.Loop do
           session_id: String.t() | nil,
           agent: String.t(),
           model: String.t() | nil,
-          history: [String.t()],
-          history_index: non_neg_integer(),
           running: boolean()
         }
 
@@ -99,10 +91,12 @@ defmodule CodePuppyControl.REPL.Loop do
       agent: agent,
       model: model,
       session_id: session_id,
-      history: [],
-      history_index: 0,
       running: true
     }
+
+    # Ensure History GenServer is running and loaded
+    ensure_history_started()
+    History.load()
 
     print_welcome(state)
     do_loop(state)
@@ -130,7 +124,7 @@ defmodule CodePuppyControl.REPL.Loop do
         {:continue, state}
 
       true ->
-        state = record_history(state, trimmed)
+        History.add(trimmed)
         send_to_agent(trimmed, state)
         {:continue, state}
     end
@@ -148,8 +142,6 @@ defmodule CodePuppyControl.REPL.Loop do
       agent: agent,
       model: model,
       session_id: session_id,
-      history: [],
-      history_index: 0,
       running: true
     }
 
@@ -203,10 +195,12 @@ defmodule CodePuppyControl.REPL.Loop do
 
     case cmd do
       "/quit" ->
+        History.save()
         IO.puts("👋 Bye!")
         {:halt, %{state | running: false}}
 
       "/exit" ->
+        History.save()
         IO.puts("👋 Bye!")
         {:halt, %{state | running: false}}
 
@@ -226,7 +220,7 @@ defmodule CodePuppyControl.REPL.Loop do
         {:continue, state}
 
       "/history" ->
-        print_history(state)
+        print_history()
         {:continue, state}
 
       unknown ->
@@ -304,26 +298,29 @@ defmodule CodePuppyControl.REPL.Loop do
 
   # ── History ────────────────────────────────────────────────────────────────
 
-  defp record_history(state, line) do
-    # Don't record blank or duplicate entries
-    if line == "" || (state.history != [] && hd(state.history) == line) do
-      state
-    else
-      history = [line | state.history] |> Enum.take(@max_history)
-      %{state | history: history, history_index: 0}
-    end
-  end
+  defp print_history do
+    entries = History.all()
 
-  defp print_history(state) do
-    if state.history == [] do
+    if entries == [] do
       IO.puts("(no history)")
     else
-      state.history
+      entries
       |> Enum.reverse()
       |> Enum.with_index(1)
       |> Enum.each(fn {entry, idx} ->
         IO.puts("  #{idx}: #{entry}")
       end)
+    end
+  end
+
+  defp ensure_history_started do
+    case Process.whereis(History) do
+      nil ->
+        {:ok, _pid} = History.start_link()
+        :ok
+
+      _pid ->
+        :ok
     end
   end
 

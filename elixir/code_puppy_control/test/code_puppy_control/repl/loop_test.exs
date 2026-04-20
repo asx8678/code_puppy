@@ -1,7 +1,36 @@
 defmodule CodePuppyControl.REPL.LoopTest do
-  use ExUnit.Case, async: true
+  use ExUnit.Case, async: false
 
-  alias CodePuppyControl.REPL.Loop
+  alias CodePuppyControl.REPL.{History, Loop}
+
+  # Start a fresh History GenServer for each test.
+  # async: false because we share the registered name and disk file.
+  setup do
+    case Process.whereis(History) do
+      nil -> :ok
+      pid -> GenServer.stop(pid, :shutdown, 5000)
+    end
+
+    # Wipe the history file so tests start clean
+    File.rm(History.history_path())
+
+    {:ok, _pid} = History.start_link()
+
+    on_exit(fn ->
+      try do
+        case Process.whereis(History) do
+          nil -> :ok
+          pid -> GenServer.stop(pid, :shutdown, 5000)
+        end
+      catch
+        :exit, _ -> :ok
+      end
+
+      File.rm(History.history_path())
+    end)
+
+    :ok
+  end
 
   describe "is_slash_command?/1" do
     test "detects slash commands" do
@@ -36,8 +65,6 @@ defmodule CodePuppyControl.REPL.LoopTest do
         agent: "code-puppy",
         model: "gpt-4",
         session_id: "test-session",
-        history: [],
-        history_index: 0,
         running: true
       }
 
@@ -55,7 +82,6 @@ defmodule CodePuppyControl.REPL.LoopTest do
     end
 
     test "/help continues the loop", %{state: state} do
-      # Capture output to avoid cluttering test output
       output =
         ExUnit.CaptureIO.capture_io(fn ->
           assert {:continue, ^state} = Loop.handle_input("/help", state)
@@ -105,7 +131,6 @@ defmodule CodePuppyControl.REPL.LoopTest do
     end
 
     test "/clear continues the loop", %{state: state} do
-      # /clear writes ANSI codes, capture_io handles it
       assert {:continue, ^state} = Loop.handle_input("/clear", state)
     end
 
@@ -134,8 +159,6 @@ defmodule CodePuppyControl.REPL.LoopTest do
         agent: "code-puppy",
         model: "gpt-4",
         session_id: "test-session",
-        history: [],
-        history_index: 0,
         running: true
       }
 
@@ -149,19 +172,20 @@ defmodule CodePuppyControl.REPL.LoopTest do
     test "non-blank input is recorded in history", %{state: state} do
       _output =
         ExUnit.CaptureIO.capture_io(fn ->
-          assert {:continue, new_state} = Loop.handle_input("explain this code", state)
-          assert new_state.history == ["explain this code"]
+          assert {:continue, _new_state} = Loop.handle_input("explain this code", state)
+          assert History.all() == ["explain this code"]
         end)
     end
 
     test "duplicate consecutive input is not re-recorded", %{state: state} do
-      state = %{state | history: ["hello"]}
-
       _output =
         ExUnit.CaptureIO.capture_io(fn ->
-          assert {:continue, new_state} = Loop.handle_input("hello", state)
+          # Pre-seed history
+          History.add("hello")
+          # Same input again
+          assert {:continue, _} = Loop.handle_input("hello", state)
           # Should not duplicate
-          assert new_state.history == ["hello"]
+          assert History.all() == ["hello"]
         end)
     end
 
@@ -181,8 +205,6 @@ defmodule CodePuppyControl.REPL.LoopTest do
         agent: "code-puppy",
         model: "gpt-4",
         session_id: "test-session",
-        history: [],
-        history_index: 0,
         running: true
       }
 
@@ -190,15 +212,13 @@ defmodule CodePuppyControl.REPL.LoopTest do
     end
 
     test "multiple inputs build up history", %{state: state} do
-      {final_state, _output} =
-        ExUnit.CaptureIO.with_io(fn ->
-          {:continue, s1} = Loop.handle_input("first prompt", state)
-          {:continue, s2} = Loop.handle_input("second prompt", s1)
-          s2
+      _output =
+        ExUnit.CaptureIO.capture_io(fn ->
+          {:continue, _s1} = Loop.handle_input("first prompt", state)
+          {:continue, _s2} = Loop.handle_input("second prompt", state)
+          # History is most-recent-first
+          assert History.all() == ["second prompt", "first prompt"]
         end)
-
-      # History is most-recent-first
-      assert final_state.history == ["second prompt", "first prompt"]
     end
   end
 end
