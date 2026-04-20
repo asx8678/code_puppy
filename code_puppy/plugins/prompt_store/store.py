@@ -7,20 +7,32 @@ supporting both locked built-in defaults and editable user templates.
 
 import json
 import logging
-import os
 import threading
 from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from code_puppy.config_package import env_path
+from code_puppy.config_paths import resolve_path, safe_atomic_write, safe_write
 
 logger = logging.getLogger(__name__)
 
-DEFAULT_STORE_PATH = env_path(
-    "PUPPY_PROMPT_STORE", default="~/.code_puppy/prompt_store.json"
-)
+
+# Respects pup-ex isolation (ADR-003) — resolves under active home
+def _default_store_path() -> Path:
+    """Return the prompt store path under the active home."""
+    from code_puppy.config_package.env_helpers import get_first_env
+    override = get_first_env("PUPPY_PROMPT_STORE")
+    if override:
+        return Path(override).expanduser().resolve()
+    return resolve_path("prompt_store.json")
+
+
+def __getattr__(name: str):
+    """Lazy resolution of env-sensitive module-level names (bd-193)."""
+    if name == "DEFAULT_STORE_PATH":
+        return _default_store_path()
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
 
 @dataclass
@@ -79,7 +91,7 @@ class PromptStore:
         Args:
             store_path: Path to the JSON store file. If None, uses default.
         """
-        self.store_path = store_path or DEFAULT_STORE_PATH
+        self.store_path = store_path or _default_store_path()
         self._lock = threading.Lock()
         self._templates: dict[str, PromptTemplate] = {}
         self._active: dict[str, str] = {}  # agent_name -> template_id
@@ -120,7 +132,11 @@ class PromptStore:
         """Backup the broken store file and start fresh."""
         backup_path = self.store_path.with_suffix(".json.bak")
         try:
-            self.store_path.copy(backup_path, preserve_metadata=True)
+            safe_write(
+                backup_path,
+                self.store_path.read_text(encoding="utf-8", errors="surrogateescape"),
+                encoding="utf-8",
+            )
             logger.info(f"Backed up broken store to {backup_path}")
         except Exception as e:
             logger.warning(f"Failed to backup broken store: {e}")
@@ -133,29 +149,16 @@ class PromptStore:
 
         Writes to a temp file then renames for atomicity.
         """
-        # Ensure parent directory exists
-        self.store_path.parent.mkdir(parents=True, exist_ok=True)
-
         data = {
             "templates": [tmpl.to_dict() for tmpl in self._templates.values()],
             "active": self._active,
         }
 
-        temp_path = self.store_path.with_suffix(".tmp")
         try:
-            with open(temp_path, "w", encoding="utf-8") as f:
-                json.dump(data, f, indent=2)
-            # Atomic rename
-            os.replace(temp_path, self.store_path)
+            safe_atomic_write(self.store_path, json.dumps(data, indent=2))
             logger.debug(f"Saved {len(self._templates)} templates to store")
         except Exception as e:
             logger.error(f"Error saving store: {e}")
-            # Clean up temp file if it exists
-            if temp_path.exists():
-                try:
-                    temp_path.unlink()
-                except Exception:
-                    pass
             raise
 
     def list_templates(self, agent_name: str | None = None) -> list[PromptTemplate]:

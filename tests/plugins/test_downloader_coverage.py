@@ -388,7 +388,7 @@ def test_force_reinstall_rmtree_fails(tmp_path):
     skill_dir = tmp_path / "myskill"
     skill_dir.mkdir()
     with patch(
-        "code_puppy.plugins.agent_skills.downloader._safe_rmtree", return_value=False
+        "code_puppy.plugins.agent_skills.downloader.safe_rm_rf", side_effect=OSError
     ):
         r = download_and_install_skill(
             "myskill", "http://x", target_dir=tmp_path, force=True
@@ -574,8 +574,9 @@ def test_move_failure(tmp_path):
                             "code_puppy.plugins.agent_skills.downloader._stage_normalized_install",
                             return_value=staged,
                         ):
-                            with patch.object(
-                                Path, "move", side_effect=OSError
+                            with patch(
+                                "code_puppy.plugins.agent_skills.downloader.shutil.move",
+                                side_effect=OSError,
                             ):
                                 r = download_and_install_skill(
                                     "myskill", "http://x", target_dir=tmp_path
@@ -631,11 +632,11 @@ def test_post_install_missing_skill_md(tmp_path):
         dest.write_bytes(zip_data)
         return True
 
-    # After Path.move(), delete the SKILL.md so the post-install check fails
-    original_move = Path.move
+    # After shutil.move(), delete the SKILL.md so the post-install check fails
+    from shutil import move as original_move
 
-    def fake_move(self, target):
-        result = original_move(self, target)
+    def fake_move(src, target):
+        result = original_move(src, target)
         # Remove SKILL.md from the final destination
         skill_md = Path(target) / "SKILL.md"
         if skill_md.exists():
@@ -646,7 +647,10 @@ def test_post_install_missing_skill_md(tmp_path):
         "code_puppy.plugins.agent_skills.downloader._download_to_file",
         side_effect=fake_download,
     ):
-        with patch.object(Path, "move", fake_move):
+        with patch(
+            "code_puppy.plugins.agent_skills.downloader.shutil.move",
+            side_effect=fake_move,
+        ):
             r = download_and_install_skill("myskill", "http://x", target_dir=tmp_path)
     assert not r.success and "missing SKILL.md" in r.message
 

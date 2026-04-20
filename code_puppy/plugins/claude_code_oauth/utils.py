@@ -511,6 +511,8 @@ def save_tokens(tokens: dict[str, Any]) -> bool:
     # permissions atomically, avoiding TOCTOU race condition.
     try:
         token_path = get_token_storage_path()
+        from code_puppy.config_paths import assert_write_allowed
+        assert_write_allowed(token_path, "save_claude_oauth_tokens")
         fd = os.open(token_path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
         try:
             with os.fdopen(fd, "w", encoding="utf-8") as handle:
@@ -599,6 +601,8 @@ def save_claude_models(models: dict[str, Any]) -> bool:
     # permissions atomically, avoiding TOCTOU race condition.
     try:
         models_path = get_claude_models_path()
+        from code_puppy.config_paths import assert_write_allowed
+        assert_write_allowed(models_path, "save_claude_models")
         fd = os.open(models_path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
         try:
             with os.fdopen(fd, "w", encoding="utf-8") as handle:

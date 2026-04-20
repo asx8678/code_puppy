@@ -364,6 +364,8 @@ def save_tokens(tokens: dict[str, Any]) -> bool:
         raise TypeError("tokens cannot be None")
     try:
         token_path = get_token_storage_path()
+        from code_puppy.config_paths import assert_write_allowed
+        assert_write_allowed(token_path, "save_chatgpt_oauth_tokens")
         with open(token_path, "w", encoding="utf-8") as handle:
             json.dump(tokens, handle, indent=2)
         token_path.chmod(0o600)
@@ -397,6 +399,8 @@ def load_chatgpt_models() -> dict[str, Any]:
 def save_chatgpt_models(models: dict[str, Any]) -> bool:
     try:
         models_path = get_chatgpt_models_path()
+        from code_puppy.config_paths import assert_write_allowed
+        assert_write_allowed(models_path, "save_chatgpt_models")
         with open(models_path, "w", encoding="utf-8") as handle:
             json.dump(models, handle, indent=2)
         return True

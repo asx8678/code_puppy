@@ -211,8 +211,16 @@ def set_session_model(model: str | None) -> None:
 
 def reset_session_model() -> None:
     """Reset the session-local model cache (primarily for testing)."""
-    transport = _get_transport()
-    transport._send_request("runtime_reset_session_model", {})
+    try:
+        transport = _get_transport()
+        transport._send_request("runtime_reset_session_model", {})
+    except (ElixirTransportError, OSError, BrokenPipeError, ConnectionError, TimeoutError):
+        if _degraded():
+            with _DEGRADED_STATE_LOCK:
+                global _SESSION_MODEL
+                _SESSION_MODEL = None
+            return
+        raise
 
 
 # =============================================================================

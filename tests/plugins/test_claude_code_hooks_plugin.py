@@ -471,6 +471,11 @@ class TestOnPostToolCallHook:
 class TestCallbackRegistration:
     def test_pre_tool_call_registered(self):
         """The plugin must register on_pre_tool_call_hook under 'pre_tool_call'."""
+        import importlib
+
+        import code_puppy.plugins.claude_code_hooks.register_callbacks as _rc
+        importlib.reload(_rc)
+
         from code_puppy.callbacks import _callbacks
         from code_puppy.plugins.claude_code_hooks.register_callbacks import (
             on_pre_tool_call_hook,
@@ -480,6 +485,11 @@ class TestCallbackRegistration:
 
     def test_post_tool_call_registered(self):
         """The plugin must register on_post_tool_call_hook under 'post_tool_call'."""
+        import importlib
+
+        import code_puppy.plugins.claude_code_hooks.register_callbacks as _rc
+        importlib.reload(_rc)
+
         from code_puppy.callbacks import _callbacks
         from code_puppy.plugins.claude_code_hooks.register_callbacks import (
             on_post_tool_call_hook,

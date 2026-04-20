@@ -17,12 +17,16 @@ from pathlib import Path
 
 import httpx
 
+from code_puppy.config_paths import assert_write_allowed, resolve_path, safe_mkdir_p, safe_rm_rf
 from code_puppy.plugins.agent_skills.discovery import refresh_skill_cache
 from code_puppy.plugins.agent_skills.installer import InstallResult
 
 logger = logging.getLogger(__name__)
 
-_DEFAULT_SKILLS_DIR = Path.home() / ".code_puppy" / "skills"
+# Respects pup-ex isolation (ADR-003)
+def _default_skills_dir() -> Path:
+    """Return the skills directory under the active home."""
+    return resolve_path("skills")
 _MAX_UNCOMPRESSED_BYTES = 50 * 1024 * 1024  # 50MB
 
 # Maximum compressed download size (50MB - same as uncompressed limit)
@@ -259,7 +263,7 @@ def download_and_install_skill(
     Args:
         skill_name: Skill name (directory name under target_dir).
         download_url: Absolute URL to the skill .zip.
-        target_dir: Base skills directory. Defaults to ~/.code_puppy/skills.
+        target_dir: Base skills directory. Defaults to active-home/skills.
         force: If True, delete any existing install first.
 
     Returns:
@@ -276,10 +280,12 @@ def download_and_install_skill(
             success=False, message="skill_name must be a simple directory name"
         )
 
-    base_dir = target_dir or _DEFAULT_SKILLS_DIR
+    base_dir = Path(target_dir) if target_dir is not None else _default_skills_dir()
     skill_dir = base_dir / skill_name
 
     try:
+        assert_write_allowed(base_dir, "skill_install_base_dir")
+        assert_write_allowed(skill_dir, "skill_install_target")
         if skill_dir.exists():
             if not force:
                 return InstallResult(
@@ -291,14 +297,16 @@ def download_and_install_skill(
             logger.info(
                 f"Force reinstall enabled; removing existing skill at {skill_dir}"
             )
-            if not _safe_rmtree(skill_dir):
+            try:
+                safe_rm_rf(skill_dir)
+            except Exception:
                 return InstallResult(
                     success=False,
                     message=f"Failed to remove existing skill directory: {skill_dir}",
                     installed_path=skill_dir,
                 )
 
-        base_dir.mkdir(parents=True, exist_ok=True)
+        safe_mkdir_p(base_dir)
 
         with tempfile.TemporaryDirectory(prefix="code_puppy_skill_") as tmp:
             tmp_dir = Path(tmp)
@@ -365,7 +373,7 @@ def download_and_install_skill(
                 if skill_dir.exists():
                     # Shouldn't happen (handled earlier), but be safe.
                     if force:
-                        _safe_rmtree(skill_dir)
+                        safe_rm_rf(skill_dir)
                     else:
                         return InstallResult(
                             success=False,
@@ -373,11 +381,12 @@ def download_and_install_skill(
                             installed_path=skill_dir,
                         )
 
+                assert_write_allowed(skill_dir, "skill_install_move")
                 shutil.move(str(staged_skill_dir), str(skill_dir))
             except Exception as e:
                 logger.exception(f"Failed to install skill into {skill_dir}: {e}")
                 # Cleanup partial install.
-                _safe_rmtree(skill_dir)
+                safe_rm_rf(skill_dir)
                 return InstallResult(
                     success=False, message="Failed to move skill into place"
                 )
@@ -385,7 +394,7 @@ def download_and_install_skill(
         # Post-install verification.
         if not (skill_dir / "SKILL.md").is_file():
             logger.warning(f"Installed skill missing SKILL.md: {skill_dir}")
-            _safe_rmtree(skill_dir)
+            safe_rm_rf(skill_dir)
             return InstallResult(
                 success=False,
                 message="Installed skill is missing SKILL.md",

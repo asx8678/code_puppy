@@ -5,6 +5,7 @@ import logging
 from pathlib import Path
 
 from code_puppy.config import get_value, set_value
+from code_puppy.config_paths import resolve_path
 
 logger = logging.getLogger(__name__)
 
@@ -33,7 +34,7 @@ def get_skill_directories() -> list[str]:
             logger.error(f"Failed to parse skill_directories config: {e}")
 
     # Fallback to defaults
-    home_skills = str(Path.home() / ".code_puppy" / "skills")
+    home_skills = str(resolve_path("skills"))
     project_config_skills = str(Path.cwd() / ".code_puppy" / "skills")
     local_skills = str(Path.cwd() / "skills")
     return [

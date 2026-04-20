@@ -29,6 +29,7 @@ try:
 except ImportError:
     _HAS_PROMPT_TOOLKIT = False
 
+from code_puppy.config_paths import resolve_path
 from code_puppy.command_line.pagination import (
     ensure_visible_page,
     get_page_bounds,
@@ -49,7 +50,7 @@ PAGE_SIZE = 12
 def is_skill_installed(skill_id: str) -> bool:
     """Return True if the skill is already installed locally."""
 
-    return (Path.home() / ".code_puppy" / "skills" / skill_id / "SKILL.md").is_file()
+    return (resolve_path("skills") / skill_id / "SKILL.md").is_file()
 
 
 def _format_bytes(num_bytes: int) -> str:

@@ -55,6 +55,22 @@ except (ImportError, AttributeError):
     pass
 
 
+# Config path attributes that must be isolated between tests.
+# These correspond to module-level overrides in config.py that tests
+# may set via monkeypatch or direct assignment.
+_CONFIG_PATH_ATTRS = (
+    "CONFIG_FILE",
+    "CONFIG_DIR",
+    "DATA_DIR",
+    "CACHE_DIR",
+    "STATE_DIR",
+    "SKILLS_DIR",
+    "AGENTS_DIR",
+    "AUTOSAVE_DIR",
+    "COMMAND_HISTORY_FILE",
+)
+
+
 @pytest.fixture(autouse=True)
 def isolate_config_between_tests(tmp_path_factory):
     """Isolate config file changes between tests.
@@ -62,13 +78,31 @@ def isolate_config_between_tests(tmp_path_factory):
     This prevents tests from modifying the user's real config file
     (e.g., changing the selected model). Each test gets its own
     temporary config file in a separate directory from tmp_path.
+
+    All config path attributes (CONFIG_FILE, CONFIG_DIR, DATA_DIR, etc.)
+    are captured and restored so that stale overrides from one test
+    don't leak into the next.
     """
     import shutil
     import tempfile
 
-    # Save original config path
-    original_config_file = cp_config.CONFIG_FILE
-    original_config_dir = cp_config.CONFIG_DIR
+    # bd-193: Enable degraded mode so runtime_state helpers (e.g.
+    # reset_session_model) fall back gracefully when the Elixir
+    # transport is unavailable — unit tests should not require a
+    # running Elixir backend.
+    _prev_degraded = os.environ.get("PUP_ALLOW_ELIXIR_DEGRADED")
+    os.environ["PUP_ALLOW_ELIXIR_DEGRADED"] = "1"
+
+    # Snapshot which attrs exist in cp_config.__dict__ and their values.
+    # Attributes that are absent (resolved only via __getattr__) should be
+    # *removed* at teardown, not restored to a stale value.
+    _attr_existed: dict[str, bool] = {}
+    _attr_snapshots: dict[str, object] = {}
+    for attr in _CONFIG_PATH_ATTRS:
+        existed = attr in cp_config.__dict__
+        _attr_existed[attr] = existed
+        if existed:
+            _attr_snapshots[attr] = cp_config.__dict__[attr]
 
     # Create a completely separate temp directory for config isolation
     # (not using tmp_path which tests may use for their own purposes)
@@ -77,13 +111,28 @@ def isolate_config_between_tests(tmp_path_factory):
     os.makedirs(temp_config_dir, exist_ok=True)
     temp_config_file = os.path.join(temp_config_dir, "puppy.cfg")
 
-    # Copy existing config if it exists (so tests start with real settings)
-    if os.path.exists(original_config_file):
-        shutil.copy(original_config_file, temp_config_file)
+    # bd-193: Do NOT copy the user's real config into the temp location.
+    # Tests should start with an empty temp config for determinism unless a
+    # test explicitly writes values.  Previously, copying the real config
+    # caused environment-sensitive failures in boolean-getter tests (e.g.
+    # get_use_dbos() returning False when the user's config had
+    # enable_dbos=false).
 
-    # Redirect config to temp location
+    # Redirect only CONFIG_FILE/CONFIG_DIR to deterministic temp values.
+    # Clear all other lazy path attrs so they resolve dynamically per-test
+    # (important for pup-ex tests that flip PUP_EX_HOME at runtime).
     cp_config.CONFIG_FILE = temp_config_file
     cp_config.CONFIG_DIR = temp_config_dir
+    for attr in (
+        "DATA_DIR",
+        "CACHE_DIR",
+        "STATE_DIR",
+        "SKILLS_DIR",
+        "AGENTS_DIR",
+        "AUTOSAVE_DIR",
+        "COMMAND_HISTORY_FILE",
+    ):
+        cp_config.__dict__.pop(attr, None)
 
     # Invalidate the config cache so _get_config() re-reads from the new
     # temp path instead of serving stale data from a previous test.
@@ -92,33 +141,31 @@ def isolate_config_between_tests(tmp_path_factory):
     # Clear model cache to ensure fresh state
     cp_config.clear_model_cache()
     # Clear session-local model cache (required for /model session sticky behavior)
-    # NOTE(bd-133): When Elixir routing is enabled, this requires the transport.
-    # Gracefully skip if Elixir is unavailable to allow tests to run without the
-    # full Elixir backend during unit testing.
-    try:
-        cp_config.reset_session_model()
-    except Exception:
-        pass  # Elixir transport unavailable, skip runtime state cleanup
+    # bd-193: PUP_ALLOW_ELIXIR_DEGRADED=1 is set above so this degrades
+    # gracefully when the Elixir transport is unavailable.
+    cp_config.reset_session_model()
 
     # Reset all singletons for test isolation
     reset_all_singletons()
 
     yield
 
-    # Restore original config paths
-    cp_config.CONFIG_FILE = original_config_file
-    cp_config.CONFIG_DIR = original_config_dir
+    # Restore original config paths — only put back attrs that existed
+    # before; remove any that were absent (so __getattr__ resolves them
+    # lazily again instead of serving a stale override).
+    for attr in _CONFIG_PATH_ATTRS:
+        if _attr_existed[attr]:
+            cp_config.__dict__[attr] = _attr_snapshots[attr]
+        else:
+            cp_config.__dict__.pop(attr, None)
 
     # Invalidate the config cache so the next test starts from a clean slate.
     cp_config._invalidate_config()
 
     # Clear cache again after test
     cp_config.clear_model_cache()
-    # Clear session-local model cache (gracefully skip if Elixir unavailable)
-    try:
-        cp_config.reset_session_model()
-    except Exception:
-        pass
+    # Clear session-local model cache
+    cp_config.reset_session_model()
 
     # Reset all singletons for test isolation
     reset_all_singletons()
@@ -128,6 +175,12 @@ def isolate_config_between_tests(tmp_path_factory):
         shutil.rmtree(config_temp_dir)
     except Exception:
         pass  # Best effort cleanup
+
+    # Restore degraded-mode env var
+    if _prev_degraded is None:
+        os.environ.pop("PUP_ALLOW_ELIXIR_DEGRADED", None)
+    else:
+        os.environ["PUP_ALLOW_ELIXIR_DEGRADED"] = _prev_degraded
 
 
 # Re-export polling helpers for convenient `from tests._helpers.polling import poll` style

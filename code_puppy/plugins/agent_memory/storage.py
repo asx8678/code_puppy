@@ -6,16 +6,20 @@ handling of corrupt or missing data files.
 
 import json
 import logging
-import os
 import threading
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+from code_puppy.config_paths import resolve_path, safe_atomic_write, safe_mkdir_p, safe_write
+
 logger = logging.getLogger(__name__)
 
-# Base storage location: ~/.code_puppy/memory/
-_MEMORY_DIR = Path.home() / ".code_puppy" / "memory"
+
+# Base storage location: respects pup-ex isolation (ADR-003)
+def _memory_dir() -> Path:
+    """Return the memory directory under the active home."""
+    return resolve_path("memory")
 
 # Fact schema: {text: str, confidence: float, source_session: str, created_at: str, last_reinforced: str}
 Fact = dict[str, Any]
@@ -49,12 +53,12 @@ class FileMemoryStorage:
             raise ValueError(f"Invalid agent_name: {agent_name}")
 
         self.agent_name = agent_name
-        self._file_path = _MEMORY_DIR / f"{agent_name}.json"
+        self._file_path = _memory_dir() / f"{agent_name}.json"
         self._lock = threading.Lock()
 
     def _ensure_directory(self) -> None:
         """Ensure the memory directory exists."""
-        _MEMORY_DIR.mkdir(parents=True, exist_ok=True)
+        safe_mkdir_p(_memory_dir())
 
     def _backup_corrupt_file(self) -> None:
         """Backup a corrupt JSON file before resetting."""
@@ -66,7 +70,7 @@ class FileMemoryStorage:
             # Use .json.bak suffix before any existing suffixes
             backup_name = f"{self._file_path.stem}.corrupt.{timestamp}.json.bak"
             backup_path = self._file_path.parent / backup_name
-            self._file_path.copy(backup_path, preserve_metadata=True)
+            safe_write(backup_path, self._file_path.read_text(encoding="utf-8"))
             logger.warning(
                 "Corrupt memory file for %s backed up to %s",
                 self.agent_name,
@@ -128,27 +132,16 @@ class FileMemoryStorage:
         self._ensure_directory()
 
         try:
-            # Write atomically: write to temp file, then rename
-            temp_file = self._file_path.with_suffix(".tmp")
-            with open(temp_file, "w", encoding="utf-8") as f:
-                json.dump(facts, f, indent=2, ensure_ascii=False)
-                f.flush()
-                # Ensure data is written to disk before renaming
-                os.fsync(f.fileno())
-            temp_file.replace(self._file_path)
+            safe_atomic_write(
+                self._file_path,
+                json.dumps(facts, indent=2, ensure_ascii=False),
+            )
         except (IOError, OSError) as e:
             logger.error(
                 "Failed to save memory file for %s: %s",
                 self.agent_name,
                 e,
             )
-            # Clean up temp file if it exists
-            try:
-                temp_file = self._file_path.with_suffix(".tmp")
-                if temp_file.exists():
-                    temp_file.unlink()
-            except (IOError, OSError):
-                pass
 
     def load(self) -> list[Fact]:
         """Load all facts from storage.

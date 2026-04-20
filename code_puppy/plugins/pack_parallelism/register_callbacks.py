@@ -19,10 +19,10 @@ Per-session override (slash command):
 """
 
 import logging
-import os
 from pathlib import Path
 
 from code_puppy.callbacks import register_callback
+from code_puppy.config_paths import safe_atomic_write
 
 # Import RunLimiter for runtime enforcement
 try:
@@ -38,7 +38,25 @@ except ImportError:
 
 logger = logging.getLogger(__name__)
 
-_CONFIG_PATH = Path.home() / ".code_puppy" / "pack_parallelism.toml"
+
+# Respects pup-ex isolation (ADR-003) — resolves under active home
+_CONFIG_PATH: Path | None = None
+
+
+def _config_path() -> Path:
+    """Return the pack parallelism config path under the active home.
+
+    Honors a patched ``_CONFIG_PATH`` module attribute when present so tests
+    can override the location without depending on the active home.
+    """
+    if _CONFIG_PATH is not None:
+        return _CONFIG_PATH
+
+    from code_puppy.config_paths import resolve_path
+
+    return resolve_path("pack_parallelism.toml")
+
+
 _BUILTIN_DEFAULT = 6
 
 # Module-level per-session override; None means "use config file value"
@@ -100,7 +118,7 @@ def _read_config_max() -> int:
         return _cached_config
 
     result = _BUILTIN_DEFAULT
-    if not _CONFIG_PATH.exists():
+    if not _config_path().exists():
         _cached_config = result
         return _cached_config
 
@@ -108,7 +126,7 @@ def _read_config_max() -> int:
     try:
         import tomllib  # Python 3.11+
 
-        with open(_CONFIG_PATH, "rb") as fh:
+        with open(_config_path(), "rb") as fh:
             data = tomllib.load(fh)
         result = int(
             data.get("pack_leader", {}).get("max_parallelism", _BUILTIN_DEFAULT)
@@ -118,7 +136,7 @@ def _read_config_max() -> int:
         try:
             import tomli
 
-            with open(_CONFIG_PATH, "rb") as fh:
+            with open(_config_path(), "rb") as fh:
                 data = tomli.load(fh)
             result = int(
                 data.get("pack_leader", {}).get("max_parallelism", _BUILTIN_DEFAULT)
@@ -126,7 +144,7 @@ def _read_config_max() -> int:
         except ImportError:
             # No TOML library available, use manual parser
             try:
-                with open(_CONFIG_PATH, "r", encoding="utf-8") as fh:
+                with open(_config_path(), "r", encoding="utf-8") as fh:
                     content = fh.read()
                 data = _parse_toml_manual(content)
                 result = int(
@@ -137,13 +155,13 @@ def _read_config_max() -> int:
             except Exception as exc:
                 logger.warning(
                     "pack_parallelism: manual parser failed for %s: %s",
-                    _CONFIG_PATH,
+                    _config_path(),
                     exc,
                 )
                 result = _BUILTIN_DEFAULT
     except Exception as exc:
         logger.warning(
-            "pack_parallelism: could not read config %s: %s", _CONFIG_PATH, exc
+            "pack_parallelism: could not read config %s: %s", _config_path(), exc
         )
         result = _BUILTIN_DEFAULT
 
@@ -162,15 +180,12 @@ def _write_config_max(value: int) -> bool:
     """
     global _cached_config
     try:
-        # Ensure parent directory exists
-        _CONFIG_PATH.parent.mkdir(parents=True, exist_ok=True)
-
         lines: list[str] = []
         pack_leader_idx: int | None = None
         max_parallelism_idx: int | None = None
 
-        if _CONFIG_PATH.exists():
-            with open(_CONFIG_PATH, "r", encoding="utf-8") as fh:
+        if _config_path().exists():
+            with open(_config_path(), "r", encoding="utf-8") as fh:
                 lines = fh.readlines()
 
             # Find [pack_leader] section and max_parallelism key
@@ -211,11 +226,8 @@ def _write_config_max(value: int) -> bool:
             insert_idx = pack_leader_idx + 1
             new_lines.insert(insert_idx, f"max_parallelism = {value}\n")
 
-        # Write atomically
-        tmp_path = _CONFIG_PATH.with_suffix(".tmp")
-        with open(tmp_path, "w", encoding="utf-8") as fh:
-            fh.writelines(new_lines)
-        os.replace(tmp_path, _CONFIG_PATH)
+        # Write atomically through the isolation-aware helper
+        safe_atomic_write(_config_path(), "".join(new_lines))
 
         # Invalidate cache so next read picks up the new value
         _cached_config = None
@@ -223,7 +235,7 @@ def _write_config_max(value: int) -> bool:
 
     except Exception as exc:
         logger.warning(
-            "pack_parallelism: failed to write config %s: %s", _CONFIG_PATH, exc
+            "pack_parallelism: failed to write config %s: %s", _config_path(), exc
         )
         return False
 
@@ -324,7 +336,7 @@ def _handle_command(command: str, name: str):
         source = (
             "session override"
             if _session_max is not None
-            else f"config ({_CONFIG_PATH})"
+            else f"config ({_config_path()})"
         )
         emit_info(
             f"🐺 Pack Leader max parallelism: **{current}** (from {source})\n"
@@ -407,12 +419,12 @@ def _handle_command(command: str, name: str):
             _cached_config = new_val  # Update cache directly
             _session_max = None  # Clear session override so config takes effect
             source_msg = "(saved as default)"
-            saved_path_msg = f"\n   Saved to {_CONFIG_PATH}"
+            saved_path_msg = f"\n   Saved to {_config_path()}"
         else:
             # Persistence failed — fall back to session-only
             _session_max = new_val
             source_msg = "(session only — failed to save to disk)"
-            saved_path_msg = f"\n   ⚠️ Could not write to {_CONFIG_PATH}"
+            saved_path_msg = f"\n   ⚠️ Could not write to {_config_path()}"
 
     # Invalidate agent caches so the new value is reflected in prompts
     _invalidate_agent_caches(previous_val, new_val)

@@ -17,6 +17,7 @@ from textual.app import ComposeResult
 from textual.binding import Binding
 from textual.widgets import Footer, RichLog, Static
 
+from code_puppy.config_paths import resolve_path
 from code_puppy.tui.base_screen import MenuScreen
 from code_puppy.tui.widgets.searchable_list import SearchableList, SearchableListItem
 from code_puppy.tui.widgets.split_panel import SplitPanel
@@ -39,7 +40,7 @@ def _load_catalog_skills():
 
 def _is_installed(skill_id: str) -> bool:
     """Return True if the skill is already installed locally."""
-    return (Path.home() / ".code_puppy" / "skills" / skill_id / "SKILL.md").is_file()
+    return (resolve_path("skills") / skill_id / "SKILL.md").is_file()
 
 
 def _format_bytes(num_bytes: int) -> str:

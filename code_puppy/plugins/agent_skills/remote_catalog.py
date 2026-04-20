@@ -21,12 +21,30 @@ from urllib.parse import urljoin
 
 import httpx
 
+from code_puppy.config_paths import resolve_path, safe_atomic_write
+
 logger = logging.getLogger(__name__)
 
 SKILLS_JSON_URL = "https://www.llmspec.dev/skills/skills.json"
 
-_CACHE_DIR = Path.home() / ".code_puppy" / "cache"
-_CACHE_PATH = _CACHE_DIR / "skills_catalog.json"
+# Respects pup-ex isolation (ADR-003)
+_CACHE_PATH: Path | None = None
+
+
+def _cache_dir() -> Path:
+    """Return the cache directory under the active home."""
+    return resolve_path("cache")
+
+
+def _cache_path() -> Path:
+    """Return the skills catalog cache path under the active home.
+
+    Honors a patched ``_CACHE_PATH`` module attribute when present so tests
+    can override the cache location directly.
+    """
+    if _CACHE_PATH is not None:
+        return _CACHE_PATH
+    return _cache_dir() / "skills_catalog.json"
 _CACHE_TTL_SECONDS = 30 * 60
 
 
@@ -117,11 +135,8 @@ def _write_cache(cache_path: Path, data: dict[str, Any]) -> bool:
     """Serialize and write catalog JSON to the disk cache."""
 
     try:
-        cache_path.parent.mkdir(parents=True, exist_ok=True)
         # Stable formatting so diffs are readable when debugging.
-        cache_path.write_text(
-            json.dumps(data, indent=2, sort_keys=True) + "\n", encoding="utf-8"
-        )
+        safe_atomic_write(cache_path, json.dumps(data, indent=2, sort_keys=True) + "\n")
         return True
     except Exception as e:
         logger.warning(f"Failed to write cache {cache_path}: {e}")
@@ -272,12 +287,12 @@ def fetch_remote_catalog(force_refresh: bool = False) -> RemoteCatalogData | Non
         Parsed RemoteCatalogData on success, otherwise None.
     """
 
-    cache_fresh = _cache_is_fresh(_CACHE_PATH, _CACHE_TTL_SECONDS)
+    cache_fresh = _cache_is_fresh(_cache_path(), _CACHE_TTL_SECONDS)
 
     # Use fresh cache unless forced.
     if not force_refresh and cache_fresh:
-        logger.info(f"Using fresh remote catalog cache: {_CACHE_PATH}")
-        cached = _read_cache(_CACHE_PATH)
+        logger.info(f"Using fresh remote catalog cache: {_cache_path()}")
+        cached = _read_cache(_cache_path())
         if cached is None:
             logger.warning("Fresh cache exists but could not be read; refetching")
         else:
@@ -288,10 +303,10 @@ def fetch_remote_catalog(force_refresh: bool = False) -> RemoteCatalogData | Non
 
     if force_refresh:
         logger.info("Force refresh enabled; fetching remote skills catalog")
-    elif _CACHE_PATH.exists():
+    elif _cache_path().exists():
         logger.info(
             "Cache is missing or stale; fetching remote skills catalog "
-            f"(cache_path={_CACHE_PATH}, fresh={cache_fresh})"
+            f"(cache_path={_cache_path()}, fresh={cache_fresh})"
         )
     else:
         logger.info("No cache present; fetching remote skills catalog")
@@ -299,19 +314,19 @@ def fetch_remote_catalog(force_refresh: bool = False) -> RemoteCatalogData | Non
     remote_raw = _fetch_remote_json(SKILLS_JSON_URL)
     if remote_raw is not None:
         logger.info("Fetched remote skills catalog successfully")
-        _write_cache(_CACHE_PATH, remote_raw)
+        _write_cache(_cache_path(), remote_raw)
         parsed = _parse_catalog(remote_raw)
         if parsed is not None:
             return parsed
         logger.warning("Remote catalog fetched but failed to parse")
 
     # Offline fallback: use cache even if expired.
-    if _CACHE_PATH.exists():
+    if _cache_path().exists():
         logger.warning(
             "Remote fetch failed; falling back to cached skills catalog "
-            f"(even if expired): {_CACHE_PATH}"
+            f"(even if expired): {_cache_path()}"
         )
-        cached = _read_cache(_CACHE_PATH)
+        cached = _read_cache(_cache_path())
         if cached is None:
             return None
         return _parse_catalog(cached)

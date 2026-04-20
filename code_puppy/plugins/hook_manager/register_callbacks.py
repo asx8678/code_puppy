@@ -17,7 +17,7 @@ from code_puppy.callbacks import register_callback
 logger = logging.getLogger(__name__)
 
 _COMMAND_NAME = "hooks"
-_ALIASES = "hook"
+_ALIASES = ("hook",)
 
 
 # ---------------------------------------------------------------------------

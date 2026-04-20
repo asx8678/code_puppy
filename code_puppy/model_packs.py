@@ -229,8 +229,8 @@ def save_user_packs() -> None:
 
 def get_packs_file() -> str:
     """Get the path to the user-defined packs file."""
-    import os
-    return os.path.expanduser("~/.code_puppy/model_packs.json")
+    from code_puppy.config_paths import resolve_path
+    return str(resolve_path("model_packs.json"))
 
 
 # Auto-load on import

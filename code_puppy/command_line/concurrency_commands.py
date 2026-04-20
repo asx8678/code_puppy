@@ -9,6 +9,7 @@ Provides commands:
 from pathlib import Path
 
 from code_puppy.command_line.command_registry import register_command
+from code_puppy.config_paths import resolve_path
 from code_puppy.concurrency_limits import (
     ensure_config_file,
     get_concurrency_status,
@@ -86,7 +87,7 @@ def _show_concurrency_status() -> None:
     lines.append(f"  Available: [cyan]{status['tool_calls_available']}[/cyan]")
     lines.append("")
 
-    config_path = Path.home() / ".code_puppy" / "concurrency.toml"
+    config_path = resolve_path("concurrency.toml")
     if config_path.exists():
         lines.append(f"[dim]Config: {config_path}[/dim]")
     else:
