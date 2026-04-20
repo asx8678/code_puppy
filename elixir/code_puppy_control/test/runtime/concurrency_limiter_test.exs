@@ -23,6 +23,7 @@ defmodule CodePuppyControl.Runtime.ConcurrencyLimiterTest do
     # Reset counters to 0 (preserving limits)
     try do
       entries = :ets.tab2list(:concurrency_limits)
+
       Enum.each(entries, fn {type, _current, limit} ->
         :ets.insert(:concurrency_limits, {type, 0, limit})
       end)

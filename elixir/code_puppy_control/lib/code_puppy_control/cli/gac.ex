@@ -155,8 +155,8 @@ defmodule CodePuppyControl.CLI.Gac do
 
   defp generate_message do
     # Get staged files for heuristics
-    {diff_output, _} = System.cmd("git", ["diff", "--cached", "--name-only"],
-      stderr_to_stdout: true)
+    {diff_output, _} =
+      System.cmd("git", ["diff", "--cached", "--name-only"], stderr_to_stdout: true)
 
     files = diff_output |> String.trim() |> String.split("\n", trim: true)
 

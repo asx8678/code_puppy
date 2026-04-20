@@ -140,7 +140,8 @@ defmodule CodePuppyControl.Workflow.StepTest do
     end
 
     test "start fails when max_attempts exceeded", %{step: step} do
-      step = step
+      step =
+        step
         |> Step.changeset(%{max_attempts: 1})
         |> Repo.update!()
 
@@ -181,7 +182,9 @@ defmodule CodePuppyControl.Workflow.StepTest do
       {:ok, _} = Step.cancel(step)
 
       # Attempting to execute should return cancelled error
-      result = Step.execute(workflow_id, "cancelled_step", fn -> {:ok, %{"should_not_run" => true}} end)
+      result =
+        Step.execute(workflow_id, "cancelled_step", fn -> {:ok, %{"should_not_run" => true}} end)
+
       assert result == {:error, :cancelled}
     end
   end

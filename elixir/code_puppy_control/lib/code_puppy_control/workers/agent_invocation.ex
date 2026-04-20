@@ -65,8 +65,8 @@ defmodule CodePuppyControl.Workers.AgentInvocation do
 
     # Step 1: Initialize — idempotent (no-op if already done)
     case Step.execute(workflow_id, "initialize", fn ->
-      initialize_step(session_id, agent_name, args)
-    end) do
+           initialize_step(session_id, agent_name, args)
+         end) do
       {:ok, _init_result} ->
         # Step 2: Run agent — the core execution
         case Step.execute(workflow_id, "run_agent", fn ->

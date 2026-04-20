@@ -78,12 +78,13 @@ defmodule CodePuppyControl.WorkflowTest do
         })
 
       # Workflow.invoke_agent should detect the existing job
-      {:ok, job2} = Workflow.invoke_agent(%{
-        session_id: "sess-idem",
-        agent_name: "test-agent",
-        prompt: "Second call",
-        workflow_id: workflow_id
-      })
+      {:ok, job2} =
+        Workflow.invoke_agent(%{
+          session_id: "sess-idem",
+          agent_name: "test-agent",
+          prompt: "Second call",
+          workflow_id: workflow_id
+        })
 
       # Same job returned (idempotent)
       assert job1.id == job2.id
@@ -113,12 +114,13 @@ defmodule CodePuppyControl.WorkflowTest do
         })
 
       # Call with string-keyed params (as JSON-RPC would send)
-      {:ok, returned_job} = Workflow.invoke_agent(%{
-        "session_id" => "sess-string",
-        "agent_name" => "test-agent",
-        "prompt" => "String key test",
-        "workflow_id" => workflow_id
-      })
+      {:ok, returned_job} =
+        Workflow.invoke_agent(%{
+          "session_id" => "sess-string",
+          "agent_name" => "test-agent",
+          "prompt" => "String key test",
+          "workflow_id" => workflow_id
+        })
 
       # Idempotent: same job returned
       assert returned_job.id == job.id
@@ -137,12 +139,13 @@ defmodule CodePuppyControl.WorkflowTest do
         })
 
       # Call with atom-keyed params (as Elixir callers would use)
-      {:ok, returned_job} = Workflow.invoke_agent(%{
-        session_id: "sess-atom",
-        agent_name: "test-agent",
-        prompt: "Atom key test",
-        workflow_id: workflow_id
-      })
+      {:ok, returned_job} =
+        Workflow.invoke_agent(%{
+          session_id: "sess-atom",
+          agent_name: "test-agent",
+          prompt: "Atom key test",
+          workflow_id: workflow_id
+        })
 
       # Idempotent: same job returned
       assert returned_job.id == job.id

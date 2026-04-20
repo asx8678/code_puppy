@@ -2322,12 +2322,15 @@ defmodule CodePuppyControl.Transport.StdioService do
     # atom/string keys internally, so we pass params through as-is.
     case CodePuppyControl.Workflow.invoke_agent(params) do
       {:ok, job} ->
-        Protocol.encode_response(%{
-          "job_id" => job.id,
-          "workflow_id" => job.args["workflow_id"],
-          "state" => job.state,
-          "queue" => job.queue
-        }, id)
+        Protocol.encode_response(
+          %{
+            "job_id" => job.id,
+            "workflow_id" => job.args["workflow_id"],
+            "state" => job.state,
+            "queue" => job.queue
+          },
+          id
+        )
 
       {:error, reason} ->
         Protocol.encode_error(-32_000, "Workflow invocation failed: #{inspect(reason)}", id)
@@ -2342,13 +2345,17 @@ defmodule CodePuppyControl.Transport.StdioService do
     else
       case CodePuppyControl.Workflow.get_status(workflow_id) do
         {:ok, status} ->
-          Protocol.encode_response(%{
-            "workflow_id" => status.workflow_id,
-            "state" => status.state,
-            "steps" => Enum.map(status.steps, fn step ->
-              %{"name" => step.step_name, "state" => step.state, "attempt" => step.attempt}
-            end)
-          }, id)
+          Protocol.encode_response(
+            %{
+              "workflow_id" => status.workflow_id,
+              "state" => status.state,
+              "steps" =>
+                Enum.map(status.steps, fn step ->
+                  %{"name" => step.step_name, "state" => step.state, "attempt" => step.attempt}
+                end)
+            },
+            id
+          )
 
         {:error, :not_found} ->
           Protocol.encode_error(-32_001, "Workflow not found", id)

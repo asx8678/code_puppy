@@ -160,7 +160,7 @@ defmodule CodePuppyControl.Runtime.EventBusTest do
         EventBus.broadcast_tool_result(run_id, nil, "read_file", %{content: "data"}, store: false)
 
       assert_receive {:event, %{type: "tool_result", tool_name: "read_file", run_id: ^run_id}},
-                      1_000
+                     1_000
     end
   end
 
@@ -173,7 +173,7 @@ defmodule CodePuppyControl.Runtime.EventBusTest do
         EventBus.broadcast_tool_call(run_id, nil, "write_file", %{path: "/tmp/x"}, store: false)
 
       assert_receive {:event, %{type: "tool_call", tool_name: "write_file", run_id: ^run_id}},
-                      1_000
+                     1_000
     end
   end
 
@@ -185,7 +185,7 @@ defmodule CodePuppyControl.Runtime.EventBusTest do
       :ok = EventBus.broadcast_error(run_id, nil, "something broke", store: false)
 
       assert_receive {:event, %{type: "error", message: "something broke", run_id: ^run_id}},
-                      1_000
+                     1_000
     end
   end
 

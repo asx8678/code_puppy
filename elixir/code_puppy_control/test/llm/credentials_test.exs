@@ -18,6 +18,7 @@ defmodule CodePuppyControl.LLM.CredentialsTest do
   # Helper to save, set, and restore env vars within a test
   defp with_env(vars, fun) do
     saved = Enum.map(vars, fn {k, _v} -> {k, System.get_env(k)} end)
+
     Enum.each(vars, fn {k, v} ->
       if v == nil, do: System.delete_env(k), else: System.put_env(k, v)
     end)

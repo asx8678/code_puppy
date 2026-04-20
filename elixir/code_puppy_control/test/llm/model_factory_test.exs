@@ -22,6 +22,7 @@ defmodule CodePuppyControl.LLM.ModelFactoryTest do
   # Helper to save, set, and restore env vars within a test
   defp with_env(vars, fun) do
     saved = Enum.map(vars, fn {k, _v} -> {k, System.get_env(k)} end)
+
     Enum.each(vars, fn {k, v} ->
       if v == nil, do: System.delete_env(k), else: System.put_env(k, v)
     end)
@@ -50,7 +51,10 @@ defmodule CodePuppyControl.LLM.ModelFactoryTest do
     end
 
     test "returns error for unsupported model type" do
-      :ets.insert(:model_configs, {"bad-type-model", %{"type" => "doesnotexist", "name" => "fake"}})
+      :ets.insert(
+        :model_configs,
+        {"bad-type-model", %{"type" => "doesnotexist", "name" => "fake"}}
+      )
 
       assert {:error, {:unsupported_model_type, "doesnotexist", "bad-type-model"}} =
                ModelFactory.resolve("bad-type-model")
@@ -59,7 +63,10 @@ defmodule CodePuppyControl.LLM.ModelFactoryTest do
     end
 
     test "returns error for OAuth phase-4 types" do
-      :ets.insert(:model_configs, {"claude-code-test", %{"type" => "claude_code", "name" => "test"}})
+      :ets.insert(
+        :model_configs,
+        {"claude-code-test", %{"type" => "claude_code", "name" => "test"}}
+      )
 
       assert {:error, {:oauth_phase_4, "claude_code", "claude-code-test"}} =
                ModelFactory.resolve("claude-code-test")
@@ -91,7 +98,10 @@ defmodule CodePuppyControl.LLM.ModelFactoryTest do
 
     test "resolves anthropic model with API key" do
       with_env([{"ANTHROPIC_API_KEY", "ant-key-456"}], fn ->
-        :ets.insert(:model_configs, {"test-anthropic", %{"type" => "anthropic", "name" => "claude-sonnet-4"}})
+        :ets.insert(
+          :model_configs,
+          {"test-anthropic", %{"type" => "anthropic", "name" => "claude-sonnet-4"}}
+        )
 
         assert {:ok, handle} = ModelFactory.resolve("test-anthropic")
         assert handle.provider_module == Anthropic
@@ -103,15 +113,19 @@ defmodule CodePuppyControl.LLM.ModelFactoryTest do
 
     test "resolves custom_openai with custom endpoint" do
       with_env([{"OPENAI_API_KEY", "cust-key"}], fn ->
-        :ets.insert(:model_configs, {"custom-model", %{
-          "type" => "custom_openai",
-          "name" => "cust",
-          "custom_endpoint" => %{
-            "url" => "https://fake.url/v1",
-            "headers" => %{"X-Api-Key" => "$OPENAI_API_KEY"},
-            "api_key" => "$OPENAI_API_KEY"
-          }
-        }})
+        :ets.insert(
+          :model_configs,
+          {"custom-model",
+           %{
+             "type" => "custom_openai",
+             "name" => "cust",
+             "custom_endpoint" => %{
+               "url" => "https://fake.url/v1",
+               "headers" => %{"X-Api-Key" => "$OPENAI_API_KEY"},
+               "api_key" => "$OPENAI_API_KEY"
+             }
+           }}
+        )
 
         assert {:ok, handle} = ModelFactory.resolve("custom-model")
         assert handle.base_url == "https://fake.url/v1"
@@ -122,11 +136,15 @@ defmodule CodePuppyControl.LLM.ModelFactoryTest do
     end
 
     test "custom endpoint missing URL returns handle with nil base_url" do
-      :ets.insert(:model_configs, {"custom-no-url", %{
-        "type" => "custom_openai",
-        "name" => "bad",
-        "custom_endpoint" => %{"headers" => %{}}
-      }})
+      :ets.insert(
+        :model_configs,
+        {"custom-no-url",
+         %{
+           "type" => "custom_openai",
+           "name" => "bad",
+           "custom_endpoint" => %{"headers" => %{}}
+         }}
+      )
 
       assert {:ok, handle} = ModelFactory.resolve("custom-no-url")
       assert handle.base_url == nil
@@ -135,11 +153,15 @@ defmodule CodePuppyControl.LLM.ModelFactoryTest do
     end
 
     test "azure_openai resolves without azure_endpoint" do
-      :ets.insert(:model_configs, {"az-missing", %{
-        "type" => "azure_openai",
-        "name" => "az",
-        "api_version" => "2023-05-15"
-      }})
+      :ets.insert(
+        :model_configs,
+        {"az-missing",
+         %{
+           "type" => "azure_openai",
+           "name" => "az",
+           "api_version" => "2023-05-15"
+         }}
+      )
 
       assert {:ok, handle} = ModelFactory.resolve("az-missing")
       # Without azure_endpoint, base_url comes from provider defaults (nil for azure)
@@ -150,10 +172,14 @@ defmodule CodePuppyControl.LLM.ModelFactoryTest do
 
     test "resolves gemini model" do
       with_env([{"GEMINI_API_KEY", "gem-key"}], fn ->
-        :ets.insert(:model_configs, {"test-gemini", %{"type" => "gemini", "name" => "gemini-pro"}})
+        :ets.insert(
+          :model_configs,
+          {"test-gemini", %{"type" => "gemini", "name" => "gemini-pro"}}
+        )
 
         assert {:ok, handle} = ModelFactory.resolve("test-gemini")
-        assert handle.provider_module == OpenAI  # Gemini uses OpenAI-compatible provider
+        # Gemini uses OpenAI-compatible provider
+        assert handle.provider_module == OpenAI
         assert handle.api_key == "gem-key"
       end)
     after
@@ -162,7 +188,10 @@ defmodule CodePuppyControl.LLM.ModelFactoryTest do
 
     test "resolves cerebras model" do
       with_env([{"CEREBRAS_API_KEY", "cerebras-key"}], fn ->
-        :ets.insert(:model_configs, {"test-cerebras", %{"type" => "cerebras", "name" => "llama3"}})
+        :ets.insert(
+          :model_configs,
+          {"test-cerebras", %{"type" => "cerebras", "name" => "llama3"}}
+        )
 
         assert {:ok, handle} = ModelFactory.resolve("test-cerebras")
         assert handle.provider_module == OpenAI

@@ -71,7 +71,10 @@ defmodule CodePuppyControl.SessionStorage.Migrator do
   @spec migrate(keyword()) :: {:ok, migrate_result()}
   def migrate(opts \\ []) do
     source_dir = Keyword.get(opts, :source_dir, Path.expand(@default_subagent_dir))
-    source_autosave_dir = Keyword.get(opts, :source_autosave_dir, Path.expand(@default_autosave_dir))
+
+    source_autosave_dir =
+      Keyword.get(opts, :source_autosave_dir, Path.expand(@default_autosave_dir))
+
     dest_dir = Keyword.get(opts, :dest_dir, SessionStorage.base_dir())
     dry_run = Keyword.get(opts, :dry_run, false)
     overwrite = Keyword.get(opts, :overwrite, false)
@@ -92,7 +95,8 @@ defmodule CodePuppyControl.SessionStorage.Migrator do
 
     # Process each file
     {migrated, skipped, failed} =
-      Enum.reduce(all_files, {[], [], []}, fn {path, stem}, {acc_migrated, acc_skipped, acc_failed} ->
+      Enum.reduce(all_files, {[], [], []}, fn {path, stem},
+                                              {acc_migrated, acc_skipped, acc_failed} ->
         # Check if already migrated (unless overwrite)
         if not overwrite and SessionStorage.session_exists?(stem, base_dir: dest_dir) do
           {acc_migrated, [stem | acc_skipped], acc_failed}
@@ -197,7 +201,8 @@ defmodule CodePuppyControl.SessionStorage.Migrator do
         end
 
       :python_msgpack_hmac ->
-        {:error, "Legacy msgpack format not supported (install msgpack Python lib to convert first)"}
+        {:error,
+         "Legacy msgpack format not supported (install msgpack Python lib to convert first)"}
 
       :unknown ->
         # Try plain JSON decode as last resort
