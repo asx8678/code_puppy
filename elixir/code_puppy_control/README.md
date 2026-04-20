@@ -143,6 +143,27 @@ Content-Length: 47\r\n
 
 See `lib/code_puppy_control/protocol.ex` for encoding/decoding functions.
 
+### Running Evals
+
+Eval tests (`:eval` tag) are excluded by default and run only when
+`RUN_EVALS=1` is set in the environment. This mirrors the Python
+`evals/conftest.py` gate (see [bd-175](./docs/decisions/bd-175-evals-port.md)).
+
+```bash
+# Default: skip all evals
+mix test
+
+# Run only evals
+RUN_EVALS=1 mix test --only eval
+
+# Run the harness parity gate (not tagged :eval, always runs)
+mix test test/code_puppy_control/evals/logger_test.exs
+```
+
+Eval results are logged as JSON to `<repo_root>/evals/logs/<sanitized_name>.json`
+using the SAME schema as the Python harness, so cross-runtime parity diffs are a
+`jq 'del(.timestamp)' | diff` away.
+
 ### Running Isolation Gates
 
 The 5 CI gates from ADR-003 are consolidated in a dedicated test file:

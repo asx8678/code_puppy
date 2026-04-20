@@ -36,9 +36,18 @@ end
 
 CodePuppyControl.Parsing.Parsers.register_all()
 
-# Configure ExUnit with integration and E2E tests excluded by default
+# Configure ExUnit with integration and E2E tests excluded by default.
+# `:eval` tests are ALSO excluded unless RUN_EVALS=1 is set, mirroring the
+# Python `evals/conftest.py` gate (bd-175).
+exclude_tags =
+  if System.get_env("RUN_EVALS") == "1" do
+    [:integration, :e2e, :skip]
+  else
+    [:integration, :e2e, :skip, :eval]
+  end
+
 ExUnit.configure(
-  exclude: [:integration, :e2e, :skip],
+  exclude: exclude_tags,
   formatters: [ExUnit.CLIFormatter],
   timeout: 30_000
 )
