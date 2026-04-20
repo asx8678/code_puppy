@@ -883,6 +883,85 @@ class TestRunWizard:
         assert result is None
 
 
+class TestPromptStdioConfigUnsupportedCommand:
+    """Tests for the unsupported-command flow in prompt_stdio_config.
+
+    Verifies that when a command is not on the whitelist:
+    - The error message is shown
+    - An informational note clarifies the command is still blocked at runtime
+    - The confirm prompt makes clear the command will NOT execute
+    """
+
+    @pytest.fixture
+    def wizard(self):
+        """Create wizard instance."""
+        with patch("code_puppy.mcp_.config_wizard.get_mcp_manager"):
+            return MCPConfigWizard()
+
+    @patch("code_puppy.mcp_.config_wizard.prompt_ask")
+    @patch("code_puppy.mcp_.config_wizard.confirm_ask")
+    @patch("code_puppy.mcp_.config_wizard.emit_info")
+    @patch("code_puppy.mcp_.config_wizard.emit_error")
+    @patch("code_puppy.mcp_.config_wizard.is_command_allowed", return_value=False)
+    @patch("code_puppy.mcp_.mcp_security.get_allowed_commands", return_value={"python3", "npx"})
+    def test_unsupported_command_shows_runtime_block_note(
+        self,
+        mock_allowed,
+        mock_is_allowed,
+        mock_error,
+        mock_info,
+        mock_confirm,
+        mock_prompt,
+        wizard,
+    ):
+        """Unsupported command flow must emit info about runtime blocking."""
+        # First prompt: 'rm' (not allowed), user says yes to save anyway,
+        # then args, cwd, timeout
+        mock_prompt.side_effect = ["rm", "", "", "30"]
+        # confirm_ask: save anyway (True), skip env (False)
+        mock_confirm.side_effect = [True, False]
+        wizard.prompt_stdio_config()
+
+        # Verify the informational note about runtime blocking was emitted
+        info_messages = [
+            call[0][0] for call in mock_info.call_args_list
+        ]
+        assert any(
+            "blocked at runtime" in msg for msg in info_messages
+        ), f"Expected 'blocked at runtime' note in info messages; got: {info_messages}"
+
+    @patch("code_puppy.mcp_.config_wizard.prompt_ask")
+    @patch("code_puppy.mcp_.config_wizard.confirm_ask")
+    @patch("code_puppy.mcp_.config_wizard.emit_info")
+    @patch("code_puppy.mcp_.config_wizard.emit_error")
+    @patch("code_puppy.mcp_.config_wizard.is_command_allowed", return_value=False)
+    @patch("code_puppy.mcp_.mcp_security.get_allowed_commands", return_value={"python3", "npx"})
+    def test_unsupported_command_confirm_mentions_will_not_execute(
+        self,
+        mock_allowed,
+        mock_is_allowed,
+        mock_error,
+        mock_info,
+        mock_confirm,
+        mock_prompt,
+        wizard,
+    ):
+        """The confirm_ask prompt must make clear the command will NOT execute."""
+        mock_prompt.side_effect = ["rm", "", "", "30"]
+        mock_confirm.side_effect = [True, False]
+        wizard.prompt_stdio_config()
+
+        # Check that confirm_ask was called with wording that mentions
+        # the command will NOT execute
+        confirm_calls = [
+            call[0][0] for call in mock_confirm.call_args_list
+        ]
+        assert any(
+            "NOT execute" in prompt for prompt in confirm_calls
+        ), f"Expected 'NOT execute' in confirm prompt; got: {confirm_calls}"
+
+
+
 class TestRunAddWizard:
     """Tests for run_add_wizard entry point function."""
 

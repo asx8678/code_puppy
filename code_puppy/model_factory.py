@@ -272,11 +272,8 @@ def make_model_settings(
         # Remove top_p as Anthropic doesn't support it with extended thinking
         model_settings_dict.pop("top_p", None)
 
-        # Claude extended thinking requires temperature=1.0 (API restriction)
-        # Default to 1.0 if not explicitly set by user
-        if model_settings_dict.get("temperature") is None:
-            model_settings_dict["temperature"] = 1.0
-
+        # Determine extended_thinking mode BEFORE setting temperature,
+        # because thinking mode dictates the allowed temperature value.
         from code_puppy.model_utils import get_default_extended_thinking
 
         default_thinking = get_default_extended_thinking(model_name)
@@ -288,6 +285,21 @@ def make_model_settings(
             extended_thinking = "enabled"
         elif extended_thinking is False:
             extended_thinking = "off"
+
+        # Claude extended thinking requires temperature=1.0 (API restriction).
+        # When thinking is active, any non-1.0 temperature must be coerced.
+        if extended_thinking in ("enabled", "adaptive"):
+            user_temp = model_settings_dict.get("temperature")
+            if user_temp is not None and user_temp != 1.0:
+                emit_warning(
+                    f"Extended thinking is '{extended_thinking}' for model "
+                    f"'{model_name}'; overriding temperature from "
+                    f"{user_temp} to 1.0 (API requirement)."
+                )
+            model_settings_dict["temperature"] = 1.0
+        elif model_settings_dict.get("temperature") is None:
+            # No thinking active — default to 1.0 only when not explicitly set
+            model_settings_dict["temperature"] = 1.0
 
         budget_tokens = effective_settings.get("budget_tokens", 10000)
         if extended_thinking in ("enabled", "adaptive"):

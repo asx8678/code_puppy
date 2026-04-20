@@ -271,9 +271,18 @@ class MCPConfigWizard:
                     f"Allowed commands: {', '.join(sorted(allowed))}",
                     message_group=group_id,
                 )
-                if not confirm_ask("Use this command anyway?", default=False):
+                emit_info(
+                    "Note: unsupported commands will still be blocked at runtime "
+                    "by the security layer even if saved in the configuration.",
+                    message_group=group_id,
+                )
+                if not confirm_ask(
+                    "Save this command in config anyway? (it will NOT execute)",
+                    default=False,
+                ):
                     continue
-                # User chose to continue - security will be enforced at server creation
+                # User chose to save the command anyway — it remains blocked
+                # at runtime by the MCP security enforcement layer.
 
             break
 
