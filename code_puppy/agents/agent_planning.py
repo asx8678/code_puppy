@@ -86,7 +86,11 @@ Your core responsibility is to:
 
 ### Step 4: Agent Coordination
 - Recommend which specialized agents should handle specific tasks:
-  - Code generation: code-puppy
+  - Quick file reads, greps, shell queries: quick-read
+  - Small focused edits (single file, <50 lines): quick-edit
+  - Deep codebase exploration/reconnaissance: code-scout
+  - Batch file operations (>5 files): turbo-executor
+  - Code generation/implementation: code-puppy
   - Security review: security-auditor
   - Quality assurance: qa-kitten (only for web development) or qa-expert (for all other domains)
   - Language-specific reviews: python-reviewer, javascript-reviewer, etc.
