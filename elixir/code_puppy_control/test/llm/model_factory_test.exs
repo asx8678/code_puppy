@@ -1,0 +1,298 @@
+defmodule CodePuppyControl.LLM.ModelFactoryTest do
+  @moduledoc """
+  Port of tests/test_model_factory.py — ModelFactory.resolve/1 and credential resolution.
+
+  Covers:
+  - Resolving known model types to provider handles
+  - Error for unknown model names
+  - Error for unsupported model types
+  - Provider module lookup
+  - Credentials: validation via ModelFactory
+  - Custom endpoint resolution
+  - Handle struct fields
+  - list_available/0 filtering
+  """
+  use ExUnit.Case, async: false
+
+  alias CodePuppyControl.ModelFactory
+  alias CodePuppyControl.ModelFactory.{Credentials, Handle}
+  alias CodePuppyControl.ModelRegistry
+  alias CodePuppyControl.LLM.Providers.{OpenAI, Anthropic}
+
+  # Helper to save, set, and restore env vars within a test
+  defp with_env(vars, fun) do
+    saved = Enum.map(vars, fn {k, _v} -> {k, System.get_env(k)} end)
+    Enum.each(vars, fn {k, v} ->
+      if v == nil, do: System.delete_env(k), else: System.put_env(k, v)
+    end)
+
+    try do
+      fun.()
+    after
+      Enum.each(saved, fn
+        {k, nil} -> System.delete_env(k)
+        {k, v} -> System.put_env(k, v)
+      end)
+    end
+  end
+
+  setup do
+    CodePuppyControl.TestSupport.Reset.ensure_gen_server_started(ModelRegistry)
+    :ok
+  end
+
+  # ── Resolve ─────────────────────────────────────────────────────────────
+
+  describe "resolve/1" do
+    test "returns error for unknown model name" do
+      assert {:error, {:unknown_model, "nonexistent-model-xyz"}} =
+               ModelFactory.resolve("nonexistent-model-xyz")
+    end
+
+    test "returns error for unsupported model type" do
+      :ets.insert(:model_configs, {"bad-type-model", %{"type" => "doesnotexist", "name" => "fake"}})
+
+      assert {:error, {:unsupported_model_type, "doesnotexist", "bad-type-model"}} =
+               ModelFactory.resolve("bad-type-model")
+    after
+      :ets.delete(:model_configs, "bad-type-model")
+    end
+
+    test "returns error for OAuth phase-4 types" do
+      :ets.insert(:model_configs, {"claude-code-test", %{"type" => "claude_code", "name" => "test"}})
+
+      assert {:error, {:oauth_phase_4, "claude_code", "claude-code-test"}} =
+               ModelFactory.resolve("claude-code-test")
+    after
+      :ets.delete(:model_configs, "claude-code-test")
+    end
+
+    test "returns error for round_robin type" do
+      :ets.insert(:model_configs, {"rr-model", %{"type" => "round_robin", "name" => "rr"}})
+
+      assert {:error, :round_robin_use_routing} = ModelFactory.resolve("rr-model")
+    after
+      :ets.delete(:model_configs, "rr-model")
+    end
+
+    test "resolves openai model with API key" do
+      with_env([{"OPENAI_API_KEY", "test-key-123"}], fn ->
+        :ets.insert(:model_configs, {"test-openai", %{"type" => "openai", "name" => "gpt-4o"}})
+
+        assert {:ok, handle} = ModelFactory.resolve("test-openai")
+        assert %Handle{} = handle
+        assert handle.provider_module == OpenAI
+        assert handle.api_key == "test-key-123"
+        assert handle.model_name == "test-openai"
+      end)
+    after
+      :ets.delete(:model_configs, "test-openai")
+    end
+
+    test "resolves anthropic model with API key" do
+      with_env([{"ANTHROPIC_API_KEY", "ant-key-456"}], fn ->
+        :ets.insert(:model_configs, {"test-anthropic", %{"type" => "anthropic", "name" => "claude-sonnet-4"}})
+
+        assert {:ok, handle} = ModelFactory.resolve("test-anthropic")
+        assert handle.provider_module == Anthropic
+        assert handle.api_key == "ant-key-456"
+      end)
+    after
+      :ets.delete(:model_configs, "test-anthropic")
+    end
+
+    test "resolves custom_openai with custom endpoint" do
+      with_env([{"OPENAI_API_KEY", "cust-key"}], fn ->
+        :ets.insert(:model_configs, {"custom-model", %{
+          "type" => "custom_openai",
+          "name" => "cust",
+          "custom_endpoint" => %{
+            "url" => "https://fake.url/v1",
+            "headers" => %{"X-Api-Key" => "$OPENAI_API_KEY"},
+            "api_key" => "$OPENAI_API_KEY"
+          }
+        }})
+
+        assert {:ok, handle} = ModelFactory.resolve("custom-model")
+        assert handle.base_url == "https://fake.url/v1"
+        assert {"X-Api-Key", "cust-key"} in handle.extra_headers
+      end)
+    after
+      :ets.delete(:model_configs, "custom-model")
+    end
+
+    test "custom endpoint missing URL returns handle with nil base_url" do
+      :ets.insert(:model_configs, {"custom-no-url", %{
+        "type" => "custom_openai",
+        "name" => "bad",
+        "custom_endpoint" => %{"headers" => %{}}
+      }})
+
+      assert {:ok, handle} = ModelFactory.resolve("custom-no-url")
+      assert handle.base_url == nil
+    after
+      :ets.delete(:model_configs, "custom-no-url")
+    end
+
+    test "azure_openai resolves without azure_endpoint" do
+      :ets.insert(:model_configs, {"az-missing", %{
+        "type" => "azure_openai",
+        "name" => "az",
+        "api_version" => "2023-05-15"
+      }})
+
+      assert {:ok, handle} = ModelFactory.resolve("az-missing")
+      # Without azure_endpoint, base_url comes from provider defaults (nil for azure)
+      assert handle.base_url == nil
+    after
+      :ets.delete(:model_configs, "az-missing")
+    end
+
+    test "resolves gemini model" do
+      with_env([{"GEMINI_API_KEY", "gem-key"}], fn ->
+        :ets.insert(:model_configs, {"test-gemini", %{"type" => "gemini", "name" => "gemini-pro"}})
+
+        assert {:ok, handle} = ModelFactory.resolve("test-gemini")
+        assert handle.provider_module == OpenAI  # Gemini uses OpenAI-compatible provider
+        assert handle.api_key == "gem-key"
+      end)
+    after
+      :ets.delete(:model_configs, "test-gemini")
+    end
+
+    test "resolves cerebras model" do
+      with_env([{"CEREBRAS_API_KEY", "cerebras-key"}], fn ->
+        :ets.insert(:model_configs, {"test-cerebras", %{"type" => "cerebras", "name" => "llama3"}})
+
+        assert {:ok, handle} = ModelFactory.resolve("test-cerebras")
+        assert handle.provider_module == OpenAI
+        assert handle.api_key == "cerebras-key"
+      end)
+    after
+      :ets.delete(:model_configs, "test-cerebras")
+    end
+  end
+
+  # ── resolve!/1 ──────────────────────────────────────────────────────────
+
+  describe "resolve!/1" do
+    test "returns handle for valid model" do
+      with_env([{"OPENAI_API_KEY", "test"}], fn ->
+        :ets.insert(:model_configs, {"resolve-bang", %{"type" => "openai", "name" => "gpt-4o"}})
+        assert %Handle{} = ModelFactory.resolve!("resolve-bang")
+      end)
+    after
+      :ets.delete(:model_configs, "resolve-bang")
+    end
+
+    test "raises for unknown model" do
+      assert_raise RuntimeError, ~r/Failed to resolve model/, fn ->
+        ModelFactory.resolve!("definitely-nonexistent")
+      end
+    end
+  end
+
+  # ── Provider Module Lookup ──────────────────────────────────────────────
+
+  describe "provider_module_for_type/1" do
+    test "returns OpenAI for openai type" do
+      assert {:ok, OpenAI} = ModelFactory.provider_module_for_type("openai")
+    end
+
+    test "returns Anthropic for anthropic type" do
+      assert {:ok, Anthropic} = ModelFactory.provider_module_for_type("anthropic")
+    end
+
+    test "returns OpenAI for custom_openai" do
+      assert {:ok, OpenAI} = ModelFactory.provider_module_for_type("custom_openai")
+    end
+
+    test "returns OpenAI for gemini type" do
+      assert {:ok, OpenAI} = ModelFactory.provider_module_for_type("gemini")
+    end
+
+    test "returns error for unknown type" do
+      assert :error = ModelFactory.provider_module_for_type("doesnotexist")
+    end
+  end
+
+  # ── Validate Credentials ───────────────────────────────────────────────
+
+  describe "validate_credentials/1" do
+    test "returns error for unknown model" do
+      assert {:error, {:unknown_model, "nope"}} = ModelFactory.validate_credentials("nope")
+    end
+
+    test "returns :ok when API key is present" do
+      with_env([{"OPENAI_API_KEY", "present"}], fn ->
+        :ets.insert(:model_configs, {"cred-test", %{"type" => "openai", "name" => "gpt-4o"}})
+        assert :ok = ModelFactory.validate_credentials("cred-test")
+      end)
+    after
+      :ets.delete(:model_configs, "cred-test")
+    end
+
+    test "returns missing when API key is absent" do
+      with_env([{"OPENAI_API_KEY", nil}], fn ->
+        :ets.insert(:model_configs, {"cred-missing", %{"type" => "openai", "name" => "gpt-4o"}})
+        assert {:missing, ["OPENAI_API_KEY"]} = ModelFactory.validate_credentials("cred-missing")
+      end)
+    after
+      :ets.delete(:model_configs, "cred-missing")
+    end
+  end
+
+  # ── List Available ─────────────────────────────────────────────────────
+
+  describe "list_available/0" do
+    test "returns list of {name, type, module} tuples" do
+      with_env([{"OPENAI_API_KEY", "present"}], fn ->
+        available = ModelFactory.list_available()
+        assert is_list(available)
+
+        Enum.each(available, fn {name, type, mod} ->
+          assert is_binary(name)
+          assert is_binary(type)
+          assert mod in [OpenAI, Anthropic]
+        end)
+      end)
+    end
+  end
+
+  # ── Handle Struct ──────────────────────────────────────────────────────
+
+  describe "Handle" do
+    test "to_provider_opts merges model_opts with api_key and base_url" do
+      handle = %Handle{
+        model_name: "test",
+        provider_module: OpenAI,
+        provider_config: %{},
+        api_key: "sk-test",
+        base_url: "https://api.openai.com",
+        model_opts: [model: "gpt-4o", temperature: 0.7]
+      }
+
+      opts = Handle.to_provider_opts(handle)
+      assert opts[:model] == "gpt-4o"
+      assert opts[:temperature] == 0.7
+      assert opts[:api_key] == "sk-test"
+      assert opts[:base_url] == "https://api.openai.com"
+    end
+
+    test "to_provider_opts skips nil api_key and base_url" do
+      handle = %Handle{
+        model_name: "test",
+        provider_module: OpenAI,
+        provider_config: %{},
+        api_key: nil,
+        base_url: nil,
+        model_opts: [model: "gpt-4o"]
+      }
+
+      opts = Handle.to_provider_opts(handle)
+      assert opts[:model] == "gpt-4o"
+      refute Keyword.has_key?(opts, :api_key)
+      refute Keyword.has_key?(opts, :base_url)
+    end
+  end
+end
