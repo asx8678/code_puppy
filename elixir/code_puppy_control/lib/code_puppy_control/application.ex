@@ -77,6 +77,8 @@ defmodule CodePuppyControl.Application do
       CodePuppyControl.RoundRobinModel,
       CodePuppyControl.ModelsDevParser.Registry,
       CodePuppyControl.Run.Registry,
+      # bd-249: Per-{session,agent} message history state
+      CodePuppyControl.Agent.State.Registry,
       # Tool registry (ETS-backed) for agent tool dispatch (bd-149)
       CodePuppyControl.Tool.Registry,
       # Slash command registry (ETS-backed) for REPL command dispatch (bd-163)
@@ -84,6 +86,7 @@ defmodule CodePuppyControl.Application do
       # Staged changes sandbox for diff-preview system (bd-150)
       CodePuppyControl.Tools.StagedChanges,
       {CodePuppyControl.Run.Supervisor, []},
+      CodePuppyControl.Agent.State.Supervisor,
       CodePuppyControl.PythonWorker.Supervisor,
       # MCP Server supervision
       {Registry, keys: :unique, name: CodePuppyControl.MCP.Registry},
