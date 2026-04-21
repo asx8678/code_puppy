@@ -4895,10 +4895,18 @@
       "dependencies": {
         "discovered-from": [
           "bd-163"
+        ],
+        "blocks": [
+          "bd-267",
+          "bd-271",
+          "bd-269",
+          "bd-268",
+          "bd-272",
+          "bd-270"
         ]
       },
       "created_at": "2026-04-21T08:47:53.402244",
-      "updated_at": "2026-04-21T08:47:53.402252",
+      "updated_at": "2026-04-21T19:37:22.224003",
       "comments": []
     },
     "bd-245": {
@@ -4914,11 +4922,19 @@
       "dependencies": {
         "discovered-from": [
           "bd-163"
+        ],
+        "blocks": [
+          "bd-265",
+          "bd-263",
+          "bd-266",
+          "bd-264"
         ]
       },
       "created_at": "2026-04-21T08:47:58.113636",
-      "updated_at": "2026-04-21T08:47:58.113644",
-      "comments": []
+      "updated_at": "2026-04-21T19:37:56.620429",
+      "comments": [
+        "Decomposed into 4 atomic child issues:\n- bd-263: MCP entrypoint with help/list/status (READY, HIGH)\n- bd-264: MCP lifecycle subcommands (blocked by bd-263)\n- bd-265: MCP search and install flows (blocked by bd-263)  \n- bd-266: MCP management subcommands (blocked by bd-263)\n\nParent bd-245 is now blocked by all 4 children. Entrypoint (bd-263) is the first issue that can be worked on."
+      ]
     },
     "bd-246": {
       "id": "bd-246",
@@ -5289,7 +5305,168 @@
       "comments": [
         "Claimed by planning-agent-019db1 for implementation."
       ]
+    },
+    "bd-263": {
+      "id": "bd-263",
+      "title": "MCP entrypoint with help/list/status subcommands",
+      "description": "Create /mcp slash command entrypoint in Elixir with initial read-only subcommands:\n- help: Display MCP command help\n- list: List configured MCP servers\n- status: Check MCP server/connection status\n\nReferences Python implementation in code_puppy/command_line/mcp/handler.py.\nElixir MCP runtime infrastructure (MCP.Manager, MCP.Server) already exists.",
+      "status": "open",
+      "priority": 1,
+      "type": "task",
+      "labels": [],
+      "dependencies": {},
+      "created_at": "2026-04-21T19:36:29.764652",
+      "updated_at": "2026-04-21T19:36:29.764657",
+      "comments": []
+    },
+    "bd-264": {
+      "id": "bd-264",
+      "title": "MCP lifecycle subcommands (start/stop/restart/start-all/stop-all)",
+      "description": "Port MCP lifecycle management subcommands to Elixir:\n- start <server_name>: Start a specific MCP server\n- stop <server_name>: Stop a specific MCP server  \n- restart <server_name>: Restart a specific MCP server\n- start-all: Start all configured MCP servers\n- stop-all: Stop all MCP servers\n\nThese call into MCP.Supervisor and MCP.Manager runtime.\nBlocked by entrypoint issue which establishes the /mcp command structure.",
+      "status": "open",
+      "priority": 1,
+      "type": "task",
+      "labels": [],
+      "dependencies": {
+        "blocks": [
+          "bd-263"
+        ]
+      },
+      "created_at": "2026-04-21T19:36:29.768616",
+      "updated_at": "2026-04-21T19:37:00.539209",
+      "comments": []
+    },
+    "bd-265": {
+      "id": "bd-265",
+      "title": "MCP search and install flows",
+      "description": "Port MCP discovery and installation flows to Elixir:\n- search <query>: Search for available MCP servers\n- install <server_spec>: Install/configure a new MCP server (interactive wizard)\n\nThe install flow requires TUI menu interaction for server configuration.\nUses MCP.ToolIndex for search capabilities.\nBlocked by entrypoint issue which provides the /mcp command registration.",
+      "status": "open",
+      "priority": 2,
+      "type": "task",
+      "labels": [],
+      "dependencies": {
+        "blocks": [
+          "bd-263"
+        ]
+      },
+      "created_at": "2026-04-21T19:36:29.774936",
+      "updated_at": "2026-04-21T19:37:39.096038",
+      "comments": []
+    },
+    "bd-266": {
+      "id": "bd-266",
+      "title": "MCP management subcommands (test/logs/remove/edit)",
+      "description": "Port MCP management subcommands to Elixir:\n- test <server_name>: Test connectivity to an MCP server\n- logs [server_name]: Show MCP server logs (specific or all)\n- remove <server_name>: Remove an MCP server configuration\n- edit <server_name>: Open server config in editor (interactive)\n\nDepends on entrypoint existing and MCP.ClientSupervisor for test operations.\nBlocked by entrypoint issue.",
+      "status": "open",
+      "priority": 2,
+      "type": "task",
+      "labels": [],
+      "dependencies": {
+        "blocks": [
+          "bd-263"
+        ]
+      },
+      "created_at": "2026-04-21T19:36:29.781850",
+      "updated_at": "2026-04-21T19:37:00.548058",
+      "comments": []
+    },
+    "bd-267": {
+      "id": "bd-267",
+      "title": "/diff slash command port to Elixir",
+      "description": "Port the /diff slash command from Python to Elixir.\nShows git diff output in the TUI or console.\nReferences Python implementation in code_puppy/command_line/config_commands.py.\nPart of the menu wizard slash commands migration (bd-244).",
+      "status": "closed",
+      "priority": 1,
+      "type": "task",
+      "labels": [
+        "in-progress",
+        "claimed-by-pack-leader"
+      ],
+      "dependencies": {},
+      "created_at": "2026-04-21T19:36:40.240790",
+      "updated_at": "2026-04-21T20:44:58.101125",
+      "comments": [
+        "Implementation started from base branch main in isolated worktrees.",
+        "## Code Review: REQUEST_CHANGES\n\n- /diff missing from fallback completion list and related registry/completion integration expectations\n- tests need config isolation to avoid writing real user config  \n- changed file needs mix format",
+        "Shepherd: APPROVE. Watchdog: APPROVE. Merged to main via local merge. /diff slash command port landed with registry/completion wiring, config-isolated tests, and deterministic completion coverage."
+      ]
+    },
+    "bd-268": {
+      "id": "bd-268",
+      "title": "/add_model slash command port to Elixir",
+      "description": "Port the /add_model slash command from Python to Elixir.\nInteractive wizard for adding a new model configuration to the system.\nUses TUI menu flows for model parameter input.\nReferences Python implementation in code_puppy/command_line/core_commands.py.\nPart of the menu wizard slash commands migration (bd-244).",
+      "status": "open",
+      "priority": 1,
+      "type": "task",
+      "labels": [],
+      "dependencies": {},
+      "created_at": "2026-04-21T19:36:40.246567",
+      "updated_at": "2026-04-21T19:36:40.246574",
+      "comments": []
+    },
+    "bd-269": {
+      "id": "bd-269",
+      "title": "/uc slash command port to Elixir",
+      "description": "Port the /uc slash command (User Config / Universal Command) from Python to Elixir.\nInteractive user configuration menu/TUI.\nPython implementation confirmed in code_puppy/command_line/uc_menu.py with name=\"uc\" and registered in command_handler.py.\nRequires TUI menu interaction for user preference management.\nPart of the menu wizard slash commands migration (bd-244).",
+      "status": "open",
+      "priority": 2,
+      "type": "task",
+      "labels": [],
+      "dependencies": {},
+      "created_at": "2026-04-21T19:36:40.249447",
+      "updated_at": "2026-04-21T19:36:40.249457",
+      "comments": []
+    },
+    "bd-270": {
+      "id": "bd-270",
+      "title": "/model_settings summary view (--show) port to Elixir",
+      "description": "Port the read-only /model_settings --show [model_name] summary view from Python to Elixir.\nDisplays model configuration without interactive editing.\nIncludes both global model listing (--show alone) and specific model details (--show <name>).\nReferences Python implementation in code_puppy/command_line/core_commands.py.\nPart of the menu wizard slash commands migration (bd-244).",
+      "status": "closed",
+      "priority": 1,
+      "type": "task",
+      "labels": [
+        "in-progress",
+        "claimed-by-pack-leader"
+      ],
+      "dependencies": {},
+      "created_at": "2026-04-21T19:36:40.262305",
+      "updated_at": "2026-04-21T20:44:58.166052",
+      "comments": [
+        "Implementation started from base branch main in isolated worktrees.",
+        "## Code Review: REQUEST_CHANGES\n\n- /model_settings --show can crash on cleared/blank settings values\n- Python parity gap for capability-based OpenAI global controls (supported_settings-driven display)\n- tests need config isolation\n- completion/registry integration needs reconciliation for /model_settings and /ms\n- changed files need mix format",
+        "Watchdog REQUEST_CHANGES notes: broader slash-command/completion suite is seed/order-dependent; completion_test.exs fallback cases need explicit Registry state setup/clear so the suite is deterministic",
+        "Shepherd: APPROVE. Watchdog: APPROVE. Merged to main via local merge. Read-only /model_settings --show port landed with /ms alias, capability-aware display, and deterministic completion test setup."
+      ]
+    },
+    "bd-271": {
+      "id": "bd-271",
+      "title": "/model_settings interactive editor port to Elixir",
+      "description": "Port the interactive /model_settings editor flow from Python to Elixir.\nTUI-based model configuration editor for adjusting model parameters interactively.\nUses menu wizard/TUI widgets for the interactive experience.\nBlocked by the summary view issue which establishes the model settings data structures.\nReferences Python implementation in code_puppy/command_line/core_commands.py.\nPart of the menu wizard slash commands migration (bd-244).",
+      "status": "open",
+      "priority": 2,
+      "type": "task",
+      "labels": [],
+      "dependencies": {
+        "blocks": [
+          "bd-270"
+        ]
+      },
+      "created_at": "2026-04-21T19:36:40.264055",
+      "updated_at": "2026-04-21T19:37:42.796546",
+      "comments": []
+    },
+    "bd-272": {
+      "id": "bd-272",
+      "title": "/autosave_load slash command port to Elixir",
+      "description": "Port the /autosave_load slash command from Python to Elixir.\nLoads the most recent autosaved session state.\nNote: Python implementation uses /autosave_load (not /autosave as mentioned in umbrella).\nReferences Python implementation in code_puppy/command_line/session_commands.py.\nPart of the menu wizard slash commands migration (bd-244).",
+      "status": "open",
+      "priority": 2,
+      "type": "task",
+      "labels": [],
+      "dependencies": {},
+      "created_at": "2026-04-21T19:36:54.547786",
+      "updated_at": "2026-04-21T19:36:54.547791",
+      "comments": []
     }
   },
-  "counter": 262
+  "counter": 272
 }
