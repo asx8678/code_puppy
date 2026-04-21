@@ -365,19 +365,71 @@ defmodule CodePuppyControl.CLI.SlashCommands.Commands.ModelSettingsTest do
 
   # ── Capability-based display (Python parity) ─────────────────────────────
 
-  describe "get_display_settings/1 — capability-based merging" do
-    test "includes OpenAI global controls for models with supported_settings" do
-      # This test uses a model name from models.json that has
-      # supported_settings including "reasoning_effort" etc.
-      # Since the Elixir models.json may not have OpenAI models with
-      # reasoning_effort in supported_settings, we verify the function
-      # doesn't crash and returns a map.
-      result = ModelSettings.get_display_settings("firepass-kimi-k2p5-turbo")
-      assert is_map(result)
+  describe "get_display_settings/1 — capability-based gating" do
+    # ── Settings shown when supported_settings explicitly includes them ───
+
+    test "includes reasoning_effort when model metadata lists it in supported_settings" do
+      # Inject a test model into ETS that explicitly supports reasoning controls
+      test_model = "bd270-test-openai-reasoning"
+
+      :ets.insert(
+        :model_configs,
+        {test_model, %{"supported_settings" => ["reasoning_effort", "summary", "verbosity"]}}
+      )
+
+      on_exit(fn -> :ets.delete(:model_configs, test_model) end)
+
+      result = ModelSettings.get_display_settings(test_model)
+
+      assert Map.has_key?(result, "reasoning_effort"),
+             "Expected reasoning_effort in display settings for model with explicit support"
+
+      assert Map.has_key?(result, "summary"),
+             "Expected summary in display settings for model with explicit support"
+
+      assert Map.has_key?(result, "verbosity"),
+             "Expected verbosity in display settings for model with explicit support"
     end
 
-    test "does not crash for unknown model names" do
+    # ── Settings absent when supported_settings does NOT include them ──
+
+    test "excludes reasoning_effort when model supported_settings omits it" do
+      # firepass-kimi-k2p5-turbo has supported_settings: ["temperature", "seed", "top_p"]
+      # — no reasoning/summary/verbosity controls.
+      result = ModelSettings.get_display_settings("firepass-kimi-k2p5-turbo")
+
+      refute Map.has_key?(result, "reasoning_effort"),
+             "reasoning_effort should NOT appear for models without it in supported_settings"
+
+      refute Map.has_key?(result, "summary"),
+             "summary should NOT appear for models without it in supported_settings"
+
+      refute Map.has_key?(result, "verbosity"),
+             "verbosity should NOT appear for models without it in supported_settings"
+    end
+
+    # ── Settings absent when model metadata is missing entirely ─────────
+
+    test "excludes OpenAI global controls for unknown models (no metadata)" do
       result = ModelSettings.get_display_settings("nonexistent-model-xyz")
+
+      refute Map.has_key?(result, "reasoning_effort"),
+             "reasoning_effort should NOT appear for models without any metadata"
+
+      refute Map.has_key?(result, "summary"),
+             "summary should NOT appear for models without any metadata"
+
+      refute Map.has_key?(result, "verbosity"),
+             "verbosity should NOT appear for models without any metadata"
+    end
+
+    test "returns empty map for unknown model with no per-model settings" do
+      result = ModelSettings.get_display_settings("nonexistent-model-xyz")
+      assert result == %{}
+    end
+
+    test "does not crash for known models with supported_settings" do
+      result = ModelSettings.get_display_settings("firepass-kimi-k2p5-turbo")
       assert is_map(result)
     end
   end

@@ -232,10 +232,15 @@ defmodule CodePuppyControl.CLI.SlashCommands.Commands.ModelSettings do
         setting in supported
 
       _no_metadata ->
-        # Fallback: assume supported if the model has a per-model override
-        # or if the model name looks like a known prefix pattern.
-        # This matches Python's backwards-compat default of True for unknown models.
-        true
+        # Read-only summary: do NOT invent OpenAI global controls
+        # (reasoning_effort, summary, verbosity) for models that lack
+        # explicit supported_settings metadata.  Only show these controls
+        # when the model's metadata explicitly lists them.
+        #
+        # This differs from the Python runtime path (model_factory) where
+        # defaulting to True is "safe" for API calls.  In the display path,
+        # showing unsupported controls is misleading.
+        false
     end
   end
 
