@@ -102,11 +102,7 @@ defmodule CodePuppyControl.CLI.SlashCommands.Commands.CoreTest do
     test "/exit via dispatcher acts as quit alias", %{state: state} do
       # Register exit as a separate command with the same handler
       _quit_info = Registry.get("quit")
-
-      :ok =
-        Registry.register(
-          CommandInfo.new(name: "exit", description: "Exit alias", handler: &Core.handle_quit/2)
-        )
+      :ok = Registry.register(CommandInfo.new(name: "exit", description: "Exit alias", handler: &Core.handle_quit/2))
 
       output =
         ExUnit.CaptureIO.capture_io(fn ->

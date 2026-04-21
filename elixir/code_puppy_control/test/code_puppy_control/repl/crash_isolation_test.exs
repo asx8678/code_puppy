@@ -134,8 +134,7 @@ defmodule CodePuppyControl.REPL.CrashIsolationTest do
 
       # Clean up any renderer process started for this session.
       case Registry.lookup(CodePuppyControl.REPL.RendererRegistry, session_id) do
-        [] ->
-          :ok
+        [] -> :ok
 
         [{pid, _}] ->
           if Process.alive?(pid) do
@@ -239,11 +238,10 @@ defmodule CodePuppyControl.REPL.CrashIsolationTest do
 
       assert [
                %{"role" => "user", "parts" => [%{"type" => "text", "text" => "try again"}]},
-               %{
-                 "role" => "assistant",
-                 "parts" => [%{"type" => "text", "text" => "recovered reply"}]
-               }
+               %{"role" => "assistant", "parts" => [%{"type" => "text", "text" => "recovered reply"}]}
              ] = messages
     end
+
+
   end
 end

@@ -132,8 +132,7 @@ defmodule CodePuppyControl.REPL.RendererRollbackTest do
 
       # Safe renderer cleanup (same pattern as other describe blocks)
       case Registry.lookup(CodePuppyControl.REPL.RendererRegistry, session_id) do
-        [] ->
-          :ok
+        [] -> :ok
 
         [{pid, _}] ->
           if Process.alive?(pid) do
@@ -298,11 +297,10 @@ defmodule CodePuppyControl.REPL.RendererRollbackTest do
       Application.delete_env(:code_puppy_control, :test_ensure_renderer_error)
     end
 
-    test "run_until_done error still rolls back user message after refactor (bd-252 regression)",
-         %{
-           state: state,
-           session_id: session_id
-         } do
+    test "run_until_done error still rolls back user message after refactor (bd-252 regression)", %{
+      state: state,
+      session_id: session_id
+    } do
       # Pre-seed one message to prove rollback is surgical.
       State.append_message(session_id, "code_puppy", %{
         "role" => "user",
@@ -377,19 +375,15 @@ defmodule CodePuppyControl.REPL.RendererRollbackTest do
 
       assert [
                %{"role" => "user", "parts" => [%{"type" => "text", "text" => "Test prompt"}]},
-               %{
-                 "role" => "assistant",
-                 "parts" => [%{"type" => "text", "text" => "recovered reply"}]
-               }
+               %{"role" => "assistant", "parts" => [%{"type" => "text", "text" => "recovered reply"}]}
              ] =
                messages
     end
 
-    test "REPL survives renderer death between prompts without Process.unlink masking (bd-252 regression)",
-         %{
-           state: state,
-           session_id: session_id
-         } do
+    test "REPL survives renderer death between prompts without Process.unlink masking (bd-252 regression)", %{
+      state: state,
+      session_id: session_id
+    } do
       # First call: starts a renderer via handle_input. With the bd-252 fix,
       # start_renderer_idempotent unlinks the renderer from the caller
       # (REPL process), so renderer death does NOT propagate.
@@ -447,4 +441,5 @@ defmodule CodePuppyControl.REPL.RendererRollbackTest do
       assert length(messages) == 4
     end
   end
+
 end
