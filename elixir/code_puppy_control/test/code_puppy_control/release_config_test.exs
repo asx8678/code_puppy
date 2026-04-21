@@ -1,8 +1,52 @@
-# async: false — this suite mutates the __BURRITO env var and calls
-# default_secret_key_base/0 which writes to disk under :user_data basedir.
-# Those are global side effects incompatible with async test execution.
+# async: false — two tests below mutate the __BURRITO env var, which is a
+# process/node-global side effect incompatible with async test execution.
+# The remaining tests use `Application.put_env(:code_puppy_control,
+# :user_data_dir_override, tmp)` (see bd-237) to redirect the :user_data
+# basedir to a per-test tmp dir instead of writing to the CI runner's
+# real user-data home. `Application.put_env` is itself global application
+# state, so this file must stay `async: false` even if the __BURRITO
+# tests are later extracted — a future refactor would need
+# per-process/per-test state (e.g. a registry or ETS keyed by self()) to
+# justify flipping async: true.
 defmodule CodePuppyControl.ReleaseConfigTest do
   use ExUnit.Case, async: false
+
+  alias CodePuppyControl.Config
+
+  # ── Setup ────────────────────────────────────────────────────────────────
+  # Every test gets a fresh temp dir installed as the user_data_dir override,
+  # so calls to Config.default_secret_key_base/0 and
+  # Config.default_database_path/0 write inside the tmp dir — not into the
+  # CI runner's real ~/Library/Application Support/code_puppy/ (macOS) or
+  # ~/.local/share/code_puppy/ (Linux).
+
+  setup do
+    tmp_dir =
+      Path.join(
+        System.tmp_dir!(),
+        "release_config_test_#{:erlang.unique_integer([:positive])}"
+      )
+
+    File.mkdir_p!(tmp_dir)
+
+    previous_override =
+      Application.get_env(:code_puppy_control, :user_data_dir_override)
+
+    Application.put_env(:code_puppy_control, :user_data_dir_override, tmp_dir)
+
+    on_exit(fn ->
+      case previous_override do
+        nil -> Application.delete_env(:code_puppy_control, :user_data_dir_override)
+        prev -> Application.put_env(:code_puppy_control, :user_data_dir_override, prev)
+      end
+
+      File.rm_rf(tmp_dir)
+    end)
+
+    {:ok, tmp_dir: tmp_dir}
+  end
+
+  # ── Releases config (pure, no side effects) ─────────────────────────────
 
   describe "releases config" do
     test "releases/0 is configured in mix.exs" do
@@ -60,17 +104,19 @@ defmodule CodePuppyControl.ReleaseConfigTest do
     end
   end
 
-  describe "Burrito defaults (ADR-003 isolation)" do
-    alias CodePuppyControl.Config
+  # ── Burrito defaults (ADR-003 isolation) ────────────────────────────────
 
-    test "default_database_path/0 writes under :user_data basedir, NOT ~/.code_puppy" do
+  describe "Burrito defaults (ADR-003 isolation)" do
+    test "default_database_path/0 writes under the user_data override, NOT ~/.code_puppy",
+         %{tmp_dir: tmp_dir} do
       path = Config.default_database_path()
 
       refute String.contains?(path, "/.code_puppy/"),
              "default_database_path must not leak into Python legacy home ~/.code_puppy/"
 
-      expected_root = :filename.basedir(:user_data, "code_puppy") |> to_string()
-      assert String.starts_with?(path, expected_root)
+      assert String.starts_with?(path, tmp_dir),
+             "default_database_path must resolve under the user_data_dir_override (got: #{path})"
+
       assert String.ends_with?(path, "data.sqlite")
     end
 
@@ -86,28 +132,41 @@ defmodule CodePuppyControl.ReleaseConfigTest do
       assert k1 == k2, "secret key base must persist; got fresh key on second call"
     end
 
+    test "default_secret_key_base/0 persists under the user_data override",
+         %{tmp_dir: tmp_dir} do
+      _ = Config.default_secret_key_base()
+      key_file = Path.join(tmp_dir, "secret_key_base")
+
+      assert File.exists?(key_file),
+             "secret_key_base must be persisted under user_data_dir_override"
+    end
+
     test "burrito_binary?/0 returns false when __BURRITO env var is absent" do
       original = System.get_env("__BURRITO")
       System.delete_env("__BURRITO")
 
-      try do
-        refute Config.burrito_binary?()
-      after
+      on_exit(fn ->
         if original, do: System.put_env("__BURRITO", original)
-      end
+      end)
+
+      refute Config.burrito_binary?()
     end
 
     test "burrito_binary?/0 returns true when __BURRITO env var is set" do
       original = System.get_env("__BURRITO")
       System.put_env("__BURRITO", "1")
 
-      try do
-        assert Config.burrito_binary?()
-      after
-        if original, do: System.put_env("__BURRITO", original), else: System.delete_env("__BURRITO")
-      end
+      on_exit(fn ->
+        if original,
+          do: System.put_env("__BURRITO", original),
+          else: System.delete_env("__BURRITO")
+      end)
+
+      assert Config.burrito_binary?()
     end
   end
+
+  # ── Burrito CLI dispatch (source-level guards) ──────────────────────────
 
   describe "Burrito CLI dispatch" do
     test "application.ex has burrito mode detection" do
@@ -116,12 +175,14 @@ defmodule CodePuppyControl.ReleaseConfigTest do
       # but appropriate — we can't easily test Application.start/2 without
       # actually starting the supervision tree.
       source = File.read!("lib/code_puppy_control/application.ex")
+
       assert source =~ "__BURRITO",
              "Application must detect __BURRITO env var to dispatch CLI from Burrito binary"
     end
 
     test "application.ex reads argv via :init.get_plain_arguments (not Burrito runtime)" do
       source = File.read!("lib/code_puppy_control/application.ex")
+
       assert source =~ ":init.get_plain_arguments",
              "Application must read Burrito argv via :init.get_plain_arguments/0, " <>
                "not Burrito.Util.Args (runtime: false dep)"

@@ -145,7 +145,7 @@ defmodule CodePuppyControl.Config do
   """
   @spec default_secret_key_base() :: String.t()
   def default_secret_key_base do
-    user_data = :filename.basedir(:user_data, "code_puppy") |> to_string()
+    user_data = user_data_dir()
     File.mkdir_p!(user_data)
     key_file = Path.join(user_data, "secret_key_base")
 
@@ -221,7 +221,7 @@ defmodule CodePuppyControl.Config do
   """
   @spec default_database_path() :: String.t()
   def default_database_path do
-    user_data = :filename.basedir(:user_data, "code_puppy") |> to_string()
+    user_data = user_data_dir()
     File.mkdir_p!(user_data)
     Path.join(user_data, "data.sqlite")
   end
@@ -416,6 +416,23 @@ defmodule CodePuppyControl.Config do
   @doc "Run pending schema migrations on `puppy.cfg`."
   @spec migrate() :: {:ok, non_neg_integer()} | {:error, String.t()}
   def migrate, do: Migrator.migrate()
+
+  # Test-friendly indirection over `:filename.basedir(:user_data, "code_puppy")`.
+  #
+  # In production, this always returns the platform-default user-data dir.
+  # Tests can inject a temp dir via:
+  #
+  #     Application.put_env(:code_puppy_control, :user_data_dir_override, tmp_dir)
+  #
+  # This avoids writing real `secret_key_base` / `data.sqlite` files to the
+  # CI runner's home directory (bd-237).
+  @spec user_data_dir() :: String.t()
+  defp user_data_dir do
+    case Application.get_env(:code_puppy_control, :user_data_dir_override) do
+      override when is_binary(override) and byte_size(override) > 0 -> override
+      _ -> :filename.basedir(:user_data, "code_puppy") |> to_string()
+    end
+  end
 
   # ── Private helpers ─────────────────────────────────────────────────────
 
