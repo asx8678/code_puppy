@@ -52,6 +52,9 @@ defmodule CodePuppyControl.CLI.SlashCommands.Commands.ModeTest do
       )
 
     on_exit(fn ->
+      # Restore registry builtins so subsequent tests aren't poisoned
+      Registry.clear()
+      Registry.register_builtin_commands()
       Loader.invalidate()
       File.rm_rf!(@test_cfg_dir)
     end)

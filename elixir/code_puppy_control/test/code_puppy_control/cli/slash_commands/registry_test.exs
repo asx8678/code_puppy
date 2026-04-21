@@ -15,6 +15,13 @@ defmodule CodePuppyControl.CLI.SlashCommands.RegistryTest do
 
     # Clear all commands before each test
     Registry.clear()
+
+    on_exit(fn ->
+      # Restore registry builtins so subsequent tests aren't poisoned
+      Registry.clear()
+      Registry.register_builtin_commands()
+    end)
+
     :ok
   end
 
