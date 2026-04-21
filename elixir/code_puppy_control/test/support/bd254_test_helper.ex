@@ -141,7 +141,8 @@ defmodule CodePuppyControl.REPL.BD254TestHelper do
       end
 
       case Registry.lookup(CodePuppyControl.REPL.RendererRegistry, session_id) do
-        [] -> :ok
+        [] ->
+          :ok
 
         [{pid, _}] ->
           if Process.alive?(pid) do
