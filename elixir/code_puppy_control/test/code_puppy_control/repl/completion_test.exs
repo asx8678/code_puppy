@@ -13,7 +13,7 @@ defmodule CodePuppyControl.REPL.CompletionTest do
 
     test "exact match returns single result" do
       assert Completion.complete("/help", :command) == ["/help"]
-      assert Completion.complete("/model", :command) == ["/model"]
+      assert Completion.complete("/model_settings", :command) == ["/model_settings"]
     end
 
     test "no match returns empty list" do
@@ -67,7 +67,7 @@ defmodule CodePuppyControl.REPL.CompletionTest do
       all = Completion.complete_command("/")
 
       expected =
-        ~w(/help /model /mode /agent /quit /exit /clear /history /pack /flags /sessions /tui /cd /compact /truncate)
+        ~w(/help /model /mode /model_settings /ms /agent /quit /exit /clear /history /pack /flags /sessions /tui /cd /compact /truncate)
 
       for cmd <- expected do
         assert cmd in all, "Expected #{cmd} to be in slash-command completions"
@@ -103,7 +103,7 @@ defmodule CodePuppyControl.REPL.CompletionTest do
       assert "/mode" in all
       assert "/flags" in all
       assert Completion.complete("/pa", :command) == ["/pack"]
-      assert Completion.complete("/mo", :command) == ["/mode", "/model"]
+      assert Completion.complete("/mo", :command) == ["/mode", "/model", "/model_settings"]
       assert Completion.complete("/fl", :command) == ["/flags"]
     end
 

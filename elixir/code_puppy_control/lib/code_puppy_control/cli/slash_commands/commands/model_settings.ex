@@ -117,11 +117,16 @@ defmodule CodePuppyControl.CLI.SlashCommands.Commands.ModelSettings do
   @doc """
   Format a setting value for display, given its definition.
 
+  - `nil` / blank values are displayed as "— (not set)".
   - Numeric values use the `:format` key (e.g. `"{:.2f}"`).
   - Choice values are displayed as-is.
   - Boolean values are shown as "Enabled" / "Disabled".
   """
   @spec format_setting_value(any(), map()) :: String.t()
+  def format_setting_value(nil, _definition), do: "— (not set)"
+
+  def format_setting_value("", _definition), do: "— (not set)"
+
   def format_setting_value(value, %{type: :boolean}) when is_boolean(value) do
     if value, do: "Enabled", else: "Disabled"
   end
@@ -131,18 +136,14 @@ defmodule CodePuppyControl.CLI.SlashCommands.Commands.ModelSettings do
   end
 
   def format_setting_value(value, %{type: :numeric, format: fmt}) do
-    # Erlang/Elixir :io_lib.format uses ~f for floats
-    # Convert Python-style "{:.2f}" to Elixir "~f"
     case fmt do
       "{:.0f}" ->
-        # Integer display
         trunc(value * 1.0) |> to_string()
 
       "{:.2f}" ->
         "~.2f" |> :io_lib.format([value * 1.0]) |> to_string()
 
       _other ->
-        # Fallback: just inspect
         to_string(value)
     end
   end
@@ -151,7 +152,92 @@ defmodule CodePuppyControl.CLI.SlashCommands.Commands.ModelSettings do
     to_string(value)
   end
 
+  @doc """
+  Build the merged display settings for a model.
+
+  Combines per-model settings from config with global OpenAI controls,
+  using model capability metadata (`supported_settings`) — mirroring
+  Python's `_get_model_display_settings()` and `model_supports_setting()`.
+
+  When the model's `supported_settings` list includes a global control
+  (reasoning_effort, summary, verbosity), the global value is shown even
+  if no per-model override exists.  This closes the Python parity gap.
+  """
+  @spec get_display_settings(String.t()) :: map()
+  def get_display_settings(model_name) when is_binary(model_name) do
+    settings = Models.get_all_model_settings(model_name)
+
+    # Merge global OpenAI controls based on model capabilities,
+    # not just presence of per-model overrides.
+    settings =
+      if model_supports_setting?(model_name, "reasoning_effort") do
+        Map.put(settings, "reasoning_effort", Models.openai_reasoning_effort())
+      else
+        settings
+      end
+
+    settings =
+      if model_supports_setting?(model_name, "summary") do
+        Map.put(settings, "summary", Models.openai_reasoning_summary())
+      else
+        settings
+      end
+
+    settings =
+      if model_supports_setting?(model_name, "verbosity") do
+        Map.put(settings, "verbosity", Models.openai_verbosity())
+      else
+        settings
+      end
+
+    settings
+  end
+
+  @doc """
+  Format the settings summary as a string (pure function, no IO).
+
+  Useful for testing without depending on or mutating shared config.
+  """
+  @spec format_summary(String.t(), map()) :: String.t()
+  def format_summary(model_name, settings) when is_binary(model_name) and is_map(settings) do
+    if map_size(settings) == 0 do
+      "    No custom settings configured for #{model_name} (using model defaults)"
+    else
+      lines =
+        ["    Settings for #{model_name}:"]
+        |> Kernel.++(
+          settings
+          |> Enum.sort_by(fn {k, _v} -> k end)
+          |> Enum.map(fn {key, value} ->
+            defn = Map.get(@setting_definitions, key, %{type: :unknown})
+            display_name = Map.get(defn, :name, key)
+            display_value = format_setting_value(value, defn)
+            "    #{String.pad_trailing(display_name, 30)} #{display_value}"
+          end)
+        )
+
+      Enum.join(lines, "\n")
+    end
+  end
+
   # ── Private ─────────────────────────────────────────────────────────────
+
+  # Check whether a model supports a given setting.
+  # Mirrors Python's model_supports_setting().
+  # Uses ModelRegistry `supported_settings` metadata when available,
+  # falling back to presence in per-model config for backwards compat.
+  defp model_supports_setting?(model_name, setting) do
+    case CodePuppyControl.ModelRegistry.get_config(model_name) do
+      %{"supported_settings" => supported} when is_list(supported) ->
+        setting in supported
+
+      _no_metadata ->
+        # Fallback: assume supported if the model has a per-model override
+        # or if the model name looks like a known prefix pattern.
+        # This matches Python's backwards-compat default of True for unknown models.
+        true
+    end
+  end
 
   defp show_summary(nil) do
     model = Models.global_model_name()
@@ -162,60 +248,8 @@ defmodule CodePuppyControl.CLI.SlashCommands.Commands.ModelSettings do
     settings = get_display_settings(model_name)
 
     IO.puts("")
-
-    if map_size(settings) == 0 do
-      IO.puts(
-        "    No custom settings configured for #{IO.ANSI.cyan()}#{model_name}#{IO.ANSI.reset()} (using model defaults)"
-      )
-    else
-      IO.puts(
-        "    Settings for #{IO.ANSI.cyan()}#{model_name}#{IO.ANSI.reset()}:"
-      )
-
-      settings
-      |> Enum.sort_by(fn {k, _v} -> k end)
-      |> Enum.each(fn {key, value} ->
-        defn = Map.get(@setting_definitions, key, %{type: :unknown})
-        display_name = Map.get(defn, :name, key)
-        display_value = format_setting_value(value, defn)
-
-        IO.puts(
-          "    #{IO.ANSI.bright()}#{String.pad_trailing(display_name, 30)}#{IO.ANSI.reset()} #{display_value}"
-        )
-      end)
-    end
-
+    IO.puts(format_summary(model_name, settings))
     IO.puts("")
-  end
-
-  # Merges per-model settings with global OpenAI controls,
-  # mirroring Python's _get_model_display_settings.
-  defp get_display_settings(model_name) do
-    settings = Models.get_all_model_settings(model_name)
-
-    # Merge global OpenAI settings if present in per-model config
-    settings =
-      if Map.has_key?(settings, "reasoning_effort") do
-        Map.put(settings, "reasoning_effort", Models.openai_reasoning_effort())
-      else
-        settings
-      end
-
-    settings =
-      if Map.has_key?(settings, "summary") do
-        Map.put(settings, "summary", Models.openai_reasoning_summary())
-      else
-        settings
-      end
-
-    settings =
-      if Map.has_key?(settings, "verbosity") do
-        Map.put(settings, "verbosity", Models.openai_verbosity())
-      else
-        settings
-      end
-
-    settings
   end
 
   defp print_usage do

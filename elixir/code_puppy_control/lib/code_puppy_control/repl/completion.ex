@@ -22,6 +22,8 @@ defmodule CodePuppyControl.REPL.Completion do
     "/help",
     "/model",
     "/mode",
+    "/model_settings",
+    "/ms",
     "/agent",
     "/quit",
     "/exit",
