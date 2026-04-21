@@ -61,17 +61,22 @@ defmodule CodePuppyControl.REPL.Dispatch do
               # rollback on raises/throws/exits (bd-254).
               inject_success_fault()
 
+              # bd-257: Use set_messages instead of Enum.drop + append_message.
+              # The old code assumed final_messages was prefix-aligned with the
+              # pre-run history, but Agent.Loop compaction can rewrite or drop
+              # messages before returning. Enum.drop(final_messages, pre_count)
+              # would silently drop replies after compaction. Setting the full
+              # list atomically is compaction-safe and preserves rollback
+              # semantics (on error, messages_before is still restored).
               final_messages = Loop.get_messages(loop_pid)
-              new_messages = Enum.drop(final_messages, pre_count)
+              normalized = Enum.map(final_messages, &normalize_for_state/1)
 
               Logger.debug(
                 "REPL: send_to_agent pre_count=#{pre_count} final_count=#{length(final_messages)} " <>
-                  "new_count=#{length(new_messages)}"
+                  "persisted=#{length(normalized)}"
               )
 
-              Enum.each(new_messages, fn msg ->
-                State.append_message(state.session_id, agent_key, normalize_for_state(msg))
-              end)
+              State.set_messages(state.session_id, agent_key, normalized)
 
               # Fire-and-forget autosave
               SessionStorage.save_session_async(
@@ -287,6 +292,11 @@ defmodule CodePuppyControl.REPL.Dispatch do
       raise msg
     end
 
+    # bd-257: test injection for compaction options so regression tests
+    # can trigger compaction with a low message threshold.
+    compaction_opts =
+      Application.get_env(:code_puppy_control, :test_compaction_opts, [])
+
     opts = [
       run_id: run_id,
       session_id: state.session_id,
@@ -296,7 +306,8 @@ defmodule CodePuppyControl.REPL.Dispatch do
           :code_puppy_control,
           :repl_llm_module,
           CodePuppyControl.Agent.LLMAdapter
-        )
+        ),
+      compaction_opts: compaction_opts
     ]
 
     case Loop.start_link(agent_module, messages, opts) do

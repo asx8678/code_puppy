@@ -130,6 +130,7 @@ defmodule CodePuppyControl.REPL.BD254TestHelper do
       Application.delete_env(:code_puppy_control, :test_ensure_renderer_raise)
       Application.delete_env(:code_puppy_control, :test_start_agent_loop_raise)
       Application.delete_env(:code_puppy_control, :test_ensure_renderer_error)
+      Application.delete_env(:code_puppy_control, :test_compaction_opts)
 
       BD254MockLLM.stop()
 
