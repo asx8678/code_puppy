@@ -4760,7 +4760,7 @@
       "id": "bd-238",
       "title": "Burrito: verify :init.get_plain_arguments captures argv in Burrito runtime",
       "description": "TODO left in lib/code_puppy_control/application.ex by bd-171:\n\n    defp burrito_argv do\n      if burrito_cli_mode?() do\n        :init.get_plain_arguments() |> Enum.map(&to_string/1)\n      else\n        System.argv()\n      end\n    end\n\nThis assumes  captures the CLI args Burrito forwards from its Zig wrapper. This should be true (Burrito boots BEAM via erl_start which sets plain_arguments), but it has NOT been verified on an actual Burrito binary yet.\n\nOnce a Burrito build is performed and tested:\n- If argv comes through correctly: close this issue, remove TODO\n- If argv is missing/mangled: remove  from the :burrito dep in mix.exs and revert to Burrito.Util.Args.argv/0",
-      "status": "open",
+      "status": "closed",
       "priority": 2,
       "type": "task",
       "labels": [
@@ -4772,8 +4772,11 @@
         ]
       },
       "created_at": "2026-04-21T00:37:45.025543",
-      "updated_at": "2026-04-21T00:37:58.461458",
-      "comments": []
+      "updated_at": "2026-04-21T01:55:42.400120",
+      "comments": [
+        "Claimed by planning-agent-019dac. Starting host-arch verification on macOS arm64 with Zig 0.15.2, Elixir 1.19.5/OTP 28.",
+        "\u2705 Verified on macOS arm64 (Apple Silicon) with:\n- Burrito 1.5.0 (bumped from 1.3 spec; `~> 1.3` lets 1.x through, OK)\n- Zig 0.15.2 (Homebrew)\n- Elixir 1.19.5 / Erlang OTP 28\n\nBuilt via `scripts/build-burrito.sh --host-only` \u2192 `burrito_out/code_puppy_control_macos_arm64` (13M Mach-O arm64).\n\nRan 6-case argv matrix through the binary:\n\n| # | Args | Observed behavior | Result |\n|---|------|------------------|--------|\n| 1 | `--help` | Help text printed, exit 0 | \u2705 |\n| 2 | `--version` | `code-puppy 0.1.0` printed, exit 0 | \u2705 |\n| 3 | `-p 'hello world'` | Single-prompt branch fires with full string | \u2705 |\n| 4 | `--nonsense` | Error to stderr, exit 1 (display bug filed separately) | \u2705 (argv captured) |\n| 5 | `explain this` (positional) | Routed to prompt via Parser | \u2705 |\n| 6 | `-m claude-sonnet -p 'test prompt'` | Model override + prompt both captured | \u2705 |\n\nAll six cases behave identically to the non-Burrito escript path. `:init.get_plain_arguments/0` works correctly; no need to fall back to `Burrito.Util.Args.argv/0`.\n\nAction taken:\n- Removed `TODO(bd-171)` from `burrito_argv/0` in `lib/code_puppy_control/application.ex`\n- Replaced with a 'Verified in bd-238' note including platform + version matrix\n- Fixed arity typo in same comment (`get_plain_arguments/1` \u2192 `/0`)\n- `mix.exs` retains `{:burrito, \"~> 1.3\", runtime: false}` unchanged\n\nCross-platform verification (linux_x86_64, linux_arm64, windows_x86_64) is deferred to bd-236 (CI matrix build).\n\nFollow-up filed: CLI.Parser display bug (four-dash error message) \u2014 see new bd issue created this session."
+      ]
     },
     "bd-239": {
       "id": "bd-239",
@@ -4831,7 +4834,20 @@
       "created_at": "2026-04-21T00:37:55.336169",
       "updated_at": "2026-04-21T00:37:58.401383",
       "comments": []
+    },
+    "bd-242": {
+      "id": "bd-242",
+      "title": "CLI.Parser: duplicate '--' prefix in unknown-option error message",
+      "description": "Discovered during bd-238 Burrito argv verification.\n\nRunning the Burrito binary with `--nonsense` produces:\n\n    Error: unknown option(s): ----nonsense\n\nNote the four leading dashes. The user typed `--nonsense` but the error shows `----nonsense`.\n\nRoot cause in `elixir/code_puppy_control/lib/code_puppy_control/cli/parser.ex`:\n\n    {_parsed, _positional, invalid} ->\n      errors = Enum.map_join(invalid, \", \", fn {key, _val} -> \"--#{key}\" end)\n      {:error, \"unknown option(s): #{errors}\"}\n\n`OptionParser.parse/3` returns the invalid key already prefixed with `--` (e.g. `\"--nonsense\"`), so prepending another `--` yields `----nonsense`.\n\nFix: use the key as-is, e.g.\n    Enum.map_join(invalid, \", \", fn {key, _val} -> to_string(key) end)\n\nOr strip a leading `--` before re-prepending.\n\nAdd a test in `test/code_puppy_control/cli/parser_test.exs` that passes `[\"--nonsense\"]` and asserts the error message contains exactly `--nonsense` (not `----nonsense`).\n\nScope: ~5 LOC fix + 1 test. No runtime behavior change; exit code 1 is already correct.",
+      "status": "open",
+      "priority": 3,
+      "type": "bug",
+      "labels": [],
+      "dependencies": {},
+      "created_at": "2026-04-21T01:55:36.299350",
+      "updated_at": "2026-04-21T01:55:36.299359",
+      "comments": []
     }
   },
-  "counter": 241
+  "counter": 242
 }

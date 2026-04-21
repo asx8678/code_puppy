@@ -116,11 +116,16 @@ defmodule CodePuppyControl.Application do
           System.halt(0)
         rescue
           e ->
-            IO.puts(:stderr, "Burrito CLI crashed: #{Exception.format(:error, e, __STACKTRACE__)}")
+            IO.puts(
+              :stderr,
+              "Burrito CLI crashed: #{Exception.format(:error, e, __STACKTRACE__)}"
+            )
+
             System.halt(1)
         catch
           :exit, {:shutdown, code} when is_integer(code) ->
             System.halt(code)
+
           kind, reason ->
             IO.puts(:stderr, "Burrito CLI aborted (#{kind}): #{inspect(reason)}")
             System.halt(1)
@@ -146,7 +151,7 @@ defmodule CodePuppyControl.Application do
 
   # Read CLI arguments passed through the Burrito wrapper.
   #
-  # We use `:init.get_plain_arguments/1` directly instead of
+  # We use `:init.get_plain_arguments/0` directly instead of
   # `Burrito.Util.Args.argv/0` because the :burrito dependency is
   # declared `runtime: false` — it's only needed at build time for
   # `mix release`. Calling Burrito modules at runtime would raise
@@ -157,9 +162,12 @@ defmodule CodePuppyControl.Application do
   # `:init.get_plain_arguments/0`). Outside Burrito, `System.argv/0` is
   # the correct source, so we fall back to that.
   #
-  # TODO(bd-171): verify :init.get_plain_arguments captures Burrito argv
-  # in all cases; fall back to Burrito.Util.Args.argv/0 if needed
-  # (would require removing runtime: false from mix.exs dep).
+  # Verified in bd-238 (macOS arm64, Burrito 1.3, Zig 0.15.2, Elixir 1.19.5
+  # / OTP 28): option flags, positional args, short/long forms, string
+  # values with spaces, and error-exit codes all round-trip correctly
+  # through the Burrito wrapper via :init.get_plain_arguments/0.
+  # Cross-platform verification (linux_x86_64, linux_arm64, windows_x86_64)
+  # is deferred to the CI matrix build (bd-236).
   defp burrito_argv do
     if burrito_cli_mode?() do
       :init.get_plain_arguments() |> Enum.map(&to_string/1)
