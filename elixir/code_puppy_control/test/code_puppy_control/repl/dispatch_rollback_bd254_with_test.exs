@@ -177,7 +177,10 @@ defmodule CodePuppyControl.REPL.DispatchRollbackBD254WithTest do
 
       assert [
                %{"role" => "user", "parts" => [%{"type" => "text", "text" => "try again"}]},
-               %{"role" => "assistant", "parts" => [%{"type" => "text", "text" => "recovered reply"}]}
+               %{
+                 "role" => "assistant",
+                 "parts" => [%{"type" => "text", "text" => "recovered reply"}]
+               }
              ] = messages
     end
   end

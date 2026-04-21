@@ -23,6 +23,7 @@ defmodule CodePuppyControl.REPL.Completion do
     "/model",
     "/mode",
     "/agent",
+    "/agents",
     "/quit",
     "/exit",
     "/clear",

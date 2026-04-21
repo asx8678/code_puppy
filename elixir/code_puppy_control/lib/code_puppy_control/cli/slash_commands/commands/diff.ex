@@ -63,17 +63,11 @@ defmodule CodePuppyControl.CLI.SlashCommands.Commands.Diff do
 
     IO.puts("")
 
-    IO.puts(
-      "    Additions:  #{IO.ANSI.green()}#{add_color}#{IO.ANSI.reset()}"
-    )
+    IO.puts("    Additions:  #{IO.ANSI.green()}#{add_color}#{IO.ANSI.reset()}")
 
-    IO.puts(
-      "    Deletions:  #{IO.ANSI.red()}#{del_color}#{IO.ANSI.reset()}"
-    )
+    IO.puts("    Deletions:  #{IO.ANSI.red()}#{del_color}#{IO.ANSI.reset()}")
 
-    IO.puts(
-      "    Context:    #{IO.ANSI.faint()}#{ctx_lines} lines#{IO.ANSI.reset()}"
-    )
+    IO.puts("    Context:    #{IO.ANSI.faint()}#{ctx_lines} lines#{IO.ANSI.reset()}")
 
     IO.puts("")
     print_usage_hint()
@@ -85,9 +79,7 @@ defmodule CodePuppyControl.CLI.SlashCommands.Commands.Diff do
 
     IO.puts("")
 
-    IO.puts(
-      "    Additions color: #{IO.ANSI.green()}#{add_color}#{IO.ANSI.reset()}"
-    )
+    IO.puts("    Additions color: #{IO.ANSI.green()}#{add_color}#{IO.ANSI.reset()}")
 
     IO.puts("")
     print_usage_hint()
@@ -99,9 +91,7 @@ defmodule CodePuppyControl.CLI.SlashCommands.Commands.Diff do
 
     IO.puts("")
 
-    IO.puts(
-      "    Deletions color: #{IO.ANSI.red()}#{del_color}#{IO.ANSI.reset()}"
-    )
+    IO.puts("    Deletions color: #{IO.ANSI.red()}#{del_color}#{IO.ANSI.reset()}")
 
     IO.puts("")
     print_usage_hint()
@@ -115,9 +105,7 @@ defmodule CodePuppyControl.CLI.SlashCommands.Commands.Diff do
 
         IO.puts("")
 
-        IO.puts(
-          "    Additions color set to #{IO.ANSI.green()}#{color}#{IO.ANSI.reset()}"
-        )
+        IO.puts("    Additions color set to #{IO.ANSI.green()}#{color}#{IO.ANSI.reset()}")
 
         IO.puts("")
 
@@ -126,9 +114,7 @@ defmodule CodePuppyControl.CLI.SlashCommands.Commands.Diff do
 
         IO.puts("")
 
-        IO.puts(
-          "    Deletions color set to #{IO.ANSI.red()}#{color}#{IO.ANSI.reset()}"
-        )
+        IO.puts("    Deletions color set to #{IO.ANSI.red()}#{color}#{IO.ANSI.reset()}")
 
         IO.puts("")
 
