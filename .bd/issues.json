@@ -5026,7 +5026,7 @@
       "id": "bd-251",
       "title": "Unit test CodePuppyControl.Agent.LLMAdapter directly (bypass REPL)",
       "description": "Follow-up from bd-250 code review. The LLMAdapter bridges the old Agent.LLM behaviour contract to the real CodePuppyControl.LLM provider contract. Currently it's only tested transitively via REPL integration tests. Add direct unit tests:\n\n- Message conversion: parts-format \u2192 content-format (symmetric with Agent.State storage)\n- Message conversion: atom-keyed \u2192 string-keyed\n- Tool conversion: atom names \u2192 JSON-Schema function maps via Tool.Registry\n- Response reconstruction: :ok return with buffered text + tool_calls\n- Error pass-through: {:error, reason} from provider propagates unchanged\n- Tool registry missing: graceful []  fallback, no crash\n\nFile: test/code_puppy_control/agent/llm_adapter_test.exs (new)\nDiscovered-from: bd-250",
-      "status": "open",
+      "status": "closed",
       "priority": 3,
       "type": "task",
       "labels": [],
@@ -5036,11 +5036,12 @@
         ]
       },
       "created_at": "2026-04-21T11:24:59.330721",
-      "updated_at": "2026-04-21T13:59:43.073231",
+      "updated_at": "2026-04-21T14:00:30.256256",
       "comments": [
         "Claimed by pack-leader-019daf. Starting isolated worktree + delegated implementation for direct LLMAdapter unit tests. Auto-tests remain off; coding only for now.",
         "Shepherd review: APPROVE after follow-up fixes. Branch feature/bd-251-llm-adapter-tests at 192e0740 is ready for QA/tests. Tests not run because /auto-test off is active.",
-        "Watchdog QA: APPROVE after fix. mix test test/code_puppy_control/agent/llm_adapter_test.exs passed (30 tests, 0 failures). Branch feature/bd-251-llm-adapter-tests now at a197e712."
+        "Watchdog QA: APPROVE after fix. mix test test/code_puppy_control/agent/llm_adapter_test.exs passed (30 tests, 0 failures). Branch feature/bd-251-llm-adapter-tests now at a197e712.",
+        "Merged locally to main via retriever at merge commit 8fbe890a68fde0580aa10be9b978d96172addce0."
       ]
     },
     "bd-252": {
