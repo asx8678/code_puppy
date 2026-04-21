@@ -4730,11 +4730,12 @@
       "id": "bd-236",
       "title": "Burrito: CI matrix build + artifact publishing",
       "description": "Out of scope for bd-171 (core Burrito config only). Set up .github/workflows/burrito-release.yml with:\n- Matrix: macos-latest, ubuntu-latest, windows-latest\n- Trigger: git tags (v*) + workflow_dispatch\n- Artifacts: upload burrito_out/* to GitHub Release\n- Depends on: follow-ups for codesigning (A, B) to produce signed artifacts",
-      "status": "open",
+      "status": "closed",
       "priority": 2,
       "type": "task",
       "labels": [
-        "migration,python-to-elixir,rewrite,phase-7,ci"
+        "migration,python-to-elixir,rewrite,phase-7,ci",
+        "claimed-by-bloodhound-019daf"
       ],
       "dependencies": {
         "discovered-from": [
@@ -4742,8 +4743,11 @@
         ]
       },
       "created_at": "2026-04-21T00:37:44.996224",
-      "updated_at": "2026-04-21T00:37:58.428772",
-      "comments": []
+      "updated_at": "2026-04-21T09:16:28.184937",
+      "comments": [
+        "Claimed by bloodhound-019daf for CI matrix + artifact publishing work",
+        "Shipped in commit 4ecb4586. Created .github/workflows/burrito-release.yml with 3-platform matrix (macos arm64, ubuntu x86_64, windows x86_64). Triggers on v* tag push and workflow_dispatch. Release job attaches unsigned binaries and SHA256SUMS.txt to GitHub Release. Updated docs/burrito-release.md with CI/CD section. Codesigning: bd-240 (Windows) and bd-241 (macOS). Missing targets: bd-239."
+      ]
     },
     "bd-237": {
       "id": "bd-237",
