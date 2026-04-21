@@ -5058,7 +5058,7 @@
         ]
       },
       "created_at": "2026-04-21T11:24:59.335108",
-      "updated_at": "2026-04-21T14:34:49.543349",
+      "updated_at": "2026-04-21T14:50:16.145195",
       "comments": [
         "Claimed by pack-leader-019daf. Shepherd review: APPROVE. Branch feature/bd-252-renderer-registry at 08007ec6 is ready for QA/tests. Tests not run because /auto-test off is active.",
         "Watchdog QA: APPROVE after fix. mix test test/code_puppy_control/repl/loop_test.exs --seed 151066 and mix test test/code_puppy_control/repl/loop_test.exs both passed. Shepherd requested one more idempotent fallback + deterministic regression test; follow-up fix now in progress on feature/bd-252-renderer-registry.",
@@ -5066,7 +5066,9 @@
         "Shepherd review: REQUEST_CHANGES. Last blocker: send_to_agent/2 must roll back to messages_before for any failure after the user message append, including ensure_renderer/1 exhaustion or start_agent_loop/4 failure. Add regression coverage for this rollback path.",
         "Shepherd review: REQUEST_CHANGES. Remaining blocker is structural: this branch still has oversized repl/loop_test.exs (>600 lines). Need to reconcile with main after bd-255 and keep renderer/rollback regressions in split test files under the cap.",
         "Shepherd review: REQUEST_CHANGES. Remaining blockers: (1) lib/code_puppy_control/repl/loop.ex still exceeds 600-line cap after bd-252 changes; extract renderer/dispatch helper logic to a dedicated module. (2) send_to_agent_test.exs helper bug at set_response/1 uses start_if_needed() || Agent.update(...), so update never runs; fix helper implementation.",
-        "Shepherd review: REQUEST_CHANGES. Remaining blocker: newly started renderers are still linked to the REPL caller path. Must unlink/manage renderer lifecycle safely so renderer death between prompts cannot kill the blocking REPL process. Add regression coverage without test-side Process.unlink/1 masking the behavior."
+        "Shepherd review: REQUEST_CHANGES. Remaining blocker: newly started renderers are still linked to the REPL caller path. Must unlink/manage renderer lifecycle safely so renderer death between prompts cannot kill the blocking REPL process. Add regression coverage without test-side Process.unlink/1 masking the behavior.",
+        "Shepherd review: APPROVE. Final state resolves renderer link/lifecycle blocker, keeps file sizes under cap, and adds regression coverage for REPL survival + rollback behavior.",
+        "Watchdog QA: APPROVE. mix test test/code_puppy_control/repl/loop_test.exs, send_to_agent_test.exs, and renderer_rollback_test.exs all passed (38 tests total, 0 failures across the requested runs)."
       ]
     },
     "bd-253": {
