@@ -156,7 +156,12 @@ defmodule CodePuppyControl.CLI.SlashCommands.RegistryTest do
   describe "list_by_category/1" do
     test "filters commands by category" do
       cmd1 =
-        CommandInfo.new(name: "help", description: "Help", handler: fn _, s -> s end, category: "core")
+        CommandInfo.new(
+          name: "help",
+          description: "Help",
+          handler: fn _, s -> s end,
+          category: "core"
+        )
 
       cmd2 =
         CommandInfo.new(
@@ -211,6 +216,50 @@ defmodule CodePuppyControl.CLI.SlashCommands.RegistryTest do
       assert :ok = Registry.clear()
       assert {:error, :not_found} = Registry.get("test")
       assert [] = Registry.list_all()
+    end
+  end
+
+  describe "register_builtin_commands/0 — runtime wiring (bd-260)" do
+    test "registers /mode for runtime lookup" do
+      Registry.register_builtin_commands()
+      assert {:ok, cmd} = Registry.get("mode")
+      assert cmd.name == "mode"
+      assert cmd.category == "context"
+      assert cmd.usage == "/mode [preset_name]"
+    end
+
+    test "registers /mode for tab completion" do
+      Registry.register_builtin_commands()
+      names = Registry.all_names()
+      assert "mode" in names
+    end
+
+    test "registers all expected builtin commands" do
+      Registry.register_builtin_commands()
+
+      expected =
+        ~w(help quit exit clear history cd model agent sessions tui agents pack mode compact truncate)
+
+      for name <- expected do
+        assert {:ok, _} = Registry.get(name),
+               "Expected builtin command /#{name} to be registered"
+      end
+    end
+
+    test "/mode is in context category alongside /model and /agent" do
+      Registry.register_builtin_commands()
+      context_cmds = Registry.list_by_category("context")
+      context_names = Enum.map(context_cmds, & &1.name)
+      assert "mode" in context_names
+      assert "model" in context_names
+      assert "agent" in context_names
+    end
+
+    test "idempotent — calling twice does not crash" do
+      Registry.register_builtin_commands()
+      # Second call: name conflicts are logged but don't crash
+      Registry.register_builtin_commands()
+      assert {:ok, _} = Registry.get("mode")
     end
   end
 

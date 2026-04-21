@@ -258,6 +258,50 @@ defmodule CodePuppyControl.CLI.SlashCommands.Commands.ModeTest do
     end
   end
 
+  describe "/mode basic via supervised Writer (bd-260 app-path)" do
+    setup do
+      # Start Writer under supervision — mimics the real app path where
+      # CodePuppyControl.Application supervises Config.Writer.
+      # This test does NOT call Writer.start_link() manually.
+      case Process.whereis(Writer) do
+        nil -> start_supervised!(Writer)
+        _pid -> :ok
+      end
+
+      :ok
+    end
+
+    test "/mode basic succeeds without manual Writer startup" do
+      output =
+        ExUnit.CaptureIO.capture_io(fn ->
+          assert {:continue, _} = Mode.handle_mode("/mode basic", %{})
+        end)
+
+      assert output =~ "Applied"
+      assert output =~ "Basic"
+    end
+
+    test "/mode full succeeds and shows YOLO warning" do
+      output =
+        ExUnit.CaptureIO.capture_io(fn ->
+          assert {:continue, _} = Mode.handle_mode("/mode full", %{})
+        end)
+
+      assert output =~ "Applied"
+      assert output =~ "YOLO mode is now enabled"
+    end
+
+    test "/mode pack succeeds via supervised Writer" do
+      output =
+        ExUnit.CaptureIO.capture_io(fn ->
+          assert {:continue, _} = Mode.handle_mode("/mode pack", %{})
+        end)
+
+      assert output =~ "Applied"
+      assert output =~ "Pack"
+    end
+  end
+
   describe "registration and dispatch" do
     test "/mode is registered and dispatchable" do
       assert {:ok, _} = Registry.get("mode")

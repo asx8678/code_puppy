@@ -95,7 +95,9 @@ defmodule CodePuppyControl.REPL.CompletionTest do
 
       all = Completion.complete_command("/")
       assert "/pack" in all
+      assert "/mode" in all
       assert Completion.complete("/pa", :command) == ["/pack"]
+      assert Completion.complete("/mo", :command) == ["/mode", "/model"]
     end
 
     test "falls back to hardcoded list when Registry is empty" do

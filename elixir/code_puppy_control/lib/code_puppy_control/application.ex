@@ -26,6 +26,7 @@ defmodule CodePuppyControl.Application do
   17. CodePuppyControl.MCP.Supervisor - DynamicSupervisor for MCP servers
   18. CodePuppyControl.Concurrency.Supervisor - Concurrency limiter (ETS-backed)
   19. CodePuppyControl.TokenLedger - Token usage accounting (bd-152)
+  19b. CodePuppyControl.Config.Writer - Atomic puppy.cfg write-back (bd-260)
   20. CodePuppyControl.RequestTracker - Tracks JSON-RPC request/response correlation
   21. CodePuppyControl.Tools.CommandRunner.ProcessManager - Shell process tracking (bd-64)
   22. CodePuppyControl.PtyManager - PTY session manager for interactive terminals (bd-217)
@@ -101,6 +102,11 @@ defmodule CodePuppyControl.Application do
       CodePuppyControl.RateLimiter.Supervisor,
       # Token ledger for per-run/session token accounting (bd-152)
       CodePuppyControl.TokenLedger,
+      # Atomic write-back for puppy.cfg (bd-260)
+      # Must start before any /mode or preset command can be dispatched,
+      # since Presets.apply_preset/1 calls Writer.set_values/1 which
+      # requires the GenServer to be alive.
+      CodePuppyControl.Config.Writer,
       CodePuppyControl.RequestTracker,
       # Renderer registry — avoids String.to_atom for per-session renderers (bd-252)
       {Registry, keys: :unique, name: CodePuppyControl.REPL.RendererRegistry},
