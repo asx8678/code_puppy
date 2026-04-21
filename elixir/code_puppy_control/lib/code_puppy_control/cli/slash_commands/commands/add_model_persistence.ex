@@ -15,8 +15,10 @@ defmodule CodePuppyControl.CLI.SlashCommands.Commands.AddModelPersistence do
   ## Isolation
 
   All filesystem writes route through `Config.Isolation.safe_*` wrappers
-  per ADR-003.  Temp files use `System.tmp_dir!()` + unique integers
-  instead of a fixed path adjacent to the target file.
+  per ADR-003.  Temp files are placed adjacent to the target file so that
+  `File.rename/2` never crosses filesystem boundaries (avoids `:exdev`),
+  and the same `tmp_path` is reused in error-handling to prevent orphan
+  cleanup misses.
   """
 
   alias CodePuppyControl.Config.Isolation
@@ -123,21 +125,25 @@ defmodule CodePuppyControl.CLI.SlashCommands.Commands.AddModelPersistence do
   Write a JSON map to a file atomically (temp file + rename).
   Creates parent directories if needed.  Routes all writes through
   Isolation-safe wrappers.
+
+  The temp file is created in the same directory as the target so that
+  `File.rename/2` never fails with `:exdev` (cross-device link).
   """
   @spec atomic_write_json(String.t(), map()) :: {:ok, String.t()} | {:error, term()}
   def atomic_write_json(path, data) do
     dir = Path.dirname(path)
+    tmp_path = make_temp_path(path)
 
     with :ok <- safe_mkdir_p(dir),
          json = Jason.encode!(data, pretty: true),
-         tmp_path = make_temp_path(path),
          :ok <- safe_write(tmp_path, json),
          :ok <- File.rename(tmp_path, path) do
       {:ok, path}
     else
-      {:error, reason} = err ->
-        # Best-effort cleanup of temp file
-        tmp_path = make_temp_path(path)
+      {:error, _reason} = err ->
+        # Best-effort cleanup of the *same* temp file we just wrote.
+        # Reusing tmp_path (bound above) avoids the previous bug where
+        # a second make_temp_path call generated a different unique integer.
         File.rm(tmp_path)
         err
     end
@@ -145,11 +151,12 @@ defmodule CodePuppyControl.CLI.SlashCommands.Commands.AddModelPersistence do
 
   # ── Private ─────────────────────────────────────────────────────────────
 
-  # Generates a unique temp path under System.tmp_dir!() instead of
-  # a fixed path adjacent to the target file.
-  defp make_temp_path(_target_path) do
+  # Generates a unique temp path *adjacent to the target file* so that
+  # File.rename never crosses filesystem boundaries (no :exdev risk).
+  defp make_temp_path(target_path) do
+    dir = Path.dirname(target_path)
     uniq = :erlang.unique_integer([:positive])
-    Path.join(System.tmp_dir!(), "cp_extra_models_#{uniq}.tmp")
+    Path.join(dir, ".cp_extra_models_#{uniq}.tmp")
   end
 
   # Isolation-safe directory creation.  Catches IsolationViolation and

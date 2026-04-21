@@ -331,6 +331,67 @@ defmodule CodePuppyControl.CLI.SlashCommands.Commands.AddModelTest do
       {:ok, _path} = AddModelPersistence.atomic_write_json(deep_path, %{"test" => %{"type" => "openai"}})
       assert File.exists?(deep_path)
     end
+
+    test "temp file is written in the target directory (no :exdev risk)" do
+      uniq = :erlang.unique_integer([:positive])
+      dir = Path.join(System.tmp_dir!(), "cp_add_model_adjacent_#{uniq}")
+      File.mkdir_p!(dir)
+
+      on_exit(fn ->
+        File.rm_rf!(dir)
+      end)
+
+      path = Path.join(dir, "extra_models.json")
+      data = %{"test-model" => %{"type" => "openai"}}
+      {:ok, ^path} = AddModelPersistence.atomic_write_json(path, data)
+
+      # No leftover temp files in the directory — rename succeeded, so
+      # no orphaned .cp_extra_models_*.tmp should remain.
+      tmp_files =
+        File.ls!(dir)
+        |> Enum.filter(&String.starts_with?(&1, ".cp_extra_models_"))
+
+      assert tmp_files == [], "orphan temp files found: #{inspect(tmp_files)}"
+    end
+
+    test "cleans up temp file on write failure", %{tmp_dir: tmp_dir} do
+      # Create a directory where the *file* already exists as a directory,
+      # so the write to the temp path inside it will succeed but the rename
+      # will fail because the target is a directory.
+      path = Path.join(tmp_dir, "blocked_write.json")
+      File.mkdir_p!(path)
+
+      # The write itself should fail because we're trying to create a
+      # temp file inside a path that is a directory (the target's dirname
+      # is fine, but the rename will fail).
+      result = AddModelPersistence.atomic_write_json(path, %{"x" => 1})
+
+      assert match?({:error, _}, result)
+
+      # No orphaned .tmp files in tmp_dir
+      tmp_files =
+        File.ls!(tmp_dir)
+        |> Enum.filter(&String.starts_with?(&1, ".cp_extra_models_"))
+
+      assert tmp_files == [], "orphan temp files after error: #{inspect(tmp_files)}"
+    after
+      # Clean up the directory-we-turned-into-a-path
+      File.rm_rf!(path)
+    end
+
+    test "overwrites existing file atomically", %{tmp_dir: tmp_dir} do
+      path = Path.join(tmp_dir, "overwrite_test.json")
+
+      # First write
+      {:ok, ^path} = AddModelPersistence.atomic_write_json(path, %{"v" => 1})
+      {:ok, d1} = Jason.decode(File.read!(path))
+      assert d1 == %{"v" => 1}
+
+      # Second write — should replace, not merge or corrupt
+      {:ok, ^path} = AddModelPersistence.atomic_write_json(path, %{"v" => 2, "extra" => true})
+      {:ok, d2} = Jason.decode(File.read!(path))
+      assert d2 == %{"v" => 2, "extra" => true}
+    end
   end
 
   # ── End-to-end: run_with_inputs/1 with a started registry ─────────────────
