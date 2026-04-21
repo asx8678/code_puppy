@@ -3,11 +3,28 @@ defmodule CodePuppyControl.CLI.SlashCommands.Commands.DiffTest do
 
   alias CodePuppyControl.CLI.SlashCommands.{CommandInfo, Dispatcher, Registry}
   alias CodePuppyControl.CLI.SlashCommands.Commands.Diff
-  alias CodePuppyControl.Config.TUI
+  alias CodePuppyControl.Config.{Loader, TUI, Writer}
 
-  # async: false because Registry is a named singleton and we write config.
+  # async: false because Registry and Writer are named singletons and we
+  # write config.
+
+  @tmp_dir System.tmp_dir!()
+  @test_cfg_dir Path.join(@tmp_dir, "diff_test_#{:erlang.unique_integer([:positive])}")
 
   setup do
+    # Isolate config: write to a temp puppy.cfg so tests never touch the
+    # real user config.  Follows the same pattern as mode_test.exs.
+    File.mkdir_p!(@test_cfg_dir)
+    test_cfg = Path.join(@test_cfg_dir, "puppy.cfg")
+    File.write!(test_cfg, "[puppy]\n")
+    Loader.load(test_cfg)
+
+    # Start Writer if not already running (needed by TUI.set_diff_*_color)
+    case GenServer.whereis(Writer) do
+      nil -> {:ok, _} = Writer.start_link()
+      _pid -> :ok
+    end
+
     # Start the Registry GenServer if not already running
     case Process.whereis(Registry) do
       nil -> start_supervised!({Registry, []})
@@ -27,6 +44,14 @@ defmodule CodePuppyControl.CLI.SlashCommands.Commands.DiffTest do
           category: "config"
         )
       )
+
+    on_exit(fn ->
+      # Restore registry builtins so subsequent tests aren't poisoned
+      Registry.clear()
+      Registry.register_builtin_commands()
+      Loader.invalidate()
+      File.rm_rf!(@test_cfg_dir)
+    end)
 
     state = %{session_id: "test-session", running: true}
     {:ok, state: state}
