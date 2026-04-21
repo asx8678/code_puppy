@@ -379,5 +379,66 @@ defmodule CodePuppyControl.REPL.RendererRollbackTest do
              ] =
                messages
     end
+
+    test "REPL survives renderer death between prompts without Process.unlink masking (bd-252 regression)", %{
+      state: state,
+      session_id: session_id
+    } do
+      # First call: starts a renderer via handle_input. With the bd-252 fix,
+      # start_renderer_idempotent unlinks the renderer from the caller
+      # (REPL process), so renderer death does NOT propagate.
+      RollbackTestMockLLM.set_response(%{text: "first reply", tool_calls: []})
+
+      ExUnit.CaptureIO.capture_io(fn ->
+        assert {:continue, ^state} = Loop.handle_input("Hello", state)
+      end)
+
+      # The renderer should now be registered
+      [{renderer_pid, _}] = Registry.lookup(CodePuppyControl.REPL.RendererRegistry, session_id)
+      assert Process.alive?(renderer_pid)
+
+      # Kill the renderer WITHOUT calling Process.unlink first.
+      #
+      # Before the bd-252 fix, the renderer was linked to the REPL
+      # process (the test process here), so Process.exit would propagate
+      # the exit signal and kill the REPL. After the fix, the renderer
+      # is unlinked by start_renderer_idempotent, so the REPL survives.
+      #
+      # NOTE: We intentionally do NOT call Process.unlink(renderer_pid)
+      # here — this test proves the production code unlink is sufficient.
+      Process.exit(renderer_pid, :kill)
+
+      # Wait for the registry to notice the exit
+      Process.sleep(50)
+
+      # The test process (acting as REPL) must still be alive.
+      # If we reach this assertion, the REPL survived the renderer death
+      # without test-side Process.unlink masking.
+      assert Process.alive?(self())
+
+      # Second call: ensure_renderer should recover by spawning a new renderer.
+      RollbackTestMockLLM.set_response(%{text: "second reply", tool_calls: []})
+
+      ExUnit.CaptureIO.capture_io(fn ->
+        assert {:continue, ^state} = Loop.handle_input("Hello again", state)
+      end)
+
+      # A new renderer should be registered for this session
+      case Registry.lookup(CodePuppyControl.REPL.RendererRegistry, session_id) do
+        [] ->
+          # Registry may have been cleaned up already — the important
+          # thing is the call didn't crash the REPL.
+          :ok
+
+        [{new_pid, _}] ->
+          # New renderer should be a different pid
+          refute new_pid == renderer_pid
+          assert Process.alive?(new_pid)
+      end
+
+      # Messages should be persisted despite the renderer crash
+      messages = State.get_messages(session_id, "code_puppy")
+      assert length(messages) == 4
+    end
   end
 end

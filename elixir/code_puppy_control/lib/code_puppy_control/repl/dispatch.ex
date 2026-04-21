@@ -39,70 +39,76 @@ defmodule CodePuppyControl.REPL.Dispatch do
     messages = State.get_messages(state.session_id, agent_key)
     pre_count = length(messages)
 
-    with {:ok, renderer_pid} <- ensure_renderer(state),
-         run_id <- Loop.generate_run_id(),
-         {:ok, loop_pid} <- start_agent_loop(agent_module, messages, state, run_id) do
-      # Trap exits so a linked Agent.Loop crash doesn't kill the REPL process.
-      prev_trap = Process.flag(:trap_exit, true)
+    # Trap exits for the entire critical section so that a linked process
+    # crash (e.g., Agent.Loop) never kills the REPL. The renderer is
+    # unlinked from the caller (see start_renderer_idempotent), but we
+    # still trap for defensive safety across the full lifecycle.
+    prev_trap = Process.flag(:trap_exit, true)
 
-      try do
-        case Loop.run_until_done(loop_pid, :infinity) do
-          :ok ->
-            final_messages = Loop.get_messages(loop_pid)
-            new_messages = Enum.drop(final_messages, pre_count)
+    try do
+      with {:ok, renderer_pid} <- ensure_renderer(state),
+           run_id <- Loop.generate_run_id(),
+           {:ok, loop_pid} <- start_agent_loop(agent_module, messages, state, run_id) do
+        try do
+          case Loop.run_until_done(loop_pid, :infinity) do
+            :ok ->
+              final_messages = Loop.get_messages(loop_pid)
+              new_messages = Enum.drop(final_messages, pre_count)
 
-            Logger.debug(
-              "REPL: send_to_agent pre_count=#{pre_count} final_count=#{length(final_messages)} " <>
-                "new_count=#{length(new_messages)}"
-            )
+              Logger.debug(
+                "REPL: send_to_agent pre_count=#{pre_count} final_count=#{length(final_messages)} " <>
+                  "new_count=#{length(new_messages)}"
+              )
 
-            Enum.each(new_messages, fn msg ->
-              State.append_message(state.session_id, agent_key, normalize_for_state(msg))
-            end)
+              Enum.each(new_messages, fn msg ->
+                State.append_message(state.session_id, agent_key, normalize_for_state(msg))
+              end)
 
-            # Fire-and-forget autosave
-            SessionStorage.save_session_async(
-              state.session_id,
-              State.get_messages(state.session_id, agent_key),
-              []
-            )
+              # Fire-and-forget autosave
+              SessionStorage.save_session_async(
+                state.session_id,
+                State.get_messages(state.session_id, agent_key),
+                []
+              )
 
-            # Best-effort finalize — a Renderer crash (e.g., IO device
-            # terminated during test) must not prevent message persistence
-            # or crash the REPL.
-            try do
-              Renderer.finalize(renderer_pid)
-            rescue
-              _ -> :ok
-            catch
-              :exit, _ -> :ok
-            end
+              # Best-effort finalize — a Renderer crash (e.g., IO device
+              # terminated during test) must not prevent message persistence
+              # or crash the REPL.
+              try do
+                Renderer.finalize(renderer_pid)
+              rescue
+                _ -> :ok
+              catch
+                :exit, _ -> :ok
+              end
 
-            :ok
+              :ok
 
-          {:error, reason} ->
-            # Roll back to the snapshot taken before appending the user message
-            State.set_messages(state.session_id, agent_key, messages_before)
-            print_agent_error(reason)
-            :error
-        end
-      after
-        stop_agent_loop(loop_pid)
-        Process.flag(:trap_exit, prev_trap)
-        # Drain any :EXIT messages that arrived during the critical section
-        receive do
-          {:EXIT, _, _} -> :ok
+            {:error, reason} ->
+              # Roll back to the snapshot taken before appending the user message
+              State.set_messages(state.session_id, agent_key, messages_before)
+              print_agent_error(reason)
+              :error
+          end
         after
-          0 -> :ok
+          stop_agent_loop(loop_pid)
         end
+      else
+        {:error, reason} ->
+          # ensure_renderer or start_agent_loop failed after the user message
+          # was already appended — roll back to the pre-append snapshot.
+          State.set_messages(state.session_id, agent_key, messages_before)
+          print_agent_error("Agent dispatch failed: #{inspect(reason)}")
+          :error
       end
-    else
-      {:error, reason} ->
-        # ensure_renderer or start_agent_loop failed after the user message
-        # was already appended — roll back to the pre-append snapshot.
-        State.set_messages(state.session_id, agent_key, messages_before)
-        print_agent_error("Agent dispatch failed: #{inspect(reason)}")
-        :error
+    after
+      Process.flag(:trap_exit, prev_trap)
+      # Drain any :EXIT messages that arrived during the critical section
+      receive do
+        {:EXIT, _, _} -> :ok
+      after
+        0 -> :ok
+      end
     end
   end
 
@@ -156,6 +162,10 @@ defmodule CodePuppyControl.REPL.Dispatch do
   def start_renderer_idempotent(renderer_name, session_id, attempts \\ 0) do
     case Renderer.start_link(name: renderer_name, session_id: session_id) do
       {:ok, pid} ->
+        # Unlink the renderer from the caller (REPL process) so that a
+        # renderer crash between prompts cannot kill the REPL. The Registry
+        # tracks the renderer; ensure_renderer handles recovery on next call.
+        Process.unlink(pid)
         {:ok, pid}
 
       {:error, {:already_started, pid}} ->
