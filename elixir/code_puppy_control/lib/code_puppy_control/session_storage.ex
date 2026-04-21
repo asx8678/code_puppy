@@ -407,6 +407,69 @@ defmodule CodePuppyControl.SessionStorage do
   end
 
   # ---------------------------------------------------------------------------
+  # Async Autosave (bd-165)
+  # ---------------------------------------------------------------------------
+
+  @doc """
+  Non-blocking version of `save_session/3`. Snapshots history immediately,
+  submits the save to a background Task, and returns `:ok`.
+
+  Errors during the background save are logged but not raised — matches
+  Python's ThreadPoolExecutor pattern.
+
+  Uses `Task.start/1` (fire-and-forget) because `CodePuppyControl.TaskSupervisor`
+  is not currently in the app supervision tree. When/if a TaskSupervisor is added,
+  this should migrate to `Task.Supervisor.start_child/2` for proper supervision.
+
+  ## Options
+
+  Same as `save_session/3`.
+  """
+  @spec save_session_async(session_name(), history(), keyword()) :: :ok
+  def save_session_async(name, history, opts \\ []) do
+    # History is already immutable in Elixir — no list() snapshot needed
+    # unlike Python. The variable binding captures the current value.
+    history_snapshot = history
+    opts_snapshot = opts
+
+    _ =
+      Task.start(fn ->
+        case save_session(name, history_snapshot, opts_snapshot) do
+          {:ok, _meta} ->
+            mark_autosave_complete(history_snapshot)
+
+          {:error, reason} ->
+            Logger.warning("Async session save failed: #{inspect(reason)}")
+        end
+      end)
+
+    :ok
+  end
+
+  @doc """
+  Returns `true` if the autosave should be skipped — either because the
+  history is unchanged since the last save, or because the debounce
+  window (2 seconds) has not elapsed.
+
+  Delegates to `CodePuppyControl.SessionStorage.AutosaveTracker`.
+  """
+  @spec should_skip_autosave?(history()) :: boolean()
+  def should_skip_autosave?(history) do
+    CodePuppyControl.SessionStorage.AutosaveTracker.should_skip_autosave?(history)
+  end
+
+  @doc """
+  Records that an autosave has completed. Updates the debounce state
+  with the history fingerprint and current timestamp.
+
+  Delegates to `CodePuppyControl.SessionStorage.AutosaveTracker`.
+  """
+  @spec mark_autosave_complete(history()) :: :ok
+  def mark_autosave_complete(history) do
+    CodePuppyControl.SessionStorage.AutosaveTracker.mark_autosave_complete(history)
+  end
+
+  # ---------------------------------------------------------------------------
   # Utility
   # ---------------------------------------------------------------------------
 

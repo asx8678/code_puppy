@@ -8,6 +8,7 @@ defmodule CodePuppyControl.Application do
   3. CodePuppyControl.Repo - SQLite database for state persistence
   4. Phoenix.PubSub - Event distribution
   5. CodePuppyControl.EventStore - ETS-based event history for replay
+  5b. CodePuppyControl.SessionStorage.AutosaveTracker - Autosave debounce/dedup (bd-165)
   6. CodePuppyControl.RuntimeState - Global runtime state (autosave ID, session model)
   7. CodePuppyControl.PolicyEngine - Priority-based policy rule engine
   8. CodePuppyControl.AgentModelPinning - Agent-to-model pin configuration (ETS-backed)
@@ -49,6 +50,8 @@ defmodule CodePuppyControl.Application do
       CodePuppyControl.Repo,
       {Phoenix.PubSub, name: CodePuppyControl.PubSub},
       CodePuppyControl.EventStore,
+      # Autosave debounce/dedup tracker for session storage (bd-165)
+      CodePuppyControl.SessionStorage.AutosaveTracker,
       CodePuppyControl.RuntimeState,
       CodePuppyControl.PolicyEngine,
       CodePuppyControl.AgentModelPinning,
