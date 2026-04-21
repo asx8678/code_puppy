@@ -593,24 +593,30 @@ defmodule CodePuppyControl.Agent.Loop do
     allowed = MapSet.new(state.agent_module.allowed_tools())
 
     Enum.reduce(turn.pending_tool_calls, messages, fn tool_call, acc ->
-      if MapSet.member?(allowed, tool_call.name) do
+      # Provider-emitted tool call names may arrive as strings, but
+      # allowed_tools uses atoms. Resolve string names against the known
+      # allowed set — never call String.to_atom/1 on untrusted input.
+      resolved_name = resolve_tool_name(tool_call.name, allowed)
+      tool_call = %{tool_call | name: resolved_name}
+
+      if MapSet.member?(allowed, resolved_name) do
         execute_tool_call(state, tool_call, acc)
       else
         Logger.warning(
-          "Agent.Loop: tool #{tool_call.name} not in allowed_tools for #{inspect(state.agent_module)}"
+          "Agent.Loop: tool #{inspect(resolved_name)} not in allowed_tools for #{inspect(state.agent_module)}"
         )
 
         result_msg = %{
           role: "tool",
           tool_call_id: tool_call.id,
-          content: "Error: tool #{tool_call.name} is not available"
+          content: "Error: tool #{inspect(resolved_name)} is not available"
         }
 
         Events.publish(
           Events.tool_call_end(
             state.run_id,
             state.session_id,
-            tool_call.name,
+            resolved_name,
             {:error, :tool_not_allowed},
             tool_call.id
           )
@@ -620,6 +626,21 @@ defmodule CodePuppyControl.Agent.Loop do
       end
     end)
   end
+
+  # Resolve a tool name (possibly a string from the provider) to an atom
+  # by matching against the known allowed set. Returns the atom if found,
+  # or the original name (string or atom) if no match — caller treats
+  # unresolved strings as not-allowed.
+  defp resolve_tool_name(name, _allowed) when is_atom(name), do: name
+
+  defp resolve_tool_name(name, allowed) when is_binary(name) do
+    case Enum.find(allowed, &Atom.to_string(&1) == name) do
+      nil -> name
+      atom -> atom
+    end
+  end
+
+  defp resolve_tool_name(name, _allowed), do: name
 
   defp execute_tool_call(state, tool_call, messages) do
     Events.publish(

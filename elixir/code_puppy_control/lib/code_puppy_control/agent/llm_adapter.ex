@@ -100,14 +100,31 @@ defmodule CodePuppyControl.Agent.LLMAdapter do
   end
 
   defp normalize_tool_call(%{id: id, name: name, arguments: args}) do
-    %{id: id || "", name: name, arguments: args}
+    %{id: id || "", name: safe_atomize(name), arguments: args}
   end
 
   defp normalize_tool_call(%{"id" => id, "name" => name, "arguments" => args}) do
-    %{id: id || "", name: name, arguments: args}
+    %{id: id || "", name: safe_atomize(name), arguments: args}
   end
 
   defp normalize_tool_call(other), do: other
+
+  # Safely convert a string tool name to an atom ONLY if the atom already
+  # exists in the BEAM atom table (i.e., it was created during tool module
+  # compilation and registration). Uses String.to_existing_atom/1 to prevent
+  # unbounded atom creation from provider-controlled strings.
+  #
+  # If the atom doesn't exist, the name is left as a string — downstream
+  # code (Agent.Loop dispatch, Tool.Runner) treats it as unknown/not-allowed.
+  defp safe_atomize(name) when is_atom(name), do: name
+
+  defp safe_atomize(name) when is_binary(name) do
+    String.to_existing_atom(name)
+  rescue
+    ArgumentError -> name
+  end
+
+  defp safe_atomize(name), do: name
 
   # ── Message conversion ───────────────────────────────────────────────────
 

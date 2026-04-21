@@ -72,14 +72,37 @@ defmodule CodePuppyControl.Tool.Runner do
       iex> Runner.invoke(:nonexistent_tool, %{}, %{})
       {:error, "Tool not found: nonexistent_tool"}
   """
-  @spec invoke(atom(), map() | String.t(), map()) :: {:ok, term()} | {:error, term()}
-  def invoke(tool_name, args, context \\ %{}) when is_atom(tool_name) do
-    # Decode args if they're a JSON string from the LLM
+  @spec invoke(atom() | String.t(), map() | String.t(), map()) :: {:ok, term()} | {:error, term()}
+  def invoke(tool_name, args, context \\ %{})
+
+  def invoke(tool_name, args, context) when is_atom(tool_name) do
     args = decode_args(args)
 
     with {:ok, module} <- resolve_tool(tool_name) do
       do_invoke(module, tool_name, args, context)
     end
+  end
+
+  def invoke(tool_name, args, context) when is_binary(tool_name) do
+    # Provider may emit tool names as strings. Safely resolve to an existing
+    # atom only — String.to_existing_atom/1 fails if the atom was never created,
+    # preventing unbounded atom creation from untrusted input.
+    case safe_atomize_name(tool_name) do
+      {:ok, atom_name} -> invoke(atom_name, args, context)
+      :error -> {:error, "Tool not found: #{tool_name}"}
+    end
+  end
+
+  def invoke(tool_name, _args, _context) do
+    {:error, "Invalid tool name: #{inspect(tool_name)}"}
+  end
+
+  # Safely convert a string to an existing atom. Returns :error if the atom
+  # doesn't exist, avoiding unbounded atom creation from provider strings.
+  defp safe_atomize_name(name) when is_binary(name) do
+    {:ok, String.to_existing_atom(name)}
+  rescue
+    ArgumentError -> :error
   end
 
   # ── Resolution ───────────────────────────────────────────────────────────
