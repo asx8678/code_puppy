@@ -228,6 +228,52 @@ defmodule CodePuppyControl.CLI.SlashCommands.Commands.MCPTest do
       assert text =~ "healthy"
     end
 
+    test "stopped server dashboard uses ✗ icon, not literal 'stopped'" do
+      configured = [%{"name" => "idle-srv", "command" => "echo"}]
+
+      text = MCP.format_status_dashboard(configured, [])
+      # Must contain the stopped icon (✗), NOT the literal word as the icon
+      assert text =~ "✗"
+      # The status column should say "stopped" — but the *icon* must be ✗
+      refute text =~ ~r/^\s+stopped \w+.*stopped/, "icon should be ✗, not literal 'stopped'"
+    end
+
+    test "stopped server with atom :status renders icon correctly" do
+      configured = [%{"name" => "srv", "command" => "echo"}]
+
+      runtime = [
+        %{
+          name: "srv",
+          status: :stopped,
+          health: :unknown,
+          error_count: 0,
+          quarantined: false
+        }
+      ]
+
+      text = MCP.format_status_dashboard(configured, runtime)
+      assert text =~ "✗"
+      assert text =~ "stopped"
+    end
+
+    test "stopped server with string status renders icon correctly" do
+      configured = [%{"name" => "srv", "command" => "echo"}]
+
+      runtime = [
+        %{
+          name: "srv",
+          status: "stopped",
+          health: :unknown,
+          error_count: 0,
+          quarantined: false
+        }
+      ]
+
+      text = MCP.format_status_dashboard(configured, runtime)
+      assert text =~ "✗"
+      assert text =~ "stopped"
+    end
+
     test "format_status_dashboard shows crashed server" do
       configured = [%{"name" => "crash-srv", "command" => "false"}]
 
@@ -585,6 +631,43 @@ defmodule CodePuppyControl.CLI.SlashCommands.Commands.MCPTest do
 
     test "server with no config or runtime data returns not found" do
       assert {:error, :not_found} = MCP.format_server_status("ghost", [], [])
+    end
+  end
+
+  # ── Server name case-preservation regression ──────────────────────────────
+
+  describe "/mcp status <Name> preserves server name casing" do
+    test "routes to the correct server preserving original name" do
+      configured = [
+        %{"name" => "MyServer", "command" => "npx", "args" => [], "env" => %{}}
+      ]
+
+      write_mcp_config(@test_home, %{"MyServer" => %{"command" => "npx", "args" => [], "env" => %{}}})
+
+      output =
+        ExUnit.CaptureIO.capture_io(fn ->
+          assert {:continue, _} = MCP.handle_mcp("/mcp status MyServer", %{})
+        end)
+
+      # Should find the server (not "not found" because it was lowercased)
+      refute output =~ "not found"
+      assert output =~ "MyServer"
+    end
+
+    test "/mcp STATUS MyServer (uppercase subcommand) still preserves server name" do
+      configured = [
+        %{"name" => "MyServer", "command" => "npx", "args" => [], "env" => %{}}
+      ]
+
+      write_mcp_config(@test_home, %{"MyServer" => %{"command" => "npx", "args" => [], "env" => %{}}})
+
+      output =
+        ExUnit.CaptureIO.capture_io(fn ->
+          assert {:continue, _} = MCP.handle_mcp("/mcp STATUS MyServer", %{})
+        end)
+
+      refute output =~ "not found"
+      assert output =~ "MyServer"
     end
   end
 

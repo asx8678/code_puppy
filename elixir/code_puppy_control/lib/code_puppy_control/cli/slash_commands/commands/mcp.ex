@@ -235,12 +235,15 @@ defmodule CodePuppyControl.CLI.SlashCommands.Commands.MCP do
   defp route_subcommand(args) do
     parts = String.split(args, ~r/\s+/, trim: true)
 
-    # Case-insensitive matching — parity with Python handler
-    case Enum.map(parts, &String.downcase/1) do
+    # Case-insensitive matching on subcommand tokens only —
+    # server names must preserve original casing.
+    lowered = Enum.map(parts, &String.downcase/1)
+
+    case lowered do
       ["help"] -> show_help()
       ["list"] -> show_list()
       ["status"] -> show_status()
-      ["status", name] -> show_server_status(name)
+      ["status", _name_lower] -> show_server_status(Enum.at(parts, 1))
       _ -> show_unknown(parts)
     end
   end
@@ -407,6 +410,11 @@ defmodule CodePuppyControl.CLI.SlashCommands.Commands.MCP do
   defp status_to_icon(:starting), do: IO.ANSI.yellow() <> "⏳" <> IO.ANSI.reset()
   defp status_to_icon(:stopped), do: IO.ANSI.faint() <> "✗" <> IO.ANSI.reset()
   defp status_to_icon(:crashed), do: IO.ANSI.red() <> "⚠" <> IO.ANSI.reset()
+  # String fallbacks — runtime may return strings instead of atoms
+  defp status_to_icon("running"), do: status_to_icon(:running)
+  defp status_to_icon("starting"), do: status_to_icon(:starting)
+  defp status_to_icon("stopped"), do: status_to_icon(:stopped)
+  defp status_to_icon("crashed"), do: status_to_icon(:crashed)
   defp status_to_icon(s), do: to_string(s)
 
   defp health_to_string(:healthy), do: IO.ANSI.green() <> "healthy" <> IO.ANSI.reset()
