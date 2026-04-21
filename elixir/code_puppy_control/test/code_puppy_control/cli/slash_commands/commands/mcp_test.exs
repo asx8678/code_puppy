@@ -36,7 +36,7 @@ defmodule CodePuppyControl.CLI.SlashCommands.Commands.MCPTest do
           name: "mcp",
           description: "Show MCP server status and management",
           handler: &MCP.handle_mcp/2,
-          usage: "/mcp [help|list|status [name]]",
+          usage: "/mcp [help|list|status|start|stop|restart|start-all|stop-all]",
           category: "mcp"
         )
       )
@@ -452,7 +452,9 @@ defmodule CodePuppyControl.CLI.SlashCommands.Commands.MCPTest do
 
     test "/mcp usage is correct" do
       {:ok, cmd} = Registry.get("mcp")
-      assert cmd.usage == "/mcp [help|list|status [name]]"
+      assert cmd.usage =~ "start"
+      assert cmd.usage =~ "stop"
+      assert cmd.usage =~ "restart"
     end
 
     test "/mcp has detailed_help when registered with it" do

@@ -331,9 +331,54 @@ defmodule CodePuppyControl.MCP.Server do
     :ok
   end
 
-  # Private functions
+  # ── Executable resolution ────────────────────────────────────────────
+
+  @doc """
+  Resolves a bare command name to an absolute executable path.
+
+  For bare names (npx, docker, uvx, etc.), uses `System.find_executable/1`
+  to locate the binary on `$PATH`.  Absolute or relative paths are
+  returned unchanged so users can explicitly point at a binary.
+
+  Returns `{:ok, path}` on success, `{:error, {:not_found, command}}`
+  when the executable cannot be located.
+  """
+  @spec resolve_command(String.t()) :: {:ok, String.t()} | {:error, {:not_found, String.t()}}
+  def resolve_command(command) when is_binary(command) do
+    cond do
+      # Absolute path — trust the user
+      String.starts_with?(command, "/") ->
+        {:ok, command}
+
+      # Relative path (contains /) — trust the user
+      String.contains?(command, "/") ->
+        {:ok, command}
+
+      # Bare command name — resolve via PATH
+      true ->
+        case System.find_executable(command) do
+          nil -> {:error, {:not_found, command}}
+          path -> {:ok, path}
+        end
+    end
+  end
+
+  # ── Private functions ──────────────────────────────────────────────────
 
   defp start_mcp_server(state) do
+    # Resolve bare executable names (npx, docker, etc.) via PATH
+    # before spawning a Port.  This prevents silent failures when
+    # the executable is missing and provides a clear error message.
+    case resolve_command(state.command) do
+      {:error, {:not_found, cmd}} ->
+        {:error, {:command_not_found, cmd}}
+
+      {:ok, resolved_command} ->
+        spawn_mcp_port(state, resolved_command)
+    end
+  end
+
+  defp spawn_mcp_port(state, resolved_command) do
     # Convert env map to list of tuples for Port
     env_list =
       state.env
@@ -341,7 +386,7 @@ defmodule CodePuppyControl.MCP.Server do
       |> Enum.map(fn {k, v} -> {to_charlist(k), to_charlist(v)} end)
 
     port =
-      Port.open({:spawn_executable, to_charlist(state.command)}, [
+      Port.open({:spawn_executable, to_charlist(resolved_command)}, [
         :binary,
         :exit_status,
         :stderr_to_stdout,

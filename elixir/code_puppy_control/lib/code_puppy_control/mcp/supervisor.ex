@@ -98,6 +98,16 @@ defmodule CodePuppyControl.MCP.Supervisor do
   Stops an MCP server by server_id.
 
   Returns `:ok` on success or `{:error, :not_found}` if server doesn't exist.
+
+  The stop proceeds in two stages:
+  1. `Server.stop/1` — graceful GenServer shutdown (triggers `terminate/2`
+     which closes the Port and emits telemetry).
+  2. `DynamicSupervisor.terminate_child/2` — belt-and-suspenders cleanup.
+
+  Because the child uses `:transient` restart, a normal exit from step 1
+  causes the DynamicSupervisor to automatically remove the child.  So
+  `terminate_child` may return `{:error, :not_found}` — that is expected
+  and NOT propagated as an error, since the server was already stopped.
   """
   @spec stop_server(String.t()) :: :ok | {:error, :not_found}
   def stop_server(server_id) do
@@ -106,8 +116,59 @@ defmodule CodePuppyControl.MCP.Supervisor do
         {:error, :not_found}
 
       [{pid, _value} | _] ->
-        Server.stop(server_id)
-        DynamicSupervisor.terminate_child(__MODULE__, pid)
+        # Gracefully stop the GenServer.  May raise if the process exited
+        # between the Registry lookup and this call (race), so catch that.
+        try do
+          Server.stop(server_id)
+        catch
+          :exit, _ -> :ok
+        end
+
+        # After Server.stop the child exits normally.  With :transient restart
+        # the DynamicSupervisor removes it automatically, so terminate_child
+        # may return {:error, :not_found} — that's expected, not an error.
+        case DynamicSupervisor.terminate_child(__MODULE__, pid) do
+          :ok -> :ok
+          {:error, :not_found} -> :ok
+        end
+    end
+  end
+
+  @doc """
+  Restarts an MCP server by server_id using explicit config.
+
+  Stops the existing server if running, then starts a new one with
+  the provided configuration.  This is the preferred restart path —
+  the old `restart_server/1` variant (reading from Application env) is
+  deprecated because Application env is not a reliable config source.
+
+  ## Parameters
+
+    * `server_id` - The current server identifier.
+    * `config` - Keyword list with `:name`, `:command`, `:args`, `:env`.
+      `:server_id` is optional; defaults to the existing `server_id`.
+
+  ## Returns
+
+    * `{:ok, pid}` on success.
+    * `{:error, :not_found}` when `server_id` is not running.
+    * `{:error, reason}` on start failure.
+  """
+  @spec restart_server_with_config(String.t(), keyword()) ::
+          DynamicSupervisor.on_start_child() | {:error, term()}
+  def restart_server_with_config(server_id, config) do
+    case Server.get_status(server_id) do
+      status when is_map(status) ->
+        stop_server(server_id)
+        Process.sleep(100)
+
+        new_config =
+          Keyword.put_new(config, :server_id, server_id)
+
+        start_server(new_config)
+
+      _ ->
+        {:error, :not_found}
     end
   end
 
@@ -115,20 +176,19 @@ defmodule CodePuppyControl.MCP.Supervisor do
   Restarts an MCP server by server_id.
 
   Stops the existing server if running, then starts a new one with
-  the same configuration.
+  the same configuration read from Application env.
+
+  > **Deprecated:** Use `restart_server_with_config/2` instead, which
+  > reads configuration from `mcp_servers.json` rather than the fragile
+  > Application env store.
   """
   @spec restart_server(String.t()) :: DynamicSupervisor.on_start_child() | {:error, :not_found}
   def restart_server(server_id) do
-    # Get current status to preserve config
     case Server.get_status(server_id) do
       status when is_map(status) ->
-        # Stop existing server
         stop_server(server_id)
-
-        # Wait briefly for shutdown
         Process.sleep(100)
 
-        # Restart with same config
         start_server(
           server_id: status.server_id,
           name: status.name,

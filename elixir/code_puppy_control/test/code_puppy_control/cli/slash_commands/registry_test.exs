@@ -295,7 +295,7 @@ defmodule CodePuppyControl.CLI.SlashCommands.RegistryTest do
       assert {:ok, cmd} = Registry.get("mcp")
       assert cmd.name == "mcp"
       assert cmd.category == "mcp"
-      assert cmd.usage == "/mcp [help|list|status [name]]"
+      assert cmd.usage == "/mcp [help|list|status|start|stop|restart|start-all|stop-all]"
 
       mcp_cmds = Registry.list_by_category("mcp")
       assert Enum.any?(mcp_cmds, &(&1.name == "mcp"))

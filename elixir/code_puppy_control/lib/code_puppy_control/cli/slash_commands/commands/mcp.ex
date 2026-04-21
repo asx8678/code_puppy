@@ -1,18 +1,23 @@
 defmodule CodePuppyControl.CLI.SlashCommands.Commands.MCP do
   @moduledoc """
-  MCP slash command: /mcp [help|list|status [name]].
+  MCP slash command: /mcp [help|list|status|start|stop|restart|start-all|stop-all].
 
-  Read-only entrypoint for inspecting MCP server configuration and runtime
-  status.  Follows the same subcommand routing pattern as /diff and
-  /model_settings.
+  Entry point for inspecting MCP server configuration, runtime status,
+  and lifecycle management.  Follows the same subcommand routing pattern
+  as /diff and /model_settings.
 
   ## Subcommands
 
-      /mcp              — alias for /mcp list
-      /mcp list         — show configured servers and their runtime status
-      /mcp help         — show MCP command help
-      /mcp status       — status dashboard for all servers
-      /mcp status <n>   — detailed status for a single server
+      /mcp                — alias for /mcp list
+      /mcp list           — show configured servers and their runtime status
+      /mcp help           — show MCP command help
+      /mcp status         — status dashboard for all servers
+      /mcp status <n>     — detailed status for a single server
+      /mcp start <n>      — start a configured server by name
+      /mcp stop <n>       — stop a running server by name
+      /mcp restart <n>    — restart a server by name (reads fresh config)
+      /mcp start-all      — start all configured servers
+      /mcp stop-all       — stop all running servers
 
   ## Design notes
 
@@ -20,12 +25,15 @@ defmodule CodePuppyControl.CLI.SlashCommands.Commands.MCP do
     `CodePuppyControl.Config.Paths.mcp_servers_file/0` (safe JSON parse).
   - Runtime status is queried from `CodePuppyControl.MCP.Manager` when the
     MCP supervision tree is running; otherwise we show "not running".
-  - This module is intentionally read-only.  Start/stop/install/edit are
-    separate issues.
+  - Lifecycle commands (start/stop/restart/start-all/stop-all) delegate to
+    `MCPLifecycle` (and ultimately `MCP.Manager` helpers).
+  - Pure formatting functions are public for testability.
   """
 
   alias CodePuppyControl.Config.Paths
   alias CodePuppyControl.MCP.Manager
+
+  alias CodePuppyControl.CLI.SlashCommands.Commands.MCPLifecycle
 
   # ── Public API ──────────────────────────────────────────────────────────
 
@@ -61,10 +69,15 @@ defmodule CodePuppyControl.CLI.SlashCommands.Commands.MCP do
       #{IO.ANSI.cyan()}/mcp status#{IO.ANSI.reset()}        Status dashboard for all servers
       #{IO.ANSI.cyan()}/mcp status <name>#{IO.ANSI.reset()} Detailed status for one server
 
+    #{IO.ANSI.bright()}Lifecycle Commands:#{IO.ANSI.reset()}
+      #{IO.ANSI.cyan()}/mcp start <name>#{IO.ANSI.reset()}   Start a configured server
+      #{IO.ANSI.cyan()}/mcp stop <name>#{IO.ANSI.reset()}    Stop a running server
+      #{IO.ANSI.cyan()}/mcp restart <name>#{IO.ANSI.reset()} Restart a server (fresh config)
+      #{IO.ANSI.cyan()}/mcp start-all#{IO.ANSI.reset()}      Start all configured servers
+      #{IO.ANSI.cyan()}/mcp stop-all#{IO.ANSI.reset()}       Stop all running servers
+
     #{IO.ANSI.bright()}Status Indicators:#{IO.ANSI.reset()}
       ✓ Running   ✗ Stopped   ⚠ Error   ⏸ Quarantined
-
-    #{IO.ANSI.faint()}Start/stop/install/edit commands will be added in future releases.#{IO.ANSI.reset()}
     """
   end
 
@@ -235,6 +248,17 @@ defmodule CodePuppyControl.CLI.SlashCommands.Commands.MCP do
     end
   end
 
+  # ── Lifecycle formatting delegates ──────────────────────────────────────
+
+  # These thin delegates preserve the public API for backward compatibility
+  # while the actual implementations live in MCPLifecycle.
+
+  defdelegate format_start_result(name, result), to: MCPLifecycle
+  defdelegate format_stop_result(name, result), to: MCPLifecycle
+  defdelegate format_restart_result(name, result), to: MCPLifecycle
+  defdelegate format_start_all_result(results), to: MCPLifecycle
+  defdelegate format_stop_all_result(results), to: MCPLifecycle
+
   # ── Private helpers ────────────────────────────────────────────────────
 
   defp route_subcommand(args) do
@@ -249,6 +273,14 @@ defmodule CodePuppyControl.CLI.SlashCommands.Commands.MCP do
       ["list"] -> show_list()
       ["status"] -> show_status()
       ["status", _name_lower] -> show_server_status(Enum.at(parts, 1))
+      ["start"] -> MCPLifecycle.show_start_usage()
+      ["start", _name_lower] -> MCPLifecycle.show_start(Enum.at(parts, 1))
+      ["stop"] -> MCPLifecycle.show_stop_usage()
+      ["stop", _name_lower] -> MCPLifecycle.show_stop(Enum.at(parts, 1))
+      ["restart"] -> MCPLifecycle.show_restart_usage()
+      ["restart", _name_lower] -> MCPLifecycle.show_restart(Enum.at(parts, 1))
+      ["start-all"] -> MCPLifecycle.show_start_all()
+      ["stop-all"] -> MCPLifecycle.show_stop_all()
       _ -> show_unknown(parts)
     end
   end
@@ -315,45 +347,11 @@ defmodule CodePuppyControl.CLI.SlashCommands.Commands.MCP do
 
   # ── Config reading ─────────────────────────────────────────────────────
 
+  # Delegates to Manager.read_configured_servers/0 which reads from
+  # mcp_servers.json.  This private wrapper preserves the existing API
+  # for the read-only subcommands while keeping config logic in one place.
   defp read_configured_servers do
-    path = Paths.mcp_servers_file()
-
-    case File.read(path) do
-      {:ok, content} ->
-        case Jason.decode(content) do
-          {:ok, %{"mcp_servers" => servers}} when is_map(servers) ->
-            # Nested shape: {"mcp_servers": {"fs": {...}, ...}}
-            servers_to_list(servers)
-
-          {:ok, flat} when is_map(flat) ->
-            # Flat top-level shape: {"fs": {...}, "gh": {...}}
-            # Only treat as server defs if values are maps (skip malformed)
-            if Enum.any?(flat, fn {_k, v} -> is_map(v) end) do
-              servers_to_list(flat)
-            else
-              []
-            end
-
-          {:ok, _other} ->
-            []
-
-          {:error, _} ->
-            []
-        end
-
-      {:error, _} ->
-        []
-    end
-  end
-
-  # Converts a name-keyed map of server defs into a list with "name" injected.
-  # Skips entries whose value is not a map (e.g. "broken": true).
-  defp servers_to_list(servers_map) do
-    servers_map
-    |> Enum.filter(fn {_name, cfg} -> is_map(cfg) end)
-    |> Enum.map(fn {name, cfg} ->
-      Map.put(cfg, "name", name)
-    end)
+    Manager.read_configured_servers()
   end
 
   # ── Runtime queries ────────────────────────────────────────────────────
