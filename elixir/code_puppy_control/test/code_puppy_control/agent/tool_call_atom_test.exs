@@ -254,6 +254,38 @@ defmodule CodePuppyControl.Agent.ToolCallAtomTest do
       assert tc.name == "totally_bogus_unregistered_tool_xyz"
     end
 
+    test "unknown string tool name does not leak atoms (direct atom-table check)" do
+      # Prove safe_atomize never creates a new atom for an unknown string.
+      # We use String.to_existing_atom/1 as a probe — it raises ArgumentError
+      # if the atom doesn't exist, WITHOUT creating it. This is immune to
+      # concurrent VM atom creation that would make before/after atom_count
+      # comparisons flaky.
+      unknown = "totally_bogus_unregistered_tool_qwerty_"
+
+      # Pre-condition: the atom must NOT exist in the atom table
+      assert_raise ArgumentError, fn -> String.to_existing_atom(unknown) end
+
+      tool_calls = [%{id: "tc1", name: unknown, arguments: %{}}]
+      ProviderMock.set_response(%{id: "r1", content: "", tool_calls: tool_calls})
+
+      assert {:ok, resp} =
+               LLMAdapter.stream_chat(
+                 [%{"role" => "user", "content" => "hi"}],
+                 [:atom_fix_tool],
+                 [model: "test"],
+                 fn _ -> :ok end
+               )
+
+      # Post-condition: the atom STILL must NOT exist — safe_atomize must not
+      # have called String.to_atom/1 on the unknown string
+      assert_raise ArgumentError, fn -> String.to_existing_atom(unknown) end
+
+      # Also confirm the name stayed as a string
+      [tc] = resp.tool_calls
+      assert is_binary(tc.name)
+      assert tc.name == unknown
+    end
+
     test "atom tool names pass through unchanged" do
       # If the provider somehow returns an atom name, it should pass through
       tool_calls = [%{id: "tc1", name: :atom_fix_tool, arguments: %{}}]
@@ -338,6 +370,14 @@ defmodule CodePuppyControl.Agent.ToolCallAtomTest do
       tool_messages = Enum.filter(messages, fn m -> m[:role] == "tool" or m["role"] == "tool" end)
       assert length(tool_messages) >= 1, "Expected tool result message, got: #{inspect(messages)}"
 
+      # Prove the tool actually executed successfully — the AtomFixTool
+      # returns {:ok, "fixed: test"} for input "test", and format_tool_result/1
+      # inspects it, so the content must contain "fixed: test".
+      result_content = hd(tool_messages)[:content] || hd(tool_messages)["content"]
+
+      assert result_content =~ "fixed: test",
+             "Tool result should contain 'fixed: test', got: #{inspect(result_content)}"
+
       GenServer.stop(pid)
     end
 
@@ -364,10 +404,11 @@ defmodule CodePuppyControl.Agent.ToolCallAtomTest do
 
       messages = Loop.get_messages(pid)
       # Should have a tool message with "not available" error
-      tool_messages = Enum.filter(messages, fn m ->
-        role = m[:role] || m["role"]
-        role == "tool"
-      end)
+      tool_messages =
+        Enum.filter(messages, fn m ->
+          role = m[:role] || m["role"]
+          role == "tool"
+        end)
 
       assert length(tool_messages) >= 1, "Expected error tool result message"
       error_msg = hd(tool_messages)
