@@ -3476,7 +3476,8 @@
       "priority": 2,
       "type": "task",
       "labels": [
-        "migration,python-to-elixir,rewrite,phase-7"
+        "migration,python-to-elixir,rewrite,phase-7",
+        "in-progress"
       ],
       "dependencies": {
         "discovered-from": [
@@ -3487,8 +3488,11 @@
         ]
       },
       "created_at": "2026-04-18T19:48:29.985724",
-      "updated_at": "2026-04-19T00:56:31.713867",
-      "comments": []
+      "updated_at": "2026-04-21T08:15:44.905135",
+      "comments": [
+        "Claimed by user for porting work. Source files identified: version_checker.py (200 lines, 7.3KB), uvx_detection.py (244 lines, 7.4KB).",
+        "bd-173 complete. Files created: lib/code_puppy_control/version_checker.ex (226 lines), test/code_puppy_control/version_checker_test.exs (239 lines). uvx_detection.py skipped: Python/Windows/uvx-specific with no meaning for Burrito-packaged Elixir. Startup wiring: add CodePuppyControl.VersionChecker.default_version_mismatch_behavior() to CLI REPL entry point (bd-163) after supervision tree is up. 35 tests pass (2 Bypass integration tests skipped -- no Bypass dep). Returns {:ok, pid} from check_version_background instead of Task.t() since no TaskSupervisor exists yet."
+      ]
     },
     "bd-174": {
       "id": "bd-174",
