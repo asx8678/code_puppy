@@ -259,7 +259,7 @@ defmodule CodePuppyControl.CLI.SlashCommands.RegistryTest do
       Registry.register_builtin_commands()
 
       expected =
-        ~w(help quit exit clear history cd model agent sessions tui agents pack mode model_settings ms flags diff compact truncate)
+        ~w(help quit exit clear history cd model agent sessions tui agents pack mode model_settings ms flags diff mcp compact truncate)
 
       for name <- expected do
         assert {:ok, _} = Registry.get(name),
@@ -287,6 +287,18 @@ defmodule CodePuppyControl.CLI.SlashCommands.RegistryTest do
       assert "flags" in config_names
       assert "diff" in config_names
       assert "model_settings" in config_names
+    end
+
+    test "/mcp is registered in mcp category" do
+      Registry.register_builtin_commands()
+
+      assert {:ok, cmd} = Registry.get("mcp")
+      assert cmd.name == "mcp"
+      assert cmd.category == "mcp"
+      assert cmd.usage == "/mcp [help|list|status [name]]"
+
+      mcp_cmds = Registry.list_by_category("mcp")
+      assert Enum.any?(mcp_cmds, &(&1.name == "mcp"))
     end
 
     test "idempotent — calling twice does not crash" do

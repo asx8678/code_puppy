@@ -258,6 +258,16 @@ defmodule CodePuppyControl.CLI.SlashCommands.Registry do
         detailed_help:
           "Display per-model settings like temperature, seed, top_p, reasoning effort, etc. Use --show with an optional model name to view settings. The interactive editor will be added in a future release."
       ),
+      # MCP commands
+      CommandInfo.new(
+        name: "mcp",
+        description: "Show MCP server status and management",
+        handler: &Commands.MCP.handle_mcp/2,
+        usage: "/mcp [help|list|status [name]]",
+        category: "mcp",
+        detailed_help:
+          "View configured MCP servers and their runtime status. Subcommands: list, help, status. Start/stop/install are separate issues."
+      ),
       # Session commands
       CommandInfo.new(
         name: "compact",
