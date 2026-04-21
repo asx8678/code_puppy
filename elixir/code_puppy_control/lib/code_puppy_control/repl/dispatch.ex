@@ -246,10 +246,6 @@ defmodule CodePuppyControl.REPL.Dispatch do
 
     case Loop.start_link(agent_module, messages, opts) do
       {:ok, pid} ->
-        # Unlink the Agent.Loop from the REPL process so that a loop crash
-        # cannot kill the REPL via the link. GenServer.call exits are caught
-        # by the catch :exit clause in dispatch_after_append instead.
-        Process.unlink(pid)
         {:ok, pid}
 
       {:error, {:already_started, pid}} ->

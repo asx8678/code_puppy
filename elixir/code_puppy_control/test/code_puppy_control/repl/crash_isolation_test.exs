@@ -8,13 +8,15 @@ defmodule CodePuppyControl.REPL.CrashIsolationTest do
   during `run_until_done/2`, `GenServer.call` throws an `:exit`
   exception that was NOT caught, propagating up and killing the REPL.
 
-  The fix adds two layers of defence:
+  The fix adds `catch :exit` on the inner `try` block in
+  `dispatch_after_append`. When Agent.Loop dies mid-call,
+  `GenServer.call` throws an `:exit` exception; the catch clause
+  rolls back the user message and reports the error instead of
+  propagating the crash to the REPL.
 
-    1. `Process.unlink/1` after `start_link` — prevents exit signals
-       from the linked process reaching the REPL.
-    2. `catch :exit` on the inner `try` block in `dispatch_after_append`
-       — catches `GenServer.call` exit exceptions when the server dies
-       mid-call, and rolls back the user message.
+  The surrounding `trap_exit` critical section already neutralises
+  exit signals from the linked Agent.Loop, so no `Process.unlink`
+  is needed.
   """
 
   use ExUnit.Case, async: false
@@ -240,28 +242,6 @@ defmodule CodePuppyControl.REPL.CrashIsolationTest do
              ] = messages
     end
 
-    test "Agent.Loop process is not linked to the REPL after start_agent_loop", %{
-      state: state,
-      session_id: session_id
-    } do
-      # Use a normal response so the agent loop starts and completes.
-      CrashMidCallMockLLM.set_response(%{text: "hello", tool_calls: []})
 
-      # Snapshot the REPL (test) process links before the call.
-      links_before = Process.info(self(), :links) |> elem(1)
-
-      ExUnit.CaptureIO.capture_io(fn ->
-        Loop.handle_input("test", state)
-      end)
-
-      # After the call, the REPL process should NOT have any new persistent
-      # links. The Agent.Loop was unlinked by start_agent_loop, so no
-      # zombie link remains.
-      links_after = Process.info(self(), :links) |> elem(1)
-
-      # The link count should be the same (no leaked Agent.Loop links).
-      # Note: the renderer is also unlinked, so neither should leak.
-      assert length(links_after) == length(links_before)
-    end
   end
 end
