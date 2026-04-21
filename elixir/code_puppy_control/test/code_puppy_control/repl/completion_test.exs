@@ -132,7 +132,6 @@ defmodule CodePuppyControl.REPL.CompletionTest do
     end
 
     test "derives commands from Registry when populated" do
-
       all = Completion.complete_command("/")
       assert "/pack" in all
       assert "/mode" in all

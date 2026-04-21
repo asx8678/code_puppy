@@ -46,11 +46,82 @@ exclude_tags =
     [:integration, :e2e, :skip, :eval]
   end
 
-ExUnit.configure(
+# ---------------------------------------------------------------------------
+# ExUnit concurrency: laptop-friendly defaults with profile support
+# ---------------------------------------------------------------------------
+#
+# On a fanless M4 Air (10 schedulers), running all 10 cases simultaneously
+# causes thermal throttling. These profiles let you pick a comfort level:
+#
+#   PUP_TEST_PROFILE=gentle   => ~3 cases  (cool / quiet)
+#   PUP_TEST_PROFILE=balanced => ~6 cases  (default, good trade-off)
+#   PUP_TEST_PROFILE=burst    => ~9-10 cases (fast / CI-style)
+#
+# Override with an exact number:
+#   PUP_TEST_MAX_CASES=2 mix test
+#
+# Explicit CLI flags always win: --trace, --max-cases, --max-cases=N
+# ---------------------------------------------------------------------------
+
+ex_unit_opts = [
   exclude: exclude_tags,
   formatters: [ExUnit.CLIFormatter],
   timeout: 30_000
-)
+]
+
+# Detect whether the user passed --trace or --max-cases on the command line.
+# If so, we must NOT set max_cases — let ExUnit handle it.
+cli_args = System.argv()
+
+cli_overrides_max_cases =
+  Enum.any?(cli_args, fn
+    "--trace" -> true
+    arg when is_binary(arg) -> String.starts_with?(arg, "--max-cases")
+    _ -> false
+  end)
+
+# Read env var once — used in the cond below
+env_max = System.get_env("PUP_TEST_MAX_CASES")
+
+max_cases =
+  cond do
+    # 1. Explicit CLI flag → don't override, let ExUnit decide
+    cli_overrides_max_cases ->
+      nil
+
+    # 2. Exact numeric override via env var
+    env_max != nil and env_max != "" ->
+      case Integer.parse(env_max) do
+        {n, ""} when n > 0 -> n
+        _ -> nil
+      end
+
+    # 3. Profile-based heuristic (clamped to 1..schedulers to avoid
+    # oversubscribing tiny machines/containers)
+    true ->
+      schedulers = System.schedulers_online()
+      profile = System.get_env("PUP_TEST_PROFILE", "balanced")
+
+      raw_max_cases =
+        case profile do
+          "gentle" -> max(div(schedulers, 3), 2)
+          "balanced" -> max(round(schedulers * 0.6), 2)
+          "burst" -> schedulers
+          _ -> max(round(schedulers * 0.6), 2)
+        end
+
+      # Clamp to valid range: at least 1, at most schedulers
+      raw_max_cases |> max(1) |> min(schedulers)
+  end
+
+ex_unit_opts =
+  if max_cases do
+    Keyword.put(ex_unit_opts, :max_cases, max_cases)
+  else
+    ex_unit_opts
+  end
+
+ExUnit.configure(ex_unit_opts)
 
 # Use deterministic random for reproducible tests
 :rand.seed(:exsss, {1, 2, 3})

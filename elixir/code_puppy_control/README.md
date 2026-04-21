@@ -50,6 +50,46 @@ mix test
 mix phx.server
 ```
 
+## Running Tests
+
+The test suite uses **SQLite** (not PostgreSQL) because the repo, migrations,
+and Oban setup are all SQLite-specific. No external database is needed.
+
+### Concurrency profiles
+
+On laptops (especially fanless ones like the M4 Air), running all scheduler
+cores at once causes thermal throttling. Use `PUP_TEST_PROFILE` to control
+parallelism (approximate counts on a 10-scheduler machine per `mix test` process):
+
+| Profile | Flag | Approx. cases on 10-scheduler machine |
+|---------|------|-----------------------------------------|
+| balanced | *(default)* | ~6 |
+| gentle | `PUP_TEST_PROFILE=gentle` | ~3 |
+| burst | `PUP_TEST_PROFILE=burst` | ~9-10 |
+
+```bash
+# Default (balanced)
+mix test
+
+# Keep it cool
+PUP_TEST_PROFILE=gentle mix test
+
+# Fast / CI-style
+PUP_TEST_PROFILE=burst mix test
+
+# Exact override
+PUP_TEST_MAX_CASES=2 mix test
+```
+
+Explicit CLI flags (`--trace`, `--max-cases`, `--max-cases=N`) always take
+precedence over environment variables.
+
+**SQLite test database:**
+- The default test DB lives under the system temp directory (`System.tmp_dir/0`).
+- It is partition-aware (uses `MIX_TEST_PARTITION` in the path if set).
+- It is **not** automatically fresh between runs; data persists across test runs.
+- Override with `PUP_TEST_DB` to use a custom path.
+
 ## API Endpoints
 
 | Endpoint | Method | Description |

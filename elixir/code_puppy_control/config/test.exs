@@ -31,8 +31,46 @@ config :code_puppy_control, Oban,
 # Initialize plugs at runtime for faster test compilation
 config :phoenix, :plug_init_mode, :runtime
 
-# File-based database for testing (in-memory causes migration issues with SQLite)
+# ---------------------------------------------------------------------------
+# Test database (SQLite)
+# ---------------------------------------------------------------------------
+#
+# Why NOT PostgreSQL?
+#   - The repo, migrations, and Oban config are all SQLite-specific.
+#   - Switching to Postgres would require separate migration sets, a running
+#     Postgres instance in CI and locally, and Oban engine changes.
+#   - For a test suite that runs in <60s on a laptop, SQLite is the right
+#     trade-off: zero infra, instant startup, and parity with production.
+#
+# The test DB lives in System.tmp_dir!() so:
+#   - Keeps the repo clean (no priv/repo/test.db in the working tree)
+#   - OS cleans it up automatically on reboot
+#   - Partition-aware via MIX_TEST_PARTITION so parallel/partitioned runs
+#     do not collide — different partitions get unique filenames
+#
+# Note: This does NOT provide an automatically fresh DB between runs. If you
+# need unique DBs across partitioned runs, you must override PUP_TEST_DB with
+# a unique path per partition yourself.
+#
+# Override the path entirely with PUP_TEST_DB if needed.
+# ---------------------------------------------------------------------------
+
+test_db_path =
+  System.get_env("PUP_TEST_DB") ||
+    Path.join([
+      System.tmp_dir!(),
+      "code_puppy_control_test_p#{System.get_env("MIX_TEST_PARTITION", "1")}.db"
+    ])
+
 config :code_puppy_control, CodePuppyControl.Repo,
-  database: System.get_env("PUP_TEST_DB", "priv/repo/test.db"),
+  database: test_db_path,
   pool_size: 1,
-  pool: Ecto.Adapters.SQL.Sandbox
+  pool: Ecto.Adapters.SQL.Sandbox,
+  # SQLite pragmas tuned for test speed (safe for single-connection sandbox)
+  journal_mode: :wal,
+  temp_store: :memory,
+  cache_size: -64_000,
+  busy_timeout: 5_000,
+  # :off is safe here because this is temporary test data under tmp; durability
+  # is not important, and skipping fsync gives a noticeable speedup on macOS APFS.
+  synchronous: :off
