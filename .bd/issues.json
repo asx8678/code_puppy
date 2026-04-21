@@ -3233,7 +3233,7 @@
       "id": "bd-163",
       "title": "3.5 Slash-command dispatch",
       "description": "Port command_line/ (~30 files, ~300KB) to Elixir. Slash-command router + all built-in commands.",
-      "status": "open",
+      "status": "closed",
       "priority": 2,
       "type": "task",
       "labels": [
@@ -3249,9 +3249,10 @@
         ]
       },
       "created_at": "2026-04-18T19:48:10.390822",
-      "updated_at": "2026-04-21T08:48:13.024533",
+      "updated_at": "2026-04-21T08:49:49.911793",
       "comments": [
-        "bd-163 implementation summary:\n\n12 commands ported to Elixir slash-command dispatch:\n- Core: /help, /quit, /exit (alias), /clear, /history, /cd (NEW)\n- Context: /model, /agent, /sessions, /tui (delegated to existing Loop handlers)\n- Session: /compact (stub), /truncate (stub)\n\n30 commands deferred with follow-up tickets:\n- bd-244: Menu wizard commands (/add_model, /model_settings, /uc, /mcp install, /autosave, /diff)\n- bd-245: MCP sub-commands (~15 commands)\n- bd-246: /pack, /preset, /workflow small commands (lower priority)\n- bd-247: /compact + /truncate full implementation (depends on agent summarization)\n\nArchitecture decisions:\n1. ETS-backed GenServer registry (named :slash_commands table) with GenServer-serialized writes and concurrent reads\n2. Pure Dispatcher module for stateless dispatch logic\n3. CommandInfo struct mirrors Python's CommandInfo dataclass with same defaults\n4. Commands delegate to existing Loop handlers (defp \u2192 def) to minimize churn\n5. /exit registered as alias key pointing to /quit's CommandInfo (not a separate command)\n6. No silent overwrites on name conflict \u2014 returns {:error, {:name_conflict, name}}\n7. Registration is explicit via register_builtin_commands/0 called from Application.start/2\n\nNew files: 7 lib modules + 4 test files = 11 files\nTests: 54 tests across 4 test files, all passing\n"
+        "bd-163 implementation summary:\n\n12 commands ported to Elixir slash-command dispatch:\n- Core: /help, /quit, /exit (alias), /clear, /history, /cd (NEW)\n- Context: /model, /agent, /sessions, /tui (delegated to existing Loop handlers)\n- Session: /compact (stub), /truncate (stub)\n\n30 commands deferred with follow-up tickets:\n- bd-244: Menu wizard commands (/add_model, /model_settings, /uc, /mcp install, /autosave, /diff)\n- bd-245: MCP sub-commands (~15 commands)\n- bd-246: /pack, /preset, /workflow small commands (lower priority)\n- bd-247: /compact + /truncate full implementation (depends on agent summarization)\n\nArchitecture decisions:\n1. ETS-backed GenServer registry (named :slash_commands table) with GenServer-serialized writes and concurrent reads\n2. Pure Dispatcher module for stateless dispatch logic\n3. CommandInfo struct mirrors Python's CommandInfo dataclass with same defaults\n4. Commands delegate to existing Loop handlers (defp \u2192 def) to minimize churn\n5. /exit registered as alias key pointing to /quit's CommandInfo (not a separate command)\n6. No silent overwrites on name conflict \u2014 returns {:error, {:name_conflict, name}}\n7. Registration is explicit via register_builtin_commands/0 called from Application.start/2\n\nNew files: 7 lib modules + 4 test files = 11 files\nTests: 54 tests across 4 test files, all passing\n",
+        "SHIPPED: Slash-command dispatch infrastructure + 12 core commands (commits 026fd44e + 27f0fd05).\n\nWhat shipped:\n- 12 core commands ported: /help, /quit, /exit, /clear, /history, /cd, /model, /agent, /sessions, /tui, /compact (stub), /truncate (stub)\n- Architecture: ETS-backed Registry GenServer + stateless Dispatcher + command modules grouped by category\n- 54 new tests, 0 failures\n\nDeferred work (follow-up tickets filed):\n- bd-244: Menu wizards (interactive selection menus)\n- bd-245: MCP sub-commands\n- bd-246: Pack/preset/workflow commands\n- bd-247: Full /compact + /truncate implementation\n\nPhase 3 parent (bd-136) should now be closable once bd-163 is closed."
       ]
     },
     "bd-164": {
