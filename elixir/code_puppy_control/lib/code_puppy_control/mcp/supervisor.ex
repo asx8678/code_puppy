@@ -96,23 +96,60 @@ defmodule CodePuppyControl.MCP.Supervisor do
   end
 
   @doc """
+  Restarts an MCP server by server_id using explicit config.
+
+  Stops the existing server if running, then starts a new one with
+  the provided configuration.  This is the preferred restart path —
+  the old `restart_server/1` variant (reading from Application env) is
+  deprecated because Application env is not a reliable config source.
+
+  ## Parameters
+
+    * `server_id` - The current server identifier.
+    * `config` - Keyword list with `:name`, `:command`, `:args`, `:env`.
+      `:server_id` is optional; defaults to the existing `server_id`.
+
+  ## Returns
+
+    * `{:ok, pid}` on success.
+    * `{:error, :not_found}` when `server_id` is not running.
+    * `{:error, reason}` on start failure.
+  """
+  @spec restart_server_with_config(String.t(), keyword()) ::
+          DynamicSupervisor.on_start_child() | {:error, term()}
+  def restart_server_with_config(server_id, config) do
+    case Server.get_status(server_id) do
+      status when is_map(status) ->
+        stop_server(server_id)
+        Process.sleep(100)
+
+        new_config =
+          Keyword.put_new(config, :server_id, server_id)
+
+        start_server(new_config)
+
+      _ ->
+        {:error, :not_found}
+    end
+  end
+
+  @doc """
   Restarts an MCP server by server_id.
 
   Stops the existing server if running, then starts a new one with
-  the same configuration.
+  the same configuration read from Application env.
+
+  > **Deprecated:** Use `restart_server_with_config/2` instead, which
+  > reads configuration from `mcp_servers.json` rather than the fragile
+  > Application env store.
   """
   @spec restart_server(String.t()) :: DynamicSupervisor.on_start_child() | {:error, :not_found}
   def restart_server(server_id) do
-    # Get current status to preserve config
     case Server.get_status(server_id) do
       status when is_map(status) ->
-        # Stop existing server
         stop_server(server_id)
-
-        # Wait briefly for shutdown
         Process.sleep(100)
 
-        # Restart with same config
         start_server(
           server_id: status.server_id,
           name: status.name,

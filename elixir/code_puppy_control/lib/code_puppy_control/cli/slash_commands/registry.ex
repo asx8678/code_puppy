@@ -263,10 +263,10 @@ defmodule CodePuppyControl.CLI.SlashCommands.Registry do
         name: "mcp",
         description: "Show MCP server status and management",
         handler: &Commands.MCP.handle_mcp/2,
-        usage: "/mcp [help|list|status [name]]",
+        usage: "/mcp [help|list|status|start|stop|restart|start-all|stop-all]",
         category: "mcp",
         detailed_help:
-          "View configured MCP servers and their runtime status. Subcommands: list, help, status. Start/stop/install are separate issues."
+          "View and manage MCP servers. Subcommands: list, help, status, start, stop, restart, start-all, stop-all."
       ),
       # Session commands
       CommandInfo.new(

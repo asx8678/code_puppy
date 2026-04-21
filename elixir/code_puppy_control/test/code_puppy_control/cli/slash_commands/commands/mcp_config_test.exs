@@ -37,7 +37,7 @@ defmodule CodePuppyControl.CLI.SlashCommands.Commands.MCPConfigTest do
           name: "mcp",
           description: "Show MCP server status and management",
           handler: &MCP.handle_mcp/2,
-          usage: "/mcp [help|list|status [name]]",
+          usage: "/mcp [help|list|status|start|stop|restart|start-all|stop-all]",
           category: "mcp"
         )
       )

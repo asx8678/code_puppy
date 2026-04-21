@@ -36,7 +36,7 @@ defmodule CodePuppyControl.CLI.SlashCommands.Commands.MCPTest do
           name: "mcp",
           description: "Show MCP server status and management",
           handler: &MCP.handle_mcp/2,
-          usage: "/mcp [help|list|status [name]]",
+          usage: "/mcp [help|list|status|start|stop|restart|start-all|stop-all]",
           category: "mcp"
         )
       )
@@ -452,7 +452,9 @@ defmodule CodePuppyControl.CLI.SlashCommands.Commands.MCPTest do
 
     test "/mcp usage is correct" do
       {:ok, cmd} = Registry.get("mcp")
-      assert cmd.usage == "/mcp [help|list|status [name]]"
+      assert cmd.usage =~ "start"
+      assert cmd.usage =~ "stop"
+      assert cmd.usage =~ "restart"
     end
 
     test "/mcp has detailed_help when registered with it" do
@@ -541,6 +543,262 @@ defmodule CodePuppyControl.CLI.SlashCommands.Commands.MCPTest do
 
       assert output =~ "not found"
       assert output =~ "/mcp list"
+    end
+  end
+
+  # ── Lifecycle subcommand: start ───────────────────────────────────────────
+
+  describe "/mcp start" do
+    test "shows usage hint when no server name given" do
+      output =
+        ExUnit.CaptureIO.capture_io(fn ->
+          assert {:continue, _} = MCP.handle_mcp("/mcp start", %{})
+        end)
+
+      assert output =~ "Usage"
+      assert output =~ "/mcp start"
+    end
+
+    test "format_start_result — success" do
+      text = MCP.format_start_result("filesystem", {:ok, "filesystem-abc123"})
+      assert text =~ "✓"
+      assert text =~ "filesystem-abc123"
+    end
+
+    test "format_start_result — already running" do
+      text = MCP.format_start_result("filesystem", {:ok, :already_running})
+      assert text =~ "already running"
+      assert text =~ "filesystem"
+    end
+
+    test "format_start_result — not configured" do
+      text = MCP.format_start_result("nope", {:error, :not_configured})
+      assert text =~ "not found in configuration"
+      assert text =~ "/mcp list"
+    end
+
+    test "format_start_result — supervisor not running" do
+      text = MCP.format_start_result("fs", {:error, :supervisor_not_running})
+      assert text =~ "supervisor is not running"
+    end
+
+    test "format_start_result — generic error" do
+      text = MCP.format_start_result("fs", {:error, :timeout})
+      assert text =~ "Failed to start"
+      assert text =~ ":timeout"
+    end
+  end
+
+  # ── Lifecycle subcommand: stop ───────────────────────────────────────────
+
+  describe "/mcp stop" do
+    test "shows usage hint when no server name given" do
+      output =
+        ExUnit.CaptureIO.capture_io(fn ->
+          assert {:continue, _} = MCP.handle_mcp("/mcp stop", %{})
+        end)
+
+      assert output =~ "Usage"
+      assert output =~ "/mcp stop"
+    end
+
+    test "format_stop_result — success" do
+      text = MCP.format_stop_result("filesystem", :ok)
+      assert text =~ "✓"
+      assert text =~ "Stopped"
+      assert text =~ "filesystem"
+    end
+
+    test "format_stop_result — not running" do
+      text = MCP.format_stop_result("filesystem", {:error, :not_running})
+      assert text =~ "not currently running"
+    end
+
+    test "format_stop_result — supervisor not running" do
+      text = MCP.format_stop_result("fs", {:error, :supervisor_not_running})
+      assert text =~ "supervisor is not running"
+    end
+
+    test "format_stop_result — generic error" do
+      text = MCP.format_stop_result("fs", {:error, :timeout})
+      assert text =~ "Failed to stop"
+    end
+  end
+
+  # ── Lifecycle subcommand: restart ────────────────────────────────────────
+
+  describe "/mcp restart" do
+    test "shows usage hint when no server name given" do
+      output =
+        ExUnit.CaptureIO.capture_io(fn ->
+          assert {:continue, _} = MCP.handle_mcp("/mcp restart", %{})
+        end)
+
+      assert output =~ "Usage"
+      assert output =~ "/mcp restart"
+    end
+
+    test "format_restart_result — success" do
+      text = MCP.format_restart_result("filesystem", {:ok, "filesystem-abc123"})
+      assert text =~ "✓"
+      assert text =~ "Restarted"
+      assert text =~ "filesystem-abc123"
+    end
+
+    test "format_restart_result — not configured" do
+      text = MCP.format_restart_result("nope", {:error, :not_configured})
+      assert text =~ "not found in configuration"
+      assert text =~ "/mcp list"
+    end
+
+    test "format_restart_result — supervisor not running" do
+      text = MCP.format_restart_result("fs", {:error, :supervisor_not_running})
+      assert text =~ "supervisor is not running"
+    end
+
+    test "format_restart_result — generic error" do
+      text = MCP.format_restart_result("fs", {:error, :some_reason})
+      assert text =~ "Failed to restart"
+    end
+  end
+
+  # ── Lifecycle subcommand: start-all ───────────────────────────────────────
+
+  describe "/mcp start-all" do
+    test "format_start_all_result — empty list shows no servers configured" do
+      text = MCP.format_start_all_result([])
+      assert text =~ "No MCP servers configured"
+    end
+
+    test "format_start_all_result — mixed results" do
+      results = [
+        {"fs", {:ok, "fs-abc123"}},
+        {"gh", {:ok, :already_running}},
+        {"bad", {:error, :not_configured}}
+      ]
+
+      text = MCP.format_start_all_result(results)
+      assert text =~ "Starting all configured servers"
+      assert text =~ "✓ Started: fs"
+      assert text =~ "already running"
+      assert text =~ "not configured"
+      assert text =~ "1 started, 1 already running, 1 failed"
+    end
+
+    test "format_start_all_result — all started" do
+      results = [
+        {"fs", {:ok, "fs-abc"}},
+        {"gh", {:ok, "gh-def"}}
+      ]
+
+      text = MCP.format_start_all_result(results)
+      assert text =~ "2 started, 0 already running, 0 failed"
+    end
+  end
+
+  # ── Lifecycle subcommand: stop-all ────────────────────────────────────────
+
+  describe "/mcp stop-all" do
+    test "format_stop_all_result — empty list shows no servers running" do
+      text = MCP.format_stop_all_result([])
+      assert text =~ "No MCP servers currently running"
+    end
+
+    test "format_stop_all_result — mixed results" do
+      results = [
+        {"fs", :ok},
+        {"gh", {:error, :timeout}}
+      ]
+
+      text = MCP.format_stop_all_result(results)
+      assert text =~ "Stopping all running servers"
+      assert text =~ "✓ Stopped: fs"
+      assert text =~ "✗ gh"
+      assert text =~ "1 stopped, 1 failed"
+    end
+
+    test "format_stop_all_result — all stopped" do
+      results = [{"fs", :ok}, {"gh", :ok}]
+
+      text = MCP.format_stop_all_result(results)
+      assert text =~ "2 stopped, 0 failed"
+    end
+  end
+
+  # ── Help includes lifecycle commands ─────────────────────────────────────
+
+  describe "help includes lifecycle commands" do
+    test "format_help includes start/stop/restart/start-all/stop-all" do
+      text = MCP.format_help()
+      assert text =~ "/mcp start"
+      assert text =~ "/mcp stop"
+      assert text =~ "/mcp restart"
+      assert text =~ "/mcp start-all"
+      assert text =~ "/mcp stop-all"
+      assert text =~ "Lifecycle Commands"
+    end
+
+    test "/mcp help shows lifecycle commands via IO" do
+      output =
+        ExUnit.CaptureIO.capture_io(fn ->
+          assert {:continue, _} = MCP.handle_mcp("/mcp help", %{})
+        end)
+
+      assert output =~ "/mcp start"
+      assert output =~ "/mcp stop"
+      assert output =~ "/mcp restart"
+    end
+  end
+
+  # ── Case-insensitive lifecycle subcommands ───────────────────────────────
+
+  describe "case-insensitive lifecycle subcommands" do
+    test "/mcp START shows usage" do
+      output =
+        ExUnit.CaptureIO.capture_io(fn ->
+          assert {:continue, _} = MCP.handle_mcp("/mcp START", %{})
+        end)
+
+      assert output =~ "Usage"
+    end
+
+    test "/mcp STOP shows usage" do
+      output =
+        ExUnit.CaptureIO.capture_io(fn ->
+          assert {:continue, _} = MCP.handle_mcp("/mcp STOP", %{})
+        end)
+
+      assert output =~ "Usage"
+    end
+
+    test "/mcp RESTART shows usage" do
+      output =
+        ExUnit.CaptureIO.capture_io(fn ->
+          assert {:continue, _} = MCP.handle_mcp("/mcp RESTART", %{})
+        end)
+
+      assert output =~ "Usage"
+    end
+
+    test "/mcp START-ALL routes correctly" do
+      output =
+        ExUnit.CaptureIO.capture_io(fn ->
+          assert {:continue, _} = MCP.handle_mcp("/mcp START-ALL", %{})
+        end)
+
+      # Supervisor not running → empty result or no servers configured
+      assert output =~ "No MCP servers configured" or output =~ "Starting all" or
+               output =~ "supervisor"
+    end
+
+    test "/mcp STOP-ALL routes correctly" do
+      output =
+        ExUnit.CaptureIO.capture_io(fn ->
+          assert {:continue, _} = MCP.handle_mcp("/mcp STOP-ALL", %{})
+        end)
+
+      assert output =~ "No MCP servers currently running" or output =~ "Stopping all" or
+               output =~ "supervisor"
     end
   end
 end
