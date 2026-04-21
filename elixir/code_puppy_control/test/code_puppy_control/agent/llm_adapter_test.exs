@@ -294,7 +294,7 @@ defmodule CodePuppyControl.Agent.LLMAdapterTest do
     end
 
     test "mixed key styles in tool_call_id extraction" do
-      msgs = [%{role: :tool, content: "result", "tool_call_id" => "call_mixed"}]
+      msgs = [%{:role => :tool, :content => "result", "tool_call_id" => "call_mixed"}]
       ProviderMock.set_response(%{id: "r1", content: "ok", tool_calls: []})
 
       assert {:ok, _} = LLMAdapter.stream_chat(msgs, [], [model: "test"], fn _ -> :ok end)
@@ -502,7 +502,7 @@ defmodule CodePuppyControl.Agent.LLMAdapterTest do
       msgs = [%{"role" => "user", "content" => "hello"}]
       ProviderMock.set_error(:timeout)
 
-      callback_called = :atomics.new(1)
+      callback_called = :atomics.new(1, [])
 
       assert {:error, :timeout} = LLMAdapter.stream_chat(msgs, [], [model: "test"], fn _ ->
         :atomics.add(callback_called, 1, 1)
@@ -583,7 +583,7 @@ defmodule CodePuppyControl.Agent.LLMAdapterTest do
       msgs = [%{"role" => "user", "content" => "hello"}]
       ProviderMock.set_silent_ok()
 
-      callback_called = :atomics.new(1)
+      callback_called = :atomics.new(1, [])
 
       task = Task.async(fn ->
         LLMAdapter.stream_chat(msgs, [], [model: "test"], fn _ ->
