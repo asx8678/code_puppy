@@ -1,8 +1,14 @@
 defmodule CodePuppyControl.REPL.SendToAgentTest do
+  @moduledoc """
+  Tests for send_to_agent/2 (tested via handle_input/2) and the
+  Agent.LLMAdapter provider contract.
+
+  Extracted from loop_test.exs (bd-250 Phase 3 + Phase 4).
+  """
   use ExUnit.Case, async: false
 
   alias CodePuppyControl.Agent.State
-  alias CodePuppyControl.REPL.{History, Loop}
+  alias CodePuppyControl.REPL.Loop
   alias CodePuppyControl.Tools.AgentCatalogue
 
   # ---------------------------------------------------------------------------
@@ -91,33 +97,61 @@ defmodule CodePuppyControl.REPL.SendToAgentTest do
     end
   end
 
-  # Start a fresh History GenServer for each test.
-  # async: false because we share the registered name and disk file.
-  setup do
-    case Process.whereis(History) do
-      nil -> :ok
-      pid -> GenServer.stop(pid, :shutdown, 5000)
+  # ---------------------------------------------------------------------------
+  # Shared setup helpers
+  # ---------------------------------------------------------------------------
+
+  defp setup_mock_llm_and_session(_context) do
+    session_id = :crypto.strong_rand_bytes(4) |> Base.encode16(case: :lower)
+
+    prev_llm = Application.get_env(:code_puppy_control, :repl_llm_module)
+    Application.put_env(:code_puppy_control, :repl_llm_module, REPLTestMockLLM)
+    REPLTestMockLLM.reset()
+
+    try do
+      AgentCatalogue.discover_agent_modules()
+    catch
+      _, _ -> :ok
     end
 
-    # Wipe the history file so tests start clean
-    File.rm(History.history_path())
-
-    {:ok, _pid} = History.start_link()
-
     on_exit(fn ->
-      try do
-        case Process.whereis(History) do
-          nil -> :ok
-          pid -> GenServer.stop(pid, :shutdown, 5000)
-        end
-      catch
-        :exit, _ -> :ok
+      if prev_llm do
+        Application.put_env(:code_puppy_control, :repl_llm_module, prev_llm)
+      else
+        Application.delete_env(:code_puppy_control, :repl_llm_module)
       end
 
-      File.rm(History.history_path())
+      REPLTestMockLLM.stop()
+
+      try do
+        State.clear_messages(session_id, "code_puppy")
+      catch
+        _, _ -> :ok
+      end
+
+      # Clean up any renderer process started for this session.
+      case Registry.lookup(CodePuppyControl.REPL.RendererRegistry, session_id) do
+        [] -> :ok
+
+        [{pid, _}] ->
+          if Process.alive?(pid) do
+            try do
+              GenServer.stop(pid, :normal, 1_000)
+            catch
+              :exit, _ -> :ok
+            end
+          end
+      end
     end)
 
-    :ok
+    state = %Loop{
+      session_id: session_id,
+      agent: "code_puppy",
+      model: "claude-sonnet-4-20250514",
+      running: true
+    }
+
+    {:ok, state: state, session_id: session_id}
   end
 
   # ===========================================================================
@@ -128,64 +162,7 @@ defmodule CodePuppyControl.REPL.SendToAgentTest do
   # handle_input/2 which routes non-command, non-passthrough input to it.
 
   describe "send_to_agent/2 via handle_input/2 — happy path" do
-    setup do
-      # Fresh session ID per test to avoid cross-test pollution
-      session_id = :crypto.strong_rand_bytes(4) |> Base.encode16(case: :lower)
-
-      # Swap in mock LLM via app env
-      prev_llm = Application.get_env(:code_puppy_control, :repl_llm_module)
-      Application.put_env(:code_puppy_control, :repl_llm_module, REPLTestMockLLM)
-      REPLTestMockLLM.reset()
-
-      # Ensure the catalogue is running and has discovered agents.
-      # In the test environment, the app supervision tree starts the catalogue,
-      # but the "code_puppy" agent may not be registered if the catalogue was
-      # cleared by a prior test's on_exit. Re-discover to be safe.
-      try do
-        AgentCatalogue.discover_agent_modules()
-      catch
-        _, _ -> :ok
-      end
-
-      on_exit(fn ->
-        # Restore previous LLM module config
-        if prev_llm do
-          Application.put_env(:code_puppy_control, :repl_llm_module, prev_llm)
-        else
-          Application.delete_env(:code_puppy_control, :repl_llm_module)
-        end
-
-        REPLTestMockLLM.stop()
-
-        # Clean up Agent.State for this session
-        try do
-          State.clear_messages(session_id, "code_puppy")
-        catch
-          _, _ -> :ok
-        end
-
-        # Clean up any renderer process started for this session
-        renderer_name =
-          String.to_atom("Elixir.CodePuppyControl.REPL.Renderer.#{session_id}")
-
-        case Process.whereis(renderer_name) do
-          nil -> :ok
-          pid -> GenServer.stop(pid, :normal, 1_000)
-        end
-      end)
-
-      # Use "code_puppy" (underscore) to match the catalogue registration.
-      # The agent's name/0 callback returns :code_puppy, which becomes
-      # "code_puppy" in the ETS table.
-      state = %Loop{
-        session_id: session_id,
-        agent: "code_puppy",
-        model: "claude-sonnet-4-20250514",
-        running: true
-      }
-
-      {:ok, state: state, session_id: session_id}
-    end
+    setup :setup_mock_llm_and_session
 
     test "dispatches prompt, streams response, persists both messages", %{
       state: state,
@@ -241,52 +218,7 @@ defmodule CodePuppyControl.REPL.SendToAgentTest do
   end
 
   describe "send_to_agent/2 via handle_input/2 — error paths" do
-    setup do
-      session_id = :crypto.strong_rand_bytes(4) |> Base.encode16(case: :lower)
-
-      prev_llm = Application.get_env(:code_puppy_control, :repl_llm_module)
-      Application.put_env(:code_puppy_control, :repl_llm_module, REPLTestMockLLM)
-      REPLTestMockLLM.reset()
-
-      try do
-        AgentCatalogue.discover_agent_modules()
-      catch
-        _, _ -> :ok
-      end
-
-      on_exit(fn ->
-        if prev_llm do
-          Application.put_env(:code_puppy_control, :repl_llm_module, prev_llm)
-        else
-          Application.delete_env(:code_puppy_control, :repl_llm_module)
-        end
-
-        REPLTestMockLLM.stop()
-
-        try do
-          State.clear_messages(session_id, "code_puppy")
-        catch
-          _, _ -> :ok
-        end
-
-        renderer_name =
-          String.to_atom("Elixir.CodePuppyControl.REPL.Renderer.#{session_id}")
-
-        case Process.whereis(renderer_name) do
-          nil -> :ok
-          pid -> GenServer.stop(pid, :normal, 1_000)
-        end
-      end)
-
-      state = %Loop{
-        session_id: session_id,
-        agent: "code_puppy",
-        model: "claude-sonnet-4-20250514",
-        running: true
-      }
-
-      {:ok, state: state, session_id: session_id}
-    end
+    setup :setup_mock_llm_and_session
 
     test "LLM error: prints error, rolls back user message, REPL continues", %{
       state: state,
@@ -332,52 +264,7 @@ defmodule CodePuppyControl.REPL.SendToAgentTest do
   end
 
   describe "send_to_agent/2 via handle_input/2 — model override" do
-    setup do
-      session_id = :crypto.strong_rand_bytes(4) |> Base.encode16(case: :lower)
-
-      prev_llm = Application.get_env(:code_puppy_control, :repl_llm_module)
-      Application.put_env(:code_puppy_control, :repl_llm_module, REPLTestMockLLM)
-      REPLTestMockLLM.reset()
-
-      try do
-        AgentCatalogue.discover_agent_modules()
-      catch
-        _, _ -> :ok
-      end
-
-      on_exit(fn ->
-        if prev_llm do
-          Application.put_env(:code_puppy_control, :repl_llm_module, prev_llm)
-        else
-          Application.delete_env(:code_puppy_control, :repl_llm_module)
-        end
-
-        REPLTestMockLLM.stop()
-
-        try do
-          State.clear_messages(session_id, "code_puppy")
-        catch
-          _, _ -> :ok
-        end
-
-        renderer_name =
-          String.to_atom("Elixir.CodePuppyControl.REPL.Renderer.#{session_id}")
-
-        case Process.whereis(renderer_name) do
-          nil -> :ok
-          pid -> GenServer.stop(pid, :normal, 1_000)
-        end
-      end)
-
-      state = %Loop{
-        session_id: session_id,
-        agent: "code_puppy",
-        model: "claude-sonnet-4-20250514",
-        running: true
-      }
-
-      {:ok, state: state, session_id: session_id}
-    end
+    setup :setup_mock_llm_and_session
 
     test "model override from REPL state flows to llm_module.stream_chat opts", %{
       state: state
@@ -392,6 +279,81 @@ defmodule CodePuppyControl.REPL.SendToAgentTest do
       # The mock records the opts it received; the :model key should match
       # the model override from the REPL state
       assert Keyword.get(REPLTestMockLLM.last_opts(), :model) == "gpt-4o-2024-08-06"
+    end
+  end
+
+  # ===========================================================================
+  # Agent.LLMAdapter provider contract tests (bd-250 Phase 4)
+  # ===========================================================================
+
+  defmodule REPLTestProviderMock do
+    @moduledoc "Mock of CodePuppyControl.LLM.stream_chat/4 provider contract."
+
+    def start_if_needed do
+      case Process.whereis(__MODULE__) do
+        nil -> {:ok, _pid} = Elixir.Agent.start_link(fn -> %{} end, name: __MODULE__)
+        _ -> :ok
+      end
+    end
+
+    def set_response(text), do: start_if_needed() || Elixir.Agent.update(__MODULE__, &Map.put(&1, :text, text))
+    def captured_messages, do: (start_if_needed(); Elixir.Agent.get(__MODULE__, & &1)[:messages] || [])
+    def captured_tools, do: (start_if_needed(); Elixir.Agent.get(__MODULE__, & &1)[:tools] || [])
+    def reset, do: (start_if_needed(); Elixir.Agent.update(__MODULE__, fn _ -> %{} end))
+    def stop do
+      try do
+        Elixir.Agent.stop(__MODULE__)
+      catch
+        :exit, _ -> :ok
+      end
+    end
+
+    # Provider contract: atom-keyed messages, schema-map tools, raw events, returns :ok
+    def stream_chat(messages, tools, _opts, callback_fn) do
+      start_if_needed()
+      Elixir.Agent.update(__MODULE__, &Map.merge(&1, %{messages: messages, tools: tools}))
+      text = Elixir.Agent.get(__MODULE__, & &1)[:text] || "ok"
+      callback_fn.({:part_start, %{type: :text, index: 0, id: nil}})
+      callback_fn.({:part_delta, %{type: :text, index: 0, text: text, name: nil, arguments: nil}})
+      callback_fn.({:part_end, %{type: :text, index: 0, id: nil}})
+      callback_fn.({:done, %{id: "r1", model: "test", content: text, tool_calls: [],
+                   finish_reason: "stop", usage: %{prompt_tokens: 0, completion_tokens: 0, total_tokens: 0}}})
+      :ok
+    end
+  end
+
+  describe "Agent.LLMAdapter provider contract" do
+    setup do
+      prev = Application.get_env(:code_puppy_control, :llm_adapter_provider)
+      Application.put_env(:code_puppy_control, :llm_adapter_provider, REPLTestProviderMock)
+      REPLTestProviderMock.reset()
+      on_exit(fn ->
+        if prev, do: Application.put_env(:code_puppy_control, :llm_adapter_provider, prev),
+          else: Application.delete_env(:code_puppy_control, :llm_adapter_provider)
+        REPLTestProviderMock.stop()
+      end)
+      :ok
+    end
+
+    test "converts parts-format user message to content-format for provider" do
+      msgs = [%{"role" => "user", "parts" => [%{"type" => "text", "text" => "hi"}]}]
+      REPLTestProviderMock.set_response("hello")
+      assert {:ok, _} = CodePuppyControl.Agent.LLMAdapter.stream_chat(msgs, [], [model: "test"], fn _ -> :ok end)
+      assert [%{role: "user", content: "hi"}] = REPLTestProviderMock.captured_messages()
+    end
+
+    test "converts atom-keyed messages to provider format" do
+      msgs = [%{role: :assistant, content: "I can help!"}]
+      REPLTestProviderMock.set_response("ok")
+      CodePuppyControl.Agent.LLMAdapter.stream_chat(msgs, [], [model: "test"], fn _ -> :ok end)
+      assert [%{role: "assistant", content: "I can help!"}] = REPLTestProviderMock.captured_messages()
+    end
+
+    test "captures {:done, response} and returns Agent.LLM contract shape" do
+      msgs = [%{"role" => "user", "content" => "hello"}]
+      assert {:ok, resp} = CodePuppyControl.Agent.LLMAdapter.stream_chat(msgs, [], [model: "test"], fn _ -> :ok end)
+      assert resp.text == "ok"
+      assert resp.tool_calls == []
     end
   end
 end
