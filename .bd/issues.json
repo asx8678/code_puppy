@@ -4943,7 +4943,7 @@
       "id": "bd-247",
       "title": "Full /compact and /truncate implementation",
       "description": "Replace the /compact and /truncate stubs with real implementations that talk to the agent summarization port and message history. /compact should summarize and compact conversation history; /truncate should trim to the last N messages. Depends on agent summarization being wired (CurrentAgent.summarize_messages). Discovered from bd-163 (slash-command dispatch).",
-      "status": "open",
+      "status": "closed",
       "priority": 2,
       "type": "task",
       "labels": [
@@ -4955,13 +4955,14 @@
         ]
       },
       "created_at": "2026-04-21T08:48:07.596532",
-      "updated_at": "2026-04-21T15:21:09.833566",
+      "updated_at": "2026-04-21T15:23:35.185327",
       "comments": [
         "Claimed by pack-leader-019daf. Scouting implementation for /compact and /truncate in Elixir REPL slash commands; next step is isolated worktree + delegated coding.",
         "Claimed by pack-leader-019daf. Starting isolated worktree + delegated implementation for real /compact and /truncate behavior in Elixir REPL slash commands.",
         "Shepherd review: REQUEST_CHANGES. Two correctness blockers: (1) /compact and /truncate must resolve the real Agent.State key, not blindly use state.agent display string (kebab-case vs snake_case). (2) /truncate must only preserve the first message when it is actually a system/instructions message; normal Elixir Agent.State history usually starts with user/assistant messages, so otherwise truncate to the last N. Add runtime-shaped regression tests.",
         "Shepherd review: APPROVE. Final state resolves canonical Agent.State key lookup and correct /truncate semantics for user-first vs system/instructions-first histories.",
-        "Watchdog QA: APPROVE. mix test session_test.exs, loop_test.exs, and state_test.exs all passed (23/23/23 tests, 0 failures)."
+        "Watchdog QA: APPROVE. mix test session_test.exs, loop_test.exs, and state_test.exs all passed (23/23/23 tests, 0 failures).",
+        "Merged locally to main via retriever at merge commit dcda2d8b. Post-merge sanity on main passed: mix test test/code_puppy_control/cli/slash_commands/commands/session_test.exs test/code_puppy_control/repl/loop_test.exs test/code_puppy_control/agent/state_test.exs (69 tests, 0 failures)."
       ]
     },
     "bd-248": {
