@@ -142,6 +142,13 @@ defmodule CodePuppyControl.CLI.ParserTest do
     test "unknown flag returns error" do
       assert {:error, msg} = Parser.parse(["--nonexistent"])
       assert msg =~ "nonexistent"
+      refute msg =~ "----", "error message should not have duplicated '--' prefix (bd-242)"
+    end
+
+    test "unknown flag error message preserves single '--' prefix (bd-242)" do
+      assert {:error, msg} = Parser.parse(["--nonsense"])
+      assert msg =~ "--nonsense"
+      refute msg =~ "----nonsense"
     end
   end
 
