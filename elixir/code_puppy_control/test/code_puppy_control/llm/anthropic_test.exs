@@ -302,7 +302,10 @@ defmodule CodePuppyControl.LLM.Providers.AnthropicTest do
 
       opts =
         @opts
-        |> Keyword.put(:extra_headers, [{"x-custom-header", "anthropic-value"}, {"x-another", "99"}])
+        |> Keyword.put(:extra_headers, [
+          {"x-custom-header", "anthropic-value"},
+          {"x-another", "99"}
+        ])
 
       Anthropic.chat(@messages, [], opts)
 

@@ -22,25 +22,28 @@ defmodule CodePuppyControl.TUI.Screens.Help do
   # ── Commands Data ─────────────────────────────────────────────────────────
 
   @commands [
-    {"Chat Commands", [
-      {"<text>", "Send a message to the current agent"},
-      {"/help", "Show this help screen"},
-      {"/config", "Open the configuration viewer/editor"},
-      {"/model <name>", "Switch the active model"},
-      {"/clear", "Clear conversation history"},
-      {"/quit", "Exit Code Puppy"}
-    ]},
-    {"Navigation", [
-      {"q", "Return to previous screen from any overlay"},
-      {"Enter", "Confirm / return from overlay"},
-      {"Ctrl+C", "Force quit the TUI"}
-    ]},
-    {"Config Screen", [
-      {"set <KEY> <VALUE>", "Set a configuration key"},
-      {"get <KEY>", "Display the value of a config key"},
-      {"keys", "List all config keys"},
-      {"q", "Return to chat screen"}
-    ]}
+    {"Chat Commands",
+     [
+       {"<text>", "Send a message to the current agent"},
+       {"/help", "Show this help screen"},
+       {"/config", "Open the configuration viewer/editor"},
+       {"/model <name>", "Switch the active model"},
+       {"/clear", "Clear conversation history"},
+       {"/quit", "Exit Code Puppy"}
+     ]},
+    {"Navigation",
+     [
+       {"q", "Return to previous screen from any overlay"},
+       {"Enter", "Confirm / return from overlay"},
+       {"Ctrl+C", "Force quit the TUI"}
+     ]},
+    {"Config Screen",
+     [
+       {"set <KEY> <VALUE>", "Set a configuration key"},
+       {"get <KEY>", "Display the value of a config key"},
+       {"keys", "List all config keys"},
+       {"q", "Return to chat screen"}
+     ]}
   ]
 
   # ── Screen Callbacks ──────────────────────────────────────────────────────

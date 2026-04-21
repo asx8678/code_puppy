@@ -171,6 +171,7 @@ defmodule CodePuppyControl.TUI.Markdown do
 
   defp extract_blockquote_text(line) do
     trimmed = String.trim_leading(line)
+
     String.trim_leading(trimmed, ">")
     |> String.trim()
   end

@@ -98,7 +98,9 @@ defmodule CodePuppyControl.LLM.ProviderParityTest do
           {:error, reason} ->
             # Some models might not be in registry — that's OK for this test
             # as long as the type IS in the provider map
-            flunk("Unexpected error from LLM.provider_for/1 for #{inspect(model_name)}: #{inspect(reason)}")
+            flunk(
+              "Unexpected error from LLM.provider_for/1 for #{inspect(model_name)}: #{inspect(reason)}"
+            )
         end
       end
     end

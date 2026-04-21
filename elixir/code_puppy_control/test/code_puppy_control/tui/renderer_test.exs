@@ -10,9 +10,10 @@ defmodule CodePuppyControl.TUI.RendererTest do
   # We push events directly via Renderer.push/2.
   defp start_renderer(opts \\ []) do
     # Use a unique name so parallel tests don't clash
-    name = Keyword.get_lazy(opts, :name, fn ->
-      :"renderer_test_#{System.unique_integer([:positive])}"
-    end)
+    name =
+      Keyword.get_lazy(opts, :name, fn ->
+        :"renderer_test_#{System.unique_integer([:positive])}"
+      end)
 
     {:ok, pid} = Renderer.start_link(opts ++ [name: name])
     {pid, name}
@@ -112,7 +113,13 @@ defmodule CodePuppyControl.TUI.RendererTest do
       Renderer.push(name, %Event.ToolCallStart{index: 1, name: "read_file"})
       Process.sleep(50)
 
-      Renderer.push(name, %Event.ToolCallEnd{index: 1, name: "read_file", id: "tc-1", arguments: "{}"})
+      Renderer.push(name, %Event.ToolCallEnd{
+        index: 1,
+        name: "read_file",
+        id: "tc-1",
+        arguments: "{}"
+      })
+
       Process.sleep(50)
 
       state = :sys.get_state(name)
@@ -338,7 +345,13 @@ defmodule CodePuppyControl.TUI.RendererTest do
       {pid, name} = start_renderer()
 
       state_before = :sys.get_state(name)
-      Renderer.push(name, %Event.UsageUpdate{prompt_tokens: 10, completion_tokens: 5, total_tokens: 15})
+
+      Renderer.push(name, %Event.UsageUpdate{
+        prompt_tokens: 10,
+        completion_tokens: 5,
+        total_tokens: 15
+      })
+
       Process.sleep(10)
 
       state_after = :sys.get_state(name)

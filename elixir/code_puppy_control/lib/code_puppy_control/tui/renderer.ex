@@ -276,23 +276,26 @@ defmodule CodePuppyControl.TUI.Renderer do
       stop_spinner(ref)
     end)
 
-    {:reply, :ok, %__MODULE__{
-      session_id: state.session_id,
-      run_id: state.run_id,
-      topics: state.topics,
-      start_time: System.monotonic_time(:millisecond)
-    }}
+    {:reply, :ok,
+     %__MODULE__{
+       session_id: state.session_id,
+       run_id: state.run_id,
+       topics: state.topics,
+       start_time: System.monotonic_time(:millisecond)
+     }}
   end
 
   # ── Stream.Event Handlers ─────────────────────────────────────────────────
 
   defp handle_stream_event(%Event.TextStart{index: idx}, state) do
-    state = %{state |
-      streaming_parts: MapSet.put(state.streaming_parts, idx),
-      text_parts: MapSet.put(state.text_parts, idx),
-      text_buffer: Map.put(state.text_buffer, idx, []),
-      banner_printed: MapSet.put(state.banner_printed, idx)
+    state = %{
+      state
+      | streaming_parts: MapSet.put(state.streaming_parts, idx),
+        text_parts: MapSet.put(state.text_parts, idx),
+        text_buffer: Map.put(state.text_buffer, idx, []),
+        banner_printed: MapSet.put(state.banner_printed, idx)
     }
+
     print_banner(state, "AGENT RESPONSE", :blue, "💬")
   end
 
@@ -323,12 +326,14 @@ defmodule CodePuppyControl.TUI.Renderer do
   end
 
   defp handle_stream_event(%Event.ThinkingStart{index: idx}, state) do
-    state = %{state |
-      streaming_parts: MapSet.put(state.streaming_parts, idx),
-      thinking_parts: MapSet.put(state.thinking_parts, idx),
-      thinking_buffer: Map.put(state.thinking_buffer, idx, []),
-      banner_printed: MapSet.put(state.banner_printed, idx)
+    state = %{
+      state
+      | streaming_parts: MapSet.put(state.streaming_parts, idx),
+        thinking_parts: MapSet.put(state.thinking_parts, idx),
+        thinking_buffer: Map.put(state.thinking_buffer, idx, []),
+        banner_printed: MapSet.put(state.banner_printed, idx)
     }
+
     print_banner(state, "THINKING", :yellow, "⚡")
   end
 
@@ -351,11 +356,13 @@ defmodule CodePuppyControl.TUI.Renderer do
   end
 
   defp handle_stream_event(%Event.ToolCallStart{index: idx, name: name}, state) do
-    state = %{state |
-      streaming_parts: MapSet.put(state.streaming_parts, idx),
-      tool_parts: MapSet.put(state.tool_parts, idx),
-      banner_printed: MapSet.put(state.banner_printed, idx)
+    state = %{
+      state
+      | streaming_parts: MapSet.put(state.streaming_parts, idx),
+        tool_parts: MapSet.put(state.tool_parts, idx),
+        banner_printed: MapSet.put(state.banner_printed, idx)
     }
+
     state = print_tool_banner(state, name)
     start_tool_spinner(state, idx, name)
   end
@@ -468,11 +475,12 @@ defmodule CodePuppyControl.TUI.Renderer do
   # ── Part Cleanup ──────────────────────────────────────────────────────────
 
   defp cleanup_part(state, idx) do
-    %{state |
-      streaming_parts: MapSet.delete(state.streaming_parts, idx),
-      thinking_parts: MapSet.delete(state.thinking_parts, idx),
-      text_parts: MapSet.delete(state.text_parts, idx),
-      tool_parts: MapSet.delete(state.tool_parts, idx)
+    %{
+      state
+      | streaming_parts: MapSet.delete(state.streaming_parts, idx),
+        thinking_parts: MapSet.delete(state.thinking_parts, idx),
+        text_parts: MapSet.delete(state.text_parts, idx),
+        tool_parts: MapSet.delete(state.tool_parts, idx)
     }
   end
 
@@ -515,9 +523,10 @@ defmodule CodePuppyControl.TUI.Renderer do
 
     case Owl.Spinner.start(spinner_opts) do
       {:ok, _pid} ->
-        %{state |
-          spinner_ids: Map.put(state.spinner_ids, idx, ref),
-          loading_index: state.loading_index + 1
+        %{
+          state
+          | spinner_ids: Map.put(state.spinner_ids, idx, ref),
+            loading_index: state.loading_index + 1
         }
 
       {:error, reason} ->
@@ -623,5 +632,4 @@ defmodule CodePuppyControl.TUI.Renderer do
   defp owl_puts(data) do
     Owl.IO.puts(data)
   end
-
 end

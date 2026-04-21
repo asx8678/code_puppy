@@ -178,8 +178,12 @@ defmodule CodePuppyControl.Config.GoldenFileTest do
                  "Model #{inspect(model_id)} name is not a string: #{inspect(model["name"])}"
 
           case model["context_length"] do
-            nil -> :ok
-            cl when is_integer(cl) and cl > 0 -> :ok
+            nil ->
+              :ok
+
+            cl when is_integer(cl) and cl > 0 ->
+              :ok
+
             other ->
               flunk("Model #{inspect(model_id)} context_length is invalid: #{inspect(other)}")
           end

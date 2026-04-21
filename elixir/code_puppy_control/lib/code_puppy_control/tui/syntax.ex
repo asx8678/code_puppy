@@ -116,7 +116,12 @@ defmodule CodePuppyControl.TUI.Syntax do
       constants: ~w(true false nil),
       comment_single: ~r/#.*$/,
       comment_multi: nil,
-      string_delimiters: [~r/"""[\s\S]*?"""/, ~r/'''[\s\S]*?'''/, ~r/"(?:[^"\\]|\\.)*"/, ~r/'(?:[^'\\]|\\.)*'/],
+      string_delimiters: [
+        ~r/"""[\s\S]*?"""/,
+        ~r/'''[\s\S]*?'''/,
+        ~r/"(?:[^"\\]|\\.)*"/,
+        ~r/'(?:[^'\\]|\\.)*'/
+      ],
       attribute_prefix: ~r/@[a-z_][\w]*!?\??/
     }
   end
@@ -143,7 +148,12 @@ defmodule CodePuppyControl.TUI.Syntax do
       constants: ~w(True False None),
       comment_single: ~r/#.*$/,
       comment_multi: nil,
-      string_delimiters: [~r/"""[\s\S]*?"""/, ~r/'''[\s\S]*?'''/, ~r/"(?:[^"\\]|\\.)*"/, ~r/'(?:[^'\\]|\\.)*'/],
+      string_delimiters: [
+        ~r/"""[\s\S]*?"""/,
+        ~r/'''[\s\S]*?'''/,
+        ~r/"(?:[^"\\]|\\.)*"/,
+        ~r/'(?:[^'\\]|\\.)*'/
+      ],
       attribute_prefix: ~r/@[\w.]+/
     }
   end
@@ -181,7 +191,9 @@ defmodule CodePuppyControl.TUI.Syntax do
     js = js_config()
 
     Map.merge(js, %{
-      keywords: js.keywords ++ ~w(type interface enum implements namespace declare abstract readonly override),
+      keywords:
+        js.keywords ++
+          ~w(type interface enum implements namespace declare abstract readonly override),
       types: ~w(string number boolean void never any unknown object),
       builtins: js.builtins ++ ~w(Partial Required Readonly Record Pick Omit Exclude Extract)
     })
@@ -343,8 +355,12 @@ defmodule CodePuppyControl.TUI.Syntax do
     {cand_off, _, _, _} = candidate
 
     cond do
-      cand_off < best_off -> candidate
-      cand_off > best_off -> best
+      cand_off < best_off ->
+        candidate
+
+      cand_off > best_off ->
+        best
+
       # Same position — prefer longer match
       true ->
         {_, best_len, _, _} = best

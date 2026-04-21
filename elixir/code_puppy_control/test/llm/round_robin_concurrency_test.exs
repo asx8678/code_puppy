@@ -76,6 +76,7 @@ defmodule CodePuppyControl.LLM.RoundRobinConcurrencyTest do
 
       for model <- models do
         count = Map.get(frequencies, model, 0)
+
         assert count == expected_per_model,
                "#{model} got #{count} requests, expected #{expected_per_model}. " <>
                  "Distribution: #{inspect(frequencies)}"
@@ -104,6 +105,7 @@ defmodule CodePuppyControl.LLM.RoundRobinConcurrencyTest do
 
       for model <- models do
         count = Map.get(frequencies, model, 0)
+
         assert count == expected_per_model,
                "#{model} got #{count} requests, expected #{expected_per_model}. " <>
                  "Distribution: #{inspect(frequencies)}"

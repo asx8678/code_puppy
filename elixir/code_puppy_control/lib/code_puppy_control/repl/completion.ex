@@ -97,6 +97,7 @@ defmodule CodePuppyControl.REPL.Completion do
   @spec complete_file_path(String.t()) :: [String.t()]
   def complete_file_path("@" <> relative_path) do
     cwd = File.cwd!()
+
     complete_path(cwd, relative_path)
     |> Enum.map(fn path -> "@" <> path end)
   end

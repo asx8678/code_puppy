@@ -97,8 +97,18 @@ defmodule CodePuppyControl.Integration.AgentTurnE2ETest do
       cb.({:part_delta, %{type: :text, index: 0, text: "Hello ", name: nil, arguments: nil}})
       cb.({:part_delta, %{type: :text, index: 0, text: "world!", name: nil, arguments: nil}})
       cb.({:part_end, %{type: :text, index: 0, id: nil, name: nil, arguments: nil}})
-      cb.({:done, %{id: "msg-1", model: "test", content: nil, tool_calls: [],
-                     finish_reason: "stop", usage: %{prompt_tokens: 5, completion_tokens: 2, total_tokens: 7}}})
+
+      cb.(
+        {:done,
+         %{
+           id: "msg-1",
+           model: "test",
+           content: nil,
+           tool_calls: [],
+           finish_reason: "stop",
+           usage: %{prompt_tokens: 5, completion_tokens: 2, total_tokens: 7}
+         }}
+      )
 
       {:ok, %{text: "Hello world!", tool_calls: []}}
     end
@@ -116,23 +126,77 @@ defmodule CodePuppyControl.Integration.AgentTurnE2ETest do
       if Enum.any?(messages, fn m -> m[:role] == "tool" or m["role"] == "tool" end) do
         # Turn 2: after tool result, respond with text
         cb.({:part_start, %{type: :text, index: 0, id: nil}})
-        cb.({:part_delta, %{type: :text, index: 0, text: "Tool executed!", name: nil, arguments: nil}})
+
+        cb.(
+          {:part_delta,
+           %{type: :text, index: 0, text: "Tool executed!", name: nil, arguments: nil}}
+        )
+
         cb.({:part_end, %{type: :text, index: 0, id: nil, name: nil, arguments: nil}})
-        cb.({:done, %{id: "msg-3", model: "test", content: nil, tool_calls: [],
-                       finish_reason: "stop", usage: nil}})
+
+        cb.(
+          {:done,
+           %{
+             id: "msg-3",
+             model: "test",
+             content: nil,
+             tool_calls: [],
+             finish_reason: "stop",
+             usage: nil
+           }}
+        )
 
         {:ok, %{text: "Tool executed!", tool_calls: []}}
       else
         # Turn 1: request a tool call
         cb.({:part_start, %{type: :tool_call, index: 0, id: "tc-e2e-1"}})
-        cb.({:part_delta, %{type: :tool_call, index: 0, text: nil, name: "e2e_test_tool", arguments: nil}})
-        cb.({:part_delta, %{type: :tool_call, index: 0, text: nil, name: nil, arguments: "{\"input\": \"hello\"}"}})
-        cb.({:part_end, %{type: :tool_call, index: 0, id: "tc-e2e-1", name: "e2e_test_tool", arguments: "{\"input\": \"hello\"}"}})
-        cb.({:done, %{id: "msg-2", model: "test", content: nil,
-                       tool_calls: [%{id: "tc-e2e-1", name: :e2e_test_tool, arguments: %{"input" => "hello"}}],
-                       finish_reason: "tool_calls", usage: nil}})
 
-        {:ok, %{text: nil, tool_calls: [%{id: "tc-e2e-1", name: :e2e_test_tool, arguments: %{"input" => "hello"}}]}}
+        cb.(
+          {:part_delta,
+           %{type: :tool_call, index: 0, text: nil, name: "e2e_test_tool", arguments: nil}}
+        )
+
+        cb.(
+          {:part_delta,
+           %{
+             type: :tool_call,
+             index: 0,
+             text: nil,
+             name: nil,
+             arguments: "{\"input\": \"hello\"}"
+           }}
+        )
+
+        cb.(
+          {:part_end,
+           %{
+             type: :tool_call,
+             index: 0,
+             id: "tc-e2e-1",
+             name: "e2e_test_tool",
+             arguments: "{\"input\": \"hello\"}"
+           }}
+        )
+
+        cb.(
+          {:done,
+           %{
+             id: "msg-2",
+             model: "test",
+             content: nil,
+             tool_calls: [
+               %{id: "tc-e2e-1", name: :e2e_test_tool, arguments: %{"input" => "hello"}}
+             ],
+             finish_reason: "tool_calls",
+             usage: nil
+           }}
+        )
+
+        {:ok,
+         %{
+           text: nil,
+           tool_calls: [%{id: "tc-e2e-1", name: :e2e_test_tool, arguments: %{"input" => "hello"}}]
+         }}
       end
     end
   end
@@ -156,14 +220,53 @@ defmodule CodePuppyControl.Integration.AgentTurnE2ETest do
       tc_id = "tc-turn-#{turn}"
 
       cb.({:part_start, %{type: :tool_call, index: 0, id: tc_id}})
-      cb.({:part_delta, %{type: :tool_call, index: 0, text: nil, name: "e2e_test_tool", arguments: nil}})
-      cb.({:part_delta, %{type: :tool_call, index: 0, text: nil, name: nil, arguments: "{\"input\": \"turn-#{turn}\"}"}})
-      cb.({:part_end, %{type: :tool_call, index: 0, id: tc_id, name: "e2e_test_tool", arguments: "{\"input\": \"turn-#{turn}\"}"}})
-      cb.({:done, %{id: "msg-#{turn}", model: "test", content: nil,
-                     tool_calls: [%{id: tc_id, name: :e2e_test_tool, arguments: %{"input" => "turn-#{turn}"}}],
-                     finish_reason: "tool_calls", usage: nil}})
 
-      {:ok, %{text: nil, tool_calls: [%{id: tc_id, name: :e2e_test_tool, arguments: %{"input" => "turn-#{turn}"}}]}}
+      cb.(
+        {:part_delta,
+         %{type: :tool_call, index: 0, text: nil, name: "e2e_test_tool", arguments: nil}}
+      )
+
+      cb.(
+        {:part_delta,
+         %{
+           type: :tool_call,
+           index: 0,
+           text: nil,
+           name: nil,
+           arguments: "{\"input\": \"turn-#{turn}\"}"
+         }}
+      )
+
+      cb.(
+        {:part_end,
+         %{
+           type: :tool_call,
+           index: 0,
+           id: tc_id,
+           name: "e2e_test_tool",
+           arguments: "{\"input\": \"turn-#{turn}\"}"
+         }}
+      )
+
+      cb.(
+        {:done,
+         %{
+           id: "msg-#{turn}",
+           model: "test",
+           content: nil,
+           tool_calls: [
+             %{id: tc_id, name: :e2e_test_tool, arguments: %{"input" => "turn-#{turn}"}}
+           ],
+           finish_reason: "tool_calls",
+           usage: nil
+         }}
+      )
+
+      {:ok,
+       %{
+         text: nil,
+         tool_calls: [%{id: tc_id, name: :e2e_test_tool, arguments: %{"input" => "turn-#{turn}"}}]
+       }}
     end
   end
 
@@ -241,7 +344,8 @@ defmodule CodePuppyControl.Integration.AgentTurnE2ETest do
       state = Loop.get_state(pid)
       assert state.completed == true
       assert state.turn_number == 1
-      assert state.message_count == 2  # user + assistant
+      # user + assistant
+      assert state.message_count == 2
 
       events = flush_events()
       types = event_types(events)

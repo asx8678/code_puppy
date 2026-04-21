@@ -116,7 +116,8 @@ defmodule CodePuppyControl.TUI.Screens.Config do
         Enum.map(keys, fn key ->
           value = Config.get_value(key) || ""
           # Truncate long values for display
-          display_value = if byte_size(value) > 60, do: binary_part(value, 0, 57) <> "...", else: value
+          display_value =
+            if byte_size(value) > 60, do: binary_part(value, 0, 57) <> "...", else: value
 
           [
             Owl.Data.tag(key, :cyan),

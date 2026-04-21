@@ -122,17 +122,14 @@ defmodule CodePuppyControl.REPL.Input do
       "\"", {depth, :string} -> {depth, nil}
       "'", {depth, nil} -> {depth, :single_string}
       "'", {depth, :single_string} -> {depth, nil}
-
       # Opening delimiters (not inside string)
       "(", {depth, nil} -> {depth + 1, nil}
       "[", {depth, nil} -> {depth + 1, nil}
       "{", {depth, nil} -> {depth + 1, nil}
-
       # Closing delimiters (not inside string)
       ")", {depth, nil} -> {depth - 1, nil}
       "]", {depth, nil} -> {depth - 1, nil}
       "}", {depth, nil} -> {depth - 1, nil}
-
       # Any other character
       _, acc -> acc
     end)

@@ -54,7 +54,9 @@ defmodule CodePuppyControl.TUI.AppTest do
 
     on_exit(fn ->
       case Process.whereis(name) do
-        nil -> :ok
+        nil ->
+          :ok
+
         pid ->
           try do
             GenServer.stop(pid, :shutdown, 5000)

@@ -231,8 +231,12 @@ defmodule CodePuppyControl.REPL.History do
       |> Enum.join("\n")
 
     case File.write(path, content) do
-      :ok -> :ok
-      {:error, reason} -> Logger.warning("History: failed to save (#{inspect(reason)})"); :ok
+      :ok ->
+        :ok
+
+      {:error, reason} ->
+        Logger.warning("History: failed to save (#{inspect(reason)})")
+        :ok
     end
   end
 end

@@ -122,6 +122,7 @@ defmodule CodePuppyControl.LLM.ModelFactoryErrorsTest do
         assert {:error, {:json_decode_error, _}} = result
       after
         File.rm(tmp_path)
+
         if original_path do
           Application.put_env(:code_puppy_control, :bundled_models_path, original_path)
         else
@@ -332,7 +333,9 @@ defmodule CodePuppyControl.LLM.ModelFactoryErrorsTest do
 
     test "succeeds when URL is present" do
       config = %{"url" => "https://example.com/v1", "headers" => %{}}
-      assert {:ok, {"https://example.com/v1", [], nil}} = Credentials.resolve_custom_endpoint(config)
+
+      assert {:ok, {"https://example.com/v1", [], nil}} =
+               Credentials.resolve_custom_endpoint(config)
     end
   end
 
@@ -403,12 +406,15 @@ defmodule CodePuppyControl.LLM.ModelFactoryErrorsTest do
         # On most systems, root can still read 000 files; handle both outcomes
         case result do
           {:error, {:file_read_error, ^tmp_path, :eacces}} -> :ok
-          :ok -> :ok  # Running as root or similar — file was readable
-          {:error, {:file_read_error, ^tmp_path, _}} -> :ok  # Other errno
+          # Running as root or similar — file was readable
+          :ok -> :ok
+          # Other errno
+          {:error, {:file_read_error, ^tmp_path, _}} -> :ok
         end
       after
         File.chmod!(tmp_path, 0o644)
         File.rm(tmp_path)
+
         if original_path do
           Application.put_env(:code_puppy_control, :bundled_models_path, original_path)
         else
@@ -488,8 +494,13 @@ defmodule CodePuppyControl.LLM.ModelFactoryErrorsTest do
 
     test "returns missing for openai model without API key" do
       with_env([{"OPENAI_API_KEY", nil}], fn ->
-        :ets.insert(:model_configs, {"cred-openai-missing", %{"type" => "openai", "name" => "gpt-4o"}})
-        assert {:missing, ["OPENAI_API_KEY"]} = ModelFactory.validate_credentials("cred-openai-missing")
+        :ets.insert(
+          :model_configs,
+          {"cred-openai-missing", %{"type" => "openai", "name" => "gpt-4o"}}
+        )
+
+        assert {:missing, ["OPENAI_API_KEY"]} =
+                 ModelFactory.validate_credentials("cred-openai-missing")
       end)
     after
       :ets.delete(:model_configs, "cred-openai-missing")
@@ -497,8 +508,13 @@ defmodule CodePuppyControl.LLM.ModelFactoryErrorsTest do
 
     test "returns missing for anthropic model without API key" do
       with_env([{"ANTHROPIC_API_KEY", nil}], fn ->
-        :ets.insert(:model_configs, {"cred-anth-missing", %{"type" => "anthropic", "name" => "claude-3"}})
-        assert {:missing, ["ANTHROPIC_API_KEY"]} = ModelFactory.validate_credentials("cred-anth-missing")
+        :ets.insert(
+          :model_configs,
+          {"cred-anth-missing", %{"type" => "anthropic", "name" => "claude-3"}}
+        )
+
+        assert {:missing, ["ANTHROPIC_API_KEY"]} =
+                 ModelFactory.validate_credentials("cred-anth-missing")
       end)
     after
       :ets.delete(:model_configs, "cred-anth-missing")
@@ -506,8 +522,13 @@ defmodule CodePuppyControl.LLM.ModelFactoryErrorsTest do
 
     test "returns missing for gemini model without API key" do
       with_env([{"GEMINI_API_KEY", nil}], fn ->
-        :ets.insert(:model_configs, {"cred-gem-missing", %{"type" => "gemini", "name" => "gemini-pro"}})
-        assert {:missing, ["GEMINI_API_KEY"]} = ModelFactory.validate_credentials("cred-gem-missing")
+        :ets.insert(
+          :model_configs,
+          {"cred-gem-missing", %{"type" => "gemini", "name" => "gemini-pro"}}
+        )
+
+        assert {:missing, ["GEMINI_API_KEY"]} =
+                 ModelFactory.validate_credentials("cred-gem-missing")
       end)
     after
       :ets.delete(:model_configs, "cred-gem-missing")
@@ -515,8 +536,13 @@ defmodule CodePuppyControl.LLM.ModelFactoryErrorsTest do
 
     test "returns missing for openrouter model without API key" do
       with_env([{"OPENROUTER_API_KEY", nil}], fn ->
-        :ets.insert(:model_configs, {"cred-or-missing", %{"type" => "openrouter", "name" => "anthropic/claude-3"}})
-        assert {:missing, ["OPENROUTER_API_KEY"]} = ModelFactory.validate_credentials("cred-or-missing")
+        :ets.insert(
+          :model_configs,
+          {"cred-or-missing", %{"type" => "openrouter", "name" => "anthropic/claude-3"}}
+        )
+
+        assert {:missing, ["OPENROUTER_API_KEY"]} =
+                 ModelFactory.validate_credentials("cred-or-missing")
       end)
     after
       :ets.delete(:model_configs, "cred-or-missing")
