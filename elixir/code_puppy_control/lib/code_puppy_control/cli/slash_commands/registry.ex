@@ -192,7 +192,7 @@ defmodule CodePuppyControl.CLI.SlashCommands.Registry do
       ),
       CommandInfo.new(
         name: "agent",
-        description: "Show or switch the current agent",
+        description: "Interactively select or switch the current agent",
         handler: &Commands.Context.handle_agent/2,
         usage: "/agent [name]",
         category: "context"
@@ -210,13 +210,23 @@ defmodule CodePuppyControl.CLI.SlashCommands.Registry do
         handler: &Commands.Context.handle_tui/2,
         category: "context"
       ),
+      CommandInfo.new(
+        name: "agents",
+        description: "List agents and manage model pins",
+        handler: &Commands.Agents.handle_agents/2,
+        usage: "/agents [pin|unpin <agent>]",
+        category: "context",
+        detailed_help:
+          "View all agents with their pinned models. Use '/agents pin <name>' to interactively select a model to pin to an agent."
+      ),
       # Session commands
       CommandInfo.new(
         name: "compact",
         description: "Compact conversation history (stub)",
         handler: &Commands.Session.handle_compact/2,
         category: "session",
-        detailed_help: "Summarizes and compacts the conversation history to reduce context length. Depends on agent summarization port."
+        detailed_help:
+          "Summarizes and compacts the conversation history to reduce context length. Depends on agent summarization port."
       ),
       CommandInfo.new(
         name: "truncate",
@@ -224,7 +234,8 @@ defmodule CodePuppyControl.CLI.SlashCommands.Registry do
         handler: &Commands.Session.handle_truncate/2,
         usage: "/truncate <N>",
         category: "session",
-        detailed_help: "Trims the agent's message history to the last N messages. Depends on agent message history port."
+        detailed_help:
+          "Trims the agent's message history to the last N messages. Depends on agent message history port."
       )
     ]
 

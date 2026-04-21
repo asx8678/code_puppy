@@ -23,10 +23,10 @@ defmodule CodePuppyControl.CLI.SlashCommands.Commands.Context do
   end
 
   @doc """
-  Handles `/agent [name]` — shows or switches the current agent.
+  Handles `/agent [name]` — interactively select or directly switch the current agent.
 
-  Without an argument, shows the current agent name.
-  With an argument, switches to the specified agent.
+  Without an argument, triggers interactive agent selection (or falls back
+  to showing the current agent). With an argument, switches directly.
   """
   @spec handle_agent(String.t(), Loop.t()) :: {:continue, Loop.t()}
   def handle_agent(line, state) do

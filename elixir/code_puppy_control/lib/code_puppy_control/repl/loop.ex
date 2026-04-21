@@ -25,8 +25,8 @@ defmodule CodePuppyControl.REPL.Loop do
     * `/exit`    — Alias for /quit
     * `/model`   — Interactive model selection
     * `/model <name>` — Switch model directly
-    * `/agent`   — Show current agent
-    * `/agent <name>` — Switch agent
+    * `/agent`   — Interactive agent selection
+    * `/agent <name>` — Switch agent directly
     * `/sessions` — Browse and switch sessions
     * `/tui`     — Launch full TUI interface
     * `/clear`   — Clear the terminal screen
@@ -47,6 +47,7 @@ defmodule CodePuppyControl.REPL.Loop do
   alias CodePuppyControl.REPL.Input
   alias CodePuppyControl.REPL.History
   alias CodePuppyControl.Tools.AgentCatalogue
+  alias CodePuppyControl.TUI.Widgets.AgentSelector
   alias CodePuppyControl.TUI.Widgets.ModelSelector
   alias CodePuppyControl.TUI.Widgets.SessionBrowser
   alias CodePuppyControl.TUI.App
@@ -267,9 +268,24 @@ defmodule CodePuppyControl.REPL.Loop do
   @doc false
   # Public for delegation from CLI.SlashCommands.Commands.Context
   def handle_agent_command("", state) do
-    # Show current agent
-    IO.puts("Current agent: #{state.agent}")
-    {:continue, state}
+    # Interactive agent selection via AgentSelector widget
+    # Falls back to showing current agent if selection is unavailable
+    try do
+      case AgentSelector.select(default: state.agent) do
+        {:ok, agent_slug} ->
+          IO.puts("Switching agent: #{state.agent} → #{agent_slug}")
+          {:continue, %{state | agent: agent_slug}}
+
+        :cancelled ->
+          IO.puts("Agent selection cancelled.")
+          {:continue, state}
+      end
+    rescue
+      _ ->
+        # AgentSelector may fail in non-TTY environments
+        IO.puts("Current agent: #{state.agent}")
+        {:continue, state}
+    end
   end
 
   def handle_agent_command(agent_name, state) do

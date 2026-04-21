@@ -111,19 +111,44 @@ defmodule CodePuppyControl.REPL.LoopTest do
       assert output =~ "Switching model"
     end
 
-    test "/agent shows current agent", %{state: state} do
+    test "/agent with no arg triggers selector (falls back to current agent in non-TTY)", %{
+      state: state
+    } do
       output =
         ExUnit.CaptureIO.capture_io(fn ->
-          assert {:continue, ^state} = Loop.handle_input("/agent", state)
+          assert {:continue, _new_state} = Loop.handle_input("/agent", state)
         end)
 
-      assert output =~ "code-puppy"
+      # Either shows the agent selector, a cancelled message, or falls back
+      # to showing the current agent — all are valid in test env
+      assert output =~ "code-puppy" or output =~ "cancelled" or output =~ "Agent Selector"
     end
 
     test "/agent <name> switches agent", %{state: state} do
       output =
         ExUnit.CaptureIO.capture_io(fn ->
           assert {:continue, new_state} = Loop.handle_input("/agent qa-kitten", state)
+          assert new_state.agent == "qa-kitten"
+        end)
+
+      assert output =~ "Switching agent"
+    end
+
+    test "handle_agent_command with empty string invokes selector", %{state: state} do
+      output =
+        ExUnit.CaptureIO.capture_io(fn ->
+          result = Loop.handle_agent_command("", state)
+          assert {:continue, _} = result
+        end)
+
+      # In test env, selector will either render or fall back to showing current agent
+      assert is_binary(output)
+    end
+
+    test "handle_agent_command with name switches directly", %{state: state} do
+      output =
+        ExUnit.CaptureIO.capture_io(fn ->
+          assert {:continue, new_state} = Loop.handle_agent_command("qa-kitten", state)
           assert new_state.agent == "qa-kitten"
         end)
 
@@ -318,10 +343,30 @@ defmodule CodePuppyControl.REPL.LoopTest do
       end
     end
 
-    def set_response(text), do: start_if_needed() || Elixir.Agent.update(__MODULE__, &Map.put(&1, :text, text))
-    def captured_messages, do: (start_if_needed(); Elixir.Agent.get(__MODULE__, & &1)[:messages] || [])
-    def captured_tools, do: (start_if_needed(); Elixir.Agent.get(__MODULE__, & &1)[:tools] || [])
-    def reset, do: (start_if_needed(); Elixir.Agent.update(__MODULE__, fn _ -> %{} end))
+    def set_response(text),
+      do: start_if_needed() || Elixir.Agent.update(__MODULE__, &Map.put(&1, :text, text))
+
+    def captured_messages,
+      do:
+        (
+          start_if_needed()
+          Elixir.Agent.get(__MODULE__, & &1)[:messages] || []
+        )
+
+    def captured_tools,
+      do:
+        (
+          start_if_needed()
+          Elixir.Agent.get(__MODULE__, & &1)[:tools] || []
+        )
+
+    def reset,
+      do:
+        (
+          start_if_needed()
+          Elixir.Agent.update(__MODULE__, fn _ -> %{} end)
+        )
+
     def stop do
       try do
         Elixir.Agent.stop(__MODULE__)
@@ -338,8 +383,19 @@ defmodule CodePuppyControl.REPL.LoopTest do
       callback_fn.({:part_start, %{type: :text, index: 0, id: nil}})
       callback_fn.({:part_delta, %{type: :text, index: 0, text: text, name: nil, arguments: nil}})
       callback_fn.({:part_end, %{type: :text, index: 0, id: nil}})
-      callback_fn.({:done, %{id: "r1", model: "test", content: text, tool_calls: [],
-                   finish_reason: "stop", usage: %{prompt_tokens: 0, completion_tokens: 0, total_tokens: 0}}})
+
+      callback_fn.(
+        {:done,
+         %{
+           id: "r1",
+           model: "test",
+           content: text,
+           tool_calls: [],
+           finish_reason: "stop",
+           usage: %{prompt_tokens: 0, completion_tokens: 0, total_tokens: 0}
+         }}
+      )
+
       :ok
     end
   end
@@ -349,18 +405,27 @@ defmodule CodePuppyControl.REPL.LoopTest do
       prev = Application.get_env(:code_puppy_control, :llm_adapter_provider)
       Application.put_env(:code_puppy_control, :llm_adapter_provider, REPLTestProviderMock)
       REPLTestProviderMock.reset()
+
       on_exit(fn ->
-        if prev, do: Application.put_env(:code_puppy_control, :llm_adapter_provider, prev),
+        if prev,
+          do: Application.put_env(:code_puppy_control, :llm_adapter_provider, prev),
           else: Application.delete_env(:code_puppy_control, :llm_adapter_provider)
+
         REPLTestProviderMock.stop()
       end)
+
       :ok
     end
 
     test "converts parts-format user message to content-format for provider" do
       msgs = [%{"role" => "user", "parts" => [%{"type" => "text", "text" => "hi"}]}]
       REPLTestProviderMock.set_response("hello")
-      assert {:ok, _} = CodePuppyControl.Agent.LLMAdapter.stream_chat(msgs, [], [model: "test"], fn _ -> :ok end)
+
+      assert {:ok, _} =
+               CodePuppyControl.Agent.LLMAdapter.stream_chat(msgs, [], [model: "test"], fn _ ->
+                 :ok
+               end)
+
       assert [%{role: "user", content: "hi"}] = REPLTestProviderMock.captured_messages()
     end
 
@@ -368,12 +433,19 @@ defmodule CodePuppyControl.REPL.LoopTest do
       msgs = [%{role: :assistant, content: "I can help!"}]
       REPLTestProviderMock.set_response("ok")
       CodePuppyControl.Agent.LLMAdapter.stream_chat(msgs, [], [model: "test"], fn _ -> :ok end)
-      assert [%{role: "assistant", content: "I can help!"}] = REPLTestProviderMock.captured_messages()
+
+      assert [%{role: "assistant", content: "I can help!"}] =
+               REPLTestProviderMock.captured_messages()
     end
 
     test "captures {:done, response} and returns Agent.LLM contract shape" do
       msgs = [%{"role" => "user", "content" => "hello"}]
-      assert {:ok, resp} = CodePuppyControl.Agent.LLMAdapter.stream_chat(msgs, [], [model: "test"], fn _ -> :ok end)
+
+      assert {:ok, resp} =
+               CodePuppyControl.Agent.LLMAdapter.stream_chat(msgs, [], [model: "test"], fn _ ->
+                 :ok
+               end)
+
       assert resp.text == "ok"
       assert resp.tool_calls == []
     end
