@@ -5080,7 +5080,7 @@
       "id": "bd-253",
       "title": "REPL.Loop.send_to_agent/2: harden crash isolation (GenServer.call exits, linked renderer)",
       "description": "Follow-up from bd-250 code review. The current send_to_agent/2 uses Process.flag(:trap_exit, true) + receive-drain to isolate the REPL from Agent.Loop crashes. elixir-reviewer flagged two remaining gaps:\n\n1. GenServer.call/3 will still exit the caller if the GenServer dies mid-call, regardless of trap_exit \u2014 need explicit :exit catch around Loop.run_until_done/2.\n\n2. TUI.Renderer.start_link/1 links the renderer to the REPL. Between prompts, a renderer crash can still take down the REPL. Options: (a) start under a Supervisor, (b) Process.unlink after start_link, (c) use GenServer.start instead.\n\n3. Consider using DynamicSupervisor.start_child with CodePuppyControl.Run.Supervisor instead of direct start_link for the Agent.Loop \u2014 it's already set up for this.\n\nAcceptance:\n- REPL survives Agent.Loop GenServer crash mid-run\n- REPL survives Renderer crash between prompts  \n- No linked-process fatal exits reach the REPL\n\nFile: lib/code_puppy_control/repl/loop.ex\nDiscovered-from: bd-250",
-      "status": "open",
+      "status": "closed",
       "priority": 3,
       "type": "task",
       "labels": [],
@@ -5090,12 +5090,13 @@
         ]
       },
       "created_at": "2026-04-21T11:24:59.337512",
-      "updated_at": "2026-04-21T15:21:09.769324",
+      "updated_at": "2026-04-21T15:22:04.457060",
       "comments": [
         "Claimed by pack-leader-019daf. Starting isolated worktree + delegated implementation for remaining send_to_agent crash isolation gap: catch mid-call GenServer exits from Agent.Loop and add focused regression coverage.",
         "Shepherd review: REQUEST_CHANGES. Keep the new catch :exit rollback path, but remove Agent.Loop Process.unlink(pid): trap_exit already neutralizes linked exits across the critical section, and unlink weakens ownership/cleanup for a per-run unsupervised loop. Also drop/replace the non-proving unlink test.",
         "Shepherd review: APPROVE. Final state keeps the real catch :exit rollback fix for mid-call Agent.Loop crashes without the unnecessary unlink, and crash-isolation tests pass.",
-        "Watchdog QA: APPROVE. mix test test/code_puppy_control/repl/ passed (77 tests, 0 failures)."
+        "Watchdog QA: APPROVE. mix test test/code_puppy_control/repl/ passed (77 tests, 0 failures).",
+        "Merged locally to main via retriever at merge commit 83a0a3fadebbf2e6b94cadf729da43adb9bfd292."
       ]
     },
     "bd-254": {
