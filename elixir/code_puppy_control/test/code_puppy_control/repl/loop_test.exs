@@ -465,7 +465,7 @@ defmodule CodePuppyControl.REPL.LoopTest do
     } do
       REPLTestMockLLM.set_response(%{text: "Hello, human!", tool_calls: []})
 
-      output =
+      _output =
         ExUnit.CaptureIO.capture_io(fn ->
           assert {:continue, ^state} = Loop.handle_input("Hi there", state)
         end)
@@ -685,7 +685,13 @@ defmodule CodePuppyControl.REPL.LoopTest do
     def captured_messages, do: (start_if_needed(); Elixir.Agent.get(__MODULE__, & &1)[:messages] || [])
     def captured_tools, do: (start_if_needed(); Elixir.Agent.get(__MODULE__, & &1)[:tools] || [])
     def reset, do: (start_if_needed(); Elixir.Agent.update(__MODULE__, fn _ -> %{} end))
-    def stop, do: (try do: Elixir.Agent.stop(__MODULE__), catch: :exit, _ -> :ok)
+    def stop do
+      try do
+        Elixir.Agent.stop(__MODULE__)
+      catch
+        :exit, _ -> :ok
+      end
+    end
 
     # Provider contract: atom-keyed messages, schema-map tools, raw events, returns :ok
     def stream_chat(messages, tools, _opts, callback_fn) do
