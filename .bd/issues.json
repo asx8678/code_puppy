@@ -5014,9 +5014,97 @@
         ]
       },
       "created_at": "2026-04-21T10:03:40.851514",
-      "updated_at": "2026-04-21T10:03:40.851521",
+      "updated_at": "2026-04-21T11:25:04.812181",
+      "comments": [
+        "Claimed by planning-agent-019daf. Starting Phase 1: agent/loop.ex pre-flight fixes (add model: override, fix llm_module default, add get_messages/1 accessor).",
+        "Phases 1-4 shipped: Agent.Loop accepts model override + get_messages; REPL.send_to_agent/2 wired to real pipeline via Agent.LLMAdapter (new file) with proper message format translation + agent name canonicalization (kebab\u2194snake); 5 integration tests added; debug writes removed; Process.sleep removed. mix compile clean. Burrito binary being rebuilt. Follow-ups filed: bd-251, bd-252, bd-253, bd-254, bd-255. Phase 5 pending: real API smoke test + bd close."
+      ]
+    },
+    "bd-251": {
+      "id": "bd-251",
+      "title": "Unit test CodePuppyControl.Agent.LLMAdapter directly (bypass REPL)",
+      "description": "Follow-up from bd-250 code review. The LLMAdapter bridges the old Agent.LLM behaviour contract to the real CodePuppyControl.LLM provider contract. Currently it's only tested transitively via REPL integration tests. Add direct unit tests:\n\n- Message conversion: parts-format \u2192 content-format (symmetric with Agent.State storage)\n- Message conversion: atom-keyed \u2192 string-keyed\n- Tool conversion: atom names \u2192 JSON-Schema function maps via Tool.Registry\n- Response reconstruction: :ok return with buffered text + tool_calls\n- Error pass-through: {:error, reason} from provider propagates unchanged\n- Tool registry missing: graceful []  fallback, no crash\n\nFile: test/code_puppy_control/agent/llm_adapter_test.exs (new)\nDiscovered-from: bd-250",
+      "status": "open",
+      "priority": 3,
+      "type": "task",
+      "labels": [],
+      "dependencies": {
+        "discovered-from": [
+          "bd-250"
+        ]
+      },
+      "created_at": "2026-04-21T11:24:59.330721",
+      "updated_at": "2026-04-21T11:24:59.330739",
+      "comments": []
+    },
+    "bd-252": {
+      "id": "bd-252",
+      "title": "Replace String.to_atom/1 for renderer names with Registry",
+      "description": "Follow-up from bd-250 code review. renderer_name/1 in repl/loop.ex creates a dynamic atom per session_id via String.to_atom. While bounded by finite sessions per REPL lifetime, atoms are VM-global and never garbage collected.\n\nFix: Use a Registry keyed on session_id:\n\n    defmodule CodePuppyControl.REPL.RendererRegistry, do: # Registry impl\n\n    defp renderer_name(session_id) do\n      {:via, Registry, {CodePuppyControl.REPL.RendererRegistry, session_id}}\n    end\n\nAcceptance:\n- No String.to_atom on unbounded inputs\n- Registry.lookup used for existence check instead of Process.whereis\n\nFile: lib/code_puppy_control/repl/loop.ex\nDiscovered-from: bd-250",
+      "status": "open",
+      "priority": 3,
+      "type": "task",
+      "labels": [],
+      "dependencies": {
+        "discovered-from": [
+          "bd-250"
+        ]
+      },
+      "created_at": "2026-04-21T11:24:59.335108",
+      "updated_at": "2026-04-21T11:24:59.335117",
+      "comments": []
+    },
+    "bd-253": {
+      "id": "bd-253",
+      "title": "REPL.Loop.send_to_agent/2: harden crash isolation (GenServer.call exits, linked renderer)",
+      "description": "Follow-up from bd-250 code review. The current send_to_agent/2 uses Process.flag(:trap_exit, true) + receive-drain to isolate the REPL from Agent.Loop crashes. elixir-reviewer flagged two remaining gaps:\n\n1. GenServer.call/3 will still exit the caller if the GenServer dies mid-call, regardless of trap_exit \u2014 need explicit :exit catch around Loop.run_until_done/2.\n\n2. TUI.Renderer.start_link/1 links the renderer to the REPL. Between prompts, a renderer crash can still take down the REPL. Options: (a) start under a Supervisor, (b) Process.unlink after start_link, (c) use GenServer.start instead.\n\n3. Consider using DynamicSupervisor.start_child with CodePuppyControl.Run.Supervisor instead of direct start_link for the Agent.Loop \u2014 it's already set up for this.\n\nAcceptance:\n- REPL survives Agent.Loop GenServer crash mid-run\n- REPL survives Renderer crash between prompts  \n- No linked-process fatal exits reach the REPL\n\nFile: lib/code_puppy_control/repl/loop.ex\nDiscovered-from: bd-250",
+      "status": "open",
+      "priority": 3,
+      "type": "task",
+      "labels": [],
+      "dependencies": {
+        "discovered-from": [
+          "bd-250"
+        ]
+      },
+      "created_at": "2026-04-21T11:24:59.337512",
+      "updated_at": "2026-04-21T11:24:59.337521",
+      "comments": []
+    },
+    "bd-254": {
+      "id": "bd-254",
+      "title": "REPL.send_to_agent/2: broaden rollback to cover all post-append failures",
+      "description": "Follow-up from bd-250 code review. Current messages_before snapshot + State.set_messages rollback only triggers on {:error, reason} from Loop.run_until_done. Other failure paths leave the user message persisted:\n\n- Renderer start failure (unlikely but possible)\n- Loop start failure \n- Unexpected raises in the success path\n\nFix: Wrap the entire post-append section in a try/rescue/catch block; rollback on any failure class.\n\nAcceptance: Injected failures at any post-append step result in an empty Agent.State for that session+agent.\n\nFile: lib/code_puppy_control/repl/loop.ex\nDiscovered-from: bd-250",
+      "status": "open",
+      "priority": 3,
+      "type": "task",
+      "labels": [],
+      "dependencies": {
+        "discovered-from": [
+          "bd-250"
+        ]
+      },
+      "created_at": "2026-04-21T11:24:59.350629",
+      "updated_at": "2026-04-21T11:24:59.350639",
+      "comments": []
+    },
+    "bd-255": {
+      "id": "bd-255",
+      "title": "Split test/code_puppy_control/repl/loop_test.exs (>700 lines)",
+      "description": "Follow-up from bd-250. loop_test.exs is at 738 lines, over the 600-line CONTRIBUTING.md cap (we allowed 700 during bd-250 due to pre-existing growth). Extract the three new describe blocks (send_to_agent/2 \u2014 happy path, error paths, model override) into a separate file:\n\n  test/code_puppy_control/repl/send_to_agent_test.exs\n\nKeep the REPLTestMockLLM module definition with the tests that use it.\n\nDiscovered-from: bd-250",
+      "status": "open",
+      "priority": 3,
+      "type": "task",
+      "labels": [],
+      "dependencies": {
+        "discovered-from": [
+          "bd-250"
+        ]
+      },
+      "created_at": "2026-04-21T11:24:59.358557",
+      "updated_at": "2026-04-21T11:24:59.358564",
       "comments": []
     }
   },
-  "counter": 250
+  "counter": 255
 }
