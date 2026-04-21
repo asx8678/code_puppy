@@ -4839,15 +4839,33 @@
       "id": "bd-242",
       "title": "CLI.Parser: duplicate '--' prefix in unknown-option error message",
       "description": "Discovered during bd-238 Burrito argv verification.\n\nRunning the Burrito binary with `--nonsense` produces:\n\n    Error: unknown option(s): ----nonsense\n\nNote the four leading dashes. The user typed `--nonsense` but the error shows `----nonsense`.\n\nRoot cause in `elixir/code_puppy_control/lib/code_puppy_control/cli/parser.ex`:\n\n    {_parsed, _positional, invalid} ->\n      errors = Enum.map_join(invalid, \", \", fn {key, _val} -> \"--#{key}\" end)\n      {:error, \"unknown option(s): #{errors}\"}\n\n`OptionParser.parse/3` returns the invalid key already prefixed with `--` (e.g. `\"--nonsense\"`), so prepending another `--` yields `----nonsense`.\n\nFix: use the key as-is, e.g.\n    Enum.map_join(invalid, \", \", fn {key, _val} -> to_string(key) end)\n\nOr strip a leading `--` before re-prepending.\n\nAdd a test in `test/code_puppy_control/cli/parser_test.exs` that passes `[\"--nonsense\"]` and asserts the error message contains exactly `--nonsense` (not `----nonsense`).\n\nScope: ~5 LOC fix + 1 test. No runtime behavior change; exit code 1 is already correct.",
-      "status": "open",
+      "status": "closed",
       "priority": 3,
       "type": "bug",
       "labels": [],
       "dependencies": {},
       "created_at": "2026-04-21T01:55:36.299350",
-      "updated_at": "2026-04-21T01:55:36.299359",
+      "updated_at": "2026-04-21T02:04:20.536369",
+      "comments": [
+        "Claimed by planning-agent-019dac",
+        "Fixed in commit 52999365. Sibling bug in gac_parser.ex tracked as bd-243."
+      ]
+    },
+    "bd-243": {
+      "id": "bd-243",
+      "title": "CLI.GacParser: duplicate '--' prefix in unknown-option error message (same as bd-242)",
+      "description": "Same defect class as bd-242, in a sibling file.\n\nFile: elixir/code_puppy_control/lib/code_puppy_control/cli/gac_parser.ex line 51:\n\n    {_parsed, _positional, invalid} ->\n      errors = Enum.map_join(invalid, \", \", fn {key, _val} -> \"--#{key}\" end)\n      {:error, \"unknown option(s): #{errors}\"}\n\nOptionParser.parse/3 returns invalid keys already prefixed with '--', so running the gac binary with --nonsense would produce 'unknown option(s): ----nonsense' (four dashes).\n\nFix: same one-line change as bd-242 \u2014 use to_string(key) instead of \"--#{key}\".\n\nAdd a regression test in test/code_puppy_control/cli/gac_parser_test.exs under the existing 'parse/1 \u2014 error handling' describe block that asserts the error message contains '--bogus' (or similar) and refutes '----bogus'. The current test only does 'msg =~ \"bogus\"' which missed this class of bug in bd-242.\n\nScope: ~5 LOC fix + 1 test. Discovered by planning-agent-019dac while working bd-242.\n\nReference commit (the bd-242 fix) for the exact pattern.",
+      "status": "open",
+      "priority": 3,
+      "type": "bug",
+      "labels": [
+        "discovered-from:bd-242"
+      ],
+      "dependencies": {},
+      "created_at": "2026-04-21T02:03:21.764904",
+      "updated_at": "2026-04-21T02:03:21.764911",
       "comments": []
     }
   },
-  "counter": 242
+  "counter": 243
 }
