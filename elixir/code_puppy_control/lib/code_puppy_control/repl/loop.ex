@@ -46,6 +46,7 @@ defmodule CodePuppyControl.REPL.Loop do
   alias CodePuppyControl.TUI.Widgets.ModelSelector
   alias CodePuppyControl.TUI.Widgets.SessionBrowser
   alias CodePuppyControl.TUI.App
+  alias CodePuppyControl.CLI.SlashCommands.Dispatcher
 
   # ── State ──────────────────────────────────────────────────────────────────
 
@@ -185,65 +186,40 @@ defmodule CodePuppyControl.REPL.Loop do
 
   @doc """
   Returns true if the input line starts with `/` (slash command).
+  Delegates to `Dispatcher.is_slash_command?/1`.
   """
   @spec is_slash_command?(String.t()) :: boolean()
-  def is_slash_command?("/" <> _), do: true
-  def is_slash_command?(_), do: false
+  def is_slash_command?(line), do: Dispatcher.is_slash_command?(line)
 
   # ── Slash Command Execution ───────────────────────────────────────────────
 
   @spec execute_slash_command(String.t(), t()) :: {:continue, t()} | {:halt, t()}
   defp execute_slash_command(line, state) do
-    # Split "/command arg1 arg2" into ["/command", "arg1 arg2"]
-    [cmd | rest] = String.split(line, " ", parts: 2)
-    args = List.first(rest, "")
+    case Dispatcher.dispatch(line, state) do
+      {:ok, {:continue, new_state}} ->
+        {:continue, new_state}
 
-    case cmd do
-      "/quit" ->
-        History.save()
-        IO.puts("👋 Bye!")
-        {:halt, %{state | running: false}}
+      {:ok, {:halt, new_state}} ->
+        {:halt, new_state}
 
-      "/exit" ->
-        History.save()
-        IO.puts("👋 Bye!")
-        {:halt, %{state | running: false}}
-
-      "/help" ->
-        print_help()
-        {:continue, state}
-
-      "/model" ->
-        handle_model_command(args, state)
-
-      "/agent" ->
-        handle_agent_command(args, state)
-
-      "/sessions" ->
-        handle_sessions_command(args, state)
-
-      "/tui" ->
-        handle_tui_command(state)
-
-      "/clear" ->
-        # ANSI clear screen + cursor home
-        IO.write("\e[2J\e[H")
-        {:continue, state}
-
-      "/history" ->
-        print_history()
-        {:continue, state}
-
-      unknown ->
-        IO.puts(IO.ANSI.red() <> "Unknown command: #{unknown}" <> IO.ANSI.reset())
+      {:error, :unknown_command} ->
+        # Extract command name for the error message
+        cmd = line |> String.split(" ", parts: 2) |> hd()
+        IO.puts(IO.ANSI.red() <> "Unknown command: #{cmd}" <> IO.ANSI.reset())
         IO.puts("Type /help for available commands.")
+        {:continue, state}
+
+      {:error, :not_a_slash_command} ->
+        # Shouldn't happen since we gate on is_slash_command?
         {:continue, state}
     end
   end
 
   # ── Command Handlers ──────────────────────────────────────────────────────
 
-  defp handle_model_command("", state) do
+  @doc false
+  # Public for delegation from CLI.SlashCommands.Commands.Context
+  def handle_model_command("", state) do
     # Interactive model selection via ModelSelector widget
     # Falls back to showing current model if selection is unavailable
     try do
@@ -271,7 +247,7 @@ defmodule CodePuppyControl.REPL.Loop do
     end
   end
 
-  defp handle_model_command(model_name, state) do
+  def handle_model_command(model_name, state) do
     model_name = String.trim(model_name)
     IO.puts("Switching model: #{state.model} → #{model_name}")
 
@@ -285,13 +261,15 @@ defmodule CodePuppyControl.REPL.Loop do
     {:continue, %{state | model: model_name}}
   end
 
-  defp handle_agent_command("", state) do
+  @doc false
+  # Public for delegation from CLI.SlashCommands.Commands.Context
+  def handle_agent_command("", state) do
     # Show current agent
     IO.puts("Current agent: #{state.agent}")
     {:continue, state}
   end
 
-  defp handle_agent_command(agent_name, state) do
+  def handle_agent_command(agent_name, state) do
     agent_name = String.trim(agent_name)
     IO.puts("Switching agent: #{state.agent} → #{agent_name}")
     {:continue, %{state | agent: agent_name}}
@@ -299,7 +277,9 @@ defmodule CodePuppyControl.REPL.Loop do
 
   # ── Sessions Command ────────────────────────────────────────────────────
 
-  defp handle_sessions_command("", state) do
+  @doc false
+  # Public for delegation from CLI.SlashCommands.Commands.Context
+  def handle_sessions_command("", state) do
     # Launch interactive session browser
     try do
       case SessionBrowser.browse() do
@@ -326,10 +306,10 @@ defmodule CodePuppyControl.REPL.Loop do
     end
   end
 
-  defp handle_sessions_command(_args, state) do
+  def handle_sessions_command(args, state) do
     # With arguments, just invoke browse with filter
     try do
-      case SessionBrowser.browse(filter: String.trim(_args)) do
+      case SessionBrowser.browse(filter: String.trim(args)) do
         {:ok, session_name} ->
           IO.puts("Switching to session: #{session_name}")
           {:continue, %{state | session_id: session_name}}
@@ -352,7 +332,9 @@ defmodule CodePuppyControl.REPL.Loop do
 
   # ── TUI Command ────────────────────────────────────────────────────────
 
-  defp handle_tui_command(state) do
+  @doc false
+  # Public for delegation from CLI.SlashCommands.Commands.Context
+  def handle_tui_command(state) do
     IO.puts("Launching TUI...")
 
     try do
@@ -401,26 +383,21 @@ defmodule CodePuppyControl.REPL.Loop do
     # For now, display intent and echo (no-op agent pipeline)
     Logger.debug("REPL: send_to_agent agent=#{state.agent} model=#{state.model}")
 
-    IO.puts(IO.ANSI.faint() <> "[repl] Prompt dispatched to #{state.agent}@#{state.model}" <> IO.ANSI.reset())
-    IO.puts(IO.ANSI.faint() <> "[repl] Agent pipeline not yet wired — prompt: \"#{String.slice(prompt, 0, 80)}\"" <> IO.ANSI.reset())
+    IO.puts(
+      IO.ANSI.faint() <>
+        "[repl] Prompt dispatched to #{state.agent}@#{state.model}" <> IO.ANSI.reset()
+    )
+
+    IO.puts(
+      IO.ANSI.faint() <>
+        "[repl] Agent pipeline not yet wired — prompt: \"#{String.slice(prompt, 0, 80)}\"" <>
+        IO.ANSI.reset()
+    )
   end
 
   # ── History ────────────────────────────────────────────────────────────────
 
-  defp print_history do
-    entries = History.all()
-
-    if entries == [] do
-      IO.puts("(no history)")
-    else
-      entries
-      |> Enum.reverse()
-      |> Enum.with_index(1)
-      |> Enum.each(fn {entry, idx} ->
-        IO.puts("  #{idx}: #{entry}")
-      end)
-    end
-  end
+  # print_history/0 moved to CLI.SlashCommands.Commands.Core.handle_history/2
 
   defp ensure_history_started do
     case Process.whereis(History) do
@@ -448,29 +425,7 @@ defmodule CodePuppyControl.REPL.Loop do
     """)
   end
 
-  defp print_help do
-    IO.puts("""
-
-    Available commands:
-      /help              Show this help message
-      /quit, /exit       Exit the REPL
-      /model             Interactive model selection
-      /model <name>      Switch to a different model
-      /agent             Show current agent
-      /agent <name>      Switch to a different agent
-      /sessions          Browse and switch sessions
-      /sessions <filter> Browse sessions matching filter
-      /tui               Launch full TUI interface
-      /clear             Clear the terminal screen
-      /history           Show command history
-      !<command>         Run a shell command (e.g., !git status)
-
-    Tips:
-      - Use Ctrl+D to exit
-      - Unclosed brackets/quotes enable multi-line input
-      - Phase 2 will add tab completion and arrow-key navigation
-    """)
-  end
+  # print_help/0 moved to CLI.SlashCommands.Commands.Core.handle_help/2
 
   # ── Main Loop ──────────────────────────────────────────────────────────────
 

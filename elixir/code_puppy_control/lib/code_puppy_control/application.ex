@@ -64,6 +64,8 @@ defmodule CodePuppyControl.Application do
       CodePuppyControl.Run.Registry,
       # Tool registry (ETS-backed) for agent tool dispatch (bd-149)
       CodePuppyControl.Tool.Registry,
+      # Slash command registry (ETS-backed) for REPL command dispatch (bd-163)
+      CodePuppyControl.CLI.SlashCommands.Registry,
       # Staged changes sandbox for diff-preview system (bd-150)
       CodePuppyControl.Tools.StagedChanges,
       {CodePuppyControl.Run.Supervisor, []},
@@ -102,6 +104,19 @@ defmodule CodePuppyControl.Application do
     opts = [strategy: :one_for_one, name: CodePuppyControl.Supervisor] ++ @test_supervisor_opts
 
     result = Supervisor.start_link(children, opts)
+
+    # Register built-in slash commands after supervision tree is up.
+    # Must happen AFTER the Registry GenServer is started.
+    # Failures are logged but do not crash the application.
+    with {:ok, _pid} <- result do
+      try do
+        CodePuppyControl.CLI.SlashCommands.Registry.register_builtin_commands()
+      rescue
+        e ->
+          require Logger
+          Logger.warning("Failed to register built-in slash commands: #{inspect(e)}")
+      end
+    end
 
     # When running inside a Burrito-wrapped binary, dispatch the CLI
     # after the supervision tree is up, then halt the VM. This lets
