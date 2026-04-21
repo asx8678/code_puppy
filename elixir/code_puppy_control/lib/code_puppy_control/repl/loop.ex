@@ -413,6 +413,23 @@ defmodule CodePuppyControl.REPL.Loop do
 
   # ── Agent Dispatch Helpers ────────────────────────────────────────────────
 
+  @doc """
+  Resolves the Agent.State key for the given display name.
+
+  Tries the name as-given, then kebab↔snake variants, returning
+  the first key that matches in the AgentCatalogue. This is the
+  canonical key used for `Agent.State` operations.
+
+  Returns `{:ok, agent_key}` or `{:error, reason}`.
+  """
+  @spec resolve_agent_key(String.t()) :: {:ok, String.t()} | {:error, term()}
+  def resolve_agent_key(agent_name) when is_binary(agent_name) do
+    case resolve_agent_module(agent_name) do
+      {:ok, key, _module} -> {:ok, key}
+      {:error, reason} -> {:error, reason}
+    end
+  end
+
   defp resolve_agent_module(agent_name) when is_binary(agent_name) do
     # Try the name as-given, then kebab↔snake variants. AgentCatalogue keys
     # are typically snake_case internally even when the UI shows kebab-case.
