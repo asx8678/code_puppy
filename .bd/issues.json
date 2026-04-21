@@ -5036,10 +5036,11 @@
         ]
       },
       "created_at": "2026-04-21T11:24:59.330721",
-      "updated_at": "2026-04-21T13:02:56.537071",
+      "updated_at": "2026-04-21T13:59:43.073231",
       "comments": [
         "Claimed by pack-leader-019daf. Starting isolated worktree + delegated implementation for direct LLMAdapter unit tests. Auto-tests remain off; coding only for now.",
-        "Shepherd review: APPROVE after follow-up fixes. Branch feature/bd-251-llm-adapter-tests at 192e0740 is ready for QA/tests. Tests not run because /auto-test off is active."
+        "Shepherd review: APPROVE after follow-up fixes. Branch feature/bd-251-llm-adapter-tests at 192e0740 is ready for QA/tests. Tests not run because /auto-test off is active.",
+        "Watchdog QA: APPROVE after fix. mix test test/code_puppy_control/agent/llm_adapter_test.exs passed (30 tests, 0 failures). Branch feature/bd-251-llm-adapter-tests now at a197e712."
       ]
     },
     "bd-252": {
@@ -5056,9 +5057,10 @@
         ]
       },
       "created_at": "2026-04-21T11:24:59.335108",
-      "updated_at": "2026-04-21T13:02:56.540114",
+      "updated_at": "2026-04-21T13:59:43.107098",
       "comments": [
-        "Claimed by pack-leader-019daf. Shepherd review: APPROVE. Branch feature/bd-252-renderer-registry at 08007ec6 is ready for QA/tests. Tests not run because /auto-test off is active."
+        "Claimed by pack-leader-019daf. Shepherd review: APPROVE. Branch feature/bd-252-renderer-registry at 08007ec6 is ready for QA/tests. Tests not run because /auto-test off is active.",
+        "Watchdog QA: APPROVE after fix. mix test test/code_puppy_control/repl/loop_test.exs --seed 151066 and mix test test/code_puppy_control/repl/loop_test.exs both passed. Shepherd requested one more idempotent fallback + deterministic regression test; follow-up fix now in progress on feature/bd-252-renderer-registry."
       ]
     },
     "bd-253": {
@@ -5099,7 +5101,7 @@
       "id": "bd-255",
       "title": "Split test/code_puppy_control/repl/loop_test.exs (>700 lines)",
       "description": "Follow-up from bd-250. loop_test.exs is at 738 lines, over the 600-line CONTRIBUTING.md cap (we allowed 700 during bd-250 due to pre-existing growth). Extract the three new describe blocks (send_to_agent/2 \u2014 happy path, error paths, model override) into a separate file:\n\n  test/code_puppy_control/repl/send_to_agent_test.exs\n\nKeep the REPLTestMockLLM module definition with the tests that use it.\n\nDiscovered-from: bd-250",
-      "status": "open",
+      "status": "closed",
       "priority": 3,
       "type": "task",
       "labels": [],
@@ -5109,21 +5111,12 @@
         ]
       },
       "created_at": "2026-04-21T11:24:59.358557",
-      "updated_at": "2026-04-21T13:44:20.453018",
+      "updated_at": "2026-04-21T13:59:43.171348",
       "comments": [
         "Claimed by pack-leader-019daf. Starting isolated worktree + delegated refactor to split oversized repl/loop_test.exs per CONTRIBUTING 600-line cap. Tests not run because /auto-test off is active.",
         "Shepherd review: APPROVE. Branch feature/bd-255-split-loop-tests at 61d434b4 cleanly splits loop_test.exs and send_to_agent_test.exs under the 600-line cap. Tests not run because /auto-test off is active.",
-        "Watchdog QA: APPROVE. mix test test/code_puppy_control/repl/loop_test.exs test/code_puppy_control/repl/send_to_agent_test.exs passed (31 tests, 0 failures) after mix deps.get in the fresh worktree."
-      ]
-    }
-  },
-  "counter": 255
-}-test off is active."
-      ]
-    }
-  },
-  "counter": 255
-}n because /auto-test off is active."
+        "Watchdog QA: APPROVE. mix test test/code_puppy_control/repl/loop_test.exs test/code_puppy_control/repl/send_to_agent_test.exs passed (31 tests, 0 failures) after mix deps.get in the fresh worktree.",
+        "Merged locally to main via retriever at merge commit ef0c9829fb854ddbad17ba4aab6a9d15791d2ee8."
       ]
     }
   },
