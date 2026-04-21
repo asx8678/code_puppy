@@ -178,6 +178,10 @@ defmodule CodePuppyControl.REPL.DispatchRollbackBD254Test do
 
       assert [%{"role" => "user"}] = State.get_messages(session_id, "code_puppy")
 
+      # Seed a successful mock response so run_until_done returns :ok,
+      # ensuring inject_success_fault() is actually reached (bd-254).
+      BD254MockLLM.set_response(%{text: "mock reply", tool_calls: []})
+
       Application.put_env(
         :code_puppy_control,
         :test_dispatch_success_fault,
@@ -200,6 +204,10 @@ defmodule CodePuppyControl.REPL.DispatchRollbackBD254Test do
       state: state,
       session_id: session_id
     } do
+      # Seed a successful mock response so run_until_done returns :ok,
+      # ensuring inject_success_fault() is actually reached (bd-254).
+      BD254MockLLM.set_response(%{text: "mock reply", tool_calls: []})
+
       Application.put_env(
         :code_puppy_control,
         :test_dispatch_success_fault,
@@ -221,6 +229,10 @@ defmodule CodePuppyControl.REPL.DispatchRollbackBD254Test do
       state: state,
       session_id: session_id
     } do
+      # Seed a successful mock response so run_until_done returns :ok,
+      # ensuring inject_success_fault() is actually reached (bd-254).
+      BD254MockLLM.set_response(%{text: "mock reply", tool_calls: []})
+
       Application.put_env(
         :code_puppy_control,
         :test_dispatch_success_fault,
@@ -264,6 +276,10 @@ defmodule CodePuppyControl.REPL.DispatchRollbackBD254Test do
 
       assert length(State.get_messages(session_id, "code_puppy")) == 2
 
+      # Seed a successful mock response so run_until_done returns :ok,
+      # ensuring inject_success_fault() is actually reached (bd-254).
+      BD254MockLLM.set_response(%{text: "mock reply", tool_calls: []})
+
       Application.put_env(
         :code_puppy_control,
         :test_dispatch_success_fault,
@@ -290,6 +306,10 @@ defmodule CodePuppyControl.REPL.DispatchRollbackBD254Test do
       })
 
       assert [%{"role" => "user"}] = State.get_messages(session_id, "code_puppy")
+
+      # Seed a successful mock response so run_until_done returns :ok,
+      # ensuring inject_success_fault() is actually reached (bd-254).
+      BD254MockLLM.set_response(%{text: "mock reply", tool_calls: []})
 
       Application.put_env(
         :code_puppy_control,
@@ -325,6 +345,10 @@ defmodule CodePuppyControl.REPL.DispatchRollbackBD254Test do
 
       assert length(State.get_messages(session_id, "code_puppy")) == 2
 
+      # Seed a successful mock response so run_until_done returns :ok,
+      # ensuring inject_success_fault() is actually reached (bd-254).
+      BD254MockLLM.set_response(%{text: "mock reply", tool_calls: []})
+
       Application.put_env(
         :code_puppy_control,
         :test_dispatch_success_fault,
@@ -351,6 +375,10 @@ defmodule CodePuppyControl.REPL.DispatchRollbackBD254Test do
       })
 
       assert [%{"role" => "user"}] = State.get_messages(session_id, "code_puppy")
+
+      # Seed a successful mock response so run_until_done returns :ok,
+      # ensuring inject_success_fault() is actually reached (bd-254).
+      BD254MockLLM.set_response(%{text: "mock reply", tool_calls: []})
 
       Application.put_env(
         :code_puppy_control,
@@ -386,6 +414,10 @@ defmodule CodePuppyControl.REPL.DispatchRollbackBD254Test do
 
       assert length(State.get_messages(session_id, "code_puppy")) == 2
 
+      # Seed a successful mock response so run_until_done returns :ok,
+      # ensuring inject_success_fault() is actually reached (bd-254).
+      BD254MockLLM.set_response(%{text: "mock reply", tool_calls: []})
+
       Application.put_env(
         :code_puppy_control,
         :test_dispatch_success_fault,
@@ -406,6 +438,10 @@ defmodule CodePuppyControl.REPL.DispatchRollbackBD254Test do
       state: state,
       session_id: session_id
     } do
+      # Seed a successful mock response so run_until_done returns :ok,
+      # ensuring inject_success_fault() is actually reached (bd-254).
+      BD254MockLLM.set_response(%{text: "mock reply", tool_calls: []})
+
       Application.put_env(
         :code_puppy_control,
         :test_dispatch_success_fault,
