@@ -5310,14 +5310,22 @@
       "id": "bd-263",
       "title": "MCP entrypoint with help/list/status subcommands",
       "description": "Create /mcp slash command entrypoint in Elixir with initial read-only subcommands:\n- help: Display MCP command help\n- list: List configured MCP servers\n- status: Check MCP server/connection status\n\nReferences Python implementation in code_puppy/command_line/mcp/handler.py.\nElixir MCP runtime infrastructure (MCP.Manager, MCP.Server) already exists.",
-      "status": "open",
+      "status": "closed",
       "priority": 1,
       "type": "task",
-      "labels": [],
+      "labels": [
+        "claimed-by-pack-leader-019db1"
+      ],
       "dependencies": {},
       "created_at": "2026-04-21T19:36:29.764652",
-      "updated_at": "2026-04-21T19:36:29.764657",
-      "comments": []
+      "updated_at": "2026-04-21T21:28:13.555223",
+      "comments": [
+        "Starting work from base branch 'main' in an isolated worktree because the root worktree has unrelated local modifications.",
+        "Critic feedback (REQUEST_CHANGES):\\n1. Schema mismatch - assumes mcp_servers.json has 'mcpServers' key when it's actually flat\\n2. Test isolation gaps - not setting PUP_EX_HOME, loads real mcp_servers.json from user home\\n3. Missing builtin registration test coverage\\n4. Robustness/parity issues: case-sensitive subcommands (should be case-insensitive like Python), missing stopped-icon \u25a0 (was \u00d7), invalid-entry crashes vs graceful handling",
+        "Shepherd: APPROVE after schema/test-isolation/registration/parity fixes and test split under 600-line cap.",
+        "Watchdog: APPROVE after relevant format/tests passed and malformed-env /mcp status repro no longer crashes.",
+        "Merged into main via commit d82887f2"
+      ]
     },
     "bd-264": {
       "id": "bd-264",
