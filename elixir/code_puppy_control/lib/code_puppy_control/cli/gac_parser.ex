@@ -47,7 +47,7 @@ defmodule CodePuppyControl.CLI.GacParser do
         end
 
       {_parsed, _positional, invalid} ->
-        errors = Enum.map_join(invalid, ", ", fn {key, _val} -> "--#{key}" end)
+        errors = Enum.map_join(invalid, ", ", fn {key, _val} -> to_string(key) end)
         {:error, "unknown option(s): #{errors}"}
     end
   end
