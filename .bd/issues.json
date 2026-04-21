@@ -4955,9 +4955,13 @@
         ]
       },
       "created_at": "2026-04-21T08:48:07.596532",
-      "updated_at": "2026-04-21T12:43:11.135363",
+      "updated_at": "2026-04-21T15:21:09.833566",
       "comments": [
-        "Claimed by pack-leader-019daf. Scouting implementation for /compact and /truncate in Elixir REPL slash commands; next step is isolated worktree + delegated coding."
+        "Claimed by pack-leader-019daf. Scouting implementation for /compact and /truncate in Elixir REPL slash commands; next step is isolated worktree + delegated coding.",
+        "Claimed by pack-leader-019daf. Starting isolated worktree + delegated implementation for real /compact and /truncate behavior in Elixir REPL slash commands.",
+        "Shepherd review: REQUEST_CHANGES. Two correctness blockers: (1) /compact and /truncate must resolve the real Agent.State key, not blindly use state.agent display string (kebab-case vs snake_case). (2) /truncate must only preserve the first message when it is actually a system/instructions message; normal Elixir Agent.State history usually starts with user/assistant messages, so otherwise truncate to the last N. Add runtime-shaped regression tests.",
+        "Shepherd review: APPROVE. Final state resolves canonical Agent.State key lookup and correct /truncate semantics for user-first vs system/instructions-first histories.",
+        "Watchdog QA: APPROVE. mix test session_test.exs, loop_test.exs, and state_test.exs all passed (23/23/23 tests, 0 failures)."
       ]
     },
     "bd-248": {
@@ -5086,8 +5090,13 @@
         ]
       },
       "created_at": "2026-04-21T11:24:59.337512",
-      "updated_at": "2026-04-21T11:24:59.337521",
-      "comments": []
+      "updated_at": "2026-04-21T15:21:09.769324",
+      "comments": [
+        "Claimed by pack-leader-019daf. Starting isolated worktree + delegated implementation for remaining send_to_agent crash isolation gap: catch mid-call GenServer exits from Agent.Loop and add focused regression coverage.",
+        "Shepherd review: REQUEST_CHANGES. Keep the new catch :exit rollback path, but remove Agent.Loop Process.unlink(pid): trap_exit already neutralizes linked exits across the critical section, and unlink weakens ownership/cleanup for a per-run unsupervised loop. Also drop/replace the non-proving unlink test.",
+        "Shepherd review: APPROVE. Final state keeps the real catch :exit rollback fix for mid-call Agent.Loop crashes without the unnecessary unlink, and crash-isolation tests pass.",
+        "Watchdog QA: APPROVE. mix test test/code_puppy_control/repl/ passed (77 tests, 0 failures)."
+      ]
     },
     "bd-254": {
       "id": "bd-254",
@@ -5103,8 +5112,10 @@
         ]
       },
       "created_at": "2026-04-21T11:24:59.350629",
-      "updated_at": "2026-04-21T11:24:59.350639",
-      "comments": []
+      "updated_at": "2026-04-21T14:56:45.062444",
+      "comments": [
+        "Claimed by pack-leader-019daf. Queued immediately after bd-253 because both issues overlap the same REPL dispatch path; sequencing to avoid conflict churn in repl/dispatch.ex."
+      ]
     },
     "bd-255": {
       "id": "bd-255",
