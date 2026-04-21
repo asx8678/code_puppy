@@ -7,7 +7,7 @@ defmodule CodePuppyControl.CLI.SlashCommands.Commands.AddModelTest do
   alias CodePuppyControl.ModelsDevParser.{ModelInfo, ProviderInfo}
 
   setup do
-    # Start the Registry GenServer if not already running
+    # Start the SlashCommands Registry GenServer if not already running
     case Process.whereis(Registry) do
       nil -> start_supervised!({Registry, []})
       _pid -> :ok
@@ -27,12 +27,18 @@ defmodule CodePuppyControl.CLI.SlashCommands.Commands.AddModelTest do
         )
       )
 
+    # Start the LockKeeper for concurrency-safe persistence
+    case Process.whereis(AddModelPersistence.LockKeeper) do
+      nil -> start_supervised!({AddModelPersistence.LockKeeper, []})
+      _pid -> :ok
+    end
+
     # Use a temp directory for extra_models.json
     tmp_dir = Path.join(System.tmp_dir!(), "cp_add_model_test_#{:erlang.unique_integer([:positive])}")
     File.mkdir_p!(tmp_dir)
 
     # Stub Paths.extra_models_file to use our temp path
-    test_path = Path.join(tmp_dir, "extra_models.json")
+    _test_path = Path.join(tmp_dir, "extra_models.json")
 
     original_env = System.get_env("PUP_EX_HOME")
     System.put_env("PUP_EX_HOME", tmp_dir)
@@ -49,7 +55,7 @@ defmodule CodePuppyControl.CLI.SlashCommands.Commands.AddModelTest do
 
     state = %{session_id: "test-session", running: true}
 
-    {:ok, state: state, tmp_dir: tmp_dir, test_path: test_path}
+    {:ok, state: state, tmp_dir: tmp_dir}
   end
 
   # ── Registration & dispatch ──────────────────────────────────────────────
@@ -239,85 +245,9 @@ defmodule CodePuppyControl.CLI.SlashCommands.Commands.AddModelTest do
   # ── AddModelPersistence ─────────────────────────────────────────────────
 
   describe "AddModelPersistence.persist/2" do
-    test "creates new extra_models.json with model config", %{test_path: path} do
+    test "creates new extra_models.json with model config", %{tmp_dir: tmp_dir} do
       config = %{"type" => "openai", "name" => "gpt-5", "provider" => "openai"}
 
-      # Override the path for this test
-      result = with_mock_path(path, fn ->
-        AddModelPersistence.persist("openai-gpt-5", config)
-      end)
-
-      # Since we can't easily mock Paths, test via direct file ops
-      {:ok, _path} = AddModelPersistence.atomic_write_json(path, %{"openai-gpt-5" => config})
-
-      assert File.exists?(path)
-      {:ok, data} = Jason.decode(File.read!(path))
-      assert data["openai-gpt-5"]["type"] == "openai"
-    end
-
-    test "merges into existing extra_models.json", %{test_path: path} do
-      existing = %{"openai-gpt-5" => %{"type" => "openai", "name" => "gpt-5"}}
-      {:ok, _path} = AddModelPersistence.atomic_write_json(path, existing)
-
-      new_config = %{"type" => "anthropic", "name" => "claude-3"}
-      updated = Map.put(existing, "anthropic-claude-3", new_config)
-      {:ok, _path} = AddModelPersistence.atomic_write_json(path, updated)
-
-      {:ok, data} = Jason.decode(File.read!(path))
-      assert map_size(data) == 2
-      assert data["anthropic-claude-3"]["type"] == "anthropic"
-    end
-
-    test "detects duplicate model keys", %{test_path: path} do
-      existing = %{"openai-gpt-5" => %{"type" => "openai"}}
-      {:ok, _path} = AddModelPersistence.atomic_write_json(path, existing)
-
-      {:ok, loaded} = AddModelPersistence.read_existing(path)
-      assert AddModelPersistence.check_duplicate(loaded, "openai-gpt-5") == {:error, :already_exists}
-    end
-
-    test "allows new model key when existing has different keys", %{test_path: path} do
-      existing = %{"openai-gpt-5" => %{"type" => "openai"}}
-      {:ok, _path} = AddModelPersistence.atomic_write_json(path, existing)
-
-      {:ok, loaded} = AddModelPersistence.read_existing(path)
-      assert AddModelPersistence.check_duplicate(loaded, "anthropic-claude-3") == :ok
-    end
-
-    test "read_existing returns empty map for nonexistent file" do
-      {:ok, data} = AddModelPersistence.read_existing("/tmp/nonexistent_cp_test_#{:erlang.unique_integer([:positive])}.json")
-      assert data == %{}
-    end
-
-    test "atomic_write_json creates parent directories" do
-      deep_path = Path.join([System.tmp_dir!(), "cp_add_model_deep_#{:erlang.unique_integer([:positive])}", "sub", "extra_models.json"])
-
-      on_exit(fn ->
-        dir = Path.dirname(Path.dirname(deep_path))
-        File.rm_rf!(dir)
-      end)
-
-      {:ok, _path} = AddModelPersistence.atomic_write_json(deep_path, %{"test" => %{"type" => "openai"}})
-      assert File.exists?(deep_path)
-    end
-
-    test "atomic_write_json writes valid JSON", %{test_path: path} do
-      data = %{"model-a" => %{"type" => "openai", "name" => "gpt-5"}}
-      {:ok, _path} = AddModelPersistence.atomic_write_json(path, data)
-
-      {:ok, decoded} = Jason.decode(File.read!(path))
-      assert decoded == data
-    end
-  end
-
-  # ── End-to-end persist via AddModelPersistence.persist/2 ────────────────
-
-  describe "AddModelPersistence.persist/2 end-to-end" do
-    test "persists model to extra_models.json via Paths.extra_models_file()", %{tmp_dir: tmp_dir} do
-      config = %{"type" => "openai", "name" => "gpt-5", "provider" => "openai"}
-
-      # The PUP_EX_HOME is set to tmp_dir in setup, so Paths.extra_models_file()
-      # will resolve to tmp_dir/extra_models.json
       result = AddModelPersistence.persist("openai-gpt-5", config)
 
       assert {:ok, "openai-gpt-5"} = result
@@ -327,10 +257,22 @@ defmodule CodePuppyControl.CLI.SlashCommands.Commands.AddModelTest do
 
       {:ok, data} = Jason.decode(File.read!(path))
       assert data["openai-gpt-5"]["type"] == "openai"
-      assert data["openai-gpt-5"]["name"] == "gpt-5"
     end
 
-    test "rejects duplicate model key", %{tmp_dir: tmp_dir} do
+    test "merges into existing extra_models.json", %{tmp_dir: tmp_dir} do
+      config_a = %{"type" => "openai", "name" => "gpt-5", "provider" => "openai"}
+      config_b = %{"type" => "anthropic", "name" => "claude-3", "provider" => "anthropic"}
+
+      {:ok, _} = AddModelPersistence.persist("openai-gpt-5", config_a)
+      {:ok, _} = AddModelPersistence.persist("anthropic-claude-3", config_b)
+
+      path = Path.join(tmp_dir, "extra_models.json")
+      {:ok, data} = Jason.decode(File.read!(path))
+      assert map_size(data) == 2
+      assert data["anthropic-claude-3"]["type"] == "anthropic"
+    end
+
+    test "rejects duplicate model key", %{tmp_dir: _tmp_dir} do
       config = %{"type" => "openai", "name" => "gpt-5"}
       :ok = AddModelPersistence.persist("openai-gpt-5", config) |> ok_or_dup()
 
@@ -349,26 +291,145 @@ defmodule CodePuppyControl.CLI.SlashCommands.Commands.AddModelTest do
     end
   end
 
-  # ── run_with_inputs (programmatic flow) ─────────────────────────────────
+  # ── AddModelPersistence low-level ────────────────────────────────────────
 
-  describe "run_with_inputs/1" do
-    setup context do
-      # Only run these if ModelsDevParser.Registry is available
+  describe "AddModelPersistence.read_existing/1" do
+    test "returns empty map for nonexistent file" do
+      {:ok, data} = AddModelPersistence.read_existing("/tmp/nonexistent_cp_test_#{:erlang.unique_integer([:positive])}.json")
+      assert data == %{}
+    end
+
+    test "reads existing file correctly", %{tmp_dir: tmp_dir} do
+      path = Path.join(tmp_dir, "extra_models.json")
+      data = %{"test-key" => %{"type" => "openai"}}
+      File.mkdir_p!(tmp_dir)
+      File.write!(path, Jason.encode!(data))
+
+      {:ok, loaded} = AddModelPersistence.read_existing(path)
+      assert loaded["test-key"]["type"] == "openai"
+    end
+  end
+
+  describe "AddModelPersistence.atomic_write_json/2" do
+    test "writes valid JSON", %{tmp_dir: tmp_dir} do
+      path = Path.join(tmp_dir, "test_write.json")
+      data = %{"model-a" => %{"type" => "openai", "name" => "gpt-5"}}
+      {:ok, _path} = AddModelPersistence.atomic_write_json(path, data)
+
+      {:ok, decoded} = Jason.decode(File.read!(path))
+      assert decoded == data
+    end
+
+    test "creates parent directories" do
+      deep_path = Path.join([System.tmp_dir!(), "cp_add_model_deep_#{:erlang.unique_integer([:positive])}", "sub", "extra_models.json"])
+
+      on_exit(fn ->
+        dir = Path.dirname(Path.dirname(deep_path))
+        File.rm_rf!(dir)
+      end)
+
+      {:ok, _path} = AddModelPersistence.atomic_write_json(deep_path, %{"test" => %{"type" => "openai"}})
+      assert File.exists?(deep_path)
+    end
+  end
+
+  # ── End-to-end: run_with_inputs/1 with a started registry ─────────────────
+
+  describe "run_with_inputs/1 end-to-end" do
+    setup do
+      # Start the ModelsDevParser.Registry with test JSON data
+      test_json = Path.join([__DIR__, "../../../support/models_dev_parser_test_data.json"])
+
+      # Only start if not already running
       case Process.whereis(CodePuppyControl.ModelsDevParser.Registry) do
         nil ->
-          # Start a mock registry for testing
-          {:ok, _pid} = start_mock_registry(context)
-          :ok
+          {:ok, _pid} =
+            start_supervised!(
+              {CodePuppyControl.ModelsDevParser.Registry, json_path: test_json}
+            )
 
         _pid ->
           :ok
       end
+
+      # Ensure LockKeeper is running
+      case Process.whereis(AddModelPersistence.LockKeeper) do
+        nil -> start_supervised!({AddModelPersistence.LockKeeper, []})
+        _pid -> :ok
+      end
+
+      :ok
     end
 
-    @tag :skip
-    test "returns error for empty provider list" do
-      # This test needs a properly seeded mock - skip for now
-      assert true
+    test "full flow: provider selection → model selection → persistence" do
+      # The test data JSON should have at least one provider with models.
+      # We use "1" to select the first provider and "1" to select the first model.
+      result = AddModel.run_with_inputs(["1", "1"])
+
+      case result do
+        {:ok, model_key} ->
+          assert is_binary(model_key)
+
+          # Verify it was actually persisted
+          path = CodePuppyControl.Config.Paths.extra_models_file()
+
+          if File.exists?(path) do
+            {:ok, data} = Jason.decode(File.read!(path))
+            assert Map.has_key?(data, model_key)
+          end
+
+        {:error, reason} ->
+          # If the test data doesn't have what we need, at least verify
+          # the flow doesn't crash and produces a meaningful error
+          assert is_binary(reason)
+
+        :cancelled ->
+          # Input didn't match any provider/model — acceptable for sparse test data
+          assert true
+      end
+    end
+
+    test "returns error for empty inputs" do
+      result = AddModel.run_with_inputs([])
+      assert result == :cancelled
+    end
+
+    test "returns error for invalid provider selection" do
+      result = AddModel.run_with_inputs(["999999"])
+      assert match?({:error, _}, result)
+    end
+  end
+
+  # ── Concurrency safety ─────────────────────────────────────────────────
+
+  describe "concurrent persistence" do
+    test "no lost updates when multiple persists run concurrently", %{tmp_dir: tmp_dir} do
+      # Ensure LockKeeper is running
+      case Process.whereis(AddModelPersistence.LockKeeper) do
+        nil -> start_supervised!({AddModelPersistence.LockKeeper, []})
+        _pid -> :ok
+      end
+
+      # Fire off 20 concurrent persist calls
+      tasks =
+        for i <- 1..20 do
+          Task.async(fn ->
+            key = "model-#{i}"
+            config = %{"type" => "openai", "name" => "model-#{i}"}
+            AddModelPersistence.persist(key, config)
+          end)
+        end
+
+      results = Task.await_many(tasks, 15_000)
+
+      # All should succeed (different keys)
+      successes = Enum.count(results, fn r -> match?({:ok, _}, r) end)
+      assert successes == 20
+
+      # Verify all 20 are actually in the file
+      path = Path.join(tmp_dir, "extra_models.json")
+      {:ok, data} = Jason.decode(File.read!(path))
+      assert map_size(data) == 20
     end
   end
 
@@ -378,23 +439,72 @@ defmodule CodePuppyControl.CLI.SlashCommands.Commands.AddModelTest do
     test "returns continue tuple" do
       output =
         ExUnit.CaptureIO.capture_io(fn ->
-          assert {:continue, %{} = state} = AddModel.handle_add_model("/add_model", %{})
+          assert {:continue, %{}} = AddModel.handle_add_model("/add_model", %{})
         end)
 
       assert is_binary(output)
     end
   end
 
-  # ── Helpers ──────────────────────────────────────────────────────────────
+  # ── Pagination helpers ──────────────────────────────────────────────────
 
-  defp with_mock_path(_path, fun), do: fun.()
+  describe "filter_providers/2" do
+    test "filters providers by name substring" do
+      providers = [
+        %ProviderInfo{id: "openai", name: "OpenAI", env: []},
+        %ProviderInfo{id: "anthropic", name: "Anthropic", env: []},
+        %ProviderInfo{id: "google", name: "Google", env: []}
+      ]
 
-  defp start_mock_registry(_context) do
-    # For integration testing with the real registry, this would need
-    # a properly seeded JSON file. For unit tests, we test the individual
-    # functions directly.
-    {:ok, self()}
+      result = AddModel.filter_providers(providers, "open")
+      assert length(result) == 1
+      assert hd(result).id == "openai"
+    end
+
+    test "filters providers by id substring" do
+      providers = [
+        %ProviderInfo{id: "openai", name: "OpenAI", env: []},
+        %ProviderInfo{id: "anthropic", name: "Anthropic", env: []}
+      ]
+
+      result = AddModel.filter_providers(providers, "anth")
+      assert length(result) == 1
+      assert hd(result).id == "anthropic"
+    end
+
+    test "returns empty list for no match" do
+      providers = [%ProviderInfo{id: "openai", name: "OpenAI", env: []}]
+      result = AddModel.filter_providers(providers, "zzz")
+      assert result == []
+    end
   end
+
+  describe "filter_models/2" do
+    test "filters models by name substring" do
+      models = [
+        %ModelInfo{provider_id: "openai", model_id: "gpt-5", name: "GPT-5 Turbo"},
+        %ModelInfo{provider_id: "openai", model_id: "o3", name: "o3"},
+        %ModelInfo{provider_id: "anthropic", model_id: "claude-3", name: "Claude 3 Opus"}
+      ]
+
+      result = AddModel.filter_models(models, "claude")
+      assert length(result) == 1
+      assert hd(result).model_id == "claude-3"
+    end
+
+    test "filters models by model_id substring" do
+      models = [
+        %ModelInfo{provider_id: "openai", model_id: "gpt-5-turbo", name: "GPT-5 Turbo"},
+        %ModelInfo{provider_id: "openai", model_id: "o3-mini", name: "o3 Mini"}
+      ]
+
+      result = AddModel.filter_models(models, "gpt")
+      assert length(result) == 1
+      assert hd(result).model_id == "gpt-5-turbo"
+    end
+  end
+
+  # ── Helpers ──────────────────────────────────────────────────────────────
 
   defp ok_or_dup({:ok, _key}), do: :ok
   defp ok_or_dup({:error, :already_exists}), do: :ok

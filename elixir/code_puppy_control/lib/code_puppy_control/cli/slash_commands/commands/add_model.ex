@@ -239,33 +239,71 @@ defmodule CodePuppyControl.CLI.SlashCommands.Commands.AddModel do
         IO.puts(IO.ANSI.bright() <> "    Add Model — Browse providers" <> IO.ANSI.reset())
         IO.puts("")
 
-        display_providers(providers, 0)
+        browse_providers(providers, 0)
+    end
+  end
 
-        IO.puts("")
-        IO.write("    Select provider [1-#{length(providers)}] or q to cancel: ")
+  defp browse_providers(providers, page) do
+    total = length(providers)
+    total_pages = max(1, ceil(total / @page_size))
 
-        case IO.gets("") do
-          :eof ->
-            IO.puts(IO.ANSI.yellow() <> "    Cancelled." <> IO.ANSI.reset())
+    display_providers(providers, page)
 
-          {:error, _} ->
-            IO.puts(IO.ANSI.yellow() <> "    Cancelled." <> IO.ANSI.reset())
+    IO.puts("")
 
-          input ->
-            input = String.trim(input)
+    prompt =
+      if total_pages > 1 do
+        "    Select provider [1-#{total}] (n=next, p=prev, f=filter, q=cancel): "
+      else
+        "    Select provider [1-#{total}] or q to cancel: "
+      end
 
-            if input =~ ~r/^[qQ]$/ do
-              IO.puts(IO.ANSI.yellow() <> "    Cancelled." <> IO.ANSI.reset())
-            else
-              case parse_selection(input, length(providers)) do
-                {:ok, idx} ->
-                  provider = Enum.at(providers, idx)
-                  select_model_interactive(provider)
+    IO.write(prompt)
 
-                {:error, reason} ->
-                  IO.puts(IO.ANSI.red() <> "    Invalid selection: #{reason}" <> IO.ANSI.reset())
-              end
-            end
+    case IO.gets("") do
+      :eof ->
+        IO.puts(IO.ANSI.yellow() <> "    Cancelled." <> IO.ANSI.reset())
+
+      {:error, _} ->
+        IO.puts(IO.ANSI.yellow() <> "    Cancelled." <> IO.ANSI.reset())
+
+      input ->
+        handle_provider_input(String.trim(input), providers, page, total_pages)
+    end
+  end
+
+  defp handle_provider_input(input, providers, page, total_pages) do
+    cond do
+      input =~ ~r/^[qQ]$/ ->
+        IO.puts(IO.ANSI.yellow() <> "    Cancelled." <> IO.ANSI.reset())
+
+      input == "n" and page + 1 < total_pages ->
+        browse_providers(providers, page + 1)
+
+      input == "p" and page > 0 ->
+        browse_providers(providers, page - 1)
+
+      String.starts_with?(input, "f ") ->
+        query = String.trim_leading(input, "f ")
+        filtered = filter_providers(providers, query)
+
+        if filtered == [] do
+          IO.puts(IO.ANSI.faint() <> "    No providers match '#{query}'." <> IO.ANSI.reset())
+          browse_providers(providers, page)
+        else
+          IO.puts(IO.ANSI.faint() <> "    Filtered: #{length(filtered)} provider(s) match '#{query}'." <> IO.ANSI.reset())
+          browse_providers(filtered, 0)
+        end
+
+      true ->
+        case parse_selection(input, length(providers)) do
+          {:ok, idx} ->
+            provider = Enum.at(providers, idx)
+            select_model_interactive(provider)
+
+          {:error, reason} ->
+            IO.puts(IO.ANSI.red() <> "    Invalid selection: #{reason}" <> IO.ANSI.reset())
+            browse_providers(providers, page)
         end
     end
   end
@@ -294,38 +332,100 @@ defmodule CodePuppyControl.CLI.SlashCommands.Commands.AddModel do
           IO.puts(IO.ANSI.bright() <> "    #{provider.name} — Select model" <> IO.ANSI.reset())
           IO.puts("")
 
-          display_models(models, 0)
-
-          IO.puts("")
-          IO.write("    Select model [1-#{length(models)}] or q to cancel: ")
-
-          case IO.gets("") do
-            :eof ->
-              IO.puts(IO.ANSI.yellow() <> "    Cancelled." <> IO.ANSI.reset())
-
-            {:error, _} ->
-              IO.puts(IO.ANSI.yellow() <> "    Cancelled." <> IO.ANSI.reset())
-
-            input ->
-              input = String.trim(input)
-
-              if input =~ ~r/^[qQ]$/ do
-                IO.puts(IO.ANSI.yellow() <> "    Cancelled." <> IO.ANSI.reset())
-              else
-                case parse_selection(input, length(models)) do
-                  {:ok, idx} ->
-                    model = Enum.at(models, idx)
-                    execute_add_model(model, provider)
-
-                  {:error, reason} ->
-                    IO.puts(
-                      IO.ANSI.red() <> "    Invalid selection: #{reason}" <> IO.ANSI.reset()
-                    )
-                end
-              end
-          end
+          browse_models(models, provider, 0)
       end
     end
+  end
+
+  defp browse_models(models, provider, page) do
+    total = length(models)
+    total_pages = max(1, ceil(total / @page_size))
+
+    display_models(models, page)
+
+    IO.puts("")
+
+    prompt =
+      if total_pages > 1 do
+        "    Select model [1-#{total}] (n=next, p=prev, f=filter, q=cancel): "
+      else
+        "    Select model [1-#{total}] or q to cancel: "
+      end
+
+    IO.write(prompt)
+
+    case IO.gets("") do
+      :eof ->
+        IO.puts(IO.ANSI.yellow() <> "    Cancelled." <> IO.ANSI.reset())
+
+      {:error, _} ->
+        IO.puts(IO.ANSI.yellow() <> "    Cancelled." <> IO.ANSI.reset())
+
+      input ->
+        handle_model_input(String.trim(input), models, provider, page, total_pages)
+    end
+  end
+
+  defp handle_model_input(input, models, provider, page, total_pages) do
+    cond do
+      input =~ ~r/^[qQ]$/ ->
+        IO.puts(IO.ANSI.yellow() <> "    Cancelled." <> IO.ANSI.reset())
+
+      input == "n" and page + 1 < total_pages ->
+        browse_models(models, provider, page + 1)
+
+      input == "p" and page > 0 ->
+        browse_models(models, provider, page - 1)
+
+      String.starts_with?(input, "f ") ->
+        query = String.trim_leading(input, "f ")
+        filtered = filter_models(models, query)
+
+        if filtered == [] do
+          IO.puts(IO.ANSI.faint() <> "    No models match '#{query}'." <> IO.ANSI.reset())
+          browse_models(models, provider, page)
+        else
+          IO.puts(IO.ANSI.faint() <> "    Filtered: #{length(filtered)} model(s) match '#{query}'." <> IO.ANSI.reset())
+          browse_models(filtered, provider, 0)
+        end
+
+      true ->
+        case parse_selection(input, length(models)) do
+          {:ok, idx} ->
+            model = Enum.at(models, idx)
+            execute_add_model(model, provider)
+
+          {:error, reason} ->
+            IO.puts(IO.ANSI.red() <> "    Invalid selection: #{reason}" <> IO.ANSI.reset())
+            browse_models(models, provider, page)
+        end
+    end
+  end
+
+  @doc """
+  Filter a list of providers by a query string (case-insensitive).
+  Matches against provider name and id.
+  """
+  @spec filter_providers([ProviderInfo.t()], String.t()) :: [ProviderInfo.t()]
+  def filter_providers(providers, query) do
+    q = String.downcase(query)
+    Enum.filter(providers, fn p ->
+      String.contains?(String.downcase(p.name), q) or
+        String.contains?(String.downcase(p.id), q)
+    end)
+  end
+
+  @doc """
+  Filter a list of models by a query string (case-insensitive).
+  Matches against model name and model_id.
+  """
+  @spec filter_models([ModelInfo.t()], String.t()) :: [ModelInfo.t()]
+  def filter_models(models, query) do
+    q = String.downcase(query)
+    Enum.filter(models, fn m ->
+      String.contains?(String.downcase(m.name), q) or
+        String.contains?(String.downcase(m.model_id), q)
+    end)
   end
 
   defp execute_add_model(model, provider) do
@@ -417,7 +517,6 @@ defmodule CodePuppyControl.CLI.SlashCommands.Commands.AddModel do
     total = length(providers)
     total_pages = max(1, ceil(total / @page_size))
     start_idx = page * @page_size
-    end_idx = min(start_idx + @page_size, total)
 
     Enum.slice(providers, start_idx, @page_size)
     |> Enum.with_index(fn provider, i ->
@@ -448,7 +547,6 @@ defmodule CodePuppyControl.CLI.SlashCommands.Commands.AddModel do
     total = length(models)
     total_pages = max(1, ceil(total / @page_size))
     start_idx = page * @page_size
-    end_idx = min(start_idx + @page_size, total)
 
     Enum.slice(models, start_idx, @page_size)
     |> Enum.with_index(fn model, i ->
@@ -491,7 +589,7 @@ defmodule CodePuppyControl.CLI.SlashCommands.Commands.AddModel do
   defp get_models_list(provider_id) do
     case Process.whereis(CodePuppyControl.ModelsDevParser.Registry) do
       nil -> {:error, "ModelsDev registry not started"}
-      _pid -> {:ok, ModelsDevParser.get_models(provider_id)}
+      _pid -> {:ok, ModelsDevParser.get_models(ModelsDevParser.Registry, provider_id)}
     end
   rescue
     e -> {:error, Exception.message(e)}

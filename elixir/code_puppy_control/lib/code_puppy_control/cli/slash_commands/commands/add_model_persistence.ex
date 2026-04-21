@@ -2,11 +2,55 @@ defmodule CodePuppyControl.CLI.SlashCommands.Commands.AddModelPersistence do
   @moduledoc """
   Persistence layer for /add_model command.
 
-  Handles reading and writing extra_models.json, including atomic writes
-  and directory creation. Separated from the command module for testability.
+  Handles reading and writing extra_models.json, including atomic writes,
+  directory creation, and concurrency safety. Separated from the command
+  module for testability.
+
+  ## Concurrency
+
+  Uses a dedicated GenServer (`__MODULE__.LockKeeper`) to serialise
+  read-modify-write cycles, eliminating lost-update / read-modify-write
+  races when two `/add_model` calls overlap.
+
+  ## Isolation
+
+  All filesystem writes route through `Config.Isolation.safe_*` wrappers
+  per ADR-003.  Temp files use `System.tmp_dir!()` + unique integers
+  instead of a fixed path adjacent to the target file.
   """
 
+  alias CodePuppyControl.Config.Isolation
   alias CodePuppyControl.Config.Paths
+
+  # ── Lock Keeper GenServer ─────────────────────────────────────────────
+
+  defmodule LockKeeper do
+    @moduledoc false
+    # Simple serialising GenServer.  Only one persist operation runs at a
+    # time, preventing read-modify-write races on extra_models.json.
+    use GenServer
+
+    def start_link(opts \\ []) do
+      name = Keyword.get(opts, :name, __MODULE__)
+      GenServer.start_link(__MODULE__, opts, name: name)
+    end
+
+    @impl true
+    def init(_opts), do: {:ok, %{}}
+
+    @doc "Execute `fun` under the serialisation lock. Returns the fun's result."
+    @spec with_lock((() -> result)) :: result when result: var
+    def with_lock(fun) do
+      GenServer.call(__MODULE__, {:run, fun}, 30_000)
+    end
+
+    @impl true
+    def handle_call({:run, fun}, _from, state) do
+      {:reply, fun.(), state}
+    end
+  end
+
+  # ── Public API ──────────────────────────────────────────────────────────
 
   @doc """
   Persist a model config into extra_models.json.
@@ -14,20 +58,25 @@ defmodule CodePuppyControl.CLI.SlashCommands.Commands.AddModelPersistence do
   - Creates the file if it doesn't exist.
   - Merges into the existing dict (not a list).
   - Atomic write via temp file + rename.
-  - Returns `{:ok, model_key}` on success.
-  - Returns `{:error, :already_exists}` if the key is already present.
-  - Returns `{:error, reason}` on other failures.
+  - Serialised through LockKeeper to prevent lost-update races.
+  - All writes routed through Isolation-safe wrappers.
+
+  Returns `{:ok, model_key}` on success.
+  Returns `{:error, :already_exists}` if the key is already present.
+  Returns `{:error, reason}` on other failures.
   """
   @spec persist(String.t(), map()) :: {:ok, String.t()} | {:error, term()}
   def persist(model_key, config) when is_binary(model_key) and is_map(config) do
-    path = Paths.extra_models_file()
+    lock_keeper().with_lock(fn ->
+      path = Paths.extra_models_file()
 
-    with {:ok, existing} <- read_existing(path),
-         :ok <- check_duplicate(existing, model_key),
-         updated <- Map.put(existing, model_key, config),
-         {:ok, _} <- atomic_write_json(path, updated) do
-      {:ok, model_key}
-    end
+      with {:ok, existing} <- read_existing(path),
+           :ok <- check_duplicate(existing, model_key),
+           updated <- Map.put(existing, model_key, config),
+           {:ok, _} <- atomic_write_json(path, updated) do
+        {:ok, model_key}
+      end
+    end)
   end
 
   @doc """
@@ -72,23 +121,56 @@ defmodule CodePuppyControl.CLI.SlashCommands.Commands.AddModelPersistence do
 
   @doc """
   Write a JSON map to a file atomically (temp file + rename).
-  Creates parent directories if needed.
+  Creates parent directories if needed.  Routes all writes through
+  Isolation-safe wrappers.
   """
   @spec atomic_write_json(String.t(), map()) :: {:ok, String.t()} | {:error, term()}
   def atomic_write_json(path, data) do
     dir = Path.dirname(path)
 
-    with :ok <- File.mkdir_p(dir),
+    with :ok <- safe_mkdir_p(dir),
          json = Jason.encode!(data, pretty: true),
-         tmp_path = path <> ".tmp",
-         :ok <- File.write(tmp_path, json),
+         tmp_path = make_temp_path(path),
+         :ok <- safe_write(tmp_path, json),
          :ok <- File.rename(tmp_path, path) do
       {:ok, path}
     else
-      {:error, reason} ->
-        # Clean up temp file if it exists
-        File.rm(path <> ".tmp")
-        {:error, reason}
+      {:error, reason} = err ->
+        # Best-effort cleanup of temp file
+        tmp_path = make_temp_path(path)
+        File.rm(tmp_path)
+        err
     end
   end
+
+  # ── Private ─────────────────────────────────────────────────────────────
+
+  # Generates a unique temp path under System.tmp_dir!() instead of
+  # a fixed path adjacent to the target file.
+  defp make_temp_path(_target_path) do
+    uniq = :erlang.unique_integer([:positive])
+    Path.join(System.tmp_dir!(), "cp_extra_models_#{uniq}.tmp")
+  end
+
+  # Isolation-safe directory creation.  Catches IsolationViolation and
+  # converts to a tagged error so callers can pattern-match.
+  defp safe_mkdir_p(dir) do
+    Isolation.safe_mkdir_p!(dir)
+    :ok
+  rescue
+    e in CodePuppyControl.Config.Isolation.IsolationViolation ->
+      {:error, Exception.message(e)}
+  end
+
+  # Isolation-safe file write.  Same rescue strategy as safe_mkdir_p/1.
+  defp safe_write(path, content) do
+    Isolation.safe_write!(path, content)
+    :ok
+  rescue
+    e in CodePuppyControl.Config.Isolation.IsolationViolation ->
+      {:error, Exception.message(e)}
+  end
+
+  # Resolves the LockKeeper module (overridable in tests).
+  defp lock_keeper, do: __MODULE__.LockKeeper
 end
