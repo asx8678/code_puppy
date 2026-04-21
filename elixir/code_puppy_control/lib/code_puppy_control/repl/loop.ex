@@ -40,13 +40,17 @@ defmodule CodePuppyControl.REPL.Loop do
 
   require Logger
 
+  alias CodePuppyControl.Agent.{Loop, State}
+  alias CodePuppyControl.CLI.SlashCommands.Dispatcher
+  alias CodePuppyControl.Config.Models
   alias CodePuppyControl.REPL.Input
   alias CodePuppyControl.REPL.History
-  alias CodePuppyControl.Config.Models
+  alias CodePuppyControl.SessionStorage
+  alias CodePuppyControl.Tools.AgentCatalogue
+  alias CodePuppyControl.TUI.Renderer
   alias CodePuppyControl.TUI.Widgets.ModelSelector
   alias CodePuppyControl.TUI.Widgets.SessionBrowser
   alias CodePuppyControl.TUI.App
-  alias CodePuppyControl.CLI.SlashCommands.Dispatcher
 
   # ── State ──────────────────────────────────────────────────────────────────
 
@@ -379,21 +383,247 @@ defmodule CodePuppyControl.REPL.Loop do
   # ── Agent Prompt Dispatch ─────────────────────────────────────────────────
 
   defp send_to_agent(prompt, state) do
-    # TODO(bd-160): Phase 2 — wire to Agent.Loop.run/3 with streaming
-    # For now, display intent and echo (no-op agent pipeline)
     Logger.debug("REPL: send_to_agent agent=#{state.agent} model=#{state.model}")
 
-    IO.puts(
-      IO.ANSI.faint() <>
-        "[repl] Prompt dispatched to #{state.agent}@#{state.model}" <> IO.ANSI.reset()
-    )
+    with {:ok, agent_key, agent_module} <- resolve_agent_module(state.agent),
+         :ok <- ensure_agent_state_for(state.session_id, agent_key),
+         # Snapshot messages BEFORE appending the user message so we can
+         # roll back cleanly on error without index math.
+         messages_before <- State.get_messages(state.session_id, agent_key),
+         user_msg = %{"role" => "user", "parts" => [%{"type" => "text", "text" => prompt}]},
+         :ok <- State.append_message(state.session_id, agent_key, user_msg),
+         messages <- State.get_messages(state.session_id, agent_key),
+         pre_count <- length(messages),
+         {:ok, renderer_pid} <- ensure_renderer(state),
+         run_id <- Loop.generate_run_id(),
+         {:ok, loop_pid} <- start_agent_loop(agent_module, messages, state, run_id) do
+      # Trap exits so a linked Agent.Loop crash doesn't kill the REPL process.
+      prev_trap = Process.flag(:trap_exit, true)
 
-    IO.puts(
-      IO.ANSI.faint() <>
-        "[repl] Agent pipeline not yet wired — prompt: \"#{String.slice(prompt, 0, 80)}\"" <>
-        IO.ANSI.reset()
-    )
+      try do
+        case Loop.run_until_done(loop_pid, :infinity) do
+          :ok ->
+            final_messages = Loop.get_messages(loop_pid)
+            new_messages = Enum.drop(final_messages, pre_count)
+
+            Logger.debug(
+              "REPL: send_to_agent pre_count=#{pre_count} final_count=#{length(final_messages)} " <>
+                "new_count=#{length(new_messages)}"
+            )
+
+            Enum.each(new_messages, fn msg ->
+              State.append_message(state.session_id, agent_key, normalize_for_state(msg))
+            end)
+
+            # Fire-and-forget autosave
+            SessionStorage.save_session_async(
+              state.session_id,
+              State.get_messages(state.session_id, agent_key),
+              []
+            )
+
+            # Best-effort finalize — a Renderer crash (e.g., IO device
+            # terminated during test) must not prevent message persistence
+            # or crash the REPL.
+            try do
+              Renderer.finalize(renderer_pid)
+            rescue
+              _ -> :ok
+            catch
+              :exit, _ -> :ok
+            end
+
+            :ok
+
+          {:error, reason} ->
+            # Roll back to the snapshot taken before appending the user message
+            State.set_messages(state.session_id, agent_key, messages_before)
+            print_agent_error(reason)
+            :error
+        end
+      after
+        stop_agent_loop(loop_pid)
+        Process.flag(:trap_exit, prev_trap)
+        # Drain any :EXIT messages that arrived during the critical section
+        receive do
+          {:EXIT, _, _} -> :ok
+        after
+          0 -> :ok
+        end
+      end
+    else
+      {:error, {:unknown_agent, name}} ->
+        print_agent_error("Unknown agent: #{name}. Use /agent to switch.")
+        :error
+
+      {:error, :no_module} ->
+        print_agent_error("Agent \"#{state.agent}\" has no backing module. Use /agent to switch.")
+        :error
+
+      {:error, reason} ->
+        print_agent_error("Agent dispatch failed: #{inspect(reason)}")
+        :error
+    end
   end
+
+  # ── Agent Dispatch Helpers ────────────────────────────────────────────────
+
+  defp resolve_agent_module(agent_name) when is_binary(agent_name) do
+    # Try the name as-given, then kebab↔snake variants. AgentCatalogue keys
+    # are typically snake_case internally even when the UI shows kebab-case.
+    candidates =
+      [agent_name, String.replace(agent_name, "-", "_"), String.replace(agent_name, "_", "-")]
+      |> Enum.uniq()
+
+    Enum.reduce_while(candidates, {:error, {:unknown_agent, agent_name}}, fn candidate, acc ->
+      case safe_catalogue_lookup(candidate) do
+        {:ok, module} when is_atom(module) ->
+          {:halt, {:ok, candidate, module}}
+
+        :not_found ->
+          {:cont, acc}
+
+        {:error, :no_module} ->
+          {:halt, {:error, :no_module}}
+
+        _ ->
+          {:cont, acc}
+      end
+    end)
+  end
+
+  defp safe_catalogue_lookup(name) do
+    try do
+      AgentCatalogue.get_agent_module(name)
+    rescue
+      _ -> :not_found
+    end
+  end
+
+  defp ensure_agent_state_for(session_id, agent_key) do
+    case State.start_agent_state(session_id, agent_key) do
+      {:ok, _pid} -> :ok
+      {:error, reason} -> {:error, reason}
+    end
+  end
+
+  defp ensure_renderer(state) do
+    renderer_name = renderer_name(state.session_id)
+
+    case Process.whereis(renderer_name) do
+      nil ->
+        Renderer.start_link(name: renderer_name, session_id: state.session_id)
+
+      pid when is_pid(pid) ->
+        Renderer.reset(pid)
+        {:ok, pid}
+    end
+  end
+
+  defp renderer_name(session_id) do
+    # One atom per session — finite sessions per REPL lifetime, so atom table
+    # growth is bounded.
+    String.to_atom("Elixir.CodePuppyControl.REPL.Renderer.#{session_id}")
+  end
+
+  defp start_agent_loop(agent_module, messages, state, run_id) do
+    opts = [
+      run_id: run_id,
+      session_id: state.session_id,
+      model: state.model,
+      llm_module:
+        Application.get_env(
+          :code_puppy_control,
+          :repl_llm_module,
+          CodePuppyControl.Agent.LLMAdapter
+        )
+    ]
+
+    case Loop.start_link(agent_module, messages, opts) do
+      {:ok, pid} ->
+        {:ok, pid}
+
+      {:error, {:already_started, pid}} ->
+        # Shouldn't happen with unique run_id, but be defensive
+        {:ok, pid}
+
+      {:error, reason} ->
+        {:error, reason}
+    end
+  end
+
+  defp stop_agent_loop(pid) when is_pid(pid) do
+    if Process.alive?(pid) do
+      try do
+        GenServer.stop(pid, :normal, 5_000)
+      catch
+        :exit, _ -> :ok
+      end
+    end
+
+    :ok
+  end
+
+  defp print_agent_error(message) when is_binary(message) do
+    IO.puts(IO.ANSI.red() <> "⚠ " <> message <> IO.ANSI.reset())
+  end
+
+  defp print_agent_error(other) do
+    IO.puts(IO.ANSI.red() <> "\u26A0 " <> inspect(other) <> IO.ANSI.reset())
+  end
+
+  # Converts atom-keyed message maps to the string-keyed, parts-based
+  # format expected by Agent.State.message_hash/1.
+  #
+  # Agent.State hashes messages using the "role" and "parts" keys (Python
+  # convention). Messages from Agent.Loop use atom-keyed :role/:content
+  # instead. Without this conversion, all messages with the same role hash
+  # identically and are silently dropped by the dedup logic.
+  defp normalize_for_state(map) when is_map(map) do
+    map
+    |> stringify_keys()
+    |> content_to_parts()
+  end
+
+  defp normalize_for_state(list) when is_list(list) do
+    Enum.map(list, &normalize_for_state/1)
+  end
+
+  defp normalize_for_state(value), do: value
+
+  defp stringify_keys(map) when is_map(map) do
+    Map.new(map, fn
+      {k, v} when is_atom(k) -> {Atom.to_string(k), normalize_for_state(v)}
+      {k, v} when is_binary(k) -> {k, normalize_for_state(v)}
+    end)
+  end
+
+  defp stringify_keys(value), do: normalize_for_state(value)
+
+  # Convert "content" field to "parts" list for Agent.State hash compatibility.
+  # Python messages use: %{"role" => ..., "parts" => [%{"type" => "text", "text" => ...}]}
+  # Elixir Agent.Loop uses: %{role: ..., content: ...}
+  defp content_to_parts(%{"content" => _content, "parts" => _parts} = msg) do
+    # Already has parts — leave as is
+    msg
+  end
+
+  defp content_to_parts(%{"content" => content} = msg) when is_binary(content) do
+    msg
+    |> Map.delete("content")
+    |> Map.put("parts", [%{"type" => "text", "text" => content}])
+  end
+
+  defp content_to_parts(%{"content" => content} = msg) when is_list(content) do
+    # Multi-part content (e.g., tool result blocks)
+    parts = Enum.map(content, &part_for_content/1)
+    msg |> Map.delete("content") |> Map.put("parts", parts)
+  end
+
+  defp content_to_parts(msg), do: msg
+
+  defp part_for_content(%{} = part), do: part
+  defp part_for_content(text) when is_binary(text), do: %{"type" => "text", "text" => text}
 
   # ── History ────────────────────────────────────────────────────────────────
 

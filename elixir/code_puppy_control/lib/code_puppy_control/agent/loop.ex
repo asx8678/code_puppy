@@ -32,9 +32,11 @@ defmodule CodePuppyControl.Agent.Loop do
 
   ## LLM Integration
 
-  The loop calls `CodePuppyControl.Agent.LLM.stream_chat/4` which is expected
-  to be a behaviour callback. Until bd-145 delivers the real LLM module,
-  pass a mock module via opts for testing.
+  The default `:llm_module` is `CodePuppyControl.Agent.LLMAdapter` which bridges the
+  old `Agent.LLM` behaviour contract (atom tool names, `{:ok, response}` return) to the
+  real `CodePuppyControl.LLM` provider contract (schema-map tools, `:ok` return with
+  response delivered via `{:done, response}` callback). Tests may pass a mock via
+  `opts[:llm_module]`.
 
   ## Compaction
 
@@ -79,7 +81,8 @@ defmodule CodePuppyControl.Agent.Loop do
           llm_module: module(),
           metadata: map(),
           compaction_enabled: boolean(),
-          compaction_opts: keyword()
+          compaction_opts: keyword(),
+          model: String.t() | nil
         ]
 
   @doc """
@@ -143,6 +146,18 @@ defmodule CodePuppyControl.Agent.Loop do
   end
 
   @doc """
+  Returns the current message history from the loop.
+
+  Unlike `get_state/1`, this returns the raw message list so callers
+  (e.g., the REPL) can write the final conversation back to `Agent.State`
+  after `run_until_done/2` completes.
+  """
+  @spec get_messages(GenServer.server()) :: [map()]
+  def get_messages(pid) do
+    GenServer.call(pid, :get_messages)
+  end
+
+  @doc """
   Cancels the agent run.
 
   Sends a halt signal so the loop exits after the current operation.
@@ -190,6 +205,7 @@ defmodule CodePuppyControl.Agent.Loop do
     :agent_state,
     :cancelled,
     :completed,
+    :model_override,
     compaction_enabled: true,
     compaction_opts: []
   ]
@@ -207,6 +223,7 @@ defmodule CodePuppyControl.Agent.Loop do
           agent_state: map(),
           cancelled: boolean(),
           completed: boolean(),
+          model_override: String.t() | nil,
           compaction_enabled: boolean(),
           compaction_opts: keyword()
         }
@@ -220,10 +237,11 @@ defmodule CodePuppyControl.Agent.Loop do
     run_id = Keyword.get(opts, :run_id, generate_run_id())
     session_id = Keyword.get(opts, :session_id)
     max_turns = Keyword.get(opts, :max_turns, 25)
-    llm_module = Keyword.get(opts, :llm_module, CodePuppyControl.Agent.LLM)
+    llm_module = Keyword.get(opts, :llm_module, CodePuppyControl.Agent.LLMAdapter)
     metadata = Keyword.get(opts, :metadata, %{})
     compaction_enabled = Keyword.get(opts, :compaction_enabled, true)
     compaction_opts = Keyword.get(opts, :compaction_opts, [])
+    model_override = Keyword.get(opts, :model)
 
     state = %__MODULE__{
       agent_module: agent_module,
@@ -239,7 +257,8 @@ defmodule CodePuppyControl.Agent.Loop do
       cancelled: false,
       completed: false,
       compaction_enabled: compaction_enabled,
-      compaction_opts: compaction_opts
+      compaction_opts: compaction_opts,
+      model_override: model_override
     }
 
     Logger.info(
@@ -282,6 +301,11 @@ defmodule CodePuppyControl.Agent.Loop do
     }
 
     {:reply, view, state}
+  end
+
+  @impl true
+  def handle_call(:get_messages, _from, state) do
+    {:reply, state.messages, state}
   end
 
   @impl true
@@ -413,7 +437,7 @@ defmodule CodePuppyControl.Agent.Loop do
           })
 
         tools = state.agent_module.allowed_tools()
-        model = resolve_model(state.agent_module)
+        model = resolve_model(state)
 
         raw_callback = build_stream_callback(state)
         stream_callback = Normalizer.normalize(raw_callback)
@@ -536,7 +560,7 @@ defmodule CodePuppyControl.Agent.Loop do
     # TODO(bd-152): When bd-145 delivers real LLM usage data, replace these
     # zeros with actual prompt_tokens, completion_tokens, cached_tokens from
     # the provider response.
-    model = resolve_model(state.agent_module)
+    model = resolve_model(state)
 
     status =
       case turn.state do
@@ -642,7 +666,12 @@ defmodule CodePuppyControl.Agent.Loop do
   # Helpers
   # ---------------------------------------------------------------------------
 
-  defp resolve_model(agent_module) do
+  defp resolve_model(%__MODULE__{model_override: override})
+       when is_binary(override) and override != "" do
+    override
+  end
+
+  defp resolve_model(%__MODULE__{agent_module: agent_module}) do
     case agent_module.model_preference() do
       {:pack, role} ->
         # TODO(bd-152): Integrate with model packs when available
