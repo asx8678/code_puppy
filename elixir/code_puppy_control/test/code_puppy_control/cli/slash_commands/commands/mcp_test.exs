@@ -642,7 +642,9 @@ defmodule CodePuppyControl.CLI.SlashCommands.Commands.MCPTest do
         %{"name" => "MyServer", "command" => "npx", "args" => [], "env" => %{}}
       ]
 
-      write_mcp_config(@test_home, %{"MyServer" => %{"command" => "npx", "args" => [], "env" => %{}}})
+      write_mcp_config(@test_home, %{
+        "MyServer" => %{"command" => "npx", "args" => [], "env" => %{}}
+      })
 
       output =
         ExUnit.CaptureIO.capture_io(fn ->
@@ -659,7 +661,9 @@ defmodule CodePuppyControl.CLI.SlashCommands.Commands.MCPTest do
         %{"name" => "MyServer", "command" => "npx", "args" => [], "env" => %{}}
       ]
 
-      write_mcp_config(@test_home, %{"MyServer" => %{"command" => "npx", "args" => [], "env" => %{}}})
+      write_mcp_config(@test_home, %{
+        "MyServer" => %{"command" => "npx", "args" => [], "env" => %{}}
+      })
 
       output =
         ExUnit.CaptureIO.capture_io(fn ->
@@ -668,6 +672,57 @@ defmodule CodePuppyControl.CLI.SlashCommands.Commands.MCPTest do
 
       refute output =~ "not found"
       assert output =~ "MyServer"
+    end
+  end
+
+  # ── Malformed env/args in server config (bd-263 regression) ─────────────
+
+  describe "/mcp status <name> with malformed env/args" do
+    test "does not crash when env is a string instead of a map" do
+      configured = [
+        %{"name" => "weird", "command" => "echo", "env" => "oops", "args" => []}
+      ]
+
+      {:ok, text} = MCP.format_server_status("weird", configured, [])
+      assert text =~ "Server: weird"
+      assert text =~ "echo"
+      # env fallback: 0 keys (not a crash)
+      assert text =~ "0"
+    end
+
+    test "does not crash when args is a string instead of a list" do
+      configured = [
+        %{"name" => "borked", "command" => "echo", "args" => "not-a-list", "env" => %{}}
+      ]
+
+      {:ok, text} = MCP.format_server_status("borked", configured, [])
+      assert text =~ "Server: borked"
+      # args fallback: [] (not a crash)
+      assert text =~ "[]"
+    end
+
+    test "does not crash when both env and args are wrong types" do
+      configured = [
+        %{"name" => "mega-bork", "command" => "echo", "env" => 42, "args" => nil}
+      ]
+
+      {:ok, text} = MCP.format_server_status("mega-bork", configured, [])
+      assert text =~ "Server: mega-bork"
+    end
+
+    test "end-to-end /mcp status weird with malformed env in config file" do
+      write_mcp_config(@test_home, %{
+        "weird" => %{"command" => "echo", "env" => "oops"}
+      })
+
+      output =
+        ExUnit.CaptureIO.capture_io(fn ->
+          assert {:continue, _} = MCP.handle_mcp("/mcp status weird", %{})
+        end)
+
+      refute output =~ "not found"
+      assert output =~ "weird"
+      assert output =~ "echo"
     end
   end
 

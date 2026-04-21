@@ -185,13 +185,18 @@ defmodule CodePuppyControl.CLI.SlashCommands.Commands.MCP do
         ""
       ]
 
+      # Normalize malformed field types so /mcp status never crashes
+      # on non-map env or non-list args values (e.g. {"env": "oops"}).
+      safe_env = if is_map(cfg["env"]), do: cfg["env"], else: %{}
+      safe_args = if is_list(cfg["args"]), do: cfg["args"], else: []
+
       lines =
         if cfg do
           lines ++
             [
               "    Command:     #{cfg["command"] || "—"}",
-              "    Args:        #{inspect(cfg["args"] || [])}",
-              "    Env keys:    #{inspect(map_size(cfg["env"] || %{}))}"
+              "    Args:        #{inspect(safe_args)}",
+              "    Env keys:    #{inspect(map_size(safe_env))}"
             ]
         else
           lines
