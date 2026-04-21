@@ -210,6 +210,13 @@ defmodule CodePuppyControl.CLI.SlashCommands.Registry do
         handler: &Commands.Context.handle_tui/2,
         category: "context"
       ),
+      CommandInfo.new(
+        name: "pack",
+        description: "Show or switch model pack",
+        handler: &Commands.Pack.handle_pack/2,
+        usage: "/pack [pack_name]",
+        category: "context"
+      ),
       # Session commands
       CommandInfo.new(
         name: "compact",
