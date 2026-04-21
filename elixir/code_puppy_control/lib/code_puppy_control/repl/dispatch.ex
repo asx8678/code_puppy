@@ -34,6 +34,11 @@ defmodule CodePuppyControl.REPL.Dispatch do
   # Runs after the user message has been appended to Agent.State.
   # `messages_before` is the snapshot taken *before* the append; on any
   # failure we roll back to it so no orphaned user message remains.
+  #
+  # bd-254: the catch clauses wrap the ENTIRE critical section (not just
+  # the inner loop block), so raises/throws/exits from ensure_renderer/1,
+  # Loop.generate_run_id/0, start_agent_loop/4, and the success path all
+  # restore messages_before.
   @doc false
   def dispatch_after_append(state, agent_key, agent_module, messages_before) do
     messages = State.get_messages(state.session_id, agent_key)
@@ -52,15 +57,9 @@ defmodule CodePuppyControl.REPL.Dispatch do
         try do
           case Loop.run_until_done(loop_pid, :infinity) do
             :ok ->
-              # Test injection: raise in the success path to exercise
-              # rollback on unexpected raises (bd-254).
-              if raise_reason =
-                   Application.get_env(
-                     :code_puppy_control,
-                     :test_dispatch_success_raise
-                   ) do
-                raise raise_reason
-              end
+              # Test injection: fault in the success path to exercise
+              # rollback on raises/throws/exits (bd-254).
+              inject_success_fault()
 
               final_messages = Loop.get_messages(loop_pid)
               new_messages = Enum.drop(final_messages, pre_count)
@@ -100,29 +99,6 @@ defmodule CodePuppyControl.REPL.Dispatch do
               print_agent_error(reason)
               :error
           end
-        catch
-          :exit, reason ->
-            # Agent.Loop GenServer died mid-call (e.g. crashed during
-            # run_until_done or get_messages). Roll back the user message
-            # so it is not orphaned in Agent.State.
-            State.set_messages(state.session_id, agent_key, messages_before)
-            print_agent_error("Agent loop crashed: #{inspect(reason)}")
-            :error
-
-          # bd-254: broaden rollback to cover raises and throws in the
-          # post-append success path. Previously only :exit was caught, so
-          # any raise (e.g. from get_messages, append_message, or
-          # save_session_async) would propagate uncaught and crash the REPL
-          # — leaving the appended user message orphaned in Agent.State.
-          :error, reason ->
-            State.set_messages(state.session_id, agent_key, messages_before)
-            print_agent_error("Unexpected error after append: #{inspect(reason)}")
-            :error
-
-          :throw, value ->
-            State.set_messages(state.session_id, agent_key, messages_before)
-            print_agent_error("Unexpected throw after append: #{inspect(value)}")
-            :error
         after
           stop_agent_loop(loop_pid)
         end
@@ -134,6 +110,30 @@ defmodule CodePuppyControl.REPL.Dispatch do
           print_agent_error("Agent dispatch failed: #{inspect(reason)}")
           :error
       end
+    catch
+      :exit, reason ->
+        # Agent.Loop GenServer died mid-call (e.g. crashed during
+        # run_until_done or get_messages). Roll back the user message
+        # so it is not orphaned in Agent.State.
+        State.set_messages(state.session_id, agent_key, messages_before)
+        print_agent_error("Agent loop crashed: #{inspect(reason)}")
+        :error
+
+      # bd-254: broaden rollback to cover raises and throws across the
+      # ENTIRE post-append critical section — not just the inner loop block.
+      # Previously only :exit was caught, and only inside the inner try, so
+      # any raise from ensure_renderer, generate_run_id, start_agent_loop,
+      # or the success path would propagate uncaught and crash the REPL
+      # — leaving the appended user message orphaned in Agent.State.
+      :error, reason ->
+        State.set_messages(state.session_id, agent_key, messages_before)
+        print_agent_error("Unexpected error after append: #{inspect(reason)}")
+        :error
+
+      :throw, value ->
+        State.set_messages(state.session_id, agent_key, messages_before)
+        print_agent_error("Unexpected throw after append: #{inspect(value)}")
+        :error
     after
       Process.flag(:trap_exit, prev_trap)
       # Drain any :EXIT messages that arrived during the critical section
@@ -145,17 +145,41 @@ defmodule CodePuppyControl.REPL.Dispatch do
     end
   end
 
+  # Test injection helper: reads :test_dispatch_success_fault from app env
+  # and raises/throws/exits accordingly. Supports:
+  #   - binary → raise(message)
+  #   - exception struct → raise(exception)
+  #   - {:throw, value} → throw(value)
+  #   - {:exit, reason} → exit(reason)
+  # Returns :ok when no fault is configured (production path).
+  defp inject_success_fault do
+    case Application.get_env(:code_puppy_control, :test_dispatch_success_fault) do
+      nil -> :ok
+      {:throw, value} -> throw(value)
+      {:exit, reason} -> exit(reason)
+      exception when is_exception(exception) -> raise(exception)
+      message when is_binary(message) -> raise(message)
+    end
+  end
+
   # ── Renderer Management ──────────────────────────────────────────────────
 
   @doc false
   def ensure_renderer(state) do
-    # Test injection: return a synthetic error to exercise the rollback path
-    # in dispatch_after_append's else clause. Mirrors the :repl_llm_module
-    # pattern already used for LLM mock injection.
-    if reason = Application.get_env(:code_puppy_control, :test_ensure_renderer_error) do
-      {:error, reason}
-    else
-      ensure_renderer_impl(state)
+    cond do
+      # Test injection: raise instead of returning {:error, ...} to exercise
+      # the outer catch :error clause in dispatch_after_append (bd-254).
+      msg = Application.get_env(:code_puppy_control, :test_ensure_renderer_raise) ->
+        raise msg
+
+      # Test injection: return a synthetic error to exercise the rollback path
+      # in dispatch_after_append's else clause. Mirrors the :repl_llm_module
+      # pattern already used for LLM mock injection.
+      reason = Application.get_env(:code_puppy_control, :test_ensure_renderer_error) ->
+        {:error, reason}
+
+      true ->
+        ensure_renderer_impl(state)
     end
   end
 
@@ -257,6 +281,12 @@ defmodule CodePuppyControl.REPL.Dispatch do
 
   @doc false
   def start_agent_loop(agent_module, messages, state, run_id) do
+    # Test injection: raise instead of returning {:error, ...} to exercise
+    # the outer catch :error clause in dispatch_after_append (bd-254).
+    if msg = Application.get_env(:code_puppy_control, :test_start_agent_loop_raise) do
+      raise msg
+    end
+
     opts = [
       run_id: run_id,
       session_id: state.session_id,
