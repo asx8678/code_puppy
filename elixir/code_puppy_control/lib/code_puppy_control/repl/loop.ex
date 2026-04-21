@@ -402,7 +402,10 @@ defmodule CodePuppyControl.REPL.Loop do
         :error
 
       {:error, :no_module} ->
-        Dispatch.print_agent_error("Agent \"#{state.agent}\" has no backing module. Use /agent to switch.")
+        Dispatch.print_agent_error(
+          "Agent \"#{state.agent}\" has no backing module. Use /agent to switch."
+        )
+
         :error
 
       {:error, reason} ->
