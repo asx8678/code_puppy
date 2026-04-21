@@ -259,6 +259,35 @@ defmodule CodePuppyControl.Config do
   @spec websocket_secret() :: String.t() | nil
   def websocket_secret, do: System.get_env("PUP_WEBSOCKET_SECRET")
 
+  @doc """
+  Returns true if the given args list contains a --help, -h, --version,
+  -v, or -V flag. Used to fast-path CLI invocations past prod config
+  validation and supervision tree startup.
+
+  Accepts charlists (as returned by `:init.get_plain_arguments/0`) or
+  binaries (as in `System.argv/0`).
+
+  ## Examples
+
+      iex> CodePuppyControl.Config.cli_help_or_version_flag?(["--help"])
+      true
+
+      iex> CodePuppyControl.Config.cli_help_or_version_flag?([~c"--version"])
+      true
+
+      iex> CodePuppyControl.Config.cli_help_or_version_flag?(["prompt", "--model", "gpt-4"])
+      false
+  """
+  @spec cli_help_or_version_flag?([String.t() | charlist()]) :: boolean()
+  def cli_help_or_version_flag?(args) when is_list(args) do
+    Enum.any?(args, fn arg ->
+      str = to_string(arg)
+      str in ["--help", "-h", "--version", "-v", "-V"]
+    end)
+  end
+
+  def cli_help_or_version_flag?(_), do: false
+
   @doc "Validate all required config. Raises in production if missing."
   @spec validate!() :: :ok
   def validate! do

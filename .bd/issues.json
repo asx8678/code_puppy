@@ -4962,7 +4962,7 @@
       "id": "bd-248",
       "title": "Burrito binary: config validation fires before --help/--version fast-path",
       "description": "Discovered from bd-236 smoke test (commit 4ecb4586). Running the Burrito-packaged binary with --help or --version crashes at runtime config load time because config/runtime.exs calls CodePuppyControl.Config.validate!() which requires PUP_PYTHON_WORKER_SCRIPT env var in prod.\n\n## Root cause chain\n\n1. config/runtime.exs:31 \u2014 CodePuppyControl.Config.validate!() runs at every prod boot (before Application.start/2)\n2. config.ex:264 \u2014 validate!() calls python_worker_script() in prod mode\n3. config.ex:235 \u2014 python_worker_script() uses get_required_string, raises on missing env var\n4. application.ex:128 \u2014 Burrito CLI dispatch happens AFTER supervision tree startup, AFTER runtime.exs validation\n5. cli.ex:35 has a {:help, _} / {:version, _} fast path that halts(0) before config access \u2014 but it's UNREACHABLE because runtime validation fires first\n\n## Why it only hits Burrito\n\nconfig/runtime.exs runs in prod mode only. mix / escript workflows run in :dev or :test where validation is relaxed. Burrito binaries always boot in prod, so they always hit validation.\n\n## Reproduction\n\ncd elixir/code_puppy_control\n./scripts/build-burrito.sh --host-only\n./burrito_out/code_puppy_control_macos_arm64 --help\n# Crashes with \"PUP_PYTHON_WORKER_SCRIPT not set\"\n\n## Proposed fix (Option A \u2014 minimal)\n\nIn config/runtime.exs, check :init.get_plain_arguments() for --help, -h, --version, -v, -V BEFORE calling validate!(). If any appear, skip validation entirely. ~10 lines added.\n\nThis matches the pattern already used in application.ex (reading :init.get_plain_arguments() for Burrito args) and does not restructure existing code.\n\n## Alternative fix (Option B \u2014 cleaner but bigger)\n\nMove validate!() out of runtime.exs into CLI.run/1 (in cli.ex) right after Parser.parse/1 for non-help paths. Keeps all CLI flag handling colocated. ~20 lines across 2 files. Needs review of whether anything else depends on runtime-time validation order.\n\n## Acceptance criteria\n\n- ./burrito_out/code_puppy_control_* --help exits 0 with help text\n- ./burrito_out/code_puppy_control_* --version exits 0 with version text\n- ./burrito_out/code_puppy_control_* -h and -v / -V aliases also work\n- Normal REPL invocation still enforces required env vars in prod\n- Test coverage: mock :init.get_plain_arguments() in a config test\n\n## Priority\n\nMedium \u2014 ships broken for end users the moment someone tries --help on a released binary. Blocks any release promotion past bd-236.\n\n## Related\n\nDiscovered-from: bd-236 (Burrito CI matrix build)\nBlocks: first v* release tag push that anyone actually tests",
-      "status": "open",
+      "status": "closed",
       "priority": 2,
       "type": "task",
       "labels": [
@@ -4974,8 +4974,10 @@
         ]
       },
       "created_at": "2026-04-21T09:37:10.486805",
-      "updated_at": "2026-04-21T09:37:20.328092",
-      "comments": []
+      "updated_at": "2026-04-21T09:45:55.030045",
+      "comments": [
+        "Implemented in acbc5902. Burrito --help/-h/--version/-v all exit 0 with correct output. No-args invocation still fails on missing env vars. 11 unit tests added."
+      ]
     },
     "bd-249": {
       "id": "bd-249",

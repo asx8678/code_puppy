@@ -26,27 +26,39 @@ import Config
 config :code_puppy_control, :env, config_env()
 
 if config_env() == :prod do
-  # Validate and load required configuration
-  # CodePuppyControl.Config handles validation and legacy name support
-  :ok = CodePuppyControl.Config.validate!()
+  # bd-248: Fast-path --help / --version past validation and config loading.
+  # Required for Burrito-packaged binaries to display help without requiring
+  # PUP_PYTHON_WORKER_SCRIPT, PUP_SECRET_KEY_BASE, etc.
+  help_mode =
+    CodePuppyControl.Config.cli_help_or_version_flag?(:init.get_plain_arguments())
 
-  # Load configuration values via centralized module
-  # This provides typed accessors, validation, and deprecation warnings
-  secret_key_base = CodePuppyControl.Config.secret_key_base()
-  database_path = CodePuppyControl.Config.database_path()
-  python_worker_script = CodePuppyControl.Config.python_worker_script()
-  history_limit = CodePuppyControl.Config.history_limit()
-  websocket_secret = CodePuppyControl.Config.websocket_secret()
+  unless help_mode do
+    # Validate and load required configuration
+    # CodePuppyControl.Config handles validation and legacy name support
+    :ok = CodePuppyControl.Config.validate!()
 
-  # Apply to respective modules
-  config :code_puppy_control, CodePuppyControlWeb.Endpoint, secret_key_base: secret_key_base
-  config :code_puppy_control, CodePuppyControl.Repo, database: database_path
-  config :code_puppy_control, :python_worker_script, python_worker_script
-  config :code_puppy_control, :history_limit, history_limit
+    # Load configuration values via centralized module
+    # This provides typed accessors, validation, and deprecation warnings
+    secret_key_base = CodePuppyControl.Config.secret_key_base()
+    database_path = CodePuppyControl.Config.database_path()
+    python_worker_script = CodePuppyControl.Config.python_worker_script()
+    history_limit = CodePuppyControl.Config.history_limit()
+    websocket_secret = CodePuppyControl.Config.websocket_secret()
 
-  if websocket_secret do
-    config :code_puppy_control, :websocket_secret, websocket_secret
+    # Apply to respective modules
+    config :code_puppy_control, CodePuppyControlWeb.Endpoint, secret_key_base: secret_key_base
+    config :code_puppy_control, CodePuppyControl.Repo, database: database_path
+    config :code_puppy_control, :python_worker_script, python_worker_script
+    config :code_puppy_control, :history_limit, history_limit
+
+    if websocket_secret do
+      config :code_puppy_control, :websocket_secret, websocket_secret
+    end
   end
+
+  # In help_mode, intentionally leave config unpopulated.
+  # application.ex:start/2 detects help mode and starts an empty
+  # supervision tree, so no child needs these values.
 else
   # Development and test environments
   # Use relaxed validation - defaults are acceptable

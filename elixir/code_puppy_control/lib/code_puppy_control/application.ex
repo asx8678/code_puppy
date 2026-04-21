@@ -40,6 +40,21 @@ defmodule CodePuppyControl.Application do
 
   @impl true
   def start(_type, _args) do
+    # bd-248: Fast-path for --help / --version under Burrito.
+    # config/runtime.exs skips loading prod config in this case, so we must
+    # also skip starting the full supervision tree (Repo/Endpoint would crash
+    # without their config). We start an empty supervisor to satisfy the OTP
+    # Application contract, spawn the CLI dispatch, then System.halt(0).
+    if burrito_cli_mode?() and
+         CodePuppyControl.Config.cli_help_or_version_flag?(burrito_argv()) do
+      spawn_burrito_cli()
+      Supervisor.start_link([], strategy: :one_for_one, name: CodePuppyControl.Supervisor)
+    else
+      start_normal()
+    end
+  end
+
+  defp start_normal do
     children = [
       # HTTP client connection pool (Finch)
       CodePuppyControl.HttpClient.child_spec(),
@@ -119,39 +134,38 @@ defmodule CodePuppyControl.Application do
     end
 
     # When running inside a Burrito-wrapped binary, dispatch the CLI
-    # after the supervision tree is up, then halt the VM. This lets
-    # pup/code-puppy/gac behave identically under Burrito and escript.
-    #
-    # We spawn a separate process so the OTP start/2 contract (must
-    # return {:ok, pid}) is preserved — the CLI runner calls
-    # System.halt/1 when done.
+    # after the supervision tree is up, then halt the VM.
     if burrito_cli_mode?() do
-      args = burrito_argv()
-
-      spawn(fn ->
-        try do
-          CodePuppyControl.CLI.main(args)
-          System.halt(0)
-        rescue
-          e ->
-            IO.puts(
-              :stderr,
-              "Burrito CLI crashed: #{Exception.format(:error, e, __STACKTRACE__)}"
-            )
-
-            System.halt(1)
-        catch
-          :exit, {:shutdown, code} when is_integer(code) ->
-            System.halt(code)
-
-          kind, reason ->
-            IO.puts(:stderr, "Burrito CLI aborted (#{kind}): #{inspect(reason)}")
-            System.halt(1)
-        end
-      end)
+      spawn_burrito_cli()
     end
 
     result
+  end
+
+  defp spawn_burrito_cli do
+    args = burrito_argv()
+
+    spawn(fn ->
+      try do
+        CodePuppyControl.CLI.main(args)
+        System.halt(0)
+      rescue
+        e ->
+          IO.puts(
+            :stderr,
+            "Burrito CLI crashed: #{Exception.format(:error, e, __STACKTRACE__)}"
+          )
+
+          System.halt(1)
+      catch
+        :exit, {:shutdown, code} when is_integer(code) ->
+          System.halt(code)
+
+        kind, reason ->
+          IO.puts(:stderr, "Burrito CLI aborted (#{kind}): #{inspect(reason)}")
+          System.halt(1)
+      end
+    end)
   end
 
   @impl true
