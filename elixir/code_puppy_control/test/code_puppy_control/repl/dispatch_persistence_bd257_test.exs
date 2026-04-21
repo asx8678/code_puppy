@@ -113,7 +113,8 @@ defmodule CodePuppyControl.REPL.DispatchPersistenceBD257Test do
       end
 
       case Registry.lookup(CodePuppyControl.REPL.RendererRegistry, session_id) do
-        [] -> :ok
+        [] ->
+          :ok
 
         [{pid, _}] ->
           if Process.alive?(pid) do
@@ -160,7 +161,10 @@ defmodule CodePuppyControl.REPL.DispatchPersistenceBD257Test do
 
       assert [
                %{"role" => "user", "parts" => [%{"type" => "text", "text" => "Hello"}]},
-               %{"role" => "assistant", "parts" => [%{"type" => "text", "text" => "I am a helpful assistant!"}]}
+               %{
+                 "role" => "assistant",
+                 "parts" => [%{"type" => "text", "text" => "I am a helpful assistant!"}]
+               }
              ] = messages
     end
 
@@ -245,6 +249,100 @@ defmodule CodePuppyControl.REPL.DispatchPersistenceBD257Test do
 
       assert "compaction-safe reply" in assistant_texts,
              "Assistant reply must survive compaction. Got messages: #{inspect(messages)}"
+    end
+
+    test "actual compaction shrinks history and set_messages preserves result", %{
+      state: state,
+      session_id: session_id
+    } do
+      # WATCHDOG REGRESSION TEST (bd-257 critic feedback):
+      # This test forces ACTUAL compaction that shrinks the message count,
+      # proving that the old Enum.drop(final_messages, pre_count) logic
+      # would silently return [] and drop the assistant reply.
+      #
+      # The key scenario: pre_count (messages before the loop ran) exceeds
+      # the length of final_messages (after compaction). With the old code:
+      #   Enum.drop([a, b, c], 10) => []  ← ALL replies lost!
+      # With the new State.set_messages fix, the compacted output is
+      # persisted atomically regardless of prefix alignment.
+
+      # Use part_kind/content format so the token estimator assigns
+      # realistic token counts — without this, each message gets ~1 token
+      # and the split algorithm's min_keep*100 floor protects everything.
+      long_content =
+        String.duplicate(
+          "This is a substantial message with enough text for token estimation. ",
+          20
+        )
+
+      # Pre-populate 30 messages — well above any reasonable trigger
+      for i <- 1..30 do
+        State.append_message(session_id, "code_puppy", %{
+          "role" => "user",
+          "parts" => [
+            %{
+              "part_kind" => "text",
+              "content" => "Message #{i}: #{long_content}"
+            }
+          ]
+        })
+      end
+
+      pre_count = length(State.get_messages(session_id, "code_puppy"))
+      assert pre_count == 30
+
+      # Aggressive compaction: trigger at 5 messages, keep only 2
+      Application.put_env(
+        :code_puppy_control,
+        :test_compaction_opts,
+        trigger_messages: 5,
+        min_keep: 2,
+        keep_fraction: 0.05
+      )
+
+      BD257MockLLM.set_response(%{text: "post-compaction reply", tool_calls: []})
+
+      ExUnit.CaptureIO.capture_io(fn ->
+        assert {:continue, ^state} = Loop.handle_input("new question", state)
+      end)
+
+      messages = State.get_messages(session_id, "code_puppy")
+      final_count = length(messages)
+
+      # COMPACTION MUST ACTUALLY FIRE: final_count < pre_count + 2
+      # (pre_count + 2 = 32 = 30 original + 1 user + 1 assistant without
+      # compaction). If compaction ran, we should see significantly fewer.
+      assert final_count < pre_count + 2,
+             "Compaction did not shrink history: got #{final_count} messages, " <>
+               "expected < #{pre_count + 2}. Compaction opts may not be working."
+
+      # PROOF: the old Enum.drop logic would fail here.
+      # If pre_count was 31 (30 + 1 new user msg) and final_count is < 31,
+      # then Enum.drop(final_messages, pre_count) would return [].
+      # Simulate the old logic to demonstrate the bug:
+      simulated_drop = Enum.drop(messages, pre_count)
+
+      assert simulated_drop == [],
+             "Old Enum.drop logic should return [] when final_count < pre_count, " <>
+               "but got: #{inspect(simulated_drop)}. This means the test " <>
+               "setup doesn't trigger the bug scenario."
+
+      # The assistant reply MUST be present — proving set_messages works
+      # even when Enum.drop would have returned [].
+      assistant_texts =
+        messages
+        |> Enum.filter(&(&1["role"] == "assistant"))
+        |> Enum.map(fn msg ->
+          msg
+          |> Map.get("parts")
+          |> Enum.find(&Map.has_key?(&1, "text"))
+          |> Map.get("text")
+        end)
+
+      assert "post-compaction reply" in assistant_texts,
+             "Assistant reply must survive actual compaction. " <>
+               "Got #{final_count} messages (down from #{pre_count} pre-loop). " <>
+               "Messages: #{inspect(messages)}"
     end
 
     test "set_messages replaces state atomically, not incrementally", %{
