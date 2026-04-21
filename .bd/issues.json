@@ -4957,7 +4957,45 @@
       "created_at": "2026-04-21T08:48:07.596532",
       "updated_at": "2026-04-21T08:48:07.596539",
       "comments": []
+    },
+    "bd-248": {
+      "id": "bd-248",
+      "title": "Burrito binary: config validation fires before --help/--version fast-path",
+      "description": "Discovered from bd-236 smoke test (commit 4ecb4586). Running the Burrito-packaged binary with --help or --version crashes at runtime config load time because config/runtime.exs calls CodePuppyControl.Config.validate!() which requires PUP_PYTHON_WORKER_SCRIPT env var in prod.\n\n## Root cause chain\n\n1. config/runtime.exs:31 \u2014 CodePuppyControl.Config.validate!() runs at every prod boot (before Application.start/2)\n2. config.ex:264 \u2014 validate!() calls python_worker_script() in prod mode\n3. config.ex:235 \u2014 python_worker_script() uses get_required_string, raises on missing env var\n4. application.ex:128 \u2014 Burrito CLI dispatch happens AFTER supervision tree startup, AFTER runtime.exs validation\n5. cli.ex:35 has a {:help, _} / {:version, _} fast path that halts(0) before config access \u2014 but it's UNREACHABLE because runtime validation fires first\n\n## Why it only hits Burrito\n\nconfig/runtime.exs runs in prod mode only. mix / escript workflows run in :dev or :test where validation is relaxed. Burrito binaries always boot in prod, so they always hit validation.\n\n## Reproduction\n\ncd elixir/code_puppy_control\n./scripts/build-burrito.sh --host-only\n./burrito_out/code_puppy_control_macos_arm64 --help\n# Crashes with \"PUP_PYTHON_WORKER_SCRIPT not set\"\n\n## Proposed fix (Option A \u2014 minimal)\n\nIn config/runtime.exs, check :init.get_plain_arguments() for --help, -h, --version, -v, -V BEFORE calling validate!(). If any appear, skip validation entirely. ~10 lines added.\n\nThis matches the pattern already used in application.ex (reading :init.get_plain_arguments() for Burrito args) and does not restructure existing code.\n\n## Alternative fix (Option B \u2014 cleaner but bigger)\n\nMove validate!() out of runtime.exs into CLI.run/1 (in cli.ex) right after Parser.parse/1 for non-help paths. Keeps all CLI flag handling colocated. ~20 lines across 2 files. Needs review of whether anything else depends on runtime-time validation order.\n\n## Acceptance criteria\n\n- ./burrito_out/code_puppy_control_* --help exits 0 with help text\n- ./burrito_out/code_puppy_control_* --version exits 0 with version text\n- ./burrito_out/code_puppy_control_* -h and -v / -V aliases also work\n- Normal REPL invocation still enforces required env vars in prod\n- Test coverage: mock :init.get_plain_arguments() in a config test\n\n## Priority\n\nMedium \u2014 ships broken for end users the moment someone tries --help on a released binary. Blocks any release promotion past bd-236.\n\n## Related\n\nDiscovered-from: bd-236 (Burrito CI matrix build)\nBlocks: first v* release tag push that anyone actually tests",
+      "status": "open",
+      "priority": 2,
+      "type": "task",
+      "labels": [
+        "bug,burrito,config,phase-7"
+      ],
+      "dependencies": {
+        "discovered-from": [
+          "bd-236"
+        ]
+      },
+      "created_at": "2026-04-21T09:37:10.486805",
+      "updated_at": "2026-04-21T09:37:20.328092",
+      "comments": []
+    },
+    "bd-249": {
+      "id": "bd-249",
+      "title": "Agent message-history state container (prep for bd-247)",
+      "description": "Port Python BaseAgent message-history state to an Elixir GenServer so that bd-247 (/compact + /truncate full implementation) has something to operate on. Without this container, /compact has no messages to compact \u2014 this is the real blocker behind bd-247, not the Compaction algorithm itself.\n\n## Context\n\nDiscovered during bd-247 architecture scoping (after bd-163 shipped):\n- Compaction.compact/2 (pure function) \u2014 ALREADY implemented in lib/code_puppy_control/compaction.ex\n- Messages.Pruner.truncation_indices/3 \u2014 ALREADY implemented in lib/code_puppy_control/messages/pruner.ex\n- Python BaseAgent.get_message_history / set_message_history / append_to_message_history \u2014 NOT YET ported to Elixir\n- REPL send_to_agent/2 at loop.ex:381 is a TODO stub from bd-160\n\n## Scope\n\nBuild CodePuppyControl.Agent.State as a GenServer keyed by {session_id, agent_name}, mirroring Python BaseAgent._state.\n\n### Public API\n\n    @spec get_messages(session_id, agent_name) :: [message()]\n    @spec set_messages(session_id, agent_name, [message()]) :: :ok\n    @spec append_message(session_id, agent_name, message()) :: :ok\n    @spec extend_messages(session_id, agent_name, [message()]) :: :ok\n    @spec clear_messages(session_id, agent_name) :: :ok\n    @spec message_count(session_id, agent_name) :: non_neg_integer()\n    @spec message_hash(message()) :: binary()\n\n### Implementation notes\n\n- Registry-based process lookup (reuse CodePuppyControl.Run.Registry pattern)\n- DynamicSupervisor child per {session, agent} pair\n- Hash-set dedup mirroring Python's _state.message_history_hashes (use :erlang.phash2/1 or SHA-256 per message)\n- Inactivity timeout (reuse Run.State's 30-min pattern, lib/.../run/state.ex:61)\n- Processes auto-start on first access (start_messages/2 helper)\n- NOT integrated with REPL or send_to_agent \u2014 that's the NEXT ticket\n\n### Tests\n\n- start_supervised! in tests for isolation\n- Round-trip get/set/append/extend/clear\n- Dedup: appending the same message twice doesn't grow history\n- Count accuracy\n- Inactivity timeout triggers (mock time, not sleep)\n- Multi-session isolation: {sess1, agent} and {sess2, agent} don't collide\n\n## Scope EXCLUSIONS\n\n- Do NOT wire to REPL send_to_agent/2 (that's a bd-160 follow-up)\n- Do NOT wire /compact or /truncate to this (that's bd-247)\n- Do NOT add persistence to SessionStorage (orthogonal)\n\n## Blocks\n\n- bd-247 (full /compact + /truncate) becomes trivial once this lands:\n  - /compact: get -> Compaction.compact -> set\n  - /truncate N: get -> Enum.take(-N) -> set\n\n## File references for the implementer\n\n- Template: lib/code_puppy_control/run/state.ex (GenServer + Registry + timeout)\n- Python source: code_puppy/agents/base_agent.py lines 300-340 (history API)\n- Compaction (already done): lib/code_puppy_control/compaction.ex:99\n- Pruner (already done): lib/code_puppy_control/messages/pruner.ex:127\n- Stubs to replace later: lib/code_puppy_control/cli/slash_commands/commands/session.ex\n\n## Estimated effort\n\n~1 day pure container work (GenServer + supervisor + registry + tests).\nLow integration risk because nothing wires to it in this ticket.",
+      "status": "open",
+      "priority": 2,
+      "type": "task",
+      "labels": [
+        "migration,python-to-elixir,rewrite,phase-4,agent-state"
+      ],
+      "dependencies": {
+        "blocks": [
+          "bd-247"
+        ]
+      },
+      "created_at": "2026-04-21T09:37:13.091532",
+      "updated_at": "2026-04-21T09:37:13.091539",
+      "comments": []
     }
   },
-  "counter": 247
+  "counter": 249
 }
