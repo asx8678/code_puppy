@@ -257,7 +257,7 @@ defmodule CodePuppyControl.CLI.SlashCommands.RegistryTest do
       Registry.register_builtin_commands()
 
       expected =
-        ~w(help quit exit clear history cd model agent sessions tui agents pack mode flags compact truncate)
+        ~w(help quit exit clear history cd model agent sessions tui agents pack mode flags diff compact truncate)
 
       for name <- expected do
         assert {:ok, _} = Registry.get(name),

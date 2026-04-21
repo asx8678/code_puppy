@@ -51,6 +51,7 @@ defmodule CodePuppyControl.REPL.CompletionTest do
       assert "/quit" in all
       assert "/model" in all
       assert "/agent" in all
+      assert "/agents" in all
       assert "/clear" in all
       assert "/history" in all
       assert "/exit" in all
@@ -62,12 +63,24 @@ defmodule CodePuppyControl.REPL.CompletionTest do
       assert Completion.complete("/pack", :command) == ["/pack"]
     end
 
+    test "/ag completes to both /agent and /agents" do
+      results = Completion.complete("/ag", :command)
+      assert "/agent" in results
+      assert "/agents" in results
+    end
+
+    test "/agents is completable from fallback list" do
+      # "/age" matches both /agent and /agents
+      assert Completion.complete("/age", :command) == ["/agent", "/agents"]
+      assert Completion.complete("/agents", :command) == ["/agents"]
+    end
+
     test "all known slash commands are completable" do
       # Ensures the fallback list stays in sync with Registry.register_builtin_commands/0
       all = Completion.complete_command("/")
 
       expected =
-        ~w(/help /model /mode /agent /quit /exit /clear /history /pack /flags /sessions /tui /cd /compact /truncate)
+        ~w(/help /model /mode /agent /agents /quit /exit /clear /history /pack /flags /diff /sessions /tui /cd /compact /truncate)
 
       for cmd <- expected do
         assert cmd in all, "Expected #{cmd} to be in slash-command completions"
@@ -124,10 +137,14 @@ defmodule CodePuppyControl.REPL.CompletionTest do
       assert "/model" in all
       assert "/mode" in all
       assert "/flags" in all
+      assert "/diff" in all
+      assert "/agents" in all
 
       # Verify prefix matching works through the fallback path
       assert Completion.complete("/pa", :command) == ["/pack"]
       assert Completion.complete("/he", :command) == ["/help"]
+      assert "/agent" in Completion.complete("/ag", :command)
+      assert "/agents" in Completion.complete("/ag", :command)
 
       # Cleanup is handled by on_exit in setup — no inline restore needed
     end

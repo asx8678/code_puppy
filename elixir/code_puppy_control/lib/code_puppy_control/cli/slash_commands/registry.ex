@@ -240,6 +240,13 @@ defmodule CodePuppyControl.CLI.SlashCommands.Registry do
         usage: "/flags [reset|set <flag>|clear <flag>]",
         category: "config"
       ),
+      CommandInfo.new(
+        name: "diff",
+        description: "Show or configure diff highlighting colors",
+        handler: &Commands.Diff.handle_diff/2,
+        usage: "/diff [additions|deletions] <color>",
+        category: "config"
+      ),
       # Session commands
       CommandInfo.new(
         name: "compact",
