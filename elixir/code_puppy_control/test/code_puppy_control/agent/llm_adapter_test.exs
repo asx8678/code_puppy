@@ -402,6 +402,156 @@ defmodule CodePuppyControl.Agent.LLMAdapterTest do
   end
 
   # ===========================================================================
+  # 1b-ii. bd-258 regression: canonical tool-return part flattening
+  # ===========================================================================
+
+  describe "bd-258: canonical tool-return part flattening" do
+    test "single tool-return part produces provider message with content and tool_call_id" do
+      msgs = [
+        %{
+          "role" => "tool",
+          "parts" => [
+            %{"part_kind" => "tool-return", "tool_call_id" => "tc1", "content" => "tool result"}
+          ]
+        }
+      ]
+
+      ProviderMock.set_response(%{id: "r1", content: "ok", tool_calls: []})
+
+      assert {:ok, _} = LLMAdapter.stream_chat(msgs, [], [model: "test"], fn _ -> :ok end)
+
+      [captured] = ProviderMock.captured_messages()
+      assert captured.role == "tool"
+      assert captured.content == "tool result"
+      assert captured.tool_call_id == "tc1"
+    end
+
+    test "tool-return part with atom keys" do
+      msgs = [
+        %{
+          "role" => "tool",
+          "parts" => [
+            %{part_kind: "tool-return", tool_call_id: "tc_atom", content: "atom result"}
+          ]
+        }
+      ]
+
+      ProviderMock.set_response(%{id: "r1", content: "ok", tool_calls: []})
+
+      assert {:ok, _} = LLMAdapter.stream_chat(msgs, [], [model: "test"], fn _ -> :ok end)
+
+      [captured] = ProviderMock.captured_messages()
+      assert captured.role == "tool"
+      assert captured.content == "atom result"
+      assert captured.tool_call_id == "tc_atom"
+    end
+
+    test "multiple tool-return parts each produce separate provider messages" do
+      msgs = [
+        %{
+          "role" => "tool",
+          "parts" => [
+            %{"part_kind" => "tool-return", "tool_call_id" => "tc1", "content" => "result A"},
+            %{"part_kind" => "tool-return", "tool_call_id" => "tc2", "content" => "result B"}
+          ]
+        }
+      ]
+
+      ProviderMock.set_response(%{id: "r1", content: "ok", tool_calls: []})
+
+      assert {:ok, _} = LLMAdapter.stream_chat(msgs, [], [model: "test"], fn _ -> :ok end)
+
+      [msg_a, msg_b] = ProviderMock.captured_messages()
+      assert msg_a.role == "tool"
+      assert msg_a.content == "result A"
+      assert msg_a.tool_call_id == "tc1"
+      assert msg_b.role == "tool"
+      assert msg_b.content == "result B"
+      assert msg_b.tool_call_id == "tc2"
+    end
+
+    test "tool-return part falls back to message-root tool_call_id" do
+      msgs = [
+        %{
+          "role" => "tool",
+          "parts" => [
+            %{"part_kind" => "tool-return", "content" => "no part-level id"}
+          ],
+          "tool_call_id" => "root_id"
+        }
+      ]
+
+      ProviderMock.set_response(%{id: "r1", content: "ok", tool_calls: []})
+
+      assert {:ok, _} = LLMAdapter.stream_chat(msgs, [], [model: "test"], fn _ -> :ok end)
+
+      [captured] = ProviderMock.captured_messages()
+      assert captured.tool_call_id == "root_id"
+    end
+
+    test "part-level tool_call_id takes precedence over message-root" do
+      msgs = [
+        %{
+          "role" => "tool",
+          "parts" => [
+            %{"part_kind" => "tool-return", "tool_call_id" => "part_id", "content" => "data"}
+          ],
+          "tool_call_id" => "root_id"
+        }
+      ]
+
+      ProviderMock.set_response(%{id: "r1", content: "ok", tool_calls: []})
+
+      assert {:ok, _} = LLMAdapter.stream_chat(msgs, [], [model: "test"], fn _ -> :ok end)
+
+      [captured] = ProviderMock.captured_messages()
+      assert captured.tool_call_id == "part_id"
+    end
+
+    test "tool-return part with nil content produces empty string" do
+      msgs = [
+        %{
+          "role" => "tool",
+          "parts" => [
+            %{"part_kind" => "tool-return", "tool_call_id" => "tc_nil", "content" => nil}
+          ]
+        }
+      ]
+
+      ProviderMock.set_response(%{id: "r1", content: "ok", tool_calls: []})
+
+      assert {:ok, _} = LLMAdapter.stream_chat(msgs, [], [model: "test"], fn _ -> :ok end)
+
+      [captured] = ProviderMock.captured_messages()
+      assert captured.content == ""
+      assert captured.tool_call_id == "tc_nil"
+    end
+
+    test "mixed text and tool-return parts: text message first, then tool-return messages" do
+      msgs = [
+        %{
+          "role" => "tool",
+          "parts" => [
+            %{"part_kind" => "text", "content" => "explanation"},
+            %{"part_kind" => "tool-return", "tool_call_id" => "tc1", "content" => "result"}
+          ]
+        }
+      ]
+
+      ProviderMock.set_response(%{id: "r1", content: "ok", tool_calls: []})
+
+      assert {:ok, _} = LLMAdapter.stream_chat(msgs, [], [model: "test"], fn _ -> :ok end)
+
+      [text_msg, tool_msg] = ProviderMock.captured_messages()
+      assert text_msg.role == "tool"
+      assert text_msg.content == "explanation"
+      assert tool_msg.role == "tool"
+      assert tool_msg.content == "result"
+      assert tool_msg.tool_call_id == "tc1"
+    end
+  end
+
+  # ===========================================================================
   # 1c. bd-258 regression: next-turn with compacted history
   # ===========================================================================
 
@@ -455,6 +605,48 @@ defmodule CodePuppyControl.Agent.LLMAdapterTest do
              }
 
       assert Enum.at(captured, 3) == %{role: "user", content: "Tell me more."}
+    end
+
+    test "compacted history with tool-return parts replays with content and tool_call_id" do
+      # Full conversation including tool-return: user → assistant (tool call) → tool (result)
+      compacted_history = [
+        %{"role" => "user", "parts" => [%{"part_kind" => "text", "content" => "List files."}]},
+        %{
+          "role" => "assistant",
+          "parts" => [%{"part_kind" => "text", "content" => "Let me check."}]
+        },
+        %{
+          "role" => "tool",
+          "parts" => [
+            %{
+              "part_kind" => "tool-return",
+              "tool_call_id" => "tc1",
+              "content" => "file1.ex\nfile2.ex"
+            }
+          ]
+        },
+        %{"role" => "user", "parts" => [%{"part_kind" => "text", "content" => "Thanks!"}]}
+      ]
+
+      ProviderMock.set_response(%{id: "r1", content: "You're welcome!", tool_calls: []})
+
+      assert {:ok, _} =
+               LLMAdapter.stream_chat(compacted_history, [], [model: "test"], fn _ -> :ok end)
+
+      captured = ProviderMock.captured_messages()
+      # 4 messages: user, assistant, tool, user
+      assert length(captured) == 4
+
+      tool_msg = Enum.at(captured, 2)
+      assert tool_msg.role == "tool"
+      assert tool_msg.content == "file1.ex\nfile2.ex"
+      assert tool_msg.tool_call_id == "tc1"
+
+      # Every message must have non-empty content
+      for msg <- captured do
+        assert msg.content != "",
+               "Expected non-empty content for role=#{msg.role}, got empty string"
+      end
     end
 
     test "mixed compacted + fresh messages all produce non-empty content" do

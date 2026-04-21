@@ -39,7 +39,7 @@ defmodule CodePuppyControl.Agent.LLMAdapter do
 
   @impl true
   def stream_chat(messages, tool_names, opts, callback_fn) do
-    provider_messages = Enum.map(messages, &to_provider_message/1)
+    provider_messages = Enum.flat_map(messages, &to_provider_message/1)
     provider_tools = resolve_tools(tool_names)
 
     llm_mod = Application.get_env(:code_puppy_control, :llm_adapter_provider, LLM)
@@ -129,46 +129,75 @@ defmodule CodePuppyControl.Agent.LLMAdapter do
   # ── Message conversion ───────────────────────────────────────────────────
 
   # Prompt Toolkit "parts" format (string-keyed) — flatten to text.
-  # Supports two part schemas:
-  #   Legacy:  %{"type" => "text", "text" => "..."}
-  #   Canonical (bd-257+): %{"part_kind" => "text", "content" => "..."}
+  # Supports part schemas:
+  #   Legacy:           %{"type" => "text", "text" => "..."}
+  #   Canonical text:   %{"part_kind" => "text", "content" => "..."}
+  #   Canonical tool-return (bd-258): %{"part_kind" => "tool-return", "tool_call_id" => "...", "content" => "..."}
   # Both string-keyed and atom-keyed variants are handled.
+  #
+  # Returns a list of provider messages. Text parts are joined into a single
+  # message; each tool-return part becomes its own message (providers require
+  # one tool_call_id per tool-role message).
   defp to_provider_message(%{"role" => role, "parts" => parts} = msg) when is_list(parts) do
-    text =
-      parts
+    msg_tool_call_id = msg["tool_call_id"] || msg[:tool_call_id]
+
+    {text_parts, tool_return_parts} =
+      Enum.split_with(parts, fn
+        %{"part_kind" => "tool-return"} -> false
+        %{part_kind: "tool-return"} -> false
+        _ -> true
+      end)
+
+    # Flatten text-like parts into a single content string
+    text_content =
+      text_parts
       |> Enum.map(fn
-        # Canonical parts: part_kind/content (bd-257+ compacted history)
         %{"part_kind" => "text", "content" => c} -> c || ""
         %{part_kind: "text", content: c} -> c || ""
-        # Legacy parts: type/text
         %{"type" => "text", "text" => t} -> t
         %{type: :text, text: t} -> t
-        # Bare string part
         other when is_binary(other) -> other
         _ -> ""
       end)
       |> Enum.join("")
 
-    base = %{role: role, content: text}
-    maybe_put(base, :tool_call_id, msg["tool_call_id"] || msg[:tool_call_id])
+    text_msg =
+      if text_content != "" or tool_return_parts == [] do
+        base = %{role: role, content: text_content}
+        [maybe_put(base, :tool_call_id, msg_tool_call_id)]
+      else
+        []
+      end
+
+    # Each tool-return part produces its own provider message with
+    # part-level tool_call_id (falling back to message-root tool_call_id).
+    tool_return_msgs =
+      Enum.map(tool_return_parts, fn part ->
+        content = part["content"] || part[:content] || ""
+        part_tool_call_id = part["tool_call_id"] || part[:tool_call_id]
+        base = %{role: role, content: content}
+        maybe_put(base, :tool_call_id, part_tool_call_id || msg_tool_call_id)
+      end)
+
+    text_msg ++ tool_return_msgs
   end
 
   # String-keyed content (already in provider shape or close to it)
   defp to_provider_message(%{"role" => role, "content" => content} = msg) do
     base = %{role: role, content: content}
-    maybe_put(base, :tool_call_id, msg["tool_call_id"] || msg[:tool_call_id])
+    [maybe_put(base, :tool_call_id, msg["tool_call_id"] || msg[:tool_call_id])]
   end
 
   # Atom-keyed content (from Agent.Loop internals)
   defp to_provider_message(%{role: role, content: content} = msg) do
     base = %{role: to_string(role), content: content}
-    maybe_put(base, :tool_call_id, msg[:tool_call_id] || msg["tool_call_id"])
+    [maybe_put(base, :tool_call_id, msg[:tool_call_id] || msg["tool_call_id"])]
   end
 
   # Fallback: try to coerce
   defp to_provider_message(msg) do
     Logger.warning("LLMAdapter: unknown message shape, passing through: #{inspect(msg)}")
-    msg
+    [msg]
   end
 
   defp maybe_put(map, _key, nil), do: map
