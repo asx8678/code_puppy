@@ -54,6 +54,44 @@ defmodule CodePuppyControl.REPL.CompletionTest do
       assert "/clear" in all
       assert "/history" in all
       assert "/exit" in all
+      assert "/pack" in all
+    end
+
+    test "/pack is completable from fallback list" do
+      assert Completion.complete("/pa", :command) == ["/pack"]
+      assert Completion.complete("/pack", :command) == ["/pack"]
+    end
+
+    test "all known slash commands are completable" do
+      # Ensures the fallback list stays in sync with Registry.register_builtin_commands/0
+      all = Completion.complete_command("/")
+      expected = ~w(/help /model /agent /quit /exit /clear /history /pack /sessions /tui /cd /compact /truncate)
+      for cmd <- expected do
+        assert cmd in all, "Expected #{cmd} to be in slash-command completions"
+      end
+    end
+  end
+
+  describe "complete_command/1 — dynamic registry integration" do
+    @tag :registry
+    test "derives commands from Registry when it is running" do
+      # The Registry GenServer is started by the Application supervision tree.
+      # If it's up, Completion should derive the command list dynamically.
+      registry_alive? =
+        Process.whereis(CodePuppyControl.CLI.SlashCommands.Registry) != nil
+
+      if registry_alive? do
+        # Ensure builtins are registered (idempotent if already done)
+        CodePuppyControl.CLI.SlashCommands.Registry.register_builtin_commands()
+
+        # With Registry running, /pack must appear in completions
+        all = Completion.complete_command("/")
+        assert "/pack" in all
+        assert Completion.complete("/pa", :command) == ["/pack"]
+      else
+        # Registry not started (unlikely in normal test run) — fallback covers us
+        assert "/pack" in Completion.complete_command("/")
+      end
     end
   end
 
