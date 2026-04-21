@@ -128,25 +128,43 @@ defmodule CodePuppyControl.CLI.SlashCommands.Commands.AddModelPersistence do
 
   The temp file is created in the same directory as the target so that
   `File.rename/2` never fails with `:exdev` (cross-device link).
+
+  Exception-safe: `File.Error`, `Jason.EncodeError`, and
+  `IsolationViolation` are all caught and converted to `{:error, _}`
+  tuples.  The same `tmp_path` is cleaned up in the `after` block if
+  the operation did not succeed, preventing orphan temp files even when
+  an unexpected exception crashes the LockKeeper call.
   """
   @spec atomic_write_json(String.t(), map()) :: {:ok, String.t()} | {:error, term()}
   def atomic_write_json(path, data) do
     dir = Path.dirname(path)
     tmp_path = make_temp_path(path)
+    success = false
 
-    with :ok <- safe_mkdir_p(dir),
-         json = Jason.encode!(data, pretty: true),
-         :ok <- safe_write(tmp_path, json),
-         :ok <- File.rename(tmp_path, path) do
-      {:ok, path}
-    else
-      {:error, _reason} = err ->
-        # Best-effort cleanup of the *same* temp file we just wrote.
-        # Reusing tmp_path (bound above) avoids the previous bug where
-        # a second make_temp_path call generated a different unique integer.
-        File.rm(tmp_path)
-        err
-    end
+    result =
+      try do
+        :ok = safe_mkdir_p(dir)
+        json = Jason.encode!(data, pretty: true)
+        :ok = safe_write(tmp_path, json)
+        :ok = File.rename(tmp_path, path)
+        success = true
+        {:ok, path}
+      rescue
+        e in File.Error ->
+          {:error, Exception.message(e)}
+
+        e in Jason.EncodeError ->
+          {:error, Exception.message(e)}
+
+        e in CodePuppyControl.Config.Isolation.IsolationViolation ->
+          {:error, Exception.message(e)}
+      after
+        unless success do
+          safe_remove_tmp(tmp_path)
+        end
+      end
+
+    result
   end
 
   # ── Private ─────────────────────────────────────────────────────────────
@@ -159,23 +177,28 @@ defmodule CodePuppyControl.CLI.SlashCommands.Commands.AddModelPersistence do
     Path.join(dir, ".cp_extra_models_#{uniq}.tmp")
   end
 
-  # Isolation-safe directory creation.  Catches IsolationViolation and
-  # converts to a tagged error so callers can pattern-match.
+  # Isolation-safe directory creation.  Raises on failure so the outer
+  # try/rescue in atomic_write_json/2 can catch and convert to {:error, _}.
   defp safe_mkdir_p(dir) do
     Isolation.safe_mkdir_p!(dir)
     :ok
-  rescue
-    e in CodePuppyControl.Config.Isolation.IsolationViolation ->
-      {:error, Exception.message(e)}
   end
 
-  # Isolation-safe file write.  Same rescue strategy as safe_mkdir_p/1.
+  # Isolation-safe file write.  Raises on failure so the outer
+  # try/rescue in atomic_write_json/2 can catch and convert to {:error, _}.
   defp safe_write(path, content) do
     Isolation.safe_write!(path, content)
     :ok
+  end
+
+  # Best-effort removal of a temp file.  Never raises — if the file
+  # doesn't exist or the remove fails, we silently ignore it since we're
+  # already in an error path and the LockKeeper call must not crash.
+  defp safe_remove_tmp(tmp_path) do
+    File.rm(tmp_path)
+    :ok
   rescue
-    e in CodePuppyControl.Config.Isolation.IsolationViolation ->
-      {:error, Exception.message(e)}
+    _ -> :ok
   end
 
   # Resolves the LockKeeper module (overridable in tests).
