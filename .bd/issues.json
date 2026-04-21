@@ -4955,8 +4955,10 @@
         ]
       },
       "created_at": "2026-04-21T08:48:07.596532",
-      "updated_at": "2026-04-21T08:48:07.596539",
-      "comments": []
+      "updated_at": "2026-04-21T12:43:11.135363",
+      "comments": [
+        "Claimed by pack-leader-019daf. Scouting implementation for /compact and /truncate in Elixir REPL slash commands; next step is isolated worktree + delegated coding."
+      ]
     },
     "bd-248": {
       "id": "bd-248",
@@ -5034,8 +5036,10 @@
         ]
       },
       "created_at": "2026-04-21T11:24:59.330721",
-      "updated_at": "2026-04-21T11:24:59.330739",
-      "comments": []
+      "updated_at": "2026-04-21T12:43:45.580527",
+      "comments": [
+        "Claimed by pack-leader-019daf. Starting isolated worktree + delegated implementation for direct LLMAdapter unit tests. Auto-tests remain off; coding only for now."
+      ]
     },
     "bd-252": {
       "id": "bd-252",
