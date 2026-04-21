@@ -507,23 +507,25 @@ defmodule CodePuppyControl.REPL.Loop do
     end
   end
 
+  @renderer_registry CodePuppyControl.REPL.RendererRegistry
+
   defp ensure_renderer(state) do
     renderer_name = renderer_name(state.session_id)
 
-    case Process.whereis(renderer_name) do
-      nil ->
+    case Registry.lookup(@renderer_registry, state.session_id) do
+      [] ->
         Renderer.start_link(name: renderer_name, session_id: state.session_id)
 
-      pid when is_pid(pid) ->
+      [{pid, _value}] ->
         Renderer.reset(pid)
         {:ok, pid}
     end
   end
 
   defp renderer_name(session_id) do
-    # One atom per session — finite sessions per REPL lifetime, so atom table
-    # growth is bounded.
-    String.to_atom("Elixir.CodePuppyControl.REPL.Renderer.#{session_id}")
+    # Uses {:via, Registry, ...} so renderer processes are registered
+    # without creating atoms from unbounded session IDs (bd-252).
+    {:via, Registry, {@renderer_registry, session_id}}
   end
 
   defp start_agent_loop(agent_module, messages, state, run_id) do

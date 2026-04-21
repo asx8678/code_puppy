@@ -102,6 +102,8 @@ defmodule CodePuppyControl.Application do
       # Token ledger for per-run/session token accounting (bd-152)
       CodePuppyControl.TokenLedger,
       CodePuppyControl.RequestTracker,
+      # Renderer registry — avoids String.to_atom for per-session renderers (bd-252)
+      {Registry, keys: :unique, name: CodePuppyControl.REPL.RendererRegistry},
 
       # Shell command runner process tracking (bd-64)
       CodePuppyControl.Tools.CommandRunner.ProcessManager,
