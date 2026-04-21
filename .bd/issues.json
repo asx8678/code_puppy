@@ -4855,7 +4855,7 @@
       "id": "bd-243",
       "title": "CLI.GacParser: duplicate '--' prefix in unknown-option error message (same as bd-242)",
       "description": "Same defect class as bd-242, in a sibling file.\n\nFile: elixir/code_puppy_control/lib/code_puppy_control/cli/gac_parser.ex line 51:\n\n    {_parsed, _positional, invalid} ->\n      errors = Enum.map_join(invalid, \", \", fn {key, _val} -> \"--#{key}\" end)\n      {:error, \"unknown option(s): #{errors}\"}\n\nOptionParser.parse/3 returns invalid keys already prefixed with '--', so running the gac binary with --nonsense would produce 'unknown option(s): ----nonsense' (four dashes).\n\nFix: same one-line change as bd-242 \u2014 use to_string(key) instead of \"--#{key}\".\n\nAdd a regression test in test/code_puppy_control/cli/gac_parser_test.exs under the existing 'parse/1 \u2014 error handling' describe block that asserts the error message contains '--bogus' (or similar) and refutes '----bogus'. The current test only does 'msg =~ \"bogus\"' which missed this class of bug in bd-242.\n\nScope: ~5 LOC fix + 1 test. Discovered by planning-agent-019dac while working bd-242.\n\nReference commit (the bd-242 fix) for the exact pattern.",
-      "status": "open",
+      "status": "closed",
       "priority": 3,
       "type": "bug",
       "labels": [
@@ -4863,8 +4863,10 @@
       ],
       "dependencies": {},
       "created_at": "2026-04-21T02:03:21.764904",
-      "updated_at": "2026-04-21T02:03:21.764911",
-      "comments": []
+      "updated_at": "2026-04-21T03:01:56.561756",
+      "comments": [
+        "Fixed by mirroring bd-242 pattern (commit 52999365). One-line change (to_string(key)) in gac_parser.ex + 2 regression tests in gac_parser_test.exs. Filed and closed by planning-agent-019dac."
+      ]
     }
   },
   "counter": 243
