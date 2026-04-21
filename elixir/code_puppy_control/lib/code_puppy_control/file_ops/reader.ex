@@ -154,7 +154,9 @@ defmodule CodePuppyControl.FileOps.Reader do
   """
   @spec read_files([String.t()], keyword()) :: {:ok, [CodePuppyControl.FileOps.read_result()]}
   def read_files(paths, opts \\ []) do
-    max_concurrency = Keyword.get(opts, :max_concurrency, System.schedulers_online())
+    max_concurrency =
+      Keyword.get(opts, :max_concurrency, CodePuppyControl.Runtime.Limits.io_concurrency())
+
     timeout = Keyword.get(opts, :timeout, 30_000)
     read_opts = Keyword.take(opts, [:start_line, :num_lines, :normalize_eol])
 

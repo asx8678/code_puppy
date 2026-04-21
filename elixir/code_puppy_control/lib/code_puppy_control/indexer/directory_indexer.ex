@@ -78,7 +78,7 @@ defmodule CodePuppyControl.Indexer.DirectoryIndexer do
         |> Enum.take(max_files * @candidate_multiplier)
         |> Task.async_stream(
           fn {path, _depth, rel_path} -> process_file(path, rel_path, max_symbols) end,
-          max_concurrency: System.schedulers_online(),
+          max_concurrency: CodePuppyControl.Runtime.Limits.io_concurrency(),
           timeout: 5_000,
           on_timeout: :kill_task
         )

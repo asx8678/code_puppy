@@ -36,9 +36,9 @@ defmodule CodePuppyControl.Concurrency.Limiter do
   @type limiter_type :: :file_ops | :api_calls | :tool_calls
 
   @default_limits %{
-    file_ops: 4,
+    file_ops: 3,
     api_calls: 2,
-    tool_calls: 8
+    tool_calls: 4
   }
 
   @default_timeout 30_000
@@ -74,6 +74,35 @@ defmodule CodePuppyControl.Concurrency.Limiter do
     GenServer.call(__MODULE__, {:acquire, type}, timeout + 5_000)
   catch
     :exit, {:timeout, _} -> {:error, :timeout}
+  end
+
+  @doc """
+  Executes `fun` after acquiring a concurrency slot, and always releases it.
+
+  Returns `{:ok, result}` on success, or `{:error, :timeout}` if no slot
+  became available within the timeout.
+
+  ## Examples
+
+      Limiter.with_slot(:file_ops, fn ->
+        File.read!("large.txt")
+      end)
+  """
+  @spec with_slot(limiter_type(), (-> result), keyword()) ::
+          {:ok, result} | {:error, :timeout}
+        when result: any()
+  def with_slot(type, fun, opts \\ []) when is_function(fun, 0) do
+    case acquire(type, opts) do
+      :ok ->
+        try do
+          {:ok, fun.()}
+        after
+          release(type)
+        end
+
+      {:error, :timeout} = err ->
+        err
+    end
   end
 
   @doc """

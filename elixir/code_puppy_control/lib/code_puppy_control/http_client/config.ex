@@ -29,8 +29,10 @@ defmodule CodePuppyControl.HttpClient.Config do
   @spec child_spec(keyword()) :: Supervisor.child_spec()
   def child_spec(opts \\ []) do
     pool_name = Keyword.get(opts, :pool_name, @default_pool_name)
-    pool_size = Keyword.get(opts, :pool_size, 50)
-    pool_count = Keyword.get(opts, :pool_count, System.schedulers_online())
+    pool_size = Keyword.get(opts, :pool_size, CodePuppyControl.Runtime.Limits.finch_pool_size())
+
+    pool_count =
+      Keyword.get(opts, :pool_count, CodePuppyControl.Runtime.Limits.finch_pool_count())
 
     {Finch,
      name: pool_name,

@@ -163,7 +163,7 @@ defmodule CodePuppyControl.CodeContext do
       |> Enum.take(max_files)
       |> Enum.map(&Path.join(abs_dir, &1.path))
       |> Task.async_stream(&explore_or_nil(&1, Keyword.get(opts, :include_content, false)),
-        max_concurrency: System.schedulers_online(),
+        max_concurrency: CodePuppyControl.Runtime.Limits.io_concurrency(),
         timeout: 10_000,
         on_timeout: :kill_task
       )
@@ -194,7 +194,7 @@ defmodule CodePuppyControl.CodeContext do
       |> Enum.filter(&(Access.get(&1, :type) == :file and supported_ext?(&1.path)))
       |> Enum.map(&Path.join(abs_dir, &1.path))
       |> Task.async_stream(&find_in_file(&1, symbol_name),
-        max_concurrency: System.schedulers_online(),
+        max_concurrency: CodePuppyControl.Runtime.Limits.io_concurrency(),
         timeout: 5_000,
         on_timeout: :kill_task
       )
