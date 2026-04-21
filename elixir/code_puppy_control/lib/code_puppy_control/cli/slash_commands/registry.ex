@@ -227,6 +227,13 @@ defmodule CodePuppyControl.CLI.SlashCommands.Registry do
         usage: "/pack [pack_name]",
         category: "context"
       ),
+      CommandInfo.new(
+        name: "mode",
+        description: "Show or switch configuration preset (basic/semi/full/pack)",
+        handler: &Commands.Mode.handle_mode/2,
+        usage: "/mode [preset_name]",
+        category: "context"
+      ),
       # Session commands
       CommandInfo.new(
         name: "compact",

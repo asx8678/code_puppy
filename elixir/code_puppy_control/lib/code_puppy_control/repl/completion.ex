@@ -21,6 +21,7 @@ defmodule CodePuppyControl.REPL.Completion do
   @fallback_slash_commands [
     "/help",
     "/model",
+    "/mode",
     "/agent",
     "/quit",
     "/exit",

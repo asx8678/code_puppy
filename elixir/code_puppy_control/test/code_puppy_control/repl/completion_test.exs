@@ -67,7 +67,7 @@ defmodule CodePuppyControl.REPL.CompletionTest do
       all = Completion.complete_command("/")
 
       expected =
-        ~w(/help /model /agent /quit /exit /clear /history /pack /sessions /tui /cd /compact /truncate)
+        ~w(/help /model /mode /agent /quit /exit /clear /history /pack /sessions /tui /cd /compact /truncate)
 
       for cmd <- expected do
         assert cmd in all, "Expected #{cmd} to be in slash-command completions"
