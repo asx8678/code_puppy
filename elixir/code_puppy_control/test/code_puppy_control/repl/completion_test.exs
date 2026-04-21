@@ -2,8 +2,29 @@ defmodule CodePuppyControl.REPL.CompletionTest do
   use ExUnit.Case, async: false
 
   alias CodePuppyControl.REPL.Completion
+  alias CodePuppyControl.CLI.SlashCommands.Registry
+
+  # ── Shared setup: ensure Registry is started + populated with builtins ────
+  # Without this, tests that rely on slash-command completion are order-
+  # dependent: if registry_test.exs runs first it leaves a partially-
+  # populated Registry, and slash_commands/0 takes the Registry path
+  # instead of the fallback, returning incomplete results.
+
+  defp ensure_registry_populated do
+    case Process.whereis(Registry) do
+      nil -> start_supervised!({Registry, []})
+      _pid -> :ok
+    end
+
+    Registry.register_builtin_commands()
+  end
 
   describe "complete/2 — command type" do
+    setup do
+      ensure_registry_populated()
+      :ok
+    end
+
     test "completes slash command prefix" do
       assert Completion.complete("/h", :command) == ["/help", "/history"]
       assert Completion.complete("/he", :command) == ["/help"]
@@ -13,7 +34,7 @@ defmodule CodePuppyControl.REPL.CompletionTest do
 
     test "exact match returns single result" do
       assert Completion.complete("/help", :command) == ["/help"]
-      assert Completion.complete("/model", :command) == ["/model"]
+      assert Completion.complete("/model_settings", :command) == ["/model_settings"]
     end
 
     test "no match returns empty list" do
@@ -26,6 +47,11 @@ defmodule CodePuppyControl.REPL.CompletionTest do
   end
 
   describe "complete/2 — auto type" do
+    setup do
+      ensure_registry_populated()
+      :ok
+    end
+
     test "auto-detects slash command" do
       assert Completion.complete("/h", :auto) == ["/help", "/history"]
     end
@@ -44,6 +70,11 @@ defmodule CodePuppyControl.REPL.CompletionTest do
   end
 
   describe "complete_command/1" do
+    setup do
+      ensure_registry_populated()
+      :ok
+    end
+
     test "lists all commands matching prefix" do
       # "/" matches all commands
       all = Completion.complete_command("/")
@@ -80,7 +111,7 @@ defmodule CodePuppyControl.REPL.CompletionTest do
       all = Completion.complete_command("/")
 
       expected =
-        ~w(/help /model /mode /agent /agents /quit /exit /clear /history /pack /flags /diff /sessions /tui /cd /compact /truncate)
+        ~w(/help /model /mode /model_settings /ms /agent /agents /quit /exit /clear /history /pack /flags /diff /sessions /tui /cd /compact /truncate)
 
       for cmd <- expected do
         assert cmd in all, "Expected #{cmd} to be in slash-command completions"
@@ -90,13 +121,7 @@ defmodule CodePuppyControl.REPL.CompletionTest do
 
   describe "complete_command/1 — dynamic registry integration" do
     setup do
-      # Ensure the Registry GenServer is started for these tests
-      alias CodePuppyControl.CLI.SlashCommands.Registry
-
-      case Process.whereis(Registry) do
-        nil -> start_supervised!({Registry, []})
-        _pid -> :ok
-      end
+      ensure_registry_populated()
 
       # Restore builtins even if a test crashes mid-run (e.g. after Registry.clear())
       on_exit(fn ->
@@ -107,22 +132,17 @@ defmodule CodePuppyControl.REPL.CompletionTest do
     end
 
     test "derives commands from Registry when populated" do
-      alias CodePuppyControl.CLI.SlashCommands.Registry
-
-      Registry.register_builtin_commands()
 
       all = Completion.complete_command("/")
       assert "/pack" in all
       assert "/mode" in all
       assert "/flags" in all
       assert Completion.complete("/pa", :command) == ["/pack"]
-      assert Completion.complete("/mo", :command) == ["/mode", "/model"]
+      assert Completion.complete("/mo", :command) == ["/mode", "/model", "/model_settings"]
       assert Completion.complete("/fl", :command) == ["/flags"]
     end
 
     test "falls back to hardcoded list when Registry is empty" do
-      alias CodePuppyControl.CLI.SlashCommands.Registry
-
       # Clear all registered commands so Registry.all_names() returns []
       Registry.clear()
 

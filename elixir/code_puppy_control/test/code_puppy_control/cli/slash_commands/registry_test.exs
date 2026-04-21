@@ -251,13 +251,15 @@ defmodule CodePuppyControl.CLI.SlashCommands.RegistryTest do
       names = Registry.all_names()
       assert "mode" in names
       assert "flags" in names
+      assert "model_settings" in names
+      assert "ms" in names
     end
 
     test "registers all expected builtin commands" do
       Registry.register_builtin_commands()
 
       expected =
-        ~w(help quit exit clear history cd model agent sessions tui agents pack mode flags diff compact truncate)
+        ~w(help quit exit clear history cd model agent sessions tui agents pack mode model_settings ms flags diff compact truncate)
 
       for name <- expected do
         assert {:ok, _} = Registry.get(name),
@@ -276,13 +278,15 @@ defmodule CodePuppyControl.CLI.SlashCommands.RegistryTest do
       assert "agent" in context_names
     end
 
-    test "/flags is in config category" do
+    test "/flags, /diff, and /model_settings are in config category" do
       Registry.register_builtin_commands()
 
       config_cmds = Registry.list_by_category("config")
       config_names = Enum.map(config_cmds, & &1.name)
 
       assert "flags" in config_names
+      assert "diff" in config_names
+      assert "model_settings" in config_names
     end
 
     test "idempotent — calling twice does not crash" do
@@ -293,6 +297,9 @@ defmodule CodePuppyControl.CLI.SlashCommands.RegistryTest do
 
       assert {:ok, _} = Registry.get("mode")
       assert {:ok, _} = Registry.get("flags")
+      assert {:ok, _} = Registry.get("diff")
+      assert {:ok, _} = Registry.get("model_settings")
+      assert {:ok, _} = Registry.get("ms")
     end
   end
 
