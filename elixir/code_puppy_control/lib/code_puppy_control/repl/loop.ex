@@ -514,7 +514,7 @@ defmodule CodePuppyControl.REPL.Loop do
 
     case Registry.lookup(@renderer_registry, state.session_id) do
       [] ->
-        Renderer.start_link(name: renderer_name, session_id: state.session_id)
+        start_renderer_idempotent(renderer_name, state.session_id)
 
       [{pid, _value}] ->
         # The renderer pid from the registry may have exited between the
@@ -525,8 +525,53 @@ defmodule CodePuppyControl.REPL.Loop do
           {:ok, pid}
         catch
           :exit, _ ->
-            Renderer.start_link(name: renderer_name, session_id: state.session_id)
+            # Renderer died between lookup and reset. Start fresh,
+            # idempotently handling any registration races (concurrent
+            # start, stale Registry entry, etc.).
+            start_renderer_idempotent(renderer_name, state.session_id)
         end
+    end
+  end
+
+  # Starts a renderer, handling the race where another process already
+  # started one for the same session. This can happen when:
+  #   - A concurrent REPL call won the start race
+  #   - The Registry hasn't cleaned up a dead process's entry yet
+  # In both cases, we normalize by resetting the already-started renderer
+  # and returning its pid. If the pid is dead (stale Registry entry),
+  # we yield briefly and retry — the Registry will clean up very shortly.
+  # After retries are exhausted, we return the dead pid; the caller's
+  # finalize is wrapped in try/catch, so this is safe.
+  defp start_renderer_idempotent(renderer_name, session_id, attempts \\ 0) do
+    case Renderer.start_link(name: renderer_name, session_id: session_id) do
+      {:ok, pid} ->
+        {:ok, pid}
+
+      {:error, {:already_started, pid}} ->
+        if Process.alive?(pid) do
+          # A concurrent call won the race — normalize by resetting
+          # to clean state for the new turn.
+          try do
+            Renderer.reset(pid)
+          catch
+            :exit, _ -> :ok
+          end
+
+          {:ok, pid}
+        else
+          # Stale Registry entry (process died but entry not yet removed).
+          # Yield briefly to let the Registry partition process the DOWN
+          # message, then retry. Cap retries to avoid infinite loops.
+          if attempts < 5 do
+            Process.sleep(1)
+            start_renderer_idempotent(renderer_name, session_id, attempts + 1)
+          else
+            {:ok, pid}
+          end
+        end
+
+      {:error, reason} ->
+        {:error, reason}
     end
   end
 
