@@ -4997,7 +4997,26 @@
       "created_at": "2026-04-21T09:37:13.091532",
       "updated_at": "2026-04-21T10:01:25.266935",
       "comments": []
+    },
+    "bd-250": {
+      "id": "bd-250",
+      "title": "Wire REPL.send_to_agent/2 to Agent.Loop + Agent.State + streaming renderer",
+      "description": "Replace the bd-160 TODO stub in REPL.Loop.send_to_agent/2 (lib/code_puppy_control/repl/loop.ex:381-396) with real integration. This is the final wiring step that makes the pure-Elixir Burrito binary chat-capable.\n\n## Context\n\nbd-249 (Agent.State GenServer) is now shipped. bd-161 shipped the streaming renderer. There also exists an Agent.Loop module (lib/code_puppy_control/agent/loop.ex, ~19 KB) and Agent.Turn (~8.8 KB) that were built but never connected to the REPL path.\n\nCurrent state of `REPL.Loop.send_to_agent/2`:\n\n    defp send_to_agent(prompt, state) do\n      # TODO(bd-160): Phase 2 \u2014 wire to Agent.Loop.run/3 with streaming\n      # For now, display intent and echo (no-op agent pipeline)\n      Logger.debug(\"REPL: send_to_agent agent=#{state.agent} model=#{state.model}\")\n      IO.puts(\"[repl] Prompt dispatched to #{state.agent}@#{state.model}\")\n      IO.puts(\"[repl] Agent pipeline not yet wired \u2014 prompt: \\\"...\\\"\")\n    end\n\n## Scope (this ticket)\n\n1. In REPL.Loop.send_to_agent/2:\n   - Append the prompt to Agent.State via Agent.State.append_message(state.session_id, state.agent, prompt_as_user_msg)\n   - Get current history via Agent.State.get_messages/2\n   - Call Agent.Loop.run/N (check actual arity \u2014 read agent/loop.ex first) with history + model\n   - Stream response chunks via the existing streaming renderer (bd-161 \u2014 identify the actual module name)\n   - Append assistant response to Agent.State when done\n   - Handle errors: network failure, rate limit, missing API keys \u2192 user-visible error, continue REPL\n\n2. Ensure session autosave is triggered after each turn (reuse bd-165 SessionStorage.save_session_async/3).\n\n3. Error paths:\n   - No API key for state.model \u2192 red error message, do not crash REPL, do not append to history\n   - Agent.Loop crashes \u2192 log, red error message, REPL continues (do not propagate)\n   - Ctrl-C during streaming \u2192 cancel gracefully, partial response NOT appended to history\n\n## Scope EXCLUSIONS\n\n- Tool call loop (if Agent.Loop already handles it, great; if not, that is a separate ticket)\n- Multi-model fallback / round-robin (existing RoundRobinModel should be transparent)\n- Token accounting UI (TokenLedger exists but REPL does not need to display it yet)\n- /compact and /truncate wiring (that is bd-247)\n\n## Acceptance criteria\n\n- Typing a prompt in REPL and hitting Enter produces a real LLM response\n- The response streams character-by-character to the terminal\n- A second prompt remembers the first (multi-turn conversation works)\n- Session is autosaved after each turn (visible via /sessions list)\n- Missing API key gives clear error, REPL continues\n- Unit/integration tests: mock LLM provider, assert send_to_agent appends to Agent.State, emits renderer calls, autosaves\n\n## File references\n\n- Stub to replace: lib/code_puppy_control/repl/loop.ex:381-396\n- Agent.Loop: lib/code_puppy_control/agent/loop.ex (~19 KB, already exists)\n- Agent.Turn: lib/code_puppy_control/agent/turn.ex (~8.8 KB, already exists)\n- Agent.State: lib/code_puppy_control/agent/state.ex (bd-249, just shipped)\n- Streaming renderer: lib/code_puppy_control/tui/ (identify specific module \u2014 bd-161)\n- Session autosave: lib/code_puppy_control/session_storage.ex \u2192 save_session_async/3 (bd-165)\n- Python reference: code_puppy/interactive_loop.py (for turn orchestration semantics)\n\n## Estimated effort\n\nLikely smaller than initially thought (1-2 days, not 2-3) because Agent.Loop + Agent.Turn are already built. Main work is the REPL\u2194Agent.Loop\u2194Agent.State\u2194Renderer glue + error paths + integration tests.\n\n## Final outcome\n\nAfter this lands: the Burrito single-binary can be distributed to users who set their API keys and get a functional chat-capable pup without Python anywhere. That completes the standalone chat-capable Elixir binary goal from the bd-136/bd-171/bd-236/bd-248/bd-249 arc.\n\nDiscovered-from: bd-249 (filed during bd-249 implementation)\nBlocks: standalone Elixir binary milestone (no bd number \u2014 conceptual)",
+      "status": "open",
+      "priority": 2,
+      "type": "task",
+      "labels": [
+        "migration,python-to-elixir,rewrite,phase-3,agent-integration,repl"
+      ],
+      "dependencies": {
+        "discovered-from": [
+          "bd-249"
+        ]
+      },
+      "created_at": "2026-04-21T10:03:40.851514",
+      "updated_at": "2026-04-21T10:03:40.851521",
+      "comments": []
     }
   },
-  "counter": 249
+  "counter": 250
 }
