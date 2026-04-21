@@ -283,6 +283,213 @@ defmodule CodePuppyControl.Agent.LLMAdapterTest do
   end
 
   # ===========================================================================
+  # 1b. bd-258 regression: canonical part_kind/content flattening
+  # ===========================================================================
+
+  describe "bd-258: canonical part_kind/content flattening" do
+    test "flattens single canonical text part (string keys)" do
+      msgs = [
+        %{
+          "role" => "user",
+          "parts" => [%{"part_kind" => "text", "content" => "hello from canonical"}]
+        }
+      ]
+
+      ProviderMock.set_response(%{id: "r1", content: "ok", tool_calls: []})
+
+      assert {:ok, _} = LLMAdapter.stream_chat(msgs, [], [model: "test"], fn _ -> :ok end)
+
+      assert [%{role: "user", content: "hello from canonical"}] = ProviderMock.captured_messages()
+    end
+
+    test "flattens canonical text part with atom keys" do
+      msgs = [
+        %{"role" => "user", "parts" => [%{part_kind: "text", content: "atom canonical"}]}
+      ]
+
+      ProviderMock.set_response(%{id: "r1", content: "ok", tool_calls: []})
+
+      assert {:ok, _} = LLMAdapter.stream_chat(msgs, [], [model: "test"], fn _ -> :ok end)
+
+      assert [%{role: "user", content: "atom canonical"}] = ProviderMock.captured_messages()
+    end
+
+    test "joins multiple canonical text parts into single content string" do
+      msgs = [
+        %{
+          "role" => "user",
+          "parts" => [
+            %{"part_kind" => "text", "content" => "part A"},
+            %{"part_kind" => "text", "content" => "part B"}
+          ]
+        }
+      ]
+
+      ProviderMock.set_response(%{id: "r1", content: "ok", tool_calls: []})
+
+      assert {:ok, _} = LLMAdapter.stream_chat(msgs, [], [model: "test"], fn _ -> :ok end)
+
+      assert [%{role: "user", content: "part Apart B"}] = ProviderMock.captured_messages()
+    end
+
+    test "canonical part with nil content produces empty string, not crash" do
+      msgs = [
+        %{"role" => "assistant", "parts" => [%{"part_kind" => "text", "content" => nil}]}
+      ]
+
+      ProviderMock.set_response(%{id: "r1", content: "ok", tool_calls: []})
+
+      assert {:ok, _} = LLMAdapter.stream_chat(msgs, [], [model: "test"], fn _ -> :ok end)
+
+      assert [%{role: "assistant", content: ""}] = ProviderMock.captured_messages()
+    end
+
+    test "skips non-text canonical part_kind gracefully" do
+      msgs = [
+        %{
+          "role" => "user",
+          "parts" => [
+            %{"part_kind" => "text", "content" => "visible"},
+            %{"part_kind" => "tool-call", "content" => "call data"}
+          ]
+        }
+      ]
+
+      ProviderMock.set_response(%{id: "r1", content: "ok", tool_calls: []})
+
+      assert {:ok, _} = LLMAdapter.stream_chat(msgs, [], [model: "test"], fn _ -> :ok end)
+
+      # Only text part_kind is flattened; tool-call is skipped
+      assert [%{role: "user", content: "visible"}] = ProviderMock.captured_messages()
+    end
+
+    test "preserves tool_call_id from canonical parts-format message" do
+      msgs = [
+        %{
+          "role" => "tool",
+          "parts" => [%{"part_kind" => "text", "content" => "tool output"}],
+          "tool_call_id" => "call_canonical_999"
+        }
+      ]
+
+      ProviderMock.set_response(%{id: "r1", content: "ok", tool_calls: []})
+
+      assert {:ok, _} = LLMAdapter.stream_chat(msgs, [], [model: "test"], fn _ -> :ok end)
+
+      [captured] = ProviderMock.captured_messages()
+      assert captured.role == "tool"
+      assert captured.content == "tool output"
+      assert captured.tool_call_id == "call_canonical_999"
+    end
+
+    test "mixes canonical and legacy parts in same message" do
+      msgs = [
+        %{
+          "role" => "user",
+          "parts" => [
+            %{"part_kind" => "text", "content" => "canonical "},
+            %{"type" => "text", "text" => "legacy"}
+          ]
+        }
+      ]
+
+      ProviderMock.set_response(%{id: "r1", content: "ok", tool_calls: []})
+
+      assert {:ok, _} = LLMAdapter.stream_chat(msgs, [], [model: "test"], fn _ -> :ok end)
+
+      assert [%{role: "user", content: "canonical legacy"}] = ProviderMock.captured_messages()
+    end
+  end
+
+  # ===========================================================================
+  # 1c. bd-258 regression: next-turn with compacted history
+  # ===========================================================================
+
+  describe "bd-258: next-turn replay with compacted history" do
+    test "compacted history messages are replayed with non-empty content" do
+      # Simulates the scenario from bd-257: after compaction, persisted
+      # messages use canonical part_kind/content format. On the next turn,
+      # these must flatten to provider messages with non-empty content.
+      compacted_history = [
+        %{
+          "role" => "system",
+          "parts" => [%{"part_kind" => "text", "content" => "You are a coding assistant."}]
+        },
+        %{
+          "role" => "user",
+          "parts" => [%{"part_kind" => "text", "content" => "What is Elixir?"}]
+        },
+        %{
+          "role" => "assistant",
+          "parts" => [%{"part_kind" => "text", "content" => "Elixir is a functional language."}]
+        }
+      ]
+
+      # New user turn appended after compaction
+      new_turn = %{
+        "role" => "user",
+        "parts" => [%{"part_kind" => "text", "content" => "Tell me more."}]
+      }
+
+      all_messages = compacted_history ++ [new_turn]
+
+      ProviderMock.set_response(%{id: "r1", content: "Sure!", tool_calls: []})
+
+      assert {:ok, _} = LLMAdapter.stream_chat(all_messages, [], [model: "test"], fn _ -> :ok end)
+
+      captured = ProviderMock.captured_messages()
+      assert length(captured) == 4
+
+      # Every message must have non-empty content — the core bd-258 regression
+      for msg <- captured do
+        assert msg.content != "",
+               "Expected non-empty content for role=#{msg.role}, got empty string"
+      end
+
+      assert Enum.at(captured, 0) == %{role: "system", content: "You are a coding assistant."}
+      assert Enum.at(captured, 1) == %{role: "user", content: "What is Elixir?"}
+
+      assert Enum.at(captured, 2) == %{
+               role: "assistant",
+               content: "Elixir is a functional language."
+             }
+
+      assert Enum.at(captured, 3) == %{role: "user", content: "Tell me more."}
+    end
+
+    test "mixed compacted + fresh messages all produce non-empty content" do
+      # Compacted history in canonical format + fresh messages in legacy format
+      messages = [
+        %{
+          "role" => "system",
+          "parts" => [%{"part_kind" => "text", "content" => "System prompt."}]
+        },
+        %{
+          "role" => "user",
+          "parts" => [%{"type" => "text", "text" => "Legacy format question."}]
+        },
+        %{
+          "role" => "assistant",
+          "parts" => [%{"part_kind" => "text", "content" => "Canonical format answer."}]
+        },
+        %{"role" => "user", "content" => "Flat content follow-up."}
+      ]
+
+      ProviderMock.set_response(%{id: "r1", content: "ok", tool_calls: []})
+
+      assert {:ok, _} = LLMAdapter.stream_chat(messages, [], [model: "test"], fn _ -> :ok end)
+
+      captured = ProviderMock.captured_messages()
+      assert length(captured) == 4
+
+      for msg <- captured do
+        assert msg.content != "",
+               "Expected non-empty content for role=#{msg.role}, got empty string"
+      end
+    end
+  end
+
+  # ===========================================================================
   # 2. Message conversion: atom-keyed → string-keyed
   # ===========================================================================
 

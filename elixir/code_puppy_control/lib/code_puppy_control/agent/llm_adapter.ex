@@ -129,13 +129,21 @@ defmodule CodePuppyControl.Agent.LLMAdapter do
   # ── Message conversion ───────────────────────────────────────────────────
 
   # Prompt Toolkit "parts" format (string-keyed) — flatten to text.
-  # Agent.State stores: %{"role" => "user", "parts" => [%{"type" => "text", "text" => "..."}]}
+  # Supports two part schemas:
+  #   Legacy:  %{"type" => "text", "text" => "..."}
+  #   Canonical (bd-257+): %{"part_kind" => "text", "content" => "..."}
+  # Both string-keyed and atom-keyed variants are handled.
   defp to_provider_message(%{"role" => role, "parts" => parts} = msg) when is_list(parts) do
     text =
       parts
       |> Enum.map(fn
+        # Canonical parts: part_kind/content (bd-257+ compacted history)
+        %{"part_kind" => "text", "content" => c} -> c || ""
+        %{part_kind: "text", content: c} -> c || ""
+        # Legacy parts: type/text
         %{"type" => "text", "text" => t} -> t
         %{type: :text, text: t} -> t
+        # Bare string part
         other when is_binary(other) -> other
         _ -> ""
       end)
