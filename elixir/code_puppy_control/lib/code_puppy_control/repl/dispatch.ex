@@ -52,6 +52,16 @@ defmodule CodePuppyControl.REPL.Dispatch do
         try do
           case Loop.run_until_done(loop_pid, :infinity) do
             :ok ->
+              # Test injection: raise in the success path to exercise
+              # rollback on unexpected raises (bd-254).
+              if raise_reason =
+                   Application.get_env(
+                     :code_puppy_control,
+                     :test_dispatch_success_raise
+                   ) do
+                raise raise_reason
+              end
+
               final_messages = Loop.get_messages(loop_pid)
               new_messages = Enum.drop(final_messages, pre_count)
 
@@ -97,6 +107,21 @@ defmodule CodePuppyControl.REPL.Dispatch do
             # so it is not orphaned in Agent.State.
             State.set_messages(state.session_id, agent_key, messages_before)
             print_agent_error("Agent loop crashed: #{inspect(reason)}")
+            :error
+
+          # bd-254: broaden rollback to cover raises and throws in the
+          # post-append success path. Previously only :exit was caught, so
+          # any raise (e.g. from get_messages, append_message, or
+          # save_session_async) would propagate uncaught and crash the REPL
+          # — leaving the appended user message orphaned in Agent.State.
+          :error, reason ->
+            State.set_messages(state.session_id, agent_key, messages_before)
+            print_agent_error("Unexpected error after append: #{inspect(reason)}")
+            :error
+
+          :throw, value ->
+            State.set_messages(state.session_id, agent_key, messages_before)
+            print_agent_error("Unexpected throw after append: #{inspect(value)}")
             :error
         after
           stop_agent_loop(loop_pid)

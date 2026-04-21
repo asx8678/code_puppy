@@ -441,4 +441,158 @@ defmodule CodePuppyControl.REPL.RendererRollbackTest do
       assert length(messages) == 4
     end
   end
+
+  # ===========================================================================
+  # bd-254 regression: broadened rollback for post-append raises/throws
+  # ===========================================================================
+
+  describe "send_to_agent/2 — rollback on raises in post-append success path (bd-254)" do
+    setup :setup_mock_llm_and_session
+
+    test "raise after run_until_done ok rolls back user message", %{
+      state: state,
+      session_id: session_id
+    } do
+      # Pre-seed one message to prove rollback is surgical (not just clearing).
+      State.append_message(session_id, "code_puppy", %{
+        "role" => "user",
+        "parts" => [%{"type" => "text", "text" => "earlier message"}]
+      })
+
+      assert [%{"role" => "user"}] = State.get_messages(session_id, "code_puppy")
+
+      # Inject a synthetic raise in the success path via app env.
+      Application.put_env(
+        :code_puppy_control,
+        :test_dispatch_success_raise,
+        "injected failure for bd-254 test"
+      )
+
+      on_exit(fn ->
+        Application.delete_env(:code_puppy_control, :test_dispatch_success_raise)
+      end)
+
+      output =
+        ExUnit.CaptureIO.capture_io(fn ->
+          assert {:continue, ^state} = Loop.handle_input("This should be rolled back", state)
+        end)
+
+      # Error indicator should appear in output
+      assert output =~ "⚠" or output =~ "\e[31m" or output =~ "Unexpected error"
+
+      # The user message must have been rolled back — only the pre-seed remains.
+      messages = State.get_messages(session_id, "code_puppy")
+      assert length(messages) == 1
+      assert hd(messages)["parts"] |> hd() |> Map.get("text") == "earlier message"
+
+      # Clean up injection point
+      Application.delete_env(:code_puppy_control, :test_dispatch_success_raise)
+    end
+
+    test "raise with RuntimeError rolls back user message", %{
+      state: state,
+      session_id: session_id
+    } do
+      # Inject a RuntimeError specifically
+      Application.put_env(
+        :code_puppy_control,
+        :test_dispatch_success_raise,
+        RuntimeError.exception("boom from bd-254 test")
+      )
+
+      on_exit(fn ->
+        Application.delete_env(:code_puppy_control, :test_dispatch_success_raise)
+      end)
+
+      output =
+        ExUnit.CaptureIO.capture_io(fn ->
+          assert {:continue, ^state} = Loop.handle_input("This should be rolled back", state)
+        end)
+
+      assert output =~ "⚠" or output =~ "\e[31m" or output =~ "Unexpected error"
+
+      # No messages should remain — rolled back to empty.
+      messages = State.get_messages(session_id, "code_puppy")
+      assert messages == []
+
+      Application.delete_env(:code_puppy_control, :test_dispatch_success_raise)
+    end
+
+    test "REPL survives and subsequent call works after post-append raise", %{
+      state: state,
+      session_id: session_id
+    } do
+      # First call: raise in the success path
+      Application.put_env(
+        :code_puppy_control,
+        :test_dispatch_success_raise,
+        "first boom"
+      )
+
+      ExUnit.CaptureIO.capture_io(fn ->
+        assert {:continue, ^state} = Loop.handle_input("crash me", state)
+      end)
+
+      # Clean up the injection so the next call succeeds
+      Application.delete_env(:code_puppy_control, :test_dispatch_success_raise)
+
+      # Second call: should succeed normally
+      RollbackTestMockLLM.set_response(%{text: "recovered reply", tool_calls: []})
+
+      ExUnit.CaptureIO.capture_io(fn ->
+        assert {:continue, ^state} = Loop.handle_input("try again", state)
+      end)
+
+      # The second call should persist both messages
+      messages = State.get_messages(session_id, "code_puppy")
+      assert length(messages) == 2
+
+      assert [
+               %{"role" => "user", "parts" => [%{"type" => "text", "text" => "try again"}]},
+               %{"role" => "assistant", "parts" => [%{"type" => "text", "text" => "recovered reply"}]}
+             ] = messages
+    end
+
+    test "raise preserves earlier messages (rollback is surgical)", %{
+      state: state,
+      session_id: session_id
+    } do
+      # Pre-seed two messages to verify rollback only removes the appended
+      # user message, not earlier state.
+      State.append_message(session_id, "code_puppy", %{
+        "role" => "user",
+        "parts" => [%{"type" => "text", "text" => "msg one"}]
+      })
+
+      State.append_message(session_id, "code_puppy", %{
+        "role" => "assistant",
+        "parts" => [%{"type" => "text", "text" => "msg two"}]
+      })
+
+      assert length(State.get_messages(session_id, "code_puppy")) == 2
+
+      Application.put_env(
+        :code_puppy_control,
+        :test_dispatch_success_raise,
+        "surgical test"
+      )
+
+      on_exit(fn ->
+        Application.delete_env(:code_puppy_control, :test_dispatch_success_raise)
+      end)
+
+      ExUnit.CaptureIO.capture_io(fn ->
+        assert {:continue, ^state} = Loop.handle_input("should be rolled back", state)
+      end)
+
+      # Only the two pre-seed messages should remain — the user message
+      # that was appended before dispatch_after_append must be gone.
+      messages = State.get_messages(session_id, "code_puppy")
+      assert length(messages) == 2
+      assert Enum.at(messages, 0)["parts"] |> hd() |> Map.get("text") == "msg one"
+      assert Enum.at(messages, 1)["parts"] |> hd() |> Map.get("text") == "msg two"
+
+      Application.delete_env(:code_puppy_control, :test_dispatch_success_raise)
+    end
+  end
 end
