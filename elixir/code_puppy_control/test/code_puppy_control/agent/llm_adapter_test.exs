@@ -90,7 +90,12 @@ defmodule CodePuppyControl.Agent.LLMAdapterTest do
           # Fire text streaming events if content present
           if resp[:content] do
             callback_fn.({:part_start, %{type: :text, index: 0, id: nil}})
-            callback_fn.({:part_delta, %{type: :text, index: 0, text: resp.content, name: nil, arguments: nil}})
+
+            callback_fn.(
+              {:part_delta,
+               %{type: :text, index: 0, text: resp.content, name: nil, arguments: nil}}
+            )
+
             callback_fn.({:part_end, %{type: :text, index: 0, id: nil}})
           end
 
@@ -98,7 +103,18 @@ defmodule CodePuppyControl.Agent.LLMAdapterTest do
           if resp[:tool_calls] do
             for tc <- resp[:tool_calls] do
               callback_fn.({:part_start, %{type: :tool_call, index: 1, id: tc[:id]}})
-              callback_fn.({:part_delta, %{type: :tool_call, index: 1, text: nil, name: tc[:name], arguments: tc[:arguments]}})
+
+              callback_fn.(
+                {:part_delta,
+                 %{
+                   type: :tool_call,
+                   index: 1,
+                   text: nil,
+                   name: tc[:name],
+                   arguments: tc[:arguments]
+                 }}
+              )
+
               callback_fn.({:part_end, %{type: :tool_call, index: 1, id: tc[:id]}})
             end
           end
@@ -109,7 +125,18 @@ defmodule CodePuppyControl.Agent.LLMAdapterTest do
 
         true ->
           # Default: minimal text response
-          callback_fn.({:done, %{id: "r1", model: "test", content: "ok", tool_calls: [], finish_reason: "stop", usage: %{prompt_tokens: 0, completion_tokens: 0, total_tokens: 0}}})
+          callback_fn.(
+            {:done,
+             %{
+               id: "r1",
+               model: "test",
+               content: "ok",
+               tool_calls: [],
+               finish_reason: "stop",
+               usage: %{prompt_tokens: 0, completion_tokens: 0, total_tokens: 0}
+             }}
+          )
+
           :ok
       end
     end
@@ -118,7 +145,6 @@ defmodule CodePuppyControl.Agent.LLMAdapterTest do
   # ---------------------------------------------------------------------------
   # Stub tool for Registry-based tool resolution tests
   # ---------------------------------------------------------------------------
-
 
   defmodule StubTool do
     @moduledoc "Minimal tool module for Registry lookup tests."
@@ -194,6 +220,7 @@ defmodule CodePuppyControl.Agent.LLMAdapterTest do
           ]
         }
       ]
+
       ProviderMock.set_response(%{id: "r1", content: "ok", tool_calls: []})
 
       assert {:ok, _} = LLMAdapter.stream_chat(msgs, [], [model: "test"], fn _ -> :ok end)
@@ -209,6 +236,7 @@ defmodule CodePuppyControl.Agent.LLMAdapterTest do
           "tool_call_id" => "call_abc123"
         }
       ]
+
       ProviderMock.set_response(%{id: "r1", content: "ok", tool_calls: []})
 
       assert {:ok, _} = LLMAdapter.stream_chat(msgs, [], [model: "test"], fn _ -> :ok end)
@@ -227,6 +255,7 @@ defmodule CodePuppyControl.Agent.LLMAdapterTest do
           "parts" => [%{type: :text, text: "atom parts"}]
         }
       ]
+
       ProviderMock.set_response(%{id: "r1", content: "ok", tool_calls: []})
 
       assert {:ok, _} = LLMAdapter.stream_chat(msgs, [], [model: "test"], fn _ -> :ok end)
@@ -236,11 +265,15 @@ defmodule CodePuppyControl.Agent.LLMAdapterTest do
 
     test "skips non-text part types gracefully" do
       msgs = [
-        %{"role" => "user", "parts" => [
-          %{"type" => "text", "text" => "visible"},
-          %{"type" => "image", "url" => "http://example.com/img.png"}
-        ]}
+        %{
+          "role" => "user",
+          "parts" => [
+            %{"type" => "text", "text" => "visible"},
+            %{"type" => "image", "url" => "http://example.com/img.png"}
+          ]
+        }
       ]
+
       ProviderMock.set_response(%{id: "r1", content: "ok", tool_calls: []})
 
       assert {:ok, _} = LLMAdapter.stream_chat(msgs, [], [model: "test"], fn _ -> :ok end)
@@ -319,7 +352,13 @@ defmodule CodePuppyControl.Agent.LLMAdapterTest do
     test "resolves registered tool atom to JSON-Schema function map" do
       ProviderMock.set_response(%{id: "r1", content: "ok", tool_calls: []})
 
-      assert {:ok, _} = LLMAdapter.stream_chat([%{"role" => "user", "content" => "hi"}], [:stub_tool], [model: "test"], fn _ -> :ok end)
+      assert {:ok, _} =
+               LLMAdapter.stream_chat(
+                 [%{"role" => "user", "content" => "hi"}],
+                 [:stub_tool],
+                 [model: "test"],
+                 fn _ -> :ok end
+               )
 
       tools = ProviderMock.captured_tools()
       assert length(tools) == 1
@@ -334,7 +373,13 @@ defmodule CodePuppyControl.Agent.LLMAdapterTest do
     test "skips unregistered tool names without crashing" do
       ProviderMock.set_response(%{id: "r1", content: "ok", tool_calls: []})
 
-      assert {:ok, _} = LLMAdapter.stream_chat([%{"role" => "user", "content" => "hi"}], [:stub_tool, :nonexistent_tool], [model: "test"], fn _ -> :ok end)
+      assert {:ok, _} =
+               LLMAdapter.stream_chat(
+                 [%{"role" => "user", "content" => "hi"}],
+                 [:stub_tool, :nonexistent_tool],
+                 [model: "test"],
+                 fn _ -> :ok end
+               )
 
       tools = ProviderMock.captured_tools()
       # Only :stub_tool resolved; :nonexistent_tool silently skipped
@@ -345,7 +390,13 @@ defmodule CodePuppyControl.Agent.LLMAdapterTest do
     test "empty tool list produces empty schema list" do
       ProviderMock.set_response(%{id: "r1", content: "ok", tool_calls: []})
 
-      assert {:ok, _} = LLMAdapter.stream_chat([%{"role" => "user", "content" => "hi"}], [], [model: "test"], fn _ -> :ok end)
+      assert {:ok, _} =
+               LLMAdapter.stream_chat(
+                 [%{"role" => "user", "content" => "hi"}],
+                 [],
+                 [model: "test"],
+                 fn _ -> :ok end
+               )
 
       assert ProviderMock.captured_tools() == []
     end
@@ -371,7 +422,13 @@ defmodule CodePuppyControl.Agent.LLMAdapterTest do
       :ok = Registry.register(AnotherStubTool)
       ProviderMock.set_response(%{id: "r1", content: "ok", tool_calls: []})
 
-      assert {:ok, _} = LLMAdapter.stream_chat([%{"role" => "user", "content" => "hi"}], [:stub_tool, :another_stub], [model: "test"], fn _ -> :ok end)
+      assert {:ok, _} =
+               LLMAdapter.stream_chat(
+                 [%{"role" => "user", "content" => "hi"}],
+                 [:stub_tool, :another_stub],
+                 [model: "test"],
+                 fn _ -> :ok end
+               )
 
       tools = ProviderMock.captured_tools()
       assert length(tools) == 2
@@ -416,10 +473,12 @@ defmodule CodePuppyControl.Agent.LLMAdapterTest do
 
     test "handles multiple tool calls in response" do
       msgs = [%{"role" => "user", "content" => "multi-tool"}]
+
       tool_calls = [
         %{id: "tc1", name: "read_file", arguments: %{"path" => "a.ex"}},
         %{id: "tc2", name: "command_runner", arguments: %{"command" => "ls"}}
       ]
+
       ProviderMock.set_response(%{id: "r1", content: "", tool_calls: tool_calls})
 
       assert {:ok, resp} = LLMAdapter.stream_chat(msgs, [], [model: "test"], fn _ -> :ok end)
@@ -458,7 +517,12 @@ defmodule CodePuppyControl.Agent.LLMAdapterTest do
     test "response with both text and tool_calls" do
       msgs = [%{"role" => "user", "content" => "analyze"}]
       tool_calls = [%{id: "tc1", name: "read_file", arguments: %{"path" => "a.ex"}}]
-      ProviderMock.set_response(%{id: "r1", content: "Let me check that file.", tool_calls: tool_calls})
+
+      ProviderMock.set_response(%{
+        id: "r1",
+        content: "Let me check that file.",
+        tool_calls: tool_calls
+      })
 
       assert {:ok, resp} = LLMAdapter.stream_chat(msgs, [], [model: "test"], fn _ -> :ok end)
       assert resp.text == "Let me check that file."
@@ -468,7 +532,12 @@ defmodule CodePuppyControl.Agent.LLMAdapterTest do
     test "string-keyed content in response is extracted" do
       # Provider response may have string-keyed "content"
       msgs = [%{"role" => "user", "content" => "hello"}]
-      ProviderMock.set_response(%{"id" => "r1", "content" => "string-keyed content", "tool_calls" => []})
+
+      ProviderMock.set_response(%{
+        "id" => "r1",
+        "content" => "string-keyed content",
+        "tool_calls" => []
+      })
 
       assert {:ok, resp} = LLMAdapter.stream_chat(msgs, [], [model: "test"], fn _ -> :ok end)
       assert resp.text == "string-keyed content"
@@ -484,21 +553,24 @@ defmodule CodePuppyControl.Agent.LLMAdapterTest do
       msgs = [%{"role" => "user", "content" => "hello"}]
       ProviderMock.set_error(:rate_limited)
 
-      assert {:error, :rate_limited} = LLMAdapter.stream_chat(msgs, [], [model: "test"], fn _ -> :ok end)
+      assert {:error, :rate_limited} =
+               LLMAdapter.stream_chat(msgs, [], [model: "test"], fn _ -> :ok end)
     end
 
     test "propagates string error reason" do
       msgs = [%{"role" => "user", "content" => "hello"}]
       ProviderMock.set_error("model overloaded")
 
-      assert {:error, "model overloaded"} = LLMAdapter.stream_chat(msgs, [], [model: "test"], fn _ -> :ok end)
+      assert {:error, "model overloaded"} =
+               LLMAdapter.stream_chat(msgs, [], [model: "test"], fn _ -> :ok end)
     end
 
     test "propagates tuple error reason" do
       msgs = [%{"role" => "user", "content" => "hello"}]
       ProviderMock.set_error({:http_error, 429})
 
-      assert {:error, {:http_error, 429}} = LLMAdapter.stream_chat(msgs, [], [model: "test"], fn _ -> :ok end)
+      assert {:error, {:http_error, 429}} =
+               LLMAdapter.stream_chat(msgs, [], [model: "test"], fn _ -> :ok end)
     end
 
     test "does not call callback on error" do
@@ -507,9 +579,10 @@ defmodule CodePuppyControl.Agent.LLMAdapterTest do
 
       callback_called = :atomics.new(1, [])
 
-      assert {:error, :timeout} = LLMAdapter.stream_chat(msgs, [], [model: "test"], fn _ ->
-        :atomics.add(callback_called, 1, 1)
-      end)
+      assert {:error, :timeout} =
+               LLMAdapter.stream_chat(msgs, [], [model: "test"], fn _ ->
+                 :atomics.add(callback_called, 1, 1)
+               end)
 
       assert :atomics.get(callback_called, 1) == 0
     end
@@ -523,12 +596,13 @@ defmodule CodePuppyControl.Agent.LLMAdapterTest do
     test "returns empty tool list when all tool names are unregistered" do
       ProviderMock.set_response(%{id: "r1", content: "ok", tool_calls: []})
 
-      assert {:ok, _} = LLMAdapter.stream_chat(
-        [%{"role" => "user", "content" => "hi"}],
-        [:totally_fake_tool, :also_nonexistent],
-        [model: "test"],
-        fn _ -> :ok end
-      )
+      assert {:ok, _} =
+               LLMAdapter.stream_chat(
+                 [%{"role" => "user", "content" => "hi"}],
+                 [:totally_fake_tool, :also_nonexistent],
+                 [model: "test"],
+                 fn _ -> :ok end
+               )
 
       # No tools resolved — graceful [], not a crash
       assert ProviderMock.captured_tools() == []
@@ -537,12 +611,13 @@ defmodule CodePuppyControl.Agent.LLMAdapterTest do
     test "non-atom tool names are skipped gracefully" do
       ProviderMock.set_response(%{id: "r1", content: "ok", tool_calls: []})
 
-      assert {:ok, _} = LLMAdapter.stream_chat(
-        [%{"role" => "user", "content" => "hi"}],
-        ["string_tool_name", 123, nil],
-        [model: "test"],
-        fn _ -> :ok end
-      )
+      assert {:ok, _} =
+               LLMAdapter.stream_chat(
+                 [%{"role" => "user", "content" => "hi"}],
+                 ["string_tool_name", 123, nil],
+                 [model: "test"],
+                 fn _ -> :ok end
+               )
 
       # Non-atom entries silently filtered
       assert ProviderMock.captured_tools() == []
@@ -553,12 +628,13 @@ defmodule CodePuppyControl.Agent.LLMAdapterTest do
       # resolve_single_tool handles as nil → filtered out. Verifies no crash.
       ProviderMock.set_response(%{id: "r1", content: "ok", tool_calls: []})
 
-      assert {:ok, _} = LLMAdapter.stream_chat(
-        [%{"role" => "user", "content" => "hi"}],
-        [:no_such_tool_registered, :also_missing],
-        [model: "test"],
-        fn _ -> :ok end
-      )
+      assert {:ok, _} =
+               LLMAdapter.stream_chat(
+                 [%{"role" => "user", "content" => "hi"}],
+                 [:no_such_tool_registered, :also_missing],
+                 [model: "test"],
+                 fn _ -> :ok end
+               )
 
       assert ProviderMock.captured_tools() == []
     end
@@ -575,9 +651,10 @@ defmodule CodePuppyControl.Agent.LLMAdapterTest do
       msgs = [%{"role" => "user", "content" => "hello"}]
       ProviderMock.set_silent_ok()
 
-      task = Task.async(fn ->
-        LLMAdapter.stream_chat(msgs, [], [model: "test"], fn _ -> :ok end)
-      end)
+      task =
+        Task.async(fn ->
+          LLMAdapter.stream_chat(msgs, [], [model: "test"], fn _ -> :ok end)
+        end)
 
       assert {:error, :adapter_timeout} = Task.await(task, 10_000)
     end
@@ -588,11 +665,12 @@ defmodule CodePuppyControl.Agent.LLMAdapterTest do
 
       callback_called = :atomics.new(1, [])
 
-      task = Task.async(fn ->
-        LLMAdapter.stream_chat(msgs, [], [model: "test"], fn _ ->
-          :atomics.add(callback_called, 1, 1)
+      task =
+        Task.async(fn ->
+          LLMAdapter.stream_chat(msgs, [], [model: "test"], fn _ ->
+            :atomics.add(callback_called, 1, 1)
+          end)
         end)
-      end)
 
       assert {:error, :adapter_timeout} = Task.await(task, 10_000)
       # No events emitted → upstream callback never invoked

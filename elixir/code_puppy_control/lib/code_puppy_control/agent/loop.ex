@@ -634,7 +634,7 @@ defmodule CodePuppyControl.Agent.Loop do
   defp resolve_tool_name(name, _allowed) when is_atom(name), do: name
 
   defp resolve_tool_name(name, allowed) when is_binary(name) do
-    case Enum.find(allowed, &Atom.to_string(&1) == name) do
+    case Enum.find(allowed, &(Atom.to_string(&1) == name)) do
       nil -> name
       atom -> atom
     end
