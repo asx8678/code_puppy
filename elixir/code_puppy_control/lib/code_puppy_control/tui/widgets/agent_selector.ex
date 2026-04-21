@@ -80,10 +80,10 @@ defmodule CodePuppyControl.TUI.Widgets.AgentSelector do
         slugs = Enum.map(agents, & &1.slug)
 
         if default && default in slugs do
-          Owl.IO.puts(
-            Owl.Data.tag("\n  Default: ", [:faint]) <>
-              Owl.Data.tag(default, [:bright, :green])
-          )
+          Owl.IO.puts([
+            Owl.Data.tag("\n  Default: ", [:faint]),
+            Owl.Data.tag(default, [:bright, :green])
+          ])
         end
 
         case interactive_select(agents, slugs, label) do

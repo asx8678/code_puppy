@@ -155,6 +155,41 @@ defmodule CodePuppyControl.REPL.LoopTest do
       assert output =~ "Switching agent"
     end
 
+    test "handle_agent_command canonicalizes snake_case input to kebab-case slug", %{
+      state: state
+    } do
+      output =
+        ExUnit.CaptureIO.capture_io(fn ->
+          # User types snake_case; REPL should store kebab-case
+          assert {:continue, new_state} = Loop.handle_agent_command("code_puppy", state)
+          assert new_state.agent == "code-puppy"
+        end)
+
+      assert output =~ "Switching agent"
+      assert output =~ "code-puppy"
+    end
+
+    test "handle_agent_command stores kebab-case for known kebab input", %{state: state} do
+      output =
+        ExUnit.CaptureIO.capture_io(fn ->
+          assert {:continue, new_state} = Loop.handle_agent_command("qa-kitten", state)
+          assert new_state.agent == "qa-kitten"
+        end)
+
+      assert output =~ "Switching agent"
+    end
+
+    test "handle_agent_command falls back to raw input for unknown agent", %{state: state} do
+      output =
+        ExUnit.CaptureIO.capture_io(fn ->
+          assert {:continue, new_state} = Loop.handle_agent_command("no-such-agent", state)
+          # Unknown agent — raw input stored as-is
+          assert new_state.agent == "no-such-agent"
+        end)
+
+      assert output =~ "Switching agent"
+    end
+
     test "/clear continues the loop", %{state: state} do
       assert {:continue, ^state} = Loop.handle_input("/clear", state)
     end

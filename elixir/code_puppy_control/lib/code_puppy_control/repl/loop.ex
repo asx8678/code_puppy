@@ -290,8 +290,18 @@ defmodule CodePuppyControl.REPL.Loop do
 
   def handle_agent_command(agent_name, state) do
     agent_name = String.trim(agent_name)
-    IO.puts("Switching agent: #{state.agent} → #{agent_name}")
-    {:continue, %{state | agent: agent_name}}
+
+    # Resolve through the catalogue to get the canonical kebab-case slug.
+    # If the agent is known, store the canonical slug; otherwise fall back
+    # to the raw input so the REPL doesn't reject unknown names outright.
+    canonical_slug =
+      case resolve_agent_key(agent_name) do
+        {:ok, key} -> String.replace(key, "_", "-")
+        {:error, _} -> agent_name
+      end
+
+    IO.puts("Switching agent: #{state.agent} → #{canonical_slug}")
+    {:continue, %{state | agent: canonical_slug}}
   end
 
   # ── Sessions Command ────────────────────────────────────────────────────
