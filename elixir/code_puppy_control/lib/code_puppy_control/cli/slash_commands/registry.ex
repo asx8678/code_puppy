@@ -240,6 +240,17 @@ defmodule CodePuppyControl.CLI.SlashCommands.Registry do
         usage: "/flags [reset|set <flag>|clear <flag>]",
         category: "config"
       ),
+      # Model settings commands (read-only summary; interactive editor is bd-271)
+      CommandInfo.new(
+        name: "model_settings",
+        description: "Show per-model settings (temperature, seed, etc.)",
+        handler: &Commands.ModelSettings.handle_model_settings/2,
+        usage: "/model_settings --show [model_name]",
+        aliases: ["ms"],
+        category: "config",
+        detailed_help:
+          "Display per-model settings like temperature, seed, top_p, reasoning effort, etc. Use --show with an optional model name to view settings. The interactive editor will be added in a future release."
+      ),
       # Session commands
       CommandInfo.new(
         name: "compact",
