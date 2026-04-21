@@ -187,6 +187,45 @@ defmodule CodePuppyControl.CLI.SlashCommands.Commands.PackTest do
     end
   end
 
+  describe "/pack (whitespace-only args)" do
+    test "whitespace-only args behave like bare /pack" do
+      output =
+        ExUnit.CaptureIO.capture_io(fn ->
+          assert {:continue, _} = Pack.handle_pack("/pack   ", %{})
+        end)
+
+      assert output =~ "single"
+      assert output =~ "Available packs"
+    end
+
+    test "tabs in args behave like bare /pack" do
+      output =
+        ExUnit.CaptureIO.capture_io(fn ->
+          assert {:continue, _} = Pack.handle_pack("/pack\t", %{})
+        end)
+
+      assert output =~ "single"
+    end
+
+    test "mixed whitespace args behave like bare /pack" do
+      output =
+        ExUnit.CaptureIO.capture_io(fn ->
+          assert {:continue, _} = Pack.handle_pack("/pack  \t  ", %{})
+        end)
+
+      assert output =~ "single"
+    end
+
+    test "does not show unknown-pack error for whitespace-only args" do
+      output =
+        ExUnit.CaptureIO.capture_io(fn ->
+          assert {:continue, _} = Pack.handle_pack("/pack   ", %{})
+        end)
+
+      refute output =~ "Unknown pack"
+    end
+  end
+
   describe "/pack with invalid usage" do
     test "shows usage hint for too many args" do
       output =

@@ -1,5 +1,5 @@
 defmodule CodePuppyControl.REPL.CompletionTest do
-  use ExUnit.Case, async: true
+  use ExUnit.Case, async: false
 
   alias CodePuppyControl.REPL.Completion
 
@@ -65,7 +65,10 @@ defmodule CodePuppyControl.REPL.CompletionTest do
     test "all known slash commands are completable" do
       # Ensures the fallback list stays in sync with Registry.register_builtin_commands/0
       all = Completion.complete_command("/")
-      expected = ~w(/help /model /agent /quit /exit /clear /history /pack /sessions /tui /cd /compact /truncate)
+
+      expected =
+        ~w(/help /model /agent /quit /exit /clear /history /pack /sessions /tui /cd /compact /truncate)
+
       for cmd <- expected do
         assert cmd in all, "Expected #{cmd} to be in slash-command completions"
       end
@@ -73,25 +76,50 @@ defmodule CodePuppyControl.REPL.CompletionTest do
   end
 
   describe "complete_command/1 — dynamic registry integration" do
-    @tag :registry
-    test "derives commands from Registry when it is running" do
-      # The Registry GenServer is started by the Application supervision tree.
-      # If it's up, Completion should derive the command list dynamically.
-      registry_alive? =
-        Process.whereis(CodePuppyControl.CLI.SlashCommands.Registry) != nil
+    setup do
+      # Ensure the Registry GenServer is started for these tests
+      alias CodePuppyControl.CLI.SlashCommands.Registry
 
-      if registry_alive? do
-        # Ensure builtins are registered (idempotent if already done)
-        CodePuppyControl.CLI.SlashCommands.Registry.register_builtin_commands()
-
-        # With Registry running, /pack must appear in completions
-        all = Completion.complete_command("/")
-        assert "/pack" in all
-        assert Completion.complete("/pa", :command) == ["/pack"]
-      else
-        # Registry not started (unlikely in normal test run) — fallback covers us
-        assert "/pack" in Completion.complete_command("/")
+      case Process.whereis(Registry) do
+        nil -> start_supervised!({Registry, []})
+        _pid -> :ok
       end
+
+      :ok
+    end
+
+    test "derives commands from Registry when populated" do
+      alias CodePuppyControl.CLI.SlashCommands.Registry
+
+      Registry.register_builtin_commands()
+
+      all = Completion.complete_command("/")
+      assert "/pack" in all
+      assert Completion.complete("/pa", :command) == ["/pack"]
+    end
+
+    test "falls back to hardcoded list when Registry is empty" do
+      alias CodePuppyControl.CLI.SlashCommands.Registry
+
+      # Clear all registered commands so Registry.all_names() returns []
+      Registry.clear()
+
+      # Completion must use the fallback list
+      all = Completion.complete_command("/")
+
+      # Verify we're actually exercising the fallback path (not just getting
+      # lucky with a stale Registry). The fallback list is deterministic.
+      assert "/help" in all
+      assert "/quit" in all
+      assert "/pack" in all
+      assert "/model" in all
+
+      # Verify prefix matching works through the fallback path
+      assert Completion.complete("/pa", :command) == ["/pack"]
+      assert Completion.complete("/he", :command) == ["/help"]
+
+      # Re-register builtins so downstream tests aren't affected
+      Registry.register_builtin_commands()
     end
   end
 

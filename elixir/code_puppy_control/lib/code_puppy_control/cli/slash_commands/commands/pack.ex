@@ -15,12 +15,12 @@ defmodule CodePuppyControl.CLI.SlashCommands.Commands.Pack do
   """
   @spec handle_pack(String.t(), any()) :: {:continue, any()}
   def handle_pack(line, state) do
-    case extract_args(line) do
+    case extract_args(line) |> String.trim() do
       "" ->
         show_current_pack()
 
       args ->
-        pack_name = String.downcase(String.trim(args))
+        pack_name = String.downcase(args)
 
         if String.contains?(pack_name, " ") do
           print_usage()
@@ -53,7 +53,10 @@ defmodule CodePuppyControl.CLI.SlashCommands.Commands.Pack do
       |> Enum.each(fn {role_name, role_config} ->
         chain = format_chain(role_config)
         marker = if role_name == current.default_role, do: "→ ", else: "  "
-        IO.puts("    #{marker}#{IO.ANSI.cyan()}#{String.pad_trailing(role_name, 12)}#{IO.ANSI.reset()} #{chain}")
+
+        IO.puts(
+          "    #{marker}#{IO.ANSI.cyan()}#{String.pad_trailing(role_name, 12)}#{IO.ANSI.reset()} #{chain}"
+        )
       end)
 
       IO.puts("")
@@ -92,7 +95,10 @@ defmodule CodePuppyControl.CLI.SlashCommands.Commands.Pack do
           |> Enum.sort_by(fn {name, _} -> name end)
           |> Enum.each(fn {role_name, role_config} ->
             chain = format_chain(role_config)
-            IO.puts("      #{IO.ANSI.cyan()}#{String.pad_trailing(role_name, 12)}#{IO.ANSI.reset()} #{chain}")
+
+            IO.puts(
+              "      #{IO.ANSI.cyan()}#{String.pad_trailing(role_name, 12)}#{IO.ANSI.reset()} #{chain}"
+            )
           end)
 
           IO.puts("")
@@ -115,7 +121,9 @@ defmodule CodePuppyControl.CLI.SlashCommands.Commands.Pack do
         "    Usage: /pack [pack_name]" <> IO.ANSI.reset()
     )
 
-    IO.puts("    #{IO.ANSI.faint()}Use /pack without arguments to see current pack#{IO.ANSI.reset()}")
+    IO.puts(
+      "    #{IO.ANSI.faint()}Use /pack without arguments to see current pack#{IO.ANSI.reset()}"
+    )
   end
 
   defp format_chain(role_config) do
