@@ -131,7 +131,8 @@ defmodule CodePuppyControl.REPL.SendToAgentTest do
 
       # Clean up any renderer process started for this session.
       case Registry.lookup(CodePuppyControl.REPL.RendererRegistry, session_id) do
-        [] -> :ok
+        [] ->
+          :ok
 
         [{pid, _}] ->
           if Process.alive?(pid) do
@@ -180,7 +181,10 @@ defmodule CodePuppyControl.REPL.SendToAgentTest do
 
       assert [
                %{"role" => "user", "parts" => [%{"type" => "text", "text" => "Hi there"}]},
-               %{"role" => "assistant", "parts" => [%{"type" => "text", "text" => "Hello, human!"}]}
+               %{
+                 "role" => "assistant",
+                 "parts" => [%{"type" => "text", "text" => "Hello, human!"}]
+               }
              ] =
                messages
     end
@@ -300,9 +304,28 @@ defmodule CodePuppyControl.REPL.SendToAgentTest do
       start_if_needed()
       Elixir.Agent.update(__MODULE__, &Map.put(&1, :text, text))
     end
-    def captured_messages, do: (start_if_needed(); Elixir.Agent.get(__MODULE__, & &1)[:messages] || [])
-    def captured_tools, do: (start_if_needed(); Elixir.Agent.get(__MODULE__, & &1)[:tools] || [])
-    def reset, do: (start_if_needed(); Elixir.Agent.update(__MODULE__, fn _ -> %{} end))
+
+    def captured_messages,
+      do:
+        (
+          start_if_needed()
+          Elixir.Agent.get(__MODULE__, & &1)[:messages] || []
+        )
+
+    def captured_tools,
+      do:
+        (
+          start_if_needed()
+          Elixir.Agent.get(__MODULE__, & &1)[:tools] || []
+        )
+
+    def reset,
+      do:
+        (
+          start_if_needed()
+          Elixir.Agent.update(__MODULE__, fn _ -> %{} end)
+        )
+
     def stop do
       try do
         Elixir.Agent.stop(__MODULE__)
@@ -319,8 +342,19 @@ defmodule CodePuppyControl.REPL.SendToAgentTest do
       callback_fn.({:part_start, %{type: :text, index: 0, id: nil}})
       callback_fn.({:part_delta, %{type: :text, index: 0, text: text, name: nil, arguments: nil}})
       callback_fn.({:part_end, %{type: :text, index: 0, id: nil}})
-      callback_fn.({:done, %{id: "r1", model: "test", content: text, tool_calls: [],
-                   finish_reason: "stop", usage: %{prompt_tokens: 0, completion_tokens: 0, total_tokens: 0}}})
+
+      callback_fn.(
+        {:done,
+         %{
+           id: "r1",
+           model: "test",
+           content: text,
+           tool_calls: [],
+           finish_reason: "stop",
+           usage: %{prompt_tokens: 0, completion_tokens: 0, total_tokens: 0}
+         }}
+      )
+
       :ok
     end
   end
@@ -330,18 +364,27 @@ defmodule CodePuppyControl.REPL.SendToAgentTest do
       prev = Application.get_env(:code_puppy_control, :llm_adapter_provider)
       Application.put_env(:code_puppy_control, :llm_adapter_provider, REPLTestProviderMock)
       REPLTestProviderMock.reset()
+
       on_exit(fn ->
-        if prev, do: Application.put_env(:code_puppy_control, :llm_adapter_provider, prev),
+        if prev,
+          do: Application.put_env(:code_puppy_control, :llm_adapter_provider, prev),
           else: Application.delete_env(:code_puppy_control, :llm_adapter_provider)
+
         REPLTestProviderMock.stop()
       end)
+
       :ok
     end
 
     test "converts parts-format user message to content-format for provider" do
       msgs = [%{"role" => "user", "parts" => [%{"type" => "text", "text" => "hi"}]}]
       REPLTestProviderMock.set_response("hello")
-      assert {:ok, _} = CodePuppyControl.Agent.LLMAdapter.stream_chat(msgs, [], [model: "test"], fn _ -> :ok end)
+
+      assert {:ok, _} =
+               CodePuppyControl.Agent.LLMAdapter.stream_chat(msgs, [], [model: "test"], fn _ ->
+                 :ok
+               end)
+
       assert [%{role: "user", content: "hi"}] = REPLTestProviderMock.captured_messages()
     end
 
@@ -349,12 +392,19 @@ defmodule CodePuppyControl.REPL.SendToAgentTest do
       msgs = [%{role: :assistant, content: "I can help!"}]
       REPLTestProviderMock.set_response("ok")
       CodePuppyControl.Agent.LLMAdapter.stream_chat(msgs, [], [model: "test"], fn _ -> :ok end)
-      assert [%{role: "assistant", content: "I can help!"}] = REPLTestProviderMock.captured_messages()
+
+      assert [%{role: "assistant", content: "I can help!"}] =
+               REPLTestProviderMock.captured_messages()
     end
 
     test "captures {:done, response} and returns Agent.LLM contract shape" do
       msgs = [%{"role" => "user", "content" => "hello"}]
-      assert {:ok, resp} = CodePuppyControl.Agent.LLMAdapter.stream_chat(msgs, [], [model: "test"], fn _ -> :ok end)
+
+      assert {:ok, resp} =
+               CodePuppyControl.Agent.LLMAdapter.stream_chat(msgs, [], [model: "test"], fn _ ->
+                 :ok
+               end)
+
       assert resp.text == "ok"
       assert resp.tool_calls == []
     end
