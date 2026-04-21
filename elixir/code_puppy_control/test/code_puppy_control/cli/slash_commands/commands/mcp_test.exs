@@ -7,11 +7,19 @@ defmodule CodePuppyControl.CLI.SlashCommands.Commands.MCPTest do
   # async: false because Registry is a named singleton.
 
   @tmp_dir System.tmp_dir!()
-  @test_cfg_dir Path.join(@tmp_dir, "mcp_test_#{:erlang.unique_integer([:positive])}")
+  @test_home Path.join(@tmp_dir, "mcp_test_#{:erlang.unique_integer([:positive])}")
 
   setup do
-    # Isolate config directory
-    File.mkdir_p!(@test_cfg_dir)
+    # ── Isolate config from real home ──────────────────────────────────────
+    File.mkdir_p!(@test_home)
+
+    orig_pup_ex = System.get_env("PUP_EX_HOME")
+    orig_pup_home = System.get_env("PUP_HOME")
+    orig_puppy_home = System.get_env("PUPPY_HOME")
+
+    System.put_env("PUP_EX_HOME", @test_home)
+    System.delete_env("PUP_HOME")
+    System.delete_env("PUPPY_HOME")
 
     # Start the Registry GenServer if not already running
     case Process.whereis(Registry) do
@@ -34,13 +42,35 @@ defmodule CodePuppyControl.CLI.SlashCommands.Commands.MCPTest do
       )
 
     on_exit(fn ->
+      # Restore env
+      if orig_pup_ex,
+        do: System.put_env("PUP_EX_HOME", orig_pup_ex),
+        else: System.delete_env("PUP_EX_HOME")
+
+      if orig_pup_home,
+        do: System.put_env("PUP_HOME", orig_pup_home),
+        else: System.delete_env("PUP_HOME")
+
+      if orig_puppy_home,
+        do: System.put_env("PUPPY_HOME", orig_puppy_home),
+        else: System.delete_env("PUPPY_HOME")
+
       Registry.clear()
       Registry.register_builtin_commands()
-      File.rm_rf!(@test_cfg_dir)
+      File.rm_rf!(@test_home)
     end)
 
     state = %{session_id: "test-session", running: true}
-    {:ok, state: state, test_cfg_dir: @test_cfg_dir}
+    {:ok, state: state, test_home: @test_home}
+  end
+
+  # ── Helper: write mcp_servers.json into isolated home ───────────────────
+
+  defp write_mcp_config(dir, data) do
+    File.mkdir_p!(dir)
+    path = Path.join(dir, "mcp_servers.json")
+    :ok = File.write!(path, Jason.encode!(data))
+    path
   end
 
   # ── Help subcommand ──────────────────────────────────────────────────────
@@ -70,7 +100,6 @@ defmodule CodePuppyControl.CLI.SlashCommands.Commands.MCPTest do
 
   describe "/mcp list" do
     test "shows no servers when none configured" do
-      # Temporarily point to an empty directory
       output =
         ExUnit.CaptureIO.capture_io(fn ->
           assert {:continue, _} = MCP.handle_mcp("/mcp list", %{})
@@ -80,7 +109,6 @@ defmodule CodePuppyControl.CLI.SlashCommands.Commands.MCPTest do
     end
 
     test "format_list with configured servers from realistic data" do
-      # Simulates what read_configured_servers returns for a real mcp_servers.json
       configured = [
         %{
           "name" => "filesystem",
@@ -103,7 +131,12 @@ defmodule CodePuppyControl.CLI.SlashCommands.Commands.MCPTest do
 
     test "format_list with configured servers shows them" do
       configured = [
-        %{"name" => "filesystem", "command" => "npx", "args" => ["-y", "mcp-server"], "env" => %{}},
+        %{
+          "name" => "filesystem",
+          "command" => "npx",
+          "args" => ["-y", "mcp-server"],
+          "env" => %{}
+        },
         %{"name" => "github", "command" => "npx", "args" => ["-y", "mcp-github"], "env" => %{}}
       ]
 
@@ -119,12 +152,27 @@ defmodule CodePuppyControl.CLI.SlashCommands.Commands.MCPTest do
       ]
 
       runtime = [
-        %{name: "filesystem", status: :running, health: :healthy, error_count: 0, quarantined: false}
+        %{
+          name: "filesystem",
+          status: :running,
+          health: :healthy,
+          error_count: 0,
+          quarantined: false
+        }
       ]
 
       text = MCP.format_list(configured, runtime)
       assert text =~ "filesystem"
       assert text =~ "healthy"
+    end
+
+    test "stopped configured server shows stopped icon" do
+      configured = [%{"name" => "idle-srv", "command" => "echo"}]
+
+      text = MCP.format_list(configured, [])
+      # Stopped = no runtime entry → faint ✗
+      assert text =~ "idle-srv"
+      assert text =~ "✗"
     end
   end
 
@@ -147,7 +195,13 @@ defmodule CodePuppyControl.CLI.SlashCommands.Commands.MCPTest do
       ]
 
       runtime = [
-        %{name: "filesystem", status: :running, health: :healthy, error_count: 0, quarantined: false}
+        %{
+          name: "filesystem",
+          status: :running,
+          health: :healthy,
+          error_count: 0,
+          quarantined: false
+        }
       ]
 
       text = MCP.format_status_dashboard(configured, runtime)
@@ -158,7 +212,16 @@ defmodule CodePuppyControl.CLI.SlashCommands.Commands.MCPTest do
 
     test "format_status_dashboard shows running status" do
       configured = [%{"name" => "test-srv", "command" => "echo"}]
-      runtime = [%{name: "test-srv", status: :running, health: :healthy, error_count: 0, quarantined: false}]
+
+      runtime = [
+        %{
+          name: "test-srv",
+          status: :running,
+          health: :healthy,
+          error_count: 0,
+          quarantined: false
+        }
+      ]
 
       text = MCP.format_status_dashboard(configured, runtime)
       assert text =~ "running"
@@ -167,7 +230,16 @@ defmodule CodePuppyControl.CLI.SlashCommands.Commands.MCPTest do
 
     test "format_status_dashboard shows crashed server" do
       configured = [%{"name" => "crash-srv", "command" => "false"}]
-      runtime = [%{name: "crash-srv", status: :crashed, health: :unhealthy, error_count: 3, quarantined: true}]
+
+      runtime = [
+        %{
+          name: "crash-srv",
+          status: :crashed,
+          health: :unhealthy,
+          error_count: 3,
+          quarantined: true
+        }
+      ]
 
       text = MCP.format_status_dashboard(configured, runtime)
       assert text =~ "crashed"
@@ -182,7 +254,12 @@ defmodule CodePuppyControl.CLI.SlashCommands.Commands.MCPTest do
   describe "/mcp status <name>" do
     test "shows detailed status for a running server" do
       configured = [
-        %{"name" => "filesystem", "command" => "npx", "args" => ["-y", "mcp-server"], "env" => %{}}
+        %{
+          "name" => "filesystem",
+          "command" => "npx",
+          "args" => ["-y", "mcp-server"],
+          "env" => %{}
+        }
       ]
 
       runtime = [
@@ -222,6 +299,7 @@ defmodule CodePuppyControl.CLI.SlashCommands.Commands.MCPTest do
 
     test "shows quarantine info when server is quarantined" do
       configured = [%{"name" => "bad-srv", "command" => "false"}]
+
       runtime = [
         %{
           name: "bad-srv",
@@ -271,6 +349,132 @@ defmodule CodePuppyControl.CLI.SlashCommands.Commands.MCPTest do
     end
   end
 
+  # ── Case-insensitive subcommands ────────────────────────────────────────
+
+  describe "case-insensitive subcommands" do
+    test "/mcp HELP works" do
+      output =
+        ExUnit.CaptureIO.capture_io(fn ->
+          assert {:continue, _} = MCP.handle_mcp("/mcp HELP", %{})
+        end)
+
+      assert output =~ "MCP Server Management Commands"
+    end
+
+    test "/mcp List works" do
+      output =
+        ExUnit.CaptureIO.capture_io(fn ->
+          assert {:continue, _} = MCP.handle_mcp("/mcp List", %{})
+        end)
+
+      assert output =~ "MCP Servers" or output =~ "No MCP servers configured"
+    end
+
+    test "/mcp STATUS works" do
+      output =
+        ExUnit.CaptureIO.capture_io(fn ->
+          assert {:continue, _} = MCP.handle_mcp("/mcp STATUS", %{})
+        end)
+
+      assert output =~ "MCP Status Dashboard" or output =~ "No MCP servers configured"
+    end
+  end
+
+  # ── Config schema: flat vs nested ───────────────────────────────────────
+
+  describe "read_configured_servers — schema support" do
+    test "reads flat top-level map (fixture shape)" do
+      write_mcp_config(@test_home, %{
+        "filesystem" => %{
+          "command" => "npx",
+          "args" => ["-y", "@modelcontextprotocol/server-filesystem", "/tmp"],
+          "env" => %{}
+        },
+        "github" => %{
+          "command" => "docker",
+          "args" => ["run", "-i", "--rm", "ghcr.io/github/github-mcp-server"],
+          "env" => %{"GITHUB_TOKEN" => "${GITHUB_TOKEN}"}
+        }
+      })
+
+      {configured, _runtime} = MCP.fetch_server_data()
+      names = Enum.map(configured, & &1["name"])
+      assert "filesystem" in names
+      assert "github" in names
+    end
+
+    test "reads nested {\"mcp_servers\": {...}} shape" do
+      write_mcp_config(@test_home, %{
+        "mcp_servers" => %{
+          "deep-srv" => %{"command" => "npx", "args" => [], "env" => %{}}
+        }
+      })
+
+      {configured, _runtime} = MCP.fetch_server_data()
+      names = Enum.map(configured, & &1["name"])
+      assert "deep-srv" in names
+    end
+
+    test "returns empty for non-map JSON (e.g. array)" do
+      File.mkdir_p!(@test_home)
+      File.write!(Path.join(@test_home, "mcp_servers.json"), Jason.encode!([1, 2, 3]))
+
+      {configured, _runtime} = MCP.fetch_server_data()
+      assert configured == []
+    end
+
+    test "returns empty when file missing" do
+      File.rm(Path.join(@test_home, "mcp_servers.json"))
+
+      {configured, _runtime} = MCP.fetch_server_data()
+      assert configured == []
+    end
+  end
+
+  # ── Adversarial configured-server cases ─────────────────────────────────
+
+  describe "malformed-but-JSON-valid entries" do
+    test "skips non-map server values (e.g. \"broken\": true)" do
+      write_mcp_config(@test_home, %{
+        "broken" => true,
+        "also_broken" => "just a string",
+        "valid" => %{"command" => "npx", "args" => [], "env" => %{}}
+      })
+
+      {configured, _runtime} = MCP.fetch_server_data()
+      names = Enum.map(configured, & &1["name"])
+      assert "valid" in names
+      refute "broken" in names
+      refute "also_broken" in names
+    end
+
+    test "entirely non-map values → empty list" do
+      write_mcp_config(@test_home, %{
+        "a" => 1,
+        "b" => true,
+        "c" => "hello"
+      })
+
+      {configured, _runtime} = MCP.fetch_server_data()
+      assert configured == []
+    end
+
+    test "/mcp does not crash with malformed entries" do
+      write_mcp_config(@test_home, %{
+        "broken" => true,
+        "ok" => %{"command" => "echo"}
+      })
+
+      output =
+        ExUnit.CaptureIO.capture_io(fn ->
+          assert {:continue, _} = MCP.handle_mcp("/mcp list", %{})
+        end)
+
+      assert output =~ "ok"
+      refute output =~ "broken"
+    end
+  end
+
   # ── Registration and dispatch ────────────────────────────────────────────
 
   describe "registration and dispatch" do
@@ -310,8 +514,8 @@ defmodule CodePuppyControl.CLI.SlashCommands.Commands.MCPTest do
     end
 
     test "/mcp has detailed_help when registered with it" do
-      # Re-register with detailed_help
       Registry.clear()
+
       :ok =
         Registry.register(
           CommandInfo.new(
@@ -333,10 +537,11 @@ defmodule CodePuppyControl.CLI.SlashCommands.Commands.MCPTest do
 
   describe "fetch_server_data" do
     test "returns empty lists when no config file exists" do
+      File.rm(Path.join(@test_home, "mcp_servers.json"))
+
       {configured, runtime} = MCP.fetch_server_data()
       assert is_list(configured)
       assert is_list(runtime)
-      # No config file → empty configured list
       assert configured == []
     end
   end

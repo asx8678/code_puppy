@@ -100,19 +100,23 @@ defmodule CodePuppyControl.CLI.SlashCommands.Commands.MCP do
     else
       lines =
         ["    #{IO.ANSI.bright()}MCP Servers#{IO.ANSI.reset()}", ""]
-        |> Kernel.++(Enum.map(configured, fn server ->
-          name = server["name"] || "unknown"
-          rt = Map.get(runtime_map, name)
-          status_icon = runtime_status_icon(rt)
-          health_str = runtime_health_str(rt)
-          cmd = server["command"] || "—"
+        |> Kernel.++(
+          Enum.map(configured, fn server ->
+            name = server["name"] || "unknown"
+            rt = Map.get(runtime_map, name)
+            status_icon = runtime_status_icon(rt)
+            health_str = runtime_health_str(rt)
+            cmd = server["command"] || "—"
 
-          "    #{status_icon} #{IO.ANSI.cyan()}#{name}#{IO.ANSI.reset()}" <>
-            "   #{IO.ANSI.faint()}#{cmd}#{IO.ANSI.reset()}" <>
-            "   #{health_str}"
-        end))
+            "    #{status_icon} #{IO.ANSI.cyan()}#{name}#{IO.ANSI.reset()}" <>
+              "   #{IO.ANSI.faint()}#{cmd}#{IO.ANSI.reset()}" <>
+              "   #{health_str}"
+          end)
+        )
         |> Kernel.++([""])
-        |> Kernel.++(["    #{IO.ANSI.faint()}#{length(configured)} configured, #{length(runtime)} running#{IO.ANSI.reset()}"])
+        |> Kernel.++([
+          "    #{IO.ANSI.faint()}#{length(configured)} configured, #{length(runtime)} running#{IO.ANSI.reset()}"
+        ])
 
       Enum.join(lines, "\n")
     end
@@ -132,24 +136,29 @@ defmodule CodePuppyControl.CLI.SlashCommands.Commands.MCP do
     else
       lines =
         ["    #{IO.ANSI.bright()}MCP Status Dashboard#{IO.ANSI.reset()}", ""]
-        |> Kernel.++(Enum.map(configured, fn server ->
-          name = server["name"] || "unknown"
-          rt = Map.get(runtime_map, name)
+        |> Kernel.++(
+          Enum.map(configured, fn server ->
+            name = server["name"] || "unknown"
+            rt = Map.get(runtime_map, name)
 
-          status = if rt, do: rt.status, else: "stopped"
-          health = if rt, do: rt.health, else: :unknown
-          errors = if rt, do: rt.error_count, else: 0
-          quarantined = if rt, do: rt.quarantined, else: false
+            status = if rt, do: rt.status, else: "stopped"
+            health = if rt, do: rt.health, else: :unknown
+            errors = if rt, do: rt.error_count, else: 0
+            quarantined = if rt, do: rt.quarantined, else: false
 
-          status_icon = status_to_icon(status)
-          health_str = health_to_string(health)
-          q_str = if quarantined, do: " #{IO.ANSI.yellow()}⏸ Quarantined#{IO.ANSI.reset()}", else: ""
-          err_str = if errors > 0, do: " (#{errors} errors)", else: ""
+            status_icon = status_to_icon(status)
+            health_str = health_to_string(health)
 
-          "    #{status_icon} #{IO.ANSI.cyan()}#{String.pad_trailing(name, 20)}#{IO.ANSI.reset()}" <>
-            " #{String.pad_trailing(to_string(status), 10)}" <>
-            " #{health_str}#{err_str}#{q_str}"
-        end))
+            q_str =
+              if quarantined, do: " #{IO.ANSI.yellow()}⏸ Quarantined#{IO.ANSI.reset()}", else: ""
+
+            err_str = if errors > 0, do: " (#{errors} errors)", else: ""
+
+            "    #{status_icon} #{IO.ANSI.cyan()}#{String.pad_trailing(name, 20)}#{IO.ANSI.reset()}" <>
+              " #{String.pad_trailing(to_string(status), 10)}" <>
+              " #{health_str}#{err_str}#{q_str}"
+          end)
+        )
         |> Kernel.++([""])
 
       Enum.join(lines, "\n")
@@ -160,7 +169,8 @@ defmodule CodePuppyControl.CLI.SlashCommands.Commands.MCP do
   Formats detailed status for a single server (pure, no IO).
   Returns `{:ok, text}` if found, `{:error, :not_found}` otherwise.
   """
-  @spec format_server_status(String.t(), [map()], [map()]) :: {:ok, String.t()} | {:error, :not_found}
+  @spec format_server_status(String.t(), [map()], [map()]) ::
+          {:ok, String.t()} | {:error, :not_found}
   def format_server_status(name, configured, runtime) do
     runtime_map = build_runtime_map(runtime)
     cfg = Enum.find(configured, &(&1["name"] == name))
@@ -169,6 +179,7 @@ defmodule CodePuppyControl.CLI.SlashCommands.Commands.MCP do
       {:error, :not_found}
     else
       rt = Map.get(runtime_map, name)
+
       lines = [
         "    #{IO.ANSI.bright()}Server: #{name}#{IO.ANSI.reset()}",
         ""
@@ -177,32 +188,40 @@ defmodule CodePuppyControl.CLI.SlashCommands.Commands.MCP do
       lines =
         if cfg do
           lines ++
-            ["    Command:     #{cfg["command"] || "—"}",
-             "    Args:        #{inspect(cfg["args"] || [])}",
-             "    Env keys:    #{inspect(map_size(cfg["env"] || %{}))}"]
+            [
+              "    Command:     #{cfg["command"] || "—"}",
+              "    Args:        #{inspect(cfg["args"] || [])}",
+              "    Env keys:    #{inspect(map_size(cfg["env"] || %{}))}"
+            ]
         else
           lines
         end
 
       lines =
         if rt do
-          lines ++
-            ["",
-             "    Status:      #{rt.status}",
-             "    Health:      #{rt.health}",
-             "    Errors:      #{rt.error_count}",
-             "    Quarantined: #{rt.quarantined}",
-             "    Server ID:   #{rt.server_id}"]
-            |> Kernel.++(if rt.quarantine_until do
+          (lines ++
+             [
+               "",
+               "    Status:      #{rt.status}",
+               "    Health:      #{rt.health}",
+               "    Errors:      #{rt.error_count}",
+               "    Quarantined: #{rt.quarantined}",
+               "    Server ID:   #{rt.server_id}"
+             ])
+          |> Kernel.++(
+            if rt.quarantine_until do
               ["    Quarantined until: #{rt.quarantine_until}"]
             else
               []
-            end)
-            |> Kernel.++(if rt.last_health_check do
+            end
+          )
+          |> Kernel.++(
+            if rt.last_health_check do
               ["    Last check: #{rt.last_health_check}"]
             else
               []
-            end)
+            end
+          )
         else
           lines ++ ["", "    #{IO.ANSI.faint()}Not currently running#{IO.ANSI.reset()}"]
         end
@@ -216,7 +235,8 @@ defmodule CodePuppyControl.CLI.SlashCommands.Commands.MCP do
   defp route_subcommand(args) do
     parts = String.split(args, ~r/\s+/, trim: true)
 
-    case parts do
+    # Case-insensitive matching — parity with Python handler
+    case Enum.map(parts, &String.downcase/1) do
       ["help"] -> show_help()
       ["list"] -> show_list()
       ["status"] -> show_status()
@@ -258,11 +278,13 @@ defmodule CodePuppyControl.CLI.SlashCommands.Commands.MCP do
 
       {:error, :not_found} ->
         IO.puts("")
+
         IO.puts(
           IO.ANSI.red() <>
             "    Server '#{name}' not found." <>
             IO.ANSI.reset()
         )
+
         IO.puts("    Use /mcp list to see configured servers.")
         IO.puts("")
     end
@@ -272,11 +294,13 @@ defmodule CodePuppyControl.CLI.SlashCommands.Commands.MCP do
     subcmd = List.first(parts) || ""
 
     IO.puts("")
+
     IO.puts(
       IO.ANSI.red() <>
         "    Unknown MCP subcommand: '#{subcmd}'" <>
         IO.ANSI.reset()
     )
+
     IO.puts("    Type /mcp help for available commands.")
     IO.puts("")
   end
@@ -290,10 +314,17 @@ defmodule CodePuppyControl.CLI.SlashCommands.Commands.MCP do
       {:ok, content} ->
         case Jason.decode(content) do
           {:ok, %{"mcp_servers" => servers}} when is_map(servers) ->
-            servers
-            |> Enum.map(fn {name, cfg} ->
-              Map.put(cfg || %{}, "name", name)
-            end)
+            # Nested shape: {"mcp_servers": {"fs": {...}, ...}}
+            servers_to_list(servers)
+
+          {:ok, flat} when is_map(flat) ->
+            # Flat top-level shape: {"fs": {...}, "gh": {...}}
+            # Only treat as server defs if values are maps (skip malformed)
+            if Enum.any?(flat, fn {_k, v} -> is_map(v) end) do
+              servers_to_list(flat)
+            else
+              []
+            end
 
           {:ok, _other} ->
             []
@@ -305,6 +336,16 @@ defmodule CodePuppyControl.CLI.SlashCommands.Commands.MCP do
       {:error, _} ->
         []
     end
+  end
+
+  # Converts a name-keyed map of server defs into a list with "name" injected.
+  # Skips entries whose value is not a map (e.g. "broken": true).
+  defp servers_to_list(servers_map) do
+    servers_map
+    |> Enum.filter(fn {_name, cfg} -> is_map(cfg) end)
+    |> Enum.map(fn {name, cfg} ->
+      Map.put(cfg, "name", name)
+    end)
   end
 
   # ── Runtime queries ────────────────────────────────────────────────────
@@ -339,18 +380,27 @@ defmodule CodePuppyControl.CLI.SlashCommands.Commands.MCP do
     end)
   end
 
-  defp runtime_status_icon(nil), do: "✗"
-  defp runtime_status_icon(%{status: :running}), do: "✓"
-  defp runtime_status_icon(%{status: :starting}), do: "⏳"
-  defp runtime_status_icon(%{status: :crashed}), do: "⚠"
-  defp runtime_status_icon(%{status: :stopped}), do: "✗"
+  defp runtime_status_icon(nil), do: IO.ANSI.faint() <> "✗" <> IO.ANSI.reset()
+  defp runtime_status_icon(%{status: :running}), do: IO.ANSI.green() <> "✓" <> IO.ANSI.reset()
+  defp runtime_status_icon(%{status: :starting}), do: IO.ANSI.yellow() <> "⏳" <> IO.ANSI.reset()
+  defp runtime_status_icon(%{status: :crashed}), do: IO.ANSI.red() <> "⚠" <> IO.ANSI.reset()
+  defp runtime_status_icon(%{status: :stopped}), do: IO.ANSI.faint() <> "✗" <> IO.ANSI.reset()
   defp runtime_status_icon(_), do: "?"
 
   defp runtime_health_str(nil), do: ""
-  defp runtime_health_str(%{health: :healthy}), do: IO.ANSI.green() <> "healthy" <> IO.ANSI.reset()
-  defp runtime_health_str(%{health: :degraded}), do: IO.ANSI.yellow() <> "degraded" <> IO.ANSI.reset()
-  defp runtime_health_str(%{health: :unhealthy}), do: IO.ANSI.red() <> "unhealthy" <> IO.ANSI.reset()
-  defp runtime_health_str(%{health: :unknown}), do: IO.ANSI.faint() <> "unknown" <> IO.ANSI.reset()
+
+  defp runtime_health_str(%{health: :healthy}),
+    do: IO.ANSI.green() <> "healthy" <> IO.ANSI.reset()
+
+  defp runtime_health_str(%{health: :degraded}),
+    do: IO.ANSI.yellow() <> "degraded" <> IO.ANSI.reset()
+
+  defp runtime_health_str(%{health: :unhealthy}),
+    do: IO.ANSI.red() <> "unhealthy" <> IO.ANSI.reset()
+
+  defp runtime_health_str(%{health: :unknown}),
+    do: IO.ANSI.faint() <> "unknown" <> IO.ANSI.reset()
+
   defp runtime_health_str(_), do: ""
 
   defp status_to_icon(:running), do: IO.ANSI.green() <> "✓" <> IO.ANSI.reset()
