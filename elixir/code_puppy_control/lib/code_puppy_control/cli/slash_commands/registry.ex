@@ -192,7 +192,7 @@ defmodule CodePuppyControl.CLI.SlashCommands.Registry do
       ),
       CommandInfo.new(
         name: "agent",
-        description: "Interactively select or switch the current agent",
+        description: "Show or switch the current agent",
         handler: &Commands.Context.handle_agent/2,
         usage: "/agent [name]",
         category: "context"
@@ -218,6 +218,14 @@ defmodule CodePuppyControl.CLI.SlashCommands.Registry do
         category: "context",
         detailed_help:
           "View all agents with their pinned models. Use '/agents pin <name>' to interactively select a model to pin to an agent."
+      ),
+
+      CommandInfo.new(
+        name: "pack",
+        description: "Show or switch model pack",
+        handler: &Commands.Pack.handle_pack/2,
+        usage: "/pack [pack_name]",
+        category: "context"
       ),
       # Session commands
       CommandInfo.new(

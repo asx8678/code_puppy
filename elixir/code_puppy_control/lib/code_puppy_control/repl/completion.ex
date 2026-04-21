@@ -3,7 +3,7 @@ defmodule CodePuppyControl.REPL.Completion do
   Tab completion for the REPL.
 
   Supports:
-  - Slash commands (`/help`, `/model`, `/agent`, `/quit`, `/clear`, `/history`)
+  - Slash commands (derived from `SlashCommands.Registry` when running, fallback otherwise)
   - File path completion for `@mentions`
 
   ## Usage
@@ -15,15 +15,43 @@ defmodule CodePuppyControl.REPL.Completion do
 
   # ── Slash Commands ────────────────────────────────────────────────────────
 
-  @slash_commands [
+  # Fallback used when the Registry ETS table is not running (tests, early
+  # startup).  Must be kept in sync with
+  # `CodePuppyControl.CLI.SlashCommands.Registry.register_builtin_commands/0`.
+  @fallback_slash_commands [
     "/help",
     "/model",
     "/agent",
     "/quit",
     "/exit",
     "/clear",
-    "/history"
+    "/history",
+    "/pack",
+    "/sessions",
+    "/tui",
+    "/cd",
+    "/compact",
+    "/truncate"
   ]
+
+  # Returns the list of slash commands for completion.  When the ETS-backed
+  # Registry is running, derives the list dynamically so new commands are
+  # automatically picked up.  Falls back to the hardcoded list otherwise.
+  @spec slash_commands() :: [String.t()]
+  defp slash_commands do
+    alias CodePuppyControl.CLI.SlashCommands.Registry
+
+    case Registry.all_names() do
+      [] ->
+        # Registry not started or empty — use the maintained fallback
+        @fallback_slash_commands
+
+      names ->
+        names
+        |> Enum.map(&("/" <> &1))
+        |> Enum.sort()
+    end
+  end
 
   # ── Public API ─────────────────────────────────────────────────────────────
 
@@ -75,7 +103,7 @@ defmodule CodePuppyControl.REPL.Completion do
     if String.contains?(prefix, " ") do
       []
     else
-      Enum.filter(@slash_commands, fn cmd ->
+      Enum.filter(slash_commands(), fn cmd ->
         String.starts_with?(cmd, prefix)
       end)
     end
