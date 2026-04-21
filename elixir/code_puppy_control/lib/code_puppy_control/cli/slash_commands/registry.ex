@@ -233,6 +233,13 @@ defmodule CodePuppyControl.CLI.SlashCommands.Registry do
         usage: "/mode [preset_name]",
         category: "context"
       ),
+      CommandInfo.new(
+        name: "flags",
+        description: "Show current workflow flags and state",
+        handler: &Commands.Flags.handle_flags/2,
+        usage: "/flags [reset|set <flag>|clear <flag>]",
+        category: "config"
+      ),
       # Session commands
       CommandInfo.new(
         name: "compact",

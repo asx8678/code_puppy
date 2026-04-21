@@ -69,6 +69,8 @@ defmodule CodePuppyControl.Application do
       # Autosave debounce/dedup tracker for session storage (bd-165)
       CodePuppyControl.SessionStorage.AutosaveTracker,
       CodePuppyControl.RuntimeState,
+      # Workflow state tracking for /flags command (bd-261)
+      {CodePuppyControl.WorkflowState, name: CodePuppyControl.WorkflowState},
       CodePuppyControl.PolicyEngine,
       CodePuppyControl.AgentModelPinning,
       CodePuppyControl.ModelRegistry,

@@ -28,6 +28,7 @@ defmodule CodePuppyControl.REPL.Completion do
     "/clear",
     "/history",
     "/pack",
+    "/flags",
     "/sessions",
     "/tui",
     "/cd",

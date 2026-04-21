@@ -1,0 +1,140 @@
+defmodule CodePuppyControl.CLI.SlashCommands.Commands.Flags do
+  @moduledoc """
+  Flags slash command: /flags [reset|set <flag>|clear <flag>].
+
+  Shows workflow state and all known flags with active/inactive markers,
+  or manipulates individual flags.
+
+  Ports the Python /flags command from `code_puppy/command_line/workflow_commands.py`.
+  """
+
+  alias CodePuppyControl.WorkflowState
+
+  @usage "Usage: /flags [reset|set <flag>|clear <flag>]"
+
+  @doc """
+  Handles `/flags` — show workflow state and all known flags.
+
+  Subcommands:
+    /flags             — show all flags with active/inactive markers
+    /flags reset       — reset workflow state
+    /flags set <flag>  — set (activate) a named flag
+    /flags clear <flag> — clear (deactivate) a named flag
+  """
+  @spec handle_flags(String.t(), any()) :: {:continue, any()}
+  def handle_flags(line, state) do
+    case parse_args(line) do
+      [] ->
+        show_workflow_state()
+
+      ["reset"] ->
+        WorkflowState.reset()
+        print_success("Workflow state reset")
+
+      ["set", flag_name] ->
+        set_flag_command(flag_name)
+
+      ["clear", flag_name] ->
+        clear_flag_command(flag_name)
+
+      _other ->
+        print_usage()
+    end
+
+    {:continue, state}
+  end
+
+  # ── Subcommand Handlers ──────────────────────────────────────────────────
+
+  defp show_workflow_state do
+    active_count = WorkflowState.active_count()
+    all_flags = WorkflowState.all_flags()
+    total = length(all_flags)
+
+    IO.puts("")
+    IO.puts(IO.ANSI.bright() <> IO.ANSI.magenta() <> "    Workflow State" <> IO.ANSI.reset())
+    IO.puts("")
+
+    Enum.each(all_flags, fn {flag_name, description} ->
+      if WorkflowState.has_flag?(flag_name) do
+        IO.puts(
+          "    ✓ #{IO.ANSI.green()}#{String.pad_trailing(to_string(flag_name), 27)}#{IO.ANSI.reset()} #{description}"
+        )
+      else
+        IO.puts(
+          "    ○ #{IO.ANSI.faint()}#{String.pad_trailing(to_string(flag_name), 27)}#{IO.ANSI.reset()} #{IO.ANSI.faint()}#{description}#{IO.ANSI.reset()}"
+        )
+      end
+    end)
+
+    IO.puts("")
+    IO.puts("    #{IO.ANSI.faint()}Active flags: #{active_count}/#{total}#{IO.ANSI.reset()}")
+
+    metadata = WorkflowState.metadata()
+
+    if map_size(metadata) > 0 do
+      IO.puts("")
+      IO.puts("    #{IO.ANSI.bright()}Metadata:#{IO.ANSI.reset()}")
+
+      metadata
+      |> Enum.sort_by(fn {k, _v} -> k end)
+      |> Enum.each(fn {key, value} ->
+        IO.puts("      #{key}: #{value}")
+      end)
+    end
+
+    IO.puts("")
+  end
+
+  defp set_flag_command(raw_name) do
+    flag_atom = normalize_flag(raw_name)
+
+    if WorkflowState.known_flag?(flag_atom) do
+      WorkflowState.set_flag(flag_atom)
+      print_success("Flag #{flag_atom} set")
+    else
+      print_warning("Unknown flag: #{raw_name}")
+    end
+  end
+
+  defp clear_flag_command(raw_name) do
+    flag_atom = normalize_flag(raw_name)
+
+    if WorkflowState.known_flag?(flag_atom) do
+      WorkflowState.clear_flag(flag_atom)
+      print_success("Flag #{flag_atom} cleared")
+    else
+      print_warning("Unknown flag: #{raw_name}")
+    end
+  end
+
+  # ── Helpers ──────────────────────────────────────────────────────────────
+
+  defp normalize_flag(name) when is_binary(name) do
+    name
+    |> String.downcase()
+    |> String.to_atom()
+  end
+
+  defp parse_args("/" <> rest) do
+    case String.split(rest, " ", parts: 3) do
+      [_name] -> []
+      [_name, sub] -> [String.downcase(sub)]
+      [_name, sub, arg] -> [String.downcase(sub), arg]
+    end
+  end
+
+  defp parse_args(_line), do: []
+
+  defp print_success(msg) do
+    IO.puts(IO.ANSI.green() <> "    ✓ #{msg}" <> IO.ANSI.reset())
+  end
+
+  defp print_warning(msg) do
+    IO.puts(IO.ANSI.yellow() <> "    ⚠ #{msg}" <> IO.ANSI.reset())
+  end
+
+  defp print_usage do
+    IO.puts(IO.ANSI.yellow() <> "    #{@usage}" <> IO.ANSI.reset())
+  end
+end
