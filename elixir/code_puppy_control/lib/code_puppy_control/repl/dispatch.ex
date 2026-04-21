@@ -90,6 +90,14 @@ defmodule CodePuppyControl.REPL.Dispatch do
               print_agent_error(reason)
               :error
           end
+        catch
+          :exit, reason ->
+            # Agent.Loop GenServer died mid-call (e.g. crashed during
+            # run_until_done or get_messages). Roll back the user message
+            # so it is not orphaned in Agent.State.
+            State.set_messages(state.session_id, agent_key, messages_before)
+            print_agent_error("Agent loop crashed: #{inspect(reason)}")
+            :error
         after
           stop_agent_loop(loop_pid)
         end
@@ -238,6 +246,10 @@ defmodule CodePuppyControl.REPL.Dispatch do
 
     case Loop.start_link(agent_module, messages, opts) do
       {:ok, pid} ->
+        # Unlink the Agent.Loop from the REPL process so that a loop crash
+        # cannot kill the REPL via the link. GenServer.call exits are caught
+        # by the catch :exit clause in dispatch_after_append instead.
+        Process.unlink(pid)
         {:ok, pid}
 
       {:error, {:already_started, pid}} ->
