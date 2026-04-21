@@ -5225,15 +5225,17 @@
       "id": "bd-259",
       "title": "Port /pack slash command to Elixir",
       "description": "Port the /pack command from Python (code_puppy/command_line/pack_commands.py) to Elixir slash-command registry. This is the pack management command.",
-      "status": "open",
+      "status": "closed",
       "priority": 2,
       "type": "task",
       "labels": [],
       "dependencies": {},
       "created_at": "2026-04-21T18:05:50.489607",
-      "updated_at": "2026-04-21T18:07:34.788988",
+      "updated_at": "2026-04-21T18:41:13.179988",
       "comments": [
-        "pack-leader-019daf triage: selected as the best next actionable slice from bd-246 because Elixir already has CodePuppyControl.ModelPacks support. Dedicated worktree created at /Users/adam2/projects/bd-259 on branch feature/bd-259-pack-command from main."
+        "pack-leader-019daf triage: selected as the best next actionable slice from bd-246 because Elixir already has CodePuppyControl.ModelPacks support. Dedicated worktree created at /Users/adam2/projects/bd-259 on branch feature/bd-259-pack-command from main.",
+        "Shepherd: APPROVE. Watchdog: APPROVE on a main-relative changed-area basis. Relevant slash-command/completion tests passed; full mix test remains red on base main due unrelated baseline failures.",
+        "Merged to main via local no-ff merge. /pack slash command, registry wiring, completion updates, and targeted tests are in main."
       ]
     },
     "bd-260": {
