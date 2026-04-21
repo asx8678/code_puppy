@@ -5114,9 +5114,15 @@
         ]
       },
       "created_at": "2026-04-21T11:24:59.350629",
-      "updated_at": "2026-04-21T14:56:45.062444",
+      "updated_at": "2026-04-21T16:23:20.688548",
       "comments": [
-        "Claimed by pack-leader-019daf. Queued immediately after bd-253 because both issues overlap the same REPL dispatch path; sequencing to avoid conflict churn in repl/dispatch.ex."
+        "Claimed by pack-leader-019daf. Queued immediately after bd-253 because both issues overlap the same REPL dispatch path; sequencing to avoid conflict churn in repl/dispatch.ex.",
+        "Pack leader update: starting isolated worktree /Users/adam2/projects/bd-254 from updated main. Implementation target is now REPL.Dispatch after bd-252/bd-253 refactors; goal is broadened rollback for any post-append failure class with focused regression coverage.",
+        "Critic feedback: REQUEST_CHANGES. Must broaden rollback wrapper to cover the full post-append critical section (ensure_renderer, generate_run_id, start_agent_loop, and success path), not just the inner loop block. Add real throw-path regression coverage; ideally also keep test-env cleanup on_exit-safe. Since renderer_rollback_test.exs is already near 600 lines, split bd-254-specific tests into a dedicated file if needed.",
+        "Shepherd review: REQUEST_CHANGES. Final blocker is test validity: the new success-path fault tests in dispatch_rollback_bd254_test.exs likely pass through the ordinary run_until_done error path because they do not seed a successful mock response before the first handle_input/2 call. Seed success first so raise/throw/exit faults are exercised after run_until_done returns :ok.",
+        "Pack leader gate: not merging yet because dispatch_rollback_bd254_test.exs is 633 lines, violating the repo's 600-line hard cap. Need one final structural split of bd-254 tests into <=600-line files before merge.",
+        "Shepherd review: APPROVE. Final structural state cleanly splits bd-254 rollback coverage into helper + focused test files under the 600-line cap.",
+        "Watchdog QA: APPROVE. mix test dispatch_rollback_bd254_success_test.exs + dispatch_rollback_bd254_with_test.exs and mix test test/code_puppy_control/repl/ both passed (91 REPL tests, 0 failures)."
       ]
     },
     "bd-255": {
