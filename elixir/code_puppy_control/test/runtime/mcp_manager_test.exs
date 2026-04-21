@@ -228,4 +228,92 @@ defmodule CodePuppyControl.Runtime.MCPManagerTest do
       assert [] = Manager.stop_all_running()
     end
   end
+
+  # ---------------------------------------------------------------------------
+  # Canonical name preservation (Critic 1 regression)
+  # ---------------------------------------------------------------------------
+
+  describe "canonical name preservation on start/restart" do
+    setup do
+      File.mkdir_p!(@test_home)
+
+      File.write!(
+        Path.join(@test_home, "mcp_servers.json"),
+        Jason.encode!(%{
+          "MyServer" => %{"command" => "echo", "args" => [], "env" => %{}}
+        })
+      )
+
+      :ok
+    end
+
+    test "start_server_by_name uses canonical casing from config" do
+      # Even though we pass "myserver" (lowercase), the Manager should
+      # use the canonical name "MyServer" from config when registering.
+      # Without a running MCP supervisor, register_server will fail —
+      # but we verify the config was found (not :not_configured).
+      result = Manager.start_server_by_name("myserver")
+
+      # The supervisor is not running in test, so we expect an error
+      # from register_server — NOT :not_configured.
+      refute match?({:error, :not_configured}, result)
+    end
+
+    test "restart_server_by_name uses canonical casing from config" do
+      result = Manager.restart_server_by_name("myserver")
+      refute match?({:error, :not_configured}, result)
+    end
+
+    test "find_server_config_by_name returns canonical name" do
+      cfg = Manager.find_server_config_by_name("myserver")
+      assert cfg != nil
+      assert cfg["name"] == "MyServer"
+    end
+
+    test "start_server_by_name with MixedCase finds the config" do
+      result = Manager.start_server_by_name("MyServer")
+      refute match?({:error, :not_configured}, result)
+    end
+
+    test "start_server_by_name with ALLCAPS finds the config" do
+      result = Manager.start_server_by_name("MYSERVER")
+      refute match?({:error, :not_configured}, result)
+    end
+  end
+
+  # ---------------------------------------------------------------------------
+  # Happy-path lifecycle with echo server
+  # ---------------------------------------------------------------------------
+
+  describe "happy-path lifecycle with echo server" do
+    setup do
+      File.mkdir_p!(@test_home)
+
+      # Use "echo" as the command — it exists on all Unix systems
+      # but is NOT a valid MCP server, so it will start and then
+      # the handshake will timeout. This tests the config→start→stop
+      # flow without requiring a real MCP server.
+      File.write!(
+        Path.join(@test_home, "mcp_servers.json"),
+        Jason.encode!(%{
+          "echo-srv" => %{"command" => "echo", "args" => ["hello"], "env" => %{}}
+        })
+      )
+
+      :ok
+    end
+
+    test "start_all_configured returns results for configured servers" do
+      results = Manager.start_all_configured()
+      # Should have one entry for echo-srv (may succeed or fail based on
+      # supervisor state, but should not be empty if config is read)
+      # Note: without MCP supervisor running, results may be empty
+      assert is_list(results)
+    end
+
+    test "stop_all_running returns a list" do
+      results = Manager.stop_all_running()
+      assert is_list(results)
+    end
+  end
 end

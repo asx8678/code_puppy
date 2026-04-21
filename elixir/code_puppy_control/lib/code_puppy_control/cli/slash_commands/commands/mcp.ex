@@ -26,12 +26,14 @@ defmodule CodePuppyControl.CLI.SlashCommands.Commands.MCP do
   - Runtime status is queried from `CodePuppyControl.MCP.Manager` when the
     MCP supervision tree is running; otherwise we show "not running".
   - Lifecycle commands (start/stop/restart/start-all/stop-all) delegate to
-    `MCP.Manager` helpers that read config from disk.
+    `MCPLifecycle` (and ultimately `MCP.Manager` helpers).
   - Pure formatting functions are public for testability.
   """
 
   alias CodePuppyControl.Config.Paths
   alias CodePuppyControl.MCP.Manager
+
+  alias CodePuppyControl.CLI.SlashCommands.Commands.MCPLifecycle
 
   # ── Public API ──────────────────────────────────────────────────────────
 
@@ -246,6 +248,17 @@ defmodule CodePuppyControl.CLI.SlashCommands.Commands.MCP do
     end
   end
 
+  # ── Lifecycle formatting delegates ──────────────────────────────────────
+
+  # These thin delegates preserve the public API for backward compatibility
+  # while the actual implementations live in MCPLifecycle.
+
+  defdelegate format_start_result(name, result), to: MCPLifecycle
+  defdelegate format_stop_result(name, result), to: MCPLifecycle
+  defdelegate format_restart_result(name, result), to: MCPLifecycle
+  defdelegate format_start_all_result(results), to: MCPLifecycle
+  defdelegate format_stop_all_result(results), to: MCPLifecycle
+
   # ── Private helpers ────────────────────────────────────────────────────
 
   defp route_subcommand(args) do
@@ -260,14 +273,14 @@ defmodule CodePuppyControl.CLI.SlashCommands.Commands.MCP do
       ["list"] -> show_list()
       ["status"] -> show_status()
       ["status", _name_lower] -> show_server_status(Enum.at(parts, 1))
-      ["start"] -> show_start_usage()
-      ["start", _name_lower] -> show_start(Enum.at(parts, 1))
-      ["stop"] -> show_stop_usage()
-      ["stop", _name_lower] -> show_stop(Enum.at(parts, 1))
-      ["restart"] -> show_restart_usage()
-      ["restart", _name_lower] -> show_restart(Enum.at(parts, 1))
-      ["start-all"] -> show_start_all()
-      ["stop-all"] -> show_stop_all()
+      ["start"] -> MCPLifecycle.show_start_usage()
+      ["start", _name_lower] -> MCPLifecycle.show_start(Enum.at(parts, 1))
+      ["stop"] -> MCPLifecycle.show_stop_usage()
+      ["stop", _name_lower] -> MCPLifecycle.show_stop(Enum.at(parts, 1))
+      ["restart"] -> MCPLifecycle.show_restart_usage()
+      ["restart", _name_lower] -> MCPLifecycle.show_restart(Enum.at(parts, 1))
+      ["start-all"] -> MCPLifecycle.show_start_all()
+      ["stop-all"] -> MCPLifecycle.show_stop_all()
       _ -> show_unknown(parts)
     end
   end
@@ -316,267 +329,6 @@ defmodule CodePuppyControl.CLI.SlashCommands.Commands.MCP do
         IO.puts("")
     end
   end
-
-  # ── Subcommand: start ──────────────────────────────────────────────────
-
-  defp show_start_usage do
-    IO.puts("")
-    IO.puts("    #{IO.ANSI.yellow()}Usage: /mcp start <server_name>#{IO.ANSI.reset()}")
-    IO.puts("    Use /mcp list to see configured servers.")
-    IO.puts("")
-  end
-
-  defp show_start(name) do
-    result =
-      if mcp_supervisor_running?() do
-        try do
-          Manager.start_server_by_name(name)
-        rescue
-          _ -> {:error, :supervisor_error}
-        end
-      else
-        {:error, :supervisor_not_running}
-      end
-
-    IO.puts("")
-    IO.puts(format_start_result(name, result))
-    IO.puts("")
-  end
-
-  @doc """
-  Formats the result of a start operation (pure, no IO).
-  """
-  @spec format_start_result(String.t(), {:ok, String.t()} | {:ok, :already_running} | {:error, term()}) ::
-          String.t()
-  def format_start_result(name, {:ok, :already_running}) do
-    "    #{IO.ANSI.yellow()}• #{name} is already running#{IO.ANSI.reset()}"
-  end
-
-  def format_start_result(name, {:ok, server_id}) do
-    "    #{IO.ANSI.green()}✓ Started server (#{server_id})#{IO.ANSI.reset()}\n" <>
-      "    #{IO.ANSI.faint()}Use /mcp status #{name} to check initialization.#{IO.ANSI.reset()}"
-  end
-
-  def format_start_result(name, {:error, :not_configured}) do
-    "    #{IO.ANSI.red()}✗ Server '#{name}' not found in configuration.#{IO.ANSI.reset()}\n" <>
-      "    Use /mcp list to see configured servers."
-  end
-
-  def format_start_result(name, {:error, :supervisor_not_running}) do
-    "    #{IO.ANSI.red()}✗ Cannot start '#{name}' — MCP supervisor is not running.#{IO.ANSI.reset()}"
-  end
-
-  def format_start_result(name, {:error, reason}) do
-    "    #{IO.ANSI.red()}✗ Failed to start '#{name}': #{inspect(reason)}#{IO.ANSI.reset()}"
-  end
-
-  # ── Subcommand: stop ───────────────────────────────────────────────────
-
-  defp show_stop_usage do
-    IO.puts("")
-    IO.puts("    #{IO.ANSI.yellow()}Usage: /mcp stop <server_name>#{IO.ANSI.reset()}")
-    IO.puts("    Use /mcp status to see running servers.")
-    IO.puts("")
-  end
-
-  defp show_stop(name) do
-    result =
-      if mcp_supervisor_running?() do
-        try do
-          Manager.stop_server_by_name(name)
-        rescue
-          _ -> {:error, :supervisor_error}
-        end
-      else
-        {:error, :supervisor_not_running}
-      end
-
-    IO.puts("")
-    IO.puts(format_stop_result(name, result))
-    IO.puts("")
-  end
-
-  @doc """
-  Formats the result of a stop operation (pure, no IO).
-  """
-  @spec format_stop_result(String.t(), :ok | {:error, term()}) :: String.t()
-  def format_stop_result(name, :ok) do
-    "    #{IO.ANSI.green()}✓ Stopped server: #{name}#{IO.ANSI.reset()}"
-  end
-
-  def format_stop_result(name, {:error, :not_running}) do
-    "    #{IO.ANSI.yellow()}• '#{name}' is not currently running#{IO.ANSI.reset()}"
-  end
-
-  def format_stop_result(name, {:error, :supervisor_not_running}) do
-    "    #{IO.ANSI.red()}✗ Cannot stop '#{name}' — MCP supervisor is not running.#{IO.ANSI.reset()}"
-  end
-
-  def format_stop_result(name, {:error, reason}) do
-    "    #{IO.ANSI.red()}✗ Failed to stop '#{name}': #{inspect(reason)}#{IO.ANSI.reset()}"
-  end
-
-  # ── Subcommand: restart ────────────────────────────────────────────────
-
-  defp show_restart_usage do
-    IO.puts("")
-    IO.puts("    #{IO.ANSI.yellow()}Usage: /mcp restart <server_name>#{IO.ANSI.reset()}")
-    IO.puts("    Use /mcp list to see configured servers.")
-    IO.puts("")
-  end
-
-  defp show_restart(name) do
-    result =
-      if mcp_supervisor_running?() do
-        try do
-          Manager.restart_server_by_name(name)
-        rescue
-          _ -> {:error, :supervisor_error}
-        end
-      else
-        {:error, :supervisor_not_running}
-      end
-
-    IO.puts("")
-    IO.puts(format_restart_result(name, result))
-    IO.puts("")
-  end
-
-  @doc """
-  Formats the result of a restart operation (pure, no IO).
-  """
-  @spec format_restart_result(String.t(), {:ok, String.t()} | {:error, term()}) :: String.t()
-  def format_restart_result(name, {:ok, server_id}) do
-    "    #{IO.ANSI.green()}✓ Restarted server: #{name} (#{server_id})#{IO.ANSI.reset()}"
-  end
-
-  def format_restart_result(name, {:error, :not_configured}) do
-    "    #{IO.ANSI.red()}✗ Server '#{name}' not found in configuration.#{IO.ANSI.reset()}\n" <>
-      "    Use /mcp list to see configured servers."
-  end
-
-  def format_restart_result(name, {:error, :supervisor_not_running}) do
-    "    #{IO.ANSI.red()}✗ Cannot restart '#{name}' — MCP supervisor is not running.#{IO.ANSI.reset()}"
-  end
-
-  def format_restart_result(name, {:error, reason}) do
-    "    #{IO.ANSI.red()}✗ Failed to restart '#{name}': #{inspect(reason)}#{IO.ANSI.reset()}"
-  end
-
-  # ── Subcommand: start-all ─────────────────────────────────────────────
-
-  defp show_start_all do
-    results =
-      if mcp_supervisor_running?() do
-        try do
-          Manager.start_all_configured()
-        rescue
-          _ -> []
-        end
-      else
-        []
-      end
-
-    IO.puts("")
-    IO.puts(format_start_all_result(results))
-    IO.puts("")
-  end
-
-  @doc """
-  Formats the result of a start-all operation (pure, no IO).
-  """
-  @spec format_start_all_result([{String.t(), atom() | tuple()}]) :: String.t()
-  def format_start_all_result([]) do
-    "    #{IO.ANSI.faint()}No MCP servers configured.#{IO.ANSI.reset()}"
-  end
-
-  def format_start_all_result(results) do
-    lines = ["    #{IO.ANSI.bright()}Starting all configured servers#{IO.ANSI.reset()}", ""]
-
-    {started, already, failed} =
-      Enum.reduce(results, {0, 0, 0}, fn
-        {_name, {:ok, :already_running}}, {s, a, f} -> {s, a + 1, f}
-        {_name, {:ok, _sid}}, {s, a, f} -> {s + 1, a, f}
-        {_name, {:error, _}}, {s, a, f} -> {s, a, f + 1}
-      end)
-
-    per_server =
-      Enum.map(results, fn
-        {name, {:ok, :already_running}} ->
-          "    #{IO.ANSI.yellow()}• #{name}: already running#{IO.ANSI.reset()}"
-
-        {name, {:ok, _sid}} ->
-          "    #{IO.ANSI.green()}✓ Started: #{name}#{IO.ANSI.reset()}"
-
-        {name, {:error, reason}} ->
-          "    #{IO.ANSI.red()}✗ #{name}: #{format_error_reason(reason)}#{IO.ANSI.reset()}"
-      end)
-
-    summary =
-      [""] ++
-      ["    #{IO.ANSI.faint()}#{started} started, #{already} already running, #{failed} failed#{IO.ANSI.reset()}"]
-
-    Enum.join(lines ++ per_server ++ summary, "\n")
-  end
-
-  # ── Subcommand: stop-all ──────────────────────────────────────────────
-
-  defp show_stop_all do
-    results =
-      if mcp_supervisor_running?() do
-        try do
-          Manager.stop_all_running()
-        rescue
-          _ -> []
-        end
-      else
-        []
-      end
-
-    IO.puts("")
-    IO.puts(format_stop_all_result(results))
-    IO.puts("")
-  end
-
-  @doc """
-  Formats the result of a stop-all operation (pure, no IO).
-  """
-  @spec format_stop_all_result([{String.t(), :ok | {:error, term()}}]) :: String.t()
-  def format_stop_all_result([]) do
-    "    #{IO.ANSI.faint()}No MCP servers currently running.#{IO.ANSI.reset()}"
-  end
-
-  def format_stop_all_result(results) do
-    lines = ["    #{IO.ANSI.bright()}Stopping all running servers#{IO.ANSI.reset()}", ""]
-
-    {stopped, failed} =
-      Enum.reduce(results, {0, 0}, fn
-        {_name, :ok}, {s, f} -> {s + 1, f}
-        {_name, {:error, _}}, {s, f} -> {s, f + 1}
-      end)
-
-    per_server =
-      Enum.map(results, fn
-        {name, :ok} ->
-          "    #{IO.ANSI.green()}✓ Stopped: #{name}#{IO.ANSI.reset()}"
-
-        {name, {:error, reason}} ->
-          "    #{IO.ANSI.red()}✗ #{name}: #{format_error_reason(reason)}#{IO.ANSI.reset()}"
-      end)
-
-    summary =
-      [""] ++
-      ["    #{IO.ANSI.faint()}#{stopped} stopped, #{failed} failed#{IO.ANSI.reset()}"]
-
-    Enum.join(lines ++ per_server ++ summary, "\n")
-  end
-
-  # ── Shared formatting helpers ─────────────────────────────────────────
-
-  defp format_error_reason(:not_configured), do: "not configured"
-  defp format_error_reason(:not_running), do: "not running"
-  defp format_error_reason(:supervisor_not_running), do: "supervisor not running"
-  defp format_error_reason(reason), do: inspect(reason)
 
   defp show_unknown(parts) do
     subcmd = List.first(parts) || ""

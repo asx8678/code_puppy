@@ -265,7 +265,9 @@ defmodule CodePuppyControl.MCP.Manager do
   @spec find_server_id_by_name(String.t()) :: {:ok, String.t()} | {:error, :not_found}
   def find_server_id_by_name(name) do
     list_servers()
-    |> Enum.find(fn status -> String.downcase(to_string(status.name)) == String.downcase(name) end)
+    |> Enum.find(fn status ->
+      String.downcase(to_string(status.name)) == String.downcase(name)
+    end)
     |> case do
       nil -> {:error, :not_found}
       status -> {:ok, status.server_id}
@@ -293,14 +295,19 @@ defmodule CodePuppyControl.MCP.Manager do
         {:error, :not_configured}
 
       cfg ->
+        # Use the canonical configured name (preserves original casing)
+        # so that /mcp list and /mcp status join correctly even when the
+        # user types a different casing (e.g. /mcp start myserver → "MyServer").
+        canonical_name = cfg["name"]
+
         # Check if already running
-        case find_server_id_by_name(name) do
+        case find_server_id_by_name(canonical_name) do
           {:ok, _server_id} ->
             {:ok, :already_running}
 
           {:error, :not_found} ->
             register_server(
-              name,
+              canonical_name,
               cfg["command"] || "",
               args: cfg["args"] || [],
               env: cfg["env"] || %{}
@@ -347,8 +354,11 @@ defmodule CodePuppyControl.MCP.Manager do
         {:error, :not_configured}
 
       cfg ->
+        # Use the canonical configured name (preserves original casing)
+        canonical_name = cfg["name"]
+
         # Stop if running
-        case find_server_id_by_name(name) do
+        case find_server_id_by_name(canonical_name) do
           {:ok, server_id} ->
             unregister_server(server_id)
             Process.sleep(100)
@@ -358,7 +368,7 @@ defmodule CodePuppyControl.MCP.Manager do
         end
 
         register_server(
-          name,
+          canonical_name,
           cfg["command"] || "",
           args: cfg["args"] || [],
           env: cfg["env"] || %{}
