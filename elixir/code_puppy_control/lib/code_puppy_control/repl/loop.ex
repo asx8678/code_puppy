@@ -385,16 +385,41 @@ defmodule CodePuppyControl.REPL.Loop do
   defp send_to_agent(prompt, state) do
     Logger.debug("REPL: send_to_agent agent=#{state.agent} model=#{state.model}")
 
+    # Phase 1: resolve agent + ensure state — no state mutation, so no
+    # rollback needed if these fail.
     with {:ok, agent_key, agent_module} <- resolve_agent_module(state.agent),
-         :ok <- ensure_agent_state_for(state.session_id, agent_key),
-         # Snapshot messages BEFORE appending the user message so we can
-         # roll back cleanly on error without index math.
-         messages_before <- State.get_messages(state.session_id, agent_key),
-         user_msg = %{"role" => "user", "parts" => [%{"type" => "text", "text" => prompt}]},
-         :ok <- State.append_message(state.session_id, agent_key, user_msg),
-         messages <- State.get_messages(state.session_id, agent_key),
-         pre_count <- length(messages),
-         {:ok, renderer_pid} <- ensure_renderer(state),
+         :ok <- ensure_agent_state_for(state.session_id, agent_key) do
+      # Phase 2: snapshot, append user message, then dispatch. Any failure
+      # after the append MUST roll back so the user message is not orphaned.
+      messages_before = State.get_messages(state.session_id, agent_key)
+
+      user_msg = %{"role" => "user", "parts" => [%{"type" => "text", "text" => prompt}]}
+      :ok = State.append_message(state.session_id, agent_key, user_msg)
+
+      dispatch_after_append(state, agent_key, agent_module, messages_before)
+    else
+      {:error, {:unknown_agent, name}} ->
+        print_agent_error("Unknown agent: #{name}. Use /agent to switch.")
+        :error
+
+      {:error, :no_module} ->
+        print_agent_error("Agent \"#{state.agent}\" has no backing module. Use /agent to switch.")
+        :error
+
+      {:error, reason} ->
+        print_agent_error("Agent dispatch failed: #{inspect(reason)}")
+        :error
+    end
+  end
+
+  # Runs after the user message has been appended to Agent.State.
+  # `messages_before` is the snapshot taken *before* the append; on any
+  # failure we roll back to it so no orphaned user message remains.
+  defp dispatch_after_append(state, agent_key, agent_module, messages_before) do
+    messages = State.get_messages(state.session_id, agent_key)
+    pre_count = length(messages)
+
+    with {:ok, renderer_pid} <- ensure_renderer(state),
          run_id <- Loop.generate_run_id(),
          {:ok, loop_pid} <- start_agent_loop(agent_module, messages, state, run_id) do
       # Trap exits so a linked Agent.Loop crash doesn't kill the REPL process.
@@ -452,15 +477,10 @@ defmodule CodePuppyControl.REPL.Loop do
         end
       end
     else
-      {:error, {:unknown_agent, name}} ->
-        print_agent_error("Unknown agent: #{name}. Use /agent to switch.")
-        :error
-
-      {:error, :no_module} ->
-        print_agent_error("Agent \"#{state.agent}\" has no backing module. Use /agent to switch.")
-        :error
-
       {:error, reason} ->
+        # ensure_renderer or start_agent_loop failed after the user message
+        # was already appended — roll back to the pre-append snapshot.
+        State.set_messages(state.session_id, agent_key, messages_before)
         print_agent_error("Agent dispatch failed: #{inspect(reason)}")
         :error
     end
@@ -510,6 +530,17 @@ defmodule CodePuppyControl.REPL.Loop do
   @renderer_registry CodePuppyControl.REPL.RendererRegistry
 
   defp ensure_renderer(state) do
+    # Test injection: return a synthetic error to exercise the rollback path
+    # in dispatch_after_append's else clause. Mirrors the :repl_llm_module
+    # pattern already used for LLM mock injection.
+    if reason = Application.get_env(:code_puppy_control, :test_ensure_renderer_error) do
+      {:error, reason}
+    else
+      ensure_renderer_impl(state)
+    end
+  end
+
+  defp ensure_renderer_impl(state) do
     renderer_name = renderer_name(state.session_id)
 
     case Registry.lookup(@renderer_registry, state.session_id) do
