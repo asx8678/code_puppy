@@ -296,7 +296,10 @@ defmodule CodePuppyControl.REPL.SendToAgentTest do
       end
     end
 
-    def set_response(text), do: start_if_needed() || Elixir.Agent.update(__MODULE__, &Map.put(&1, :text, text))
+    def set_response(text) do
+      start_if_needed()
+      Elixir.Agent.update(__MODULE__, &Map.put(&1, :text, text))
+    end
     def captured_messages, do: (start_if_needed(); Elixir.Agent.get(__MODULE__, & &1)[:messages] || [])
     def captured_tools, do: (start_if_needed(); Elixir.Agent.get(__MODULE__, & &1)[:tools] || [])
     def reset, do: (start_if_needed(); Elixir.Agent.update(__MODULE__, fn _ -> %{} end))
