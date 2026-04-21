@@ -537,41 +537,57 @@ defmodule CodePuppyControl.REPL.Loop do
   # started one for the same session. This can happen when:
   #   - A concurrent REPL call won the start race
   #   - The Registry hasn't cleaned up a dead process's entry yet
-  # In both cases, we normalize by resetting the already-started renderer
-  # and returning its pid. If the pid is dead (stale Registry entry),
-  # we yield briefly and retry — the Registry will clean up very shortly.
-  # After retries are exhausted, we return the dead pid; the caller's
-  # finalize is wrapped in try/catch, so this is safe.
+  #
+  # INVARIANT: never returns {:ok, dead_pid}. If the existing renderer
+  # died during reset or the Registry entry is stale, we retry; after
+  # exhaustion we return an explicit error so the caller can fail cleanly.
   defp start_renderer_idempotent(renderer_name, session_id, attempts \\ 0) do
     case Renderer.start_link(name: renderer_name, session_id: session_id) do
       {:ok, pid} ->
         {:ok, pid}
 
       {:error, {:already_started, pid}} ->
-        if Process.alive?(pid) do
-          # A concurrent call won the race — normalize by resetting
-          # to clean state for the new turn.
-          try do
-            Renderer.reset(pid)
-          catch
-            :exit, _ -> :ok
-          end
+        cond do
+          not Process.alive?(pid) ->
+            # Stale Registry entry (process died but entry not yet removed).
+            # Yield briefly to let the Registry partition process the DOWN
+            # message, then retry. Cap retries to avoid infinite loops.
+            if attempts < 5 do
+              Process.sleep(1)
+              start_renderer_idempotent(renderer_name, session_id, attempts + 1)
+            else
+              {:error, {:renderer_not_alive, pid}}
+            end
 
-          {:ok, pid}
-        else
-          # Stale Registry entry (process died but entry not yet removed).
-          # Yield briefly to let the Registry partition process the DOWN
-          # message, then retry. Cap retries to avoid infinite loops.
-          if attempts < 5 do
-            Process.sleep(1)
-            start_renderer_idempotent(renderer_name, session_id, attempts + 1)
-          else
+          reset_failed?(pid) ->
+            # Renderer.reset raised or exited — the process likely died.
+            # Re-lookup via retry instead of returning a dying pid.
+            if attempts < 5 do
+              Process.sleep(1)
+              start_renderer_idempotent(renderer_name, session_id, attempts + 1)
+            else
+              {:error, {:renderer_reset_failed, pid}}
+            end
+
+          true ->
+            # Reset succeeded and pid is still alive.
             {:ok, pid}
-          end
         end
 
       {:error, reason} ->
         {:error, reason}
+    end
+  end
+
+  defp reset_failed?(pid) do
+    try do
+      Renderer.reset(pid)
+      # Reset returned — but the process may have died right after.
+      # The caller already checked Process.alive? so a false positive
+      # here is harmless (we just do an unnecessary retry).
+      not Process.alive?(pid)
+    catch
+      :exit, _ -> true
     end
   end
 
