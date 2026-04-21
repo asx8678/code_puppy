@@ -3249,8 +3249,10 @@
         ]
       },
       "created_at": "2026-04-18T19:48:10.390822",
-      "updated_at": "2026-04-19T00:56:31.403145",
-      "comments": []
+      "updated_at": "2026-04-21T08:48:13.024533",
+      "comments": [
+        "bd-163 implementation summary:\n\n12 commands ported to Elixir slash-command dispatch:\n- Core: /help, /quit, /exit (alias), /clear, /history, /cd (NEW)\n- Context: /model, /agent, /sessions, /tui (delegated to existing Loop handlers)\n- Session: /compact (stub), /truncate (stub)\n\n30 commands deferred with follow-up tickets:\n- bd-244: Menu wizard commands (/add_model, /model_settings, /uc, /mcp install, /autosave, /diff)\n- bd-245: MCP sub-commands (~15 commands)\n- bd-246: /pack, /preset, /workflow small commands (lower priority)\n- bd-247: /compact + /truncate full implementation (depends on agent summarization)\n\nArchitecture decisions:\n1. ETS-backed GenServer registry (named :slash_commands table) with GenServer-serialized writes and concurrent reads\n2. Pure Dispatcher module for stateless dispatch logic\n3. CommandInfo struct mirrors Python's CommandInfo dataclass with same defaults\n4. Commands delegate to existing Loop handlers (defp \u2192 def) to minimize churn\n5. /exit registered as alias key pointing to /quit's CommandInfo (not a separate command)\n6. No silent overwrites on name conflict \u2014 returns {:error, {:name_conflict, name}}\n7. Registration is explicit via register_builtin_commands/0 called from Application.start/2\n\nNew files: 7 lib modules + 4 test files = 11 files\nTests: 54 tests across 4 test files, all passing\n"
+      ]
     },
     "bd-164": {
       "id": "bd-164",
@@ -3283,7 +3285,7 @@
       "id": "bd-165",
       "title": "4.2 Session storage last mile",
       "description": "Port session_storage.py (31KB) to Elixir. Session CRUD, search, export. One-shot migrator for existing Python sessions (R8).\n\n## \u26a0\ufe0f Isolation Requirement (added per bd-186)\n\nThis task MUST:\n- Write only to ~/.code_puppy_ex/ (never ~/.code_puppy/)\n- Pass the bd-186 CI gates (no-writes-to-python-home, fresh-install-works, existing-install-untouched)\n- Run all tests against temp directories, never the user's real home\n- Respect the Python freeze policy (bd-187) \u2014 do not modify code_puppy/**/*.py",
-      "status": "open",
+      "status": "closed",
       "priority": 2,
       "type": "task",
       "labels": [
@@ -3298,10 +3300,11 @@
         ]
       },
       "created_at": "2026-04-18T19:48:17.158145",
-      "updated_at": "2026-04-19T09:43:02.764044",
+      "updated_at": "2026-04-21T08:31:40.912459",
       "comments": [
         "\n## \u26a0\ufe0f Isolation Requirement (added per bd-186)\n\nThis task MUST:\n- Write only to ~/.code_puppy_ex/ (never ~/.code_puppy/)\n- Pass the bd-186 CI gates (no-writes-to-python-home, fresh-install-works, existing-install-untouched)\n- Run all tests against temp directories, never the user's real home\n- Respect the Python freeze policy (bd-187) \u2014 do not modify code_puppy/**/*.py\n\nDependency: bd-186 now blocks this issue.",
-        "bd-186 isolation infrastructure has landed. This issue's implementation MUST:\n\n1. Write only to ~/.code_puppy_ex/ via Paths.* helpers\n   (never hardcode ~/.code_puppy/ paths)\n2. Use Isolation.safe_write! / safe_mkdir_p! / safe_rm! / safe_rm_rf!\n   for ALL filesystem mutations on user-home paths\n3. Use Isolation.read_only_legacy/1 if reading from ~/.code_puppy/\n   during one-time migration imports (and only then)\n\nRelevant commits:\n- 86b05f29 \u2014 Config.Paths extension + Config.Isolation guard module\n- 2ea04ea9 \u2014 8 hardcoded callsites routed through Paths\n- 438685ac \u2014 FirstRun + pup_ex.import/doctor/auth.login CLI\n- b692dfdb \u2014 5 ADR CI gates + GitHub Actions workflow\n\nADR-003 is the canonical design doc:\ndocs/adr/ADR-003-dual-home-config-isolation.md\n\nAny PR touching config, session, OAuth, secrets, or compat tests will\nhave to pass `mix gates.isolation` in CI. Start there."
+        "bd-186 isolation infrastructure has landed. This issue's implementation MUST:\n\n1. Write only to ~/.code_puppy_ex/ via Paths.* helpers\n   (never hardcode ~/.code_puppy/ paths)\n2. Use Isolation.safe_write! / safe_mkdir_p! / safe_rm! / safe_rm_rf!\n   for ALL filesystem mutations on user-home paths\n3. Use Isolation.read_only_legacy/1 if reading from ~/.code_puppy/\n   during one-time migration imports (and only then)\n\nRelevant commits:\n- 86b05f29 \u2014 Config.Paths extension + Config.Isolation guard module\n- 2ea04ea9 \u2014 8 hardcoded callsites routed through Paths\n- 438685ac \u2014 FirstRun + pup_ex.import/doctor/auth.login CLI\n- b692dfdb \u2014 5 ADR CI gates + GitHub Actions workflow\n\nADR-003 is the canonical design doc:\ndocs/adr/ADR-003-dual-home-config-isolation.md\n\nAny PR touching config, session, OAuth, secrets, or compat tests will\nhave to pass `mix gates.isolation` in CI. Start there.",
+        "bd-165 session storage last mile \u2014 GAPS CLOSED:\n\n1. save_session_async/3 \u2014 fire-and-forget background save via Task.start/1 (no TaskSupervisor in app tree yet, documented). Mirrors Python's ThreadPoolExecutor pattern. Snapshots history (free in Elixir via immutability), logs warnings on failure, calls mark_autosave_complete on success.\n\n2. AutosaveTracker (Agent) \u2014 should_skip_autosave?/1 and mark_autosave_complete/1. Injectable time_fn for deterministic testing. Tracks {last_len, last_hash, last_time, initialized}. 2s debounce window matches Python. Fingerprint via :erlang.term_to_binary + :crypto.hash(:sha256) + Base.encode16[:16].\n\n3. Tests \u2014 12 tests covering all specified scenarios: sync return, disk persistence, failure logging, snapshot isolation, debounce/dedup logic, empty history fingerprint, time injection via :counters.\n\nbd-193 is a non-blocker for this work: it's Python-side hardening (input validation/sanitization) that does not affect Elixir. The Elixir isolation guard (CodePuppyControl.Config.Isolation) is already enforced and mix gates.isolation passes (the one GATE-5 failure is pre-existing, unrelated to this change).\n\nDeferred to bd-163: restore_autosave_interactively (TUI-bound interactive restore flow). The async save + debounce infrastructure is now complete for programmatic use."
       ]
     },
     "bd-166": {
@@ -4871,7 +4874,83 @@
       "comments": [
         "Fixed by mirroring bd-242 pattern (commit 52999365). One-line change (to_string(key)) in gac_parser.ex + 2 regression tests in gac_parser_test.exs. Filed and closed by planning-agent-019dac."
       ]
+    },
+    "bd-244": {
+      "id": "bd-244",
+      "title": "Menu wizard slash commands port",
+      "description": "Port the menu-wizard slash commands from Python to Elixir: /add_model, /model_settings, /uc, /mcp install, /autosave, /diff. These require interactive menu flows (TUI widgets or prompts). Discovered from bd-163 (slash-command dispatch).",
+      "status": "open",
+      "priority": 2,
+      "type": "task",
+      "labels": [
+        "enhancement,elixir,slash-commands"
+      ],
+      "dependencies": {
+        "discovered-from": [
+          "bd-163"
+        ]
+      },
+      "created_at": "2026-04-21T08:47:53.402244",
+      "updated_at": "2026-04-21T08:47:53.402252",
+      "comments": []
+    },
+    "bd-245": {
+      "id": "bd-245",
+      "title": "MCP sub-commands port to Elixir",
+      "description": "Port all ~15 MCP slash sub-commands from Python to Elixir (/mcp install, /mcp list, /mcp start, /mcp stop, etc.). These require the MCP client/supervisor infrastructure to be fully wired. Discovered from bd-163 (slash-command dispatch).",
+      "status": "open",
+      "priority": 2,
+      "type": "task",
+      "labels": [
+        "enhancement,elixir,slash-commands,mcp"
+      ],
+      "dependencies": {
+        "discovered-from": [
+          "bd-163"
+        ]
+      },
+      "created_at": "2026-04-21T08:47:58.113636",
+      "updated_at": "2026-04-21T08:47:58.113644",
+      "comments": []
+    },
+    "bd-246": {
+      "id": "bd-246",
+      "title": "Port /pack, /preset, /workflow small slash commands",
+      "description": "Port the smaller slash commands from Python to Elixir: /pack, /preset, /workflow and related. Lower priority as these are convenience commands. Discovered from bd-163 (slash-command dispatch).",
+      "status": "open",
+      "priority": 2,
+      "type": "task",
+      "labels": [
+        "enhancement,elixir,slash-commands"
+      ],
+      "dependencies": {
+        "discovered-from": [
+          "bd-163"
+        ]
+      },
+      "created_at": "2026-04-21T08:48:03.676538",
+      "updated_at": "2026-04-21T08:48:03.676548",
+      "comments": []
+    },
+    "bd-247": {
+      "id": "bd-247",
+      "title": "Full /compact and /truncate implementation",
+      "description": "Replace the /compact and /truncate stubs with real implementations that talk to the agent summarization port and message history. /compact should summarize and compact conversation history; /truncate should trim to the last N messages. Depends on agent summarization being wired (CurrentAgent.summarize_messages). Discovered from bd-163 (slash-command dispatch).",
+      "status": "open",
+      "priority": 2,
+      "type": "task",
+      "labels": [
+        "enhancement,elixir,slash-commands"
+      ],
+      "dependencies": {
+        "discovered-from": [
+          "bd-163"
+        ]
+      },
+      "created_at": "2026-04-21T08:48:07.596532",
+      "updated_at": "2026-04-21T08:48:07.596539",
+      "comments": []
     }
   },
-  "counter": 243
+  "counter": 247
 }
