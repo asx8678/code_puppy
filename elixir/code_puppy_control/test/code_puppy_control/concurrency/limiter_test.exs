@@ -31,9 +31,9 @@ defmodule CodePuppyControl.Concurrency.LimiterTest do
       assert Map.has_key?(status, :api_calls)
       assert Map.has_key?(status, :tool_calls)
 
-      assert status.file_ops.limit == 4
+      assert status.file_ops.limit == 3
       assert status.api_calls.limit == 2
-      assert status.tool_calls.limit == 8
+      assert status.tool_calls.limit == 4
     end
 
     test "available equals limit when no slots are in use" do
@@ -52,14 +52,14 @@ defmodule CodePuppyControl.Concurrency.LimiterTest do
 
       status = Limiter.status()
       assert status.file_ops.in_use == 1
-      assert status.file_ops.available == 3
+      assert status.file_ops.available == 2
 
       Limiter.release(:file_ops)
       Limiter.ping()
 
       status = Limiter.status()
       assert status.file_ops.in_use == 0
-      assert status.file_ops.available == 4
+      assert status.file_ops.available == 3
     end
 
     test "acquire blocks when all slots are taken" do
@@ -207,7 +207,7 @@ defmodule CodePuppyControl.Concurrency.LimiterTest do
       # After all tasks complete, all slots should be free
       status = Limiter.status()
       assert status.tool_calls.in_use == 0
-      assert status.tool_calls.available == 8
+      assert status.tool_calls.available == 4
     end
   end
 

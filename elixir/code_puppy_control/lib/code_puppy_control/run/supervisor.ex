@@ -52,6 +52,22 @@ defmodule CodePuppyControl.Run.Supervisor do
         Logger.debug("Run.State for #{run_id} already running")
         {:ok, pid}
 
+      {:error, :max_children} ->
+        limit = CodePuppyControl.Runtime.Limits.max_runs()
+
+        Logger.warning(
+          "Run supervisor at capacity (limit: #{limit}). " <>
+            "Refusing to start run #{run_id}."
+        )
+
+        :telemetry.execute(
+          [:code_puppy, :supervisor, :full],
+          %{count: 1},
+          %{supervisor: :run, run_id: run_id}
+        )
+
+        {:error, :max_children}
+
       {:error, reason} = error ->
         Logger.error("Failed to start Run.State for #{run_id}: #{inspect(reason)}")
         error
@@ -107,7 +123,8 @@ defmodule CodePuppyControl.Run.Supervisor do
     DynamicSupervisor.init(
       strategy: :one_for_one,
       max_restarts: 100,
-      max_seconds: 60
+      max_seconds: 60,
+      max_children: CodePuppyControl.Runtime.Limits.max_runs()
     )
   end
 end

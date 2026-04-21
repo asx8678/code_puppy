@@ -8,6 +8,8 @@ defmodule CodePuppyControl.Agent.State.Supervisor do
 
   use DynamicSupervisor
 
+  require Logger
+
   alias CodePuppyControl.Agent.State
 
   @doc """
@@ -44,9 +46,23 @@ defmodule CodePuppyControl.Agent.State.Supervisor do
       {:error, {:already_started, pid}} ->
         {:ok, pid}
 
-      {:error, reason} = error ->
-        require Logger
+      {:error, :max_children} ->
+        limit = CodePuppyControl.Runtime.Limits.max_agent_states()
 
+        Logger.warning(
+          "Agent.State supervisor at capacity (limit: #{limit}). " <>
+            "Refusing to start #{session_id}/#{agent_name}."
+        )
+
+        :telemetry.execute(
+          [:code_puppy, :supervisor, :full],
+          %{count: 1},
+          %{supervisor: :agent_state, session_id: session_id, agent_name: agent_name}
+        )
+
+        {:error, :max_children}
+
+      {:error, reason} = error ->
         Logger.error(
           "Failed to start Agent.State for #{session_id}/#{agent_name}: #{inspect(reason)}"
         )
@@ -105,7 +121,8 @@ defmodule CodePuppyControl.Agent.State.Supervisor do
     DynamicSupervisor.init(
       strategy: :one_for_one,
       max_restarts: 100,
-      max_seconds: 60
+      max_seconds: 60,
+      max_children: CodePuppyControl.Runtime.Limits.max_agent_states()
     )
   end
 end

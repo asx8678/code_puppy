@@ -70,6 +70,7 @@ defmodule CodePuppyControlWeb.Router do
 
     get "/", InfoController, :index
     get "/health", HealthController, :index
+    get "/health/runtime", HealthController, :runtime
   end
 
   # Authenticated API endpoints — mutating operations

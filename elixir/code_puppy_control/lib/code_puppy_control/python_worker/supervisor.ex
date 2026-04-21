@@ -54,6 +54,21 @@ defmodule CodePuppyControl.PythonWorker.Supervisor do
         Logger.info("Python worker for run #{run_id} already running (pid: #{inspect(pid)})")
         {:ok, pid}
 
+      {:error, :max_children} ->
+        Logger.warning(
+          "Python worker supervisor at capacity (limit: " <>
+            "#{CodePuppyControl.Runtime.Limits.max_python_workers()}). " <>
+            "Refusing to start worker for run #{run_id}."
+        )
+
+        :telemetry.execute(
+          [:code_puppy, :supervisor, :full],
+          %{count: 1},
+          %{supervisor: :python_worker, run_id: run_id}
+        )
+
+        {:error, :max_children}
+
       {:error, reason} = error ->
         Logger.error("Failed to start Python worker for run #{run_id}: #{inspect(reason)}")
         error
@@ -112,7 +127,8 @@ defmodule CodePuppyControl.PythonWorker.Supervisor do
     DynamicSupervisor.init(
       strategy: :one_for_one,
       max_restarts: 10,
-      max_seconds: 60
+      max_seconds: 60,
+      max_children: CodePuppyControl.Runtime.Limits.max_python_workers()
     )
   end
 end

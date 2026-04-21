@@ -31,4 +31,13 @@ defmodule CodePuppyControlWeb.HealthController do
     |> put_resp_header("cache-control", "no-cache")
     |> json(stats)
   end
+
+  @doc """
+  GET /health/runtime
+
+  Returns a live snapshot of BEAM runtime state.
+  """
+  def runtime(conn, _params) do
+    json(conn, CodePuppyControl.Runtime.Snapshot.snapshot())
+  end
 end

@@ -5474,7 +5474,73 @@
       "created_at": "2026-04-21T19:36:54.547786",
       "updated_at": "2026-04-21T19:36:54.547791",
       "comments": []
+    },
+    "bd-273": {
+      "id": "bd-273",
+      "title": "Pre-existing Elixir test suite failures uncovered during runtime-limits QA",
+      "description": "During QA of the runtime-limits work (no direct regression), we surfaced several PRE-EXISTING failures in the Elixir test suite. These should be triaged separately:\n\nDETERMINISTIC:\n- test/code_puppy_control/scheduler/task_test.exs:34 \u2014 cron error message string drift (\"invalid cron expression: _\" vs \"...'Can't parse invalid as minute.'\")\n- test/code_puppy_control/config/round_trip_property_test.exs:164,172,209,217 \u2014 compile errors: \"misplaced operator ^nested_map\" / \"^map_of_scalars\"\n- test/code_puppy_control/config/isolation_gates_test.exs:310 \u2014 GATE-5 expects 20 Paths.*_dir/file fns, found 21 (need to update the allowlist)\n- test/code_puppy_control/transport/model_services_rpc_test.exs \u2014 12 failures, all \"response[id] == nil\" pattern \u2192 JSON-RPC ID threading bug in the transport layer\n\nFLAKY / ORDER-DEPENDENT (pass in isolation):\n- test/code_puppy_control/tui/renderer_test.exs:276 \u2014 Renderer.reset timeout\n- test/code_puppy_control/repl/loop_test.exs:95,158 \u2014 model/agent selection state leak between tests\n- test/code_puppy_control/repl/dispatch_persistence_bd257_test.exs:147,171,208,254 \u2014 history persistence assertions under concurrent test load\n\nFollow-up work should:\n1. Fix the 4 deterministic bugs (3 trivial, model_services_rpc needs real fix)\n2. Identify the shared state that makes renderer/repl tests flaky; add per-test cleanup or move to async:false\n3. Once both green, re-enable a full-suite CI gate on PUP_TEST_PROFILE=balanced",
+      "status": "open",
+      "priority": 3,
+      "type": "task",
+      "labels": [
+        "elixir",
+        "testing",
+        "tech-debt"
+      ],
+      "dependencies": {},
+      "created_at": "2026-04-21T23:24:06.124975",
+      "updated_at": "2026-04-21T23:24:06.124985",
+      "comments": []
+    },
+    "bd-274": {
+      "id": "bd-274",
+      "title": "Elixir runtime: cap BEAM VM, DynamicSupervisors, and Task.async_stream for M4 Air",
+      "description": "Optimized the Elixir control plane for laptop-class hardware (M4 MacBook Air 16 GB, fanless). Before: every DynamicSupervisor was :infinity, Task.async_stream defaulted to 10 concurrent on this machine, Finch pool held 500 sockets per host, no VM-level process cap.\n\nShipped:\n- rel/overlays/vm.args.eex: +P 131072, +Q 16384, +S 8:8, +sbwt none (battery saver)\n- mix.exs: wired vm_args into release config\n- lib/code_puppy_control/runtime/limits.ex: centralized caps with laptop/desktop/server profiles + PUP_* env var overrides\n- max_children on 5 DynamicSupervisors: python_worker, mcp_server, mcp_client, run, agent_state\n- Lowered concurrency limiter defaults: file_ops 4\u21923, tool_calls 8\u21924\n- Task.async_stream hot paths now use Limits.io_concurrency() (was schedulers_online)\n- Finch pool right-sized: 500 sockets \u2192 100 (4 pools \u00d7 25 size)\n\nDefaults tuned for laptop profile:\n- max_python_workers: 6 (\u2248600 MB Python RSS ceiling)\n- max_runs: 12\n- cpu_concurrency: 4\n- io_concurrency: 3\n\nTests: 46/46 green in changed areas (limits, snapshot, health, concurrency).",
+      "status": "closed",
+      "priority": 1,
+      "type": "task",
+      "labels": [
+        "elixir",
+        "performance",
+        "resource-limits"
+      ],
+      "dependencies": {},
+      "created_at": "2026-04-21T23:24:13.815431",
+      "updated_at": "2026-04-21T23:24:25.980148",
+      "comments": []
+    },
+    "bd-275": {
+      "id": "bd-275",
+      "title": "Add property test for DynamicSupervisor max_children enforcement",
+      "description": "QA found a coverage gap: we cap all 5 DynamicSupervisors via Runtime.Limits but no test proved the cap is actually enforced at runtime. Added test/code_puppy_control/runtime/supervisor_cap_test.exs which fills the Agent.State.Supervisor to its live cap, then asserts the next start_child call returns {:error, :max_children}.",
+      "status": "closed",
+      "priority": 2,
+      "type": "task",
+      "labels": [
+        "elixir",
+        "testing"
+      ],
+      "dependencies": {},
+      "created_at": "2026-04-21T23:24:13.820029",
+      "updated_at": "2026-04-21T23:24:25.984225",
+      "comments": []
+    },
+    "bd-276": {
+      "id": "bd-276",
+      "title": "Add /health/runtime endpoint + Runtime.Snapshot module for BEAM observability",
+      "description": "New HTTP endpoint GET /health/runtime returns a JSON snapshot of:\n- process/port counts + limits\n- memory breakdown (total/processes/ets/binary/code/atom in MB)\n- scheduler config (online/total/dirty_cpu/dirty_io)\n- supervisor populations with current/max/utilization %\n- concurrency limiter state\n- rate limiter state\n\nShared module CodePuppyControl.Runtime.Snapshot backs both the HTTP endpoint and IEx helper Snapshot.print/0.\n\nFiles:\n- lib/code_puppy_control/runtime/snapshot.ex\n- lib/code_puppy_control_web/controllers/health_controller.ex (added runtime/2 action)\n- lib/code_puppy_control_web/router.ex (added route)\n- test/code_puppy_control/runtime/snapshot_test.exs\n- test/code_puppy_control_web/controllers/health_controller_test.exs",
+      "status": "closed",
+      "priority": 2,
+      "type": "feature",
+      "labels": [
+        "elixir",
+        "observability"
+      ],
+      "dependencies": {},
+      "created_at": "2026-04-21T23:24:22.882304",
+      "updated_at": "2026-04-21T23:24:25.988122",
+      "comments": []
     }
   },
-  "counter": 272
+  "counter": 276
 }

@@ -67,6 +67,7 @@ defmodule CodePuppyControl.MixProject do
     [
       code_puppy_control: [
         steps: [:assemble, &Burrito.wrap/1],
+        vm_args: "rel/overlays/vm.args.eex",
         include_erts: true,
         strip_beams: true,
         burrito: [

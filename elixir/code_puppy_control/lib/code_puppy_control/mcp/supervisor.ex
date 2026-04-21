@@ -72,6 +72,22 @@ defmodule CodePuppyControl.MCP.Supervisor do
         Logger.info("MCP server #{server_id} already running (pid: #{inspect(pid)})")
         {:ok, pid}
 
+      {:error, :max_children} ->
+        limit = CodePuppyControl.Runtime.Limits.max_mcp_servers()
+
+        Logger.warning(
+          "MCP server supervisor at capacity (limit: #{limit}). " <>
+            "Refusing to start server #{server_id}."
+        )
+
+        :telemetry.execute(
+          [:code_puppy, :supervisor, :full],
+          %{count: 1},
+          %{supervisor: :mcp_server, server_id: server_id}
+        )
+
+        {:error, :max_children}
+
       {:error, reason} = error ->
         Logger.error("Failed to start MCP server #{server_id}: #{inspect(reason)}")
         error
@@ -171,7 +187,8 @@ defmodule CodePuppyControl.MCP.Supervisor do
     DynamicSupervisor.init(
       strategy: :one_for_one,
       max_restarts: 100,
-      max_seconds: 60
+      max_seconds: 60,
+      max_children: CodePuppyControl.Runtime.Limits.max_mcp_servers()
     )
   end
 end
