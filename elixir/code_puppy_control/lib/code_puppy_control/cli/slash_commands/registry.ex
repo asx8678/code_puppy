@@ -223,7 +223,8 @@ defmodule CodePuppyControl.CLI.SlashCommands.Registry do
         description: "Compact conversation history (stub)",
         handler: &Commands.Session.handle_compact/2,
         category: "session",
-        detailed_help: "Summarizes and compacts the conversation history to reduce context length. Depends on agent summarization port."
+        detailed_help:
+          "Summarizes and compacts the conversation history to reduce context length. Depends on agent summarization port."
       ),
       CommandInfo.new(
         name: "truncate",
@@ -231,7 +232,8 @@ defmodule CodePuppyControl.CLI.SlashCommands.Registry do
         handler: &Commands.Session.handle_truncate/2,
         usage: "/truncate <N>",
         category: "session",
-        detailed_help: "Trims the agent's message history to the last N messages. Depends on agent message history port."
+        detailed_help:
+          "Trims the agent's message history to the last N messages. Depends on agent message history port."
       )
     ]
 
