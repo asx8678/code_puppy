@@ -4739,7 +4739,7 @@
       "id": "bd-237",
       "title": "Burrito: harden release_config_test for CI (isolate side effects)",
       "description": "test/code_puppy_control/release_config_test.exs is currently async: false because it mutates __BURRITO env var globally and writes secret_key_base to :user_data basedir. This works but leaves:\n- A persisted secret_key_base file in the CI runner's user home\n- No isolation between test runs\n\nHarden by:\n- Override :user_data basedir via temp dir in test setup (see ADR-003 isolation test patterns)\n- Use Mix Task-style env isolation or setup_all with on_exit cleanup\n- Consider restoring async: true after isolation is in place",
-      "status": "open",
+      "status": "closed",
       "priority": 3,
       "type": "task",
       "labels": [
@@ -4751,8 +4751,10 @@
         ]
       },
       "created_at": "2026-04-21T00:37:44.998153",
-      "updated_at": "2026-04-21T00:37:58.443973",
-      "comments": []
+      "updated_at": "2026-04-21T01:12:47.027012",
+      "comments": [
+        "Completed by planning-agent-019dac. See commit ace8f36f. Added Config.user_data_dir/0 indirection + tmp-dir override in test setup; replaced try/after with on_exit. Kept async: false \u2014 rationale documented in file header. Tests were NOT auto-run because /auto-test off is active; user must manually run: mix test test/code_puppy_control/release_config_test.exs"
+      ]
     },
     "bd-238": {
       "id": "bd-238",
