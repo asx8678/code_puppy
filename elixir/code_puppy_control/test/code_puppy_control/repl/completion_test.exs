@@ -85,6 +85,11 @@ defmodule CodePuppyControl.REPL.CompletionTest do
         _pid -> :ok
       end
 
+      # Restore builtins even if a test crashes mid-run (e.g. after Registry.clear())
+      on_exit(fn ->
+        Registry.register_builtin_commands()
+      end)
+
       :ok
     end
 
@@ -120,8 +125,7 @@ defmodule CodePuppyControl.REPL.CompletionTest do
       assert Completion.complete("/pa", :command) == ["/pack"]
       assert Completion.complete("/he", :command) == ["/help"]
 
-      # Re-register builtins so downstream tests aren't affected
-      Registry.register_builtin_commands()
+      # Cleanup is handled by on_exit in setup — no inline restore needed
     end
   end
 
