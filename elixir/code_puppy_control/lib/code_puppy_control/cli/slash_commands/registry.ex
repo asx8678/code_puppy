@@ -219,7 +219,6 @@ defmodule CodePuppyControl.CLI.SlashCommands.Registry do
         detailed_help:
           "View all agents with their pinned models. Use '/agents pin <name>' to interactively select a model to pin to an agent."
       ),
-
       CommandInfo.new(
         name: "pack",
         description: "Show or switch model pack",

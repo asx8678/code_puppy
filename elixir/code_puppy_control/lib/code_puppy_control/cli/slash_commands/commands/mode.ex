@@ -49,26 +49,18 @@ defmodule CodePuppyControl.CLI.SlashCommands.Commands.Mode do
 
     IO.puts("")
 
-    IO.puts(
-      "    #{IO.ANSI.bright()}Configuration Mode#{IO.ANSI.reset()}"
-    )
+    IO.puts("    #{IO.ANSI.bright()}Configuration Mode#{IO.ANSI.reset()}")
 
     IO.puts("")
 
     if current do
       preset = Presets.get_preset(current)
 
-      IO.puts(
-        "    Current mode: #{IO.ANSI.cyan()}#{preset.display_name}#{IO.ANSI.reset()}"
-      )
+      IO.puts("    Current mode: #{IO.ANSI.cyan()}#{preset.display_name}#{IO.ANSI.reset()}")
 
-      IO.puts(
-        "    #{IO.ANSI.faint()}#{preset.description}#{IO.ANSI.reset()}"
-      )
+      IO.puts("    #{IO.ANSI.faint()}#{preset.description}#{IO.ANSI.reset()}")
     else
-      IO.puts(
-        "    Current mode: #{IO.ANSI.yellow()}Custom#{IO.ANSI.reset()}"
-      )
+      IO.puts("    Current mode: #{IO.ANSI.yellow()}Custom#{IO.ANSI.reset()}")
 
       IO.puts(
         "    #{IO.ANSI.faint()}Your configuration doesn't match any preset.#{IO.ANSI.reset()}"
@@ -99,9 +91,7 @@ defmodule CodePuppyControl.CLI.SlashCommands.Commands.Mode do
 
         IO.puts("")
 
-        IO.puts(
-          "    Applied '#{preset.display_name}' preset: #{preset.description}"
-        )
+        IO.puts("    Applied '#{preset.display_name}' preset: #{preset.description}")
 
         if preset_name == "full" do
           IO.puts(
