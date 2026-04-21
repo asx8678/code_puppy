@@ -517,8 +517,16 @@ defmodule CodePuppyControl.REPL.Loop do
         Renderer.start_link(name: renderer_name, session_id: state.session_id)
 
       [{pid, _value}] ->
-        Renderer.reset(pid)
-        {:ok, pid}
+        # The renderer pid from the registry may have exited between the
+        # lookup and the reset call (e.g. IO device terminated during test).
+        # Catch the exit and spawn a fresh renderer instead of crashing.
+        try do
+          Renderer.reset(pid)
+          {:ok, pid}
+        catch
+          :exit, _ ->
+            Renderer.start_link(name: renderer_name, session_id: state.session_id)
+        end
     end
   end
 
