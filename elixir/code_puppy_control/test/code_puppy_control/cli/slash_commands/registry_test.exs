@@ -226,26 +226,38 @@ defmodule CodePuppyControl.CLI.SlashCommands.RegistryTest do
     end
   end
 
-  describe "register_builtin_commands/0 — runtime wiring (bd-260)" do
+  describe "register_builtin_commands/0 — runtime wiring" do
     test "registers /mode for runtime lookup" do
       Registry.register_builtin_commands()
+
       assert {:ok, cmd} = Registry.get("mode")
       assert cmd.name == "mode"
       assert cmd.category == "context"
       assert cmd.usage == "/mode [preset_name]"
     end
 
-    test "registers /mode for tab completion" do
+    test "registers /flags for runtime lookup" do
       Registry.register_builtin_commands()
+
+      assert {:ok, cmd} = Registry.get("flags")
+      assert cmd.name == "flags"
+      assert cmd.category == "config"
+      assert cmd.usage == "/flags [reset|set <flag>|clear <flag>]"
+    end
+
+    test "registers /mode and /flags for tab completion" do
+      Registry.register_builtin_commands()
+
       names = Registry.all_names()
       assert "mode" in names
+      assert "flags" in names
     end
 
     test "registers all expected builtin commands" do
       Registry.register_builtin_commands()
 
       expected =
-        ~w(help quit exit clear history cd model agent sessions tui agents pack mode compact truncate)
+        ~w(help quit exit clear history cd model agent sessions tui agents pack mode flags compact truncate)
 
       for name <- expected do
         assert {:ok, _} = Registry.get(name),
@@ -255,18 +267,32 @@ defmodule CodePuppyControl.CLI.SlashCommands.RegistryTest do
 
     test "/mode is in context category alongside /model and /agent" do
       Registry.register_builtin_commands()
+
       context_cmds = Registry.list_by_category("context")
       context_names = Enum.map(context_cmds, & &1.name)
+
       assert "mode" in context_names
       assert "model" in context_names
       assert "agent" in context_names
     end
 
+    test "/flags is in config category" do
+      Registry.register_builtin_commands()
+
+      config_cmds = Registry.list_by_category("config")
+      config_names = Enum.map(config_cmds, & &1.name)
+
+      assert "flags" in config_names
+    end
+
     test "idempotent — calling twice does not crash" do
       Registry.register_builtin_commands()
+
       # Second call: name conflicts are logged but don't crash
       Registry.register_builtin_commands()
+
       assert {:ok, _} = Registry.get("mode")
+      assert {:ok, _} = Registry.get("flags")
     end
   end
 

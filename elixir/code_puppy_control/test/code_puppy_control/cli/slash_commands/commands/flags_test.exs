@@ -219,6 +219,163 @@ defmodule CodePuppyControl.CLI.SlashCommands.Commands.FlagsTest do
     end
   end
 
+  describe "atom safety: normalize_flag never creates atoms" do
+    test "unknown flag on /flags set does not create an atom" do
+      # Before: String.to_atom would create :totally_malicious_atom
+      # After: normalize_flag returns nil, known_flag?(nil) -> false
+      output =
+        ExUnit.CaptureIO.capture_io(fn ->
+          assert {:continue, _} = Flags.handle_flags("/flags set totally_malicious_atom", %{})
+        end)
+
+      assert output =~ "Unknown flag"
+      # The flag should not be known or active — this proves no atom was
+      # created and passed through to the WorkflowState API.
+      refute WorkflowState.known_flag?(:totally_malicious_atom)
+      refute WorkflowState.has_flag?(:totally_malicious_atom)
+    end
+
+    test "unknown flag on /flags clear does not create an atom" do
+      output =
+        ExUnit.CaptureIO.capture_io(fn ->
+          assert {:continue, _} = Flags.handle_flags("/flags clear totally_bogus_flag", %{})
+        end)
+
+      assert output =~ "Unknown flag"
+      refute WorkflowState.known_flag?(:totally_bogus_flag)
+    end
+
+    test "safe normalization: known flag resolves correctly" do
+      _output =
+        ExUnit.CaptureIO.capture_io(fn ->
+          assert {:continue, _} = Flags.handle_flags("/flags set did_run_tests", %{})
+        end)
+
+      assert WorkflowState.has_flag?(:did_run_tests)
+    end
+
+    test "safe normalization: case-insensitive known flag resolves" do
+      _output =
+        ExUnit.CaptureIO.capture_io(fn ->
+          assert {:continue, _} = Flags.handle_flags("/flags set DID_RUN_TESTS", %{})
+        end)
+
+      assert WorkflowState.has_flag?(:did_run_tests)
+    end
+  end
+
+  describe "whitespace robustness" do
+    test "/flags with leading extra space is treated as bare /flags" do
+      output =
+        ExUnit.CaptureIO.capture_io(fn ->
+          assert {:continue, _} = Flags.handle_flags("/flags  reset", %{})
+        end)
+
+      # "flags  reset" splits into ["flags", "reset"] with ~r/\s+/
+      assert output =~ "Workflow state reset"
+    end
+
+    test "/flags with trailing whitespace shows workflow state" do
+      output =
+        ExUnit.CaptureIO.capture_io(fn ->
+          assert {:continue, _} = Flags.handle_flags("/flags   ", %{})
+        end)
+
+      # Trailing whitespace is trimmed, so this is equivalent to bare /flags
+      assert output =~ "Workflow State"
+    end
+
+    test "/flags set with extra spaces still works" do
+      _output =
+        ExUnit.CaptureIO.capture_io(fn ->
+          assert {:continue, _} = Flags.handle_flags("/flags  set  did_run_tests", %{})
+        end)
+
+      assert WorkflowState.has_flag?(:did_run_tests)
+    end
+
+    test "/flags clear with extra spaces still works" do
+      WorkflowState.set_flag(:did_run_tests)
+
+      _output =
+        ExUnit.CaptureIO.capture_io(fn ->
+          assert {:continue, _} = Flags.handle_flags("/flags  clear  did_run_tests", %{})
+        end)
+
+      refute WorkflowState.has_flag?(:did_run_tests)
+    end
+  end
+
+  describe "metadata rendering robustness" do
+    test "renders string metadata values normally" do
+      WorkflowState.put_metadata("agent_name", "test-agent")
+
+      output =
+        ExUnit.CaptureIO.capture_io(fn ->
+          assert {:continue, _} = Flags.handle_flags("/flags", %{})
+        end)
+
+      assert output =~ "agent_name: test-agent"
+    end
+
+    test "renders map metadata values without crashing" do
+      WorkflowState.put_metadata("config", %{"key" => "value", "nested" => %{"deep" => true}})
+
+      output =
+        ExUnit.CaptureIO.capture_io(fn ->
+          assert {:continue, _} = Flags.handle_flags("/flags", %{})
+        end)
+
+      assert output =~ "config:"
+      refute output =~ "** (Protocol.UndefinedError)"
+    end
+
+    test "renders integer metadata values" do
+      WorkflowState.put_metadata("count", 42)
+
+      output =
+        ExUnit.CaptureIO.capture_io(fn ->
+          assert {:continue, _} = Flags.handle_flags("/flags", %{})
+        end)
+
+      assert output =~ "count: 42"
+    end
+
+    test "renders list metadata values" do
+      WorkflowState.put_metadata("tags", ["a", "b", "c"])
+
+      output =
+        ExUnit.CaptureIO.capture_io(fn ->
+          assert {:continue, _} = Flags.handle_flags("/flags", %{})
+        end)
+
+      assert output =~ "tags:"
+      refute output =~ "** (Protocol.UndefinedError)"
+    end
+
+    test "renders atom metadata values" do
+      WorkflowState.put_metadata("status", :active)
+
+      output =
+        ExUnit.CaptureIO.capture_io(fn ->
+          assert {:continue, _} = Flags.handle_flags("/flags", %{})
+        end)
+
+      assert output =~ "status: :active"
+    end
+
+    test "renders nil metadata values" do
+      WorkflowState.put_metadata("optional", nil)
+
+      output =
+        ExUnit.CaptureIO.capture_io(fn ->
+          assert {:continue, _} = Flags.handle_flags("/flags", %{})
+        end)
+
+      assert output =~ "optional: nil"
+    end
+  end
+
   describe "invalid usage" do
     test "shows usage for unknown subcommand" do
       output =

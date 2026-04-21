@@ -67,7 +67,7 @@ defmodule CodePuppyControl.REPL.CompletionTest do
       all = Completion.complete_command("/")
 
       expected =
-        ~w(/help /model /mode /agent /quit /exit /clear /history /pack /sessions /tui /cd /compact /truncate)
+        ~w(/help /model /mode /agent /quit /exit /clear /history /pack /flags /sessions /tui /cd /compact /truncate)
 
       for cmd <- expected do
         assert cmd in all, "Expected #{cmd} to be in slash-command completions"
@@ -101,8 +101,10 @@ defmodule CodePuppyControl.REPL.CompletionTest do
       all = Completion.complete_command("/")
       assert "/pack" in all
       assert "/mode" in all
+      assert "/flags" in all
       assert Completion.complete("/pa", :command) == ["/pack"]
       assert Completion.complete("/mo", :command) == ["/mode", "/model"]
+      assert Completion.complete("/fl", :command) == ["/flags"]
     end
 
     test "falls back to hardcoded list when Registry is empty" do
@@ -120,6 +122,8 @@ defmodule CodePuppyControl.REPL.CompletionTest do
       assert "/quit" in all
       assert "/pack" in all
       assert "/model" in all
+      assert "/mode" in all
+      assert "/flags" in all
 
       # Verify prefix matching works through the fallback path
       assert Completion.complete("/pa", :command) == ["/pack"]

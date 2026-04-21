@@ -79,7 +79,8 @@ defmodule CodePuppyControl.CLI.SlashCommands.Commands.Flags do
       metadata
       |> Enum.sort_by(fn {k, _v} -> k end)
       |> Enum.each(fn {key, value} ->
-        IO.puts("      #{key}: #{value}")
+        formatted = format_metadata_value(value)
+        IO.puts("      #{key}: #{formatted}")
       end)
     end
 
@@ -110,21 +111,33 @@ defmodule CodePuppyControl.CLI.SlashCommands.Commands.Flags do
 
   # ── Helpers ──────────────────────────────────────────────────────────────
 
+  # Safe flag lookup: match user input against known flag atoms
+  # without calling String.to_atom/1, which would create atoms from
+  # arbitrary user input (atom table exhaustion risk).
   defp normalize_flag(name) when is_binary(name) do
-    name
-    |> String.downcase()
-    |> String.to_atom()
+    downcased = String.downcase(name)
+
+    WorkflowState.flag_names()
+    |> Enum.find(fn atom -> Atom.to_string(atom) == downcased end)
   end
 
   defp parse_args("/" <> rest) do
-    case String.split(rest, " ", parts: 3) do
+    rest
+    |> String.trim()
+    |> String.split(~r/\s+/, parts: 3)
+    |> case do
       [_name] -> []
       [_name, sub] -> [String.downcase(sub)]
-      [_name, sub, arg] -> [String.downcase(sub), arg]
+      [_name, sub, arg] -> [String.downcase(sub), String.trim(arg)]
     end
   end
 
   defp parse_args(_line), do: []
+
+  # Safely format metadata values for display.
+  # Strings are shown as-is; everything else is inspected.
+  defp format_metadata_value(value) when is_binary(value), do: value
+  defp format_metadata_value(value), do: inspect(value)
 
   defp print_success(msg) do
     IO.puts(IO.ANSI.green() <> "    ✓ #{msg}" <> IO.ANSI.reset())
