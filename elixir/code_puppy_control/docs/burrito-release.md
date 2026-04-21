@@ -101,6 +101,38 @@ When running as a Burrito binary, `PUP_DATABASE_PATH` and `PUP_SECRET_KEY_BASE` 
 
 These paths are intentionally **outside** `~/.code_puppy/` (Python pup's home) to respect ADR-003 config isolation.
 
+## CI/CD Release Automation
+
+Tag-push builds and GitHub Release publishing are automated via `.github/workflows/burrito-release.yml` (bd-236).
+
+### How it works
+
+| Aspect | Detail |
+|--------|--------|
+| **Trigger** | Git tag push matching `v*` (e.g. `v1.0.0`) or manual `workflow_dispatch` |
+| **Matrix** | 3 platforms: `macos-latest` (arm64), `ubuntu-latest` (x86_64), `windows-latest` (x86_64) |
+| **Artifacts** | 3 native binaries + `SHA256SUMS.txt` attached to a GitHub Release |
+| **Run history** | `https://github.com/<owner>/<repo>/actions/workflows/burrito-release.yml` |
+
+On a tag push, each platform builds a Burrito binary, uploads it as a workflow artifact, then a `release` job downloads all three, computes SHA-256 checksums, and creates a GitHub Release with all files attached.
+
+`workflow_dispatch` runs build artifacts but **do not** publish a release (the `release` job only runs on tag refs).
+
+### Codesigning
+
+The CI-produced binaries are **unsigned**. Codesigning is tracked separately:
+
+- **Windows Authenticode** → bd-240
+- **macOS codesigning/notarization** → bd-241
+
+### Missing targets
+
+| Target | Status |
+|--------|--------|
+| `linux_arm64` | Tracked in bd-239 area |
+| `macos_x86_64` | Not yet tracked (follow-up needed) |
+| `linux_musl` (Alpine) | Tracked in bd-239 |
+
 ## Known Issues
 
 ### macOS Gatekeeper
