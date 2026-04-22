@@ -13,7 +13,7 @@ defmodule CodePuppyControl.LLM.ProviderTest do
   use ExUnit.Case, async: true
 
   alias CodePuppyControl.LLM.Provider
-  alias CodePuppyControl.LLM.Providers.{OpenAI, Anthropic}
+  alias CodePuppyControl.LLM.Providers.{OpenAI, Anthropic, ResponsesAPI}
   alias CodePuppyControl.Test.ProviderContract
   alias CodePuppyControl.Test.ContractViolation
 
@@ -76,21 +76,25 @@ defmodule CodePuppyControl.LLM.ProviderTest do
       assert function_exported?(Anthropic, :supports_vision?, 0)
     end
 
-    test "both providers declare @behaviour Provider" do
-      # Check that the modules have the behaviour attribute
-      openai_behaviours =
-        OpenAI.__info__(:attributes)
-        |> Keyword.get_values(:behaviour)
-        |> List.flatten()
+    test "ResponsesAPI implements all Provider callbacks" do
+      assert {:module, ResponsesAPI} = Code.ensure_loaded(ResponsesAPI)
+      assert function_exported?(ResponsesAPI, :chat, 3)
+      assert function_exported?(ResponsesAPI, :stream_chat, 4)
+      assert function_exported?(ResponsesAPI, :supports_tools?, 0)
+      assert function_exported?(ResponsesAPI, :supports_vision?, 0)
+    end
 
-      assert Provider in openai_behaviours
+    test "all providers satisfy the Provider contract via ProviderContract" do
+      # Verify behaviour compliance through the public contract API
+      # rather than inspecting compile-time module attributes.
+      assert :ok =
+               ProviderContract.validate_provider_interface(OpenAI, "OpenAI")
 
-      anthropic_behaviours =
-        Anthropic.__info__(:attributes)
-        |> Keyword.get_values(:behaviour)
-        |> List.flatten()
+      assert :ok =
+               ProviderContract.validate_provider_interface(Anthropic, "Anthropic")
 
-      assert Provider in anthropic_behaviours
+      assert :ok =
+               ProviderContract.validate_provider_interface(ResponsesAPI, "ResponsesAPI")
     end
   end
 
@@ -102,6 +106,10 @@ defmodule CodePuppyControl.LLM.ProviderTest do
     test "Anthropic supports tools" do
       assert Anthropic.supports_tools?() == true
     end
+
+    test "ResponsesAPI supports tools" do
+      assert ResponsesAPI.supports_tools?() == true
+    end
   end
 
   describe "supports_vision?/0" do
@@ -111,6 +119,10 @@ defmodule CodePuppyControl.LLM.ProviderTest do
 
     test "Anthropic supports vision" do
       assert Anthropic.supports_vision?() == true
+    end
+
+    test "ResponsesAPI supports vision" do
+      assert ResponsesAPI.supports_vision?() == true
     end
   end
 

@@ -38,14 +38,15 @@ defmodule CodePuppyControl.ModelFactory do
   | `gemini_oauth`     | ✅ Full  | Gemini OAuth (OpenAI-compat)    |
   | `custom_gemini`    | ✅ Full  | Custom Gemini-compatible        |
   | `claude_code`      | ✅ Full  | Claude Code OAuth bearer auth   |
-  | `chatgpt_oauth`    | ⚠️ Partial | Runtime auth wired; full Codex Responses parity pending |
+  | `chatgpt_oauth`    | ✅ Partial | Responses API via OAuth (forced-stream facade; settings auto-wired) |
   | `round_robin`      | ➡️ Defer | Handled by routing/             |
   """
 
   alias CodePuppyControl.Auth.RuntimeConnection
+  alias CodePuppyControl.Config.Models
   alias CodePuppyControl.ModelFactory.{Credentials, Handle}
   alias CodePuppyControl.ModelRegistry
-  alias CodePuppyControl.LLM.Providers.{OpenAI, Anthropic, Google, Azure, Groq, Together}
+  alias CodePuppyControl.LLM.Providers.{OpenAI, Anthropic, Google, Azure, Groq, Together, ResponsesAPI}
 
   require Logger
 
@@ -64,7 +65,7 @@ defmodule CodePuppyControl.ModelFactory do
     "gemini_oauth" => Google,
     "custom_gemini" => Google,
     "claude_code" => Anthropic,
-    "chatgpt_oauth" => OpenAI,
+    "chatgpt_oauth" => ResponsesAPI,
     "groq" => Groq,
     "together" => Together
   }
@@ -267,6 +268,7 @@ defmodule CodePuppyControl.ModelFactory do
         |> maybe_put_kw(:temperature, Map.get(config, "temperature"))
         |> maybe_put_kw(:max_tokens, Map.get(config, "max_output_tokens"))
         |> merge_config_opts(config)
+        |> maybe_forward_chatgpt_oauth_settings(provider_type)
 
       handle = %Handle{
         model_name: model_name,
@@ -283,6 +285,15 @@ defmodule CodePuppyControl.ModelFactory do
   end
 
   # ── Model Opts Helpers ────────────────────────────────────────────────────
+  defp maybe_forward_chatgpt_oauth_settings(opts, "chatgpt_oauth") do
+    opts
+    |> maybe_put_kw(:reasoning_effort, Models.openai_reasoning_effort())
+    |> maybe_put_kw(:reasoning_summary, Models.openai_reasoning_summary())
+    |> maybe_put_kw(:text_verbosity, Models.openai_verbosity())
+  end
+
+  defp maybe_forward_chatgpt_oauth_settings(opts, _provider_type), do: opts
+
 
   defp maybe_put_kw(opts, _key, nil), do: opts
   defp maybe_put_kw(opts, key, value), do: Keyword.put(opts, key, value)

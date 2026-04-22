@@ -28,12 +28,10 @@ defmodule CodePuppyControl.LLM.ProviderParityTest do
     "gemini",
     "gemini_oauth",
     "custom_gemini",
-    "claude_code"
+    "claude_code",
+    "chatgpt_oauth"
   ]
 
-  # chatgpt_oauth is in @oauth_types in ModelFactory (deferred, Phase 4) but
-  # not in its @provider_map. It's NOT an MF-only difference — both maps omit it.
-  # No intentional differences currently exist between the two @provider_maps.
 
   describe "provider_map parity (bd-221)" do
     test "ModelFactory supports all canonical provider types" do

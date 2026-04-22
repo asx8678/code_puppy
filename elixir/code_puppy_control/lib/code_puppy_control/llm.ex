@@ -34,12 +34,14 @@ defmodule CodePuppyControl.LLM do
   | `"anthropic"`      | `CodePuppyControl.LLM.Providers.Anthropic`|
   | `"custom_openai"`  | `CodePuppyControl.LLM.Providers.OpenAI`|
   | `"custom_anthropic"` | `CodePuppyControl.LLM.Providers.Anthropic`|
+  | `"chatgpt_oauth"` | `CodePuppyControl.LLM.Providers.ResponsesAPI`|
 
   Options are forwarded to the provider. The `:model` option defaults to the
   model name from the registry config.
   """
 
   alias CodePuppyControl.Auth.RuntimeConnection
+  alias CodePuppyControl.Config.Models
   alias CodePuppyControl.LLM.Provider
   alias CodePuppyControl.ModelFactory.Handle
   alias CodePuppyControl.ModelRegistry
@@ -64,7 +66,7 @@ defmodule CodePuppyControl.LLM do
     "gemini_oauth" => CodePuppyControl.LLM.Providers.Google,
     "custom_gemini" => CodePuppyControl.LLM.Providers.Google,
     "claude_code" => CodePuppyControl.LLM.Providers.Anthropic,
-    "chatgpt_oauth" => CodePuppyControl.LLM.Providers.OpenAI,
+    "chatgpt_oauth" => CodePuppyControl.LLM.Providers.ResponsesAPI,
     "groq" => CodePuppyControl.LLM.Providers.Groq,
     "together" => CodePuppyControl.LLM.Providers.Together
   }
@@ -205,6 +207,7 @@ defmodule CodePuppyControl.LLM do
                 |> merge_extra_headers(runtime.extra_headers)
                 |> resolve_api_key(provider_mod, model_name)
                 |> Keyword.put(:model, resolve_model_api_name(model_name))
+                |> maybe_forward_chatgpt_oauth_settings(config)
 
               {:ok, provider_mod, resolved_opts}
             end
@@ -217,6 +220,17 @@ defmodule CodePuppyControl.LLM do
         {:error, :no_model_or_provider_specified}
     end
   end
+  defp maybe_forward_chatgpt_oauth_settings(opts, config) do
+    if ModelRegistry.get_model_type(config) == "chatgpt_oauth" do
+      opts
+      |> maybe_put_opt(:reasoning_effort, Models.openai_reasoning_effort())
+      |> maybe_put_opt(:reasoning_summary, Models.openai_reasoning_summary())
+      |> maybe_put_opt(:text_verbosity, Models.openai_verbosity())
+    else
+      opts
+    end
+  end
+
 
   defp resolve_api_key(opts, provider_mod, model_name) do
     if Keyword.has_key?(opts, :api_key) do

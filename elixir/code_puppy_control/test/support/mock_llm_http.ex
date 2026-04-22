@@ -269,6 +269,256 @@ defmodule CodePuppyControl.Test.MockLLMHTTP do
       "event: message_delta\ndata: #{Jason.encode!(%{"type" => "message_delta", "delta" => %{"stop_reason" => "end_turn"}, "usage" => %{"output_tokens" => length(chunks)}})}\n\n" <>
       "event: message_stop\ndata: #{Jason.encode!(%{"type" => "message_stop"})}\n\n"
   end
+  # ── Responses API Fixtures (chatgpt_oauth) ───────────────────────────────────────────────────
+
+  def responses_api_chat_fixture(opts \\ []) do
+    id = Keyword.get(opts, :id, "resp_test123")
+    model = Keyword.get(opts, :model, "gpt-5.3-codex")
+    content = Keyword.get(opts, :content, "Hello! How can I help you?")
+    function_call = Keyword.get(opts, :function_call, nil)
+
+    output_items = []
+
+    output_items =
+      if content do
+        output_items ++
+          [
+            %{
+              "type" => "message",
+              "id" => "msg_test",
+              "role" => "assistant",
+              "content" => [%{"type" => "output_text", "text" => content, "annotations" => []}]
+            }
+          ]
+      else
+        output_items
+      end
+
+    output_items =
+      if function_call do
+        output_items ++ [function_call]
+      else
+        output_items
+      end
+
+    %{
+      "id" => id,
+      "object" => "response",
+      "model" => model,
+      "output" => output_items,
+      "status" => "completed",
+      "usage" => %{"input_tokens" => 10, "output_tokens" => 20, "total_tokens" => 30}
+    }
+    |> Jason.encode!()
+  end
+
+  def responses_api_stream_fixture(opts \\ []) do
+    chunks = Keyword.get(opts, :chunks, ["Hello", " there", "!"])
+    model = Keyword.get(opts, :model, "gpt-5.3-codex")
+    id = Keyword.get(opts, :id, "resp_stream123")
+
+    nl = "\n"
+    nn = "\n\n"
+
+    "event: response.created" <>
+      nl <>
+      "data: " <>
+      Jason.encode!(%{
+        "type" => "response.created",
+        "response" => %{
+          "id" => id,
+          "object" => "response",
+          "model" => model,
+          "status" => "in_progress",
+          "output" => [],
+          "usage" => %{}
+        }
+      }) <>
+      nn <>
+      "event: response.output_item.added" <>
+      nl <>
+      "data: " <>
+      Jason.encode!(%{
+        "type" => "response.output_item.added",
+        "output_index" => 0,
+        "item" => %{
+          "type" => "message",
+          "id" => "msg_" <> id,
+          "role" => "assistant",
+          "content" => []
+        }
+      }) <>
+      nn <>
+      "event: response.content_part.added" <>
+      nl <>
+      "data: " <>
+      Jason.encode!(%{
+        "type" => "response.content_part.added",
+        "output_index" => 0,
+        "content_index" => 0,
+        "part" => %{"type" => "output_text", "text" => "", "annotations" => []}
+      }) <>
+      nn <>
+      (chunks
+       |> Enum.map(fn t ->
+         "event: response.output_text.delta" <>
+           nl <>
+           "data: " <>
+           Jason.encode!(%{
+             "type" => "response.output_text.delta",
+             "output_index" => 0,
+             "content_index" => 0,
+             "delta" => t
+           }) <> nn
+       end)
+       |> Enum.join()) <>
+      "event: response.output_text.done" <>
+      nl <>
+      "data: " <>
+      Jason.encode!(%{
+        "type" => "response.output_text.done",
+        "output_index" => 0,
+        "content_index" => 0,
+        "text" => Enum.join(chunks)
+      }) <>
+      nn <>
+      "event: response.output_item.done" <>
+      nl <>
+      "data: " <>
+      Jason.encode!(%{
+        "type" => "response.output_item.done",
+        "output_index" => 0,
+        "item" => %{
+          "type" => "message",
+          "id" => "msg_" <> id,
+          "role" => "assistant",
+          "content" => [%{"type" => "output_text", "text" => Enum.join(chunks)}]
+        }
+      }) <>
+      nn <>
+      "event: response.completed" <>
+      nl <>
+      "data: " <>
+      Jason.encode!(%{
+        "type" => "response.completed",
+        "response" => %{
+          "id" => id,
+          "object" => "response",
+          "model" => model,
+          "status" => "completed",
+          "output" => [
+            %{
+              "type" => "message",
+              "id" => "msg_" <> id,
+              "role" => "assistant",
+              "content" => [%{"type" => "output_text", "text" => Enum.join(chunks)}]
+            }
+          ],
+          "usage" => %{
+            "input_tokens" => 10,
+            "output_tokens" => length(chunks),
+            "total_tokens" => 10 + length(chunks)
+          }
+        }
+      }) <> nn
+  end
+
+  def responses_api_tool_stream_fixture(opts \\ []) do
+    id = Keyword.get(opts, :id, "resp_tool123")
+    model = Keyword.get(opts, :model, "gpt-5.3-codex")
+    tool_name = Keyword.get(opts, :tool_name, "get_weather")
+    call_id = Keyword.get(opts, :call_id, "call_abc123")
+    arguments = Keyword.get(opts, :arguments, ~s({"location": "Boston"}))
+
+    nl = "\n"
+    nn = "\n\n"
+
+    "event: response.created" <>
+      nl <>
+      "data: " <>
+      Jason.encode!(%{
+        "type" => "response.created",
+        "response" => %{
+          "id" => id,
+          "object" => "response",
+          "model" => model,
+          "status" => "in_progress",
+          "output" => [],
+          "usage" => %{}
+        }
+      }) <>
+      nn <>
+      "event: response.output_item.added" <>
+      nl <>
+      "data: " <>
+      Jason.encode!(%{
+        "type" => "response.output_item.added",
+        "output_index" => 0,
+        "item" => %{
+          "type" => "function_call",
+          "id" => "fc_" <> id,
+          "call_id" => call_id,
+          "name" => tool_name,
+          "arguments" => ""
+        }
+      }) <>
+      nn <>
+      "event: response.function_call_arguments.delta" <>
+      nl <>
+      "data: " <>
+      Jason.encode!(%{
+        "type" => "response.function_call_arguments.delta",
+        "output_index" => 0,
+        "delta" => arguments
+      }) <>
+      nn <>
+      "event: response.function_call_arguments.done" <>
+      nl <>
+      "data: " <>
+      Jason.encode!(%{
+        "type" => "response.function_call_arguments.done",
+        "output_index" => 0,
+        "arguments" => arguments
+      }) <>
+      nn <>
+      "event: response.output_item.done" <>
+      nl <>
+      "data: " <>
+      Jason.encode!(%{
+        "type" => "response.output_item.done",
+        "output_index" => 0,
+        "item" => %{
+          "type" => "function_call",
+          "id" => "fc_" <> id,
+          "call_id" => call_id,
+          "name" => tool_name,
+          "arguments" => arguments
+        }
+      }) <>
+      nn <>
+      "event: response.completed" <>
+      nl <>
+      "data: " <>
+      Jason.encode!(%{
+        "type" => "response.completed",
+        "response" => %{
+          "id" => id,
+          "object" => "response",
+          "model" => model,
+          "status" => "completed",
+          "output" => [
+            %{
+              "type" => "function_call",
+              "id" => "fc_" <> id,
+              "call_id" => call_id,
+              "name" => tool_name,
+              "arguments" => arguments
+            }
+          ],
+          "usage" => %{"input_tokens" => 10, "output_tokens" => 50, "total_tokens" => 60}
+        }
+      }) <> nn
+  end
 
   def anthropic_tool_stream_fixture(opts \\ []) do
     id = Keyword.get(opts, :id, "msg_tool123")

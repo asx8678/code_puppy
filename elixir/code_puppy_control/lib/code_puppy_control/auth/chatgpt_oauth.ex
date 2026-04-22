@@ -390,6 +390,11 @@ defmodule CodePuppyControl.Auth.ChatGptOAuth do
           "custom_endpoint" => %{"url" => @config.api_base_url},
           "context_length" => context_length,
           "oauth_source" => "chatgpt-oauth-plugin",
+          # Informational metadata only — advertises what the Responses API
+          # endpoint accepts. The runtime auto-wiring comes from LLM and
+          # ModelFactory helpers for chatgpt_oauth, not from this metadata
+          # field itself. Explicit opts/model_opts still override defaults.
+          # See ResponsesAPI @moduledoc.
           "supported_settings" => ["reasoning_effort", "summary", "verbosity"],
           "supports_xhigh_reasoning" => supports_xhigh
         })
