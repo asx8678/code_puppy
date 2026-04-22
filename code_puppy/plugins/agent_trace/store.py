@@ -11,6 +11,7 @@ import logging
 from pathlib import Path
 from typing import Iterator
 
+from code_puppy.config_paths import assert_write_allowed, resolve_path, safe_append, safe_mkdir_p, safe_rm
 from code_puppy.plugins.agent_trace.schema import TraceEvent
 
 logger = logging.getLogger(__name__)
@@ -35,16 +36,16 @@ class TraceStore:
             base_dir: Directory for trace files. Defaults to ~/.code_puppy/traces/
         """
         if base_dir is None:
-            home = Path.home()
-            base_dir = home / ".code_puppy" / "traces"
-        
+            base_dir = resolve_path("traces")
+
+        assert_write_allowed(base_dir, "trace_store_init")
         self.base_dir = Path(base_dir)
         self._ensure_dir()
     
     def _ensure_dir(self) -> None:
         """Ensure the trace directory exists."""
         try:
-            self.base_dir.mkdir(parents=True, exist_ok=True)
+            safe_mkdir_p(self.base_dir)
         except OSError as e:
             logger.warning(f"Failed to create trace directory: {e}")
     
@@ -65,9 +66,7 @@ class TraceStore:
         
         try:
             path = self._trace_path(event.trace_id)
-            with open(path, "a", encoding="utf-8") as f:
-                f.write(event.to_json())
-                f.write("\n")
+            safe_append(path, event.to_json() + "\n", encoding="utf-8")
             return True
         except OSError as e:
             logger.debug(f"Failed to append event: {e}")
@@ -88,11 +87,12 @@ class TraceStore:
         for trace_id, trace_events in by_trace.items():
             try:
                 path = self._trace_path(trace_id)
-                with open(path, "a", encoding="utf-8") as f:
-                    for event in trace_events:
-                        f.write(event.to_json())
-                        f.write("\n")
-                        written += 1
+                safe_append(
+                    path,
+                    "".join(event.to_json() + "\n" for event in trace_events),
+                    encoding="utf-8",
+                )
+                written += len(trace_events)
             except OSError as e:
                 logger.debug(f"Failed to write batch for {trace_id}: {e}")
         
@@ -154,7 +154,7 @@ class TraceStore:
         path = self._trace_path(trace_id)
         try:
             if path.exists():
-                path.unlink()
+                safe_rm(path)
             return True
         except OSError as e:
             logger.debug(f"Failed to delete trace {trace_id}: {e}")

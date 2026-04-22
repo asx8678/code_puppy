@@ -4,16 +4,25 @@ import json
 import os
 import pathlib
 import re
+import shutil
 import threading
 import time
 from dataclasses import dataclass, field
 from functools import cache
+from typing import TYPE_CHECKING
 
 from code_puppy.utils.thread_safe_cache import thread_safe_lru_cache
 from pathlib import Path
 
 from code_puppy.session_storage import save_session_async
 from code_puppy import runtime_state
+
+# Isolation guard — per ADR-003, writes must be validated when running as pup-ex
+from code_puppy.config_paths import (
+    assert_write_allowed as _assert_write_allowed,
+    safe_atomic_write as _safe_atomic_write,
+    safe_mkdir_p as _safe_mkdir_p,
+)
 
 # Public API exports
 __all__ = [
@@ -74,6 +83,13 @@ __all__ = [
 
 ]
 
+if TYPE_CHECKING:
+    STATE_DIR: str
+    CONFIG_DIR: str
+    CACHE_DIR: str
+    AUTOSAVE_DIR: pathlib.Path
+    EXTRA_MODELS_FILE: pathlib.Path
+
 # Compiled regex for _sanitize_model_name_for_key - single pass replacement
 _SANITIZE_MODEL_NAME_RE = re.compile(r"[.\-/]")
 
@@ -90,6 +106,7 @@ class ConfigState:
     # Config caching (eliminates repeated disk reads)
     config_cache: configparser.ConfigParser | None = None
     config_mtime: float = 0.0
+    config_path: str | None = None
 
     # mtime check debouncing (reduces stat syscall cost)
     last_mtime_check: float = 0.0
@@ -121,12 +138,14 @@ def _get_xdg_dir_cached(env_var: str, fallback: str) -> str:
     """
     Get directory for code_puppy files (lru_cached - computed once per unique args).
 
-    Uses @lru_cache(maxsize=4) to cache results for each unique (env_var, fallback)
-    combination. Cached values persist for the lifetime of the process.
+    .. deprecated:: bd-193
+        Use :func:`_get_xdg_dir` instead.  The cached variant is retained for
+        backward compatibility but new code should call the uncached version
+        so that env-var changes are always respected.
 
     XDG paths are only used when the corresponding environment variable
-    is explicitly set by the user. Otherwise, we use the legacy ~/.code_puppy
-    directory for all file types (config, data, cache, state).
+    is explicitly set by the user. Otherwise, we use the active home directory
+    (which respects pup-ex isolation per ADR-003).
 
     Args:
         env_var: XDG environment variable name (e.g., "XDG_CONFIG_HOME")
@@ -135,49 +154,64 @@ def _get_xdg_dir_cached(env_var: str, fallback: str) -> str:
     Returns:
         Path to the directory for code_puppy files
     """
-    # Use XDG directory ONLY if environment variable is explicitly set
-    xdg_base = os.getenv(env_var)
-    if xdg_base:
-        return os.path.join(xdg_base, "code_puppy")
-
-    # Default to legacy ~/.code_puppy for all file types
-    return os.path.join(os.path.expanduser("~"), ".code_puppy")
+    return _get_xdg_dir(env_var, fallback)
 
 
 def _get_xdg_dir(env_var: str, fallback: str) -> str:
     """Get XDG directory (uncached: always reads current env var).
 
-    Deliberately bypasses `_get_xdg_dir_cached` so that callers who change
-    XDG_* env vars at runtime (notably tests using `patch.dict(os.environ)`)
-    always get fresh results. The cached variant is still used for the
-    module-level path constants computed once at import time.
+    Deliberately bypasses ``_get_xdg_dir_cached`` so that callers who change
+    XDG_* env vars at runtime (notably tests using ``patch.dict(os.environ)``)
+    always get fresh results.
+
+    ADR-003 (bd-193): In pup-ex mode, XDG-derived paths MUST remain under
+    the active home tree.  If the XDG env var points outside, we ignore
+    it and fall back to the active home.
     """
     xdg_base = os.getenv(env_var)
     if xdg_base:
-        return os.path.join(xdg_base, "code_puppy")
-    return os.path.join(os.path.expanduser("~"), ".code_puppy")
+        candidate = os.path.join(xdg_base, "code_puppy")
+        # ADR-003 (bd-193): In pup-ex mode, XDG paths must be under active home
+        from code_puppy.config_paths import is_pup_ex, _is_path_within_home
+        if is_pup_ex() and not _is_path_within_home(candidate):
+            from code_puppy.config_paths import home_dir
+            return str(home_dir())
+        return candidate
+    # ADR-003: Respect pup-ex isolation — use active home instead of
+    # hardcoded ~/.code_puppy/ when running as pup-ex.
+    from code_puppy.config_paths import home_dir
+    return str(home_dir())
 
 
 def _get_config() -> configparser.ConfigParser:
     """Return a cached ConfigParser, re-reading only when the file changes."""
+    config_path = str(_path_config_file())
     now = time.time()
+
+    with _state.config_lock:
+        if _state.config_path != config_path:
+            _state.config_path = config_path
+            _state.config_cache = None
+            _state.config_mtime = 0.0
+            _state.last_mtime_check = 0.0
+            _state.cached_mtime = None
 
     # Only re-check mtime after TTL expires (1 second debounce)
     if now - _state.last_mtime_check > 1.0:
         try:
-            _state.cached_mtime = os.path.getmtime(CONFIG_FILE)
+            _state.cached_mtime = os.path.getmtime(config_path)
         except OSError:
-            # File doesn't exist — return a fresh (uncached) parser each time
+            # File does not exist — return a fresh (uncached) parser each time
             # so that tests which mock ConfigParser or CONFIG_FILE work correctly.
             cfg = configparser.ConfigParser()
-            cfg.read(CONFIG_FILE)
+            cfg.read(config_path)
             return cfg
         _state.last_mtime_check = now
 
     with _state.config_lock:
         if _state.config_cache is None or _state.cached_mtime != _state.config_mtime:
             _state.config_cache = configparser.ConfigParser()
-            _state.config_cache.read(CONFIG_FILE)
+            _state.config_cache.read(config_path)
             _state.config_mtime = _state.cached_mtime
         return _state.config_cache
 
@@ -188,10 +222,12 @@ def _invalidate_config() -> None:
     Also resets the TTL-debounce state (_state.last_mtime_check, _state.cached_mtime) so
     the next _get_config() call performs a fresh mtime check rather than
     trusting stale values from before invalidation. This is essential for
-    test isolation when CONFIG_FILE is swapped between tests.
+    test isolation when CONFIG_FILE is swapped between tests.  (Internal
+    reference: uses ``_path_config_file()`` not the bare name.)
     """
     with _state.config_lock:
         _state.config_cache = None
+        _state.config_path = None
         _state.last_mtime_check = 0.0
         _state.cached_mtime = None
     # Also invalidate the protected token count cache
@@ -217,17 +253,25 @@ _CACHED_GETTERS: list[Callable[[], None]] = []
 def _registered_cache(func: Callable) -> Callable:
     """Decorator to register a cached function for auto-invalidation.
 
-    Wraps @cache and auto-registers the function's cache_clear method
-    in _CACHED_GETTERS so _invalidate_config() can clear it.
-
-    Usage:
-        @_registered_cache
-        def my_getter() -> str:
-            return expensive_lookup()
+    The cache key incorporates the effective config path so callers that
+    monkeypatch CONFIG_FILE get fresh values automatically.
+    Supports *args/**kwargs on the decorated function so that getters
+    like ``get_message_limit(default=50)`` work correctly.
     """
-    cached = cache(func)
-    _CACHED_GETTERS.append(cached.cache_clear)
-    return cached
+
+    @cache
+    def _cached(config_path: str, args: tuple, kwargs_key: tuple):
+        return func(*args, **dict(kwargs_key))
+
+    def wrapper(*args, **kwargs):
+        kwargs_key = tuple(sorted(kwargs.items()))
+        return _cached(str(_path_config_file()), args, kwargs_key)
+
+    wrapper.__name__ = func.__name__
+    wrapper.__doc__ = func.__doc__
+    wrapper.cache_clear = _cached.cache_clear  # type: ignore[attr-defined]
+    _CACHED_GETTERS.append(wrapper.cache_clear)
+    return wrapper
 
 
 def _is_truthy(val: str | None, default: bool = False) -> bool:
@@ -353,52 +397,134 @@ def _make_float_getter(
     return getter
 
 
-# --- Module-level path constants (eager, computed once at import time) ---
-# Previously these were lazy-evaluated via a module-level __getattr__ for a
-# microscopic startup perf win. That broke horribly: PEP 562 module __getattr__
-# only intercepts *external* `module.ATTR` access. It does NOT resolve bare-name
-# lookups inside the module's own functions, so every `CONFIG_FILE` reference
-# inside config.py raised NameError at runtime (see issue code_puppy-9tcr).
-# _get_xdg_dir_cached() already has @lru_cache, so these are effectively free.
+def _override_str(name: str) -> str | None:
+    override = globals().get(name)
+    if override is None:
+        return None
+    return os.fspath(override)
 
-# XDG Base Directory paths
-CONFIG_DIR = _get_xdg_dir_cached("XDG_CONFIG_HOME", ".config")
-DATA_DIR = _get_xdg_dir_cached("XDG_DATA_HOME", ".local/share")
-CACHE_DIR = _get_xdg_dir_cached("XDG_CACHE_HOME", ".cache")
-STATE_DIR = _get_xdg_dir_cached("XDG_STATE_HOME", ".local/state")
 
-# Configuration files (XDG_CONFIG_HOME)
-CONFIG_FILE = pathlib.Path(CONFIG_DIR) / "puppy.cfg"
-MCP_SERVERS_FILE = pathlib.Path(CONFIG_DIR) / "mcp_servers.json"
+def _override_path(name: str) -> pathlib.Path | None:
+    override = globals().get(name)
+    if override is None:
+        return None
+    return pathlib.Path(override)
 
-# MCP config cache with mtime invalidation
-_MCP_CONFIG_CACHE = None
-_MCP_CONFIG_MTIME = 0
 
-# Data files (XDG_DATA_HOME)
-MODELS_FILE = pathlib.Path(DATA_DIR) / "models.json"
-EXTRA_MODELS_FILE = pathlib.Path(DATA_DIR) / "extra_models.json"
-AGENTS_DIR = pathlib.Path(DATA_DIR) / "agents"
-SKILLS_DIR = pathlib.Path(DATA_DIR) / "skills"
-CONTEXTS_DIR = pathlib.Path(DATA_DIR) / "contexts"
-_DEFAULT_SQLITE_FILE = pathlib.Path(DATA_DIR) / "dbos_store.sqlite"
+# --- Lazy path accessors (bd-193: removed stale import-time capture) ---
+# Previously these were eager module-level constants computed once at import
+# time.  That captured env-sensitive paths (home_dir, XDG vars) before they
+# could be overridden by tests or by pup-ex mode activation.
+#
+# PEP 562 ``__getattr__`` only works for *external* ``module.ATTR`` access —
+# it does NOT resolve bare-name lookups inside this module's own functions.
+# So we provide private accessor functions (``_xdg_*()``) for INTERNAL use,
+# and ``__getattr__`` for backward-compatible EXTERNAL access.
+#
+# IMPORTANT: Within config.py, always use the ``_xdg_*()`` / ``_path_*()``
+# functions — NEVER use the bare names like ``CONFIG_FILE`` because those
+# will raise ``NameError`` at runtime.
 
-# OAuth plugin model files (XDG_DATA_HOME)
-CHATGPT_MODELS_FILE = pathlib.Path(DATA_DIR) / "chatgpt_models.json"
-CLAUDE_MODELS_FILE = pathlib.Path(DATA_DIR) / "claude_models.json"
 
-# Cache files (XDG_CACHE_HOME)
-AUTOSAVE_DIR = pathlib.Path(CACHE_DIR) / "autosaves"
+def _xdg_config_dir() -> str:
+    """Return the XDG config directory (respects pup-ex isolation)."""
+    return _override_str("CONFIG_DIR") or _get_xdg_dir("XDG_CONFIG_HOME", ".config")
 
-# State files (XDG_STATE_HOME)
-COMMAND_HISTORY_FILE = pathlib.Path(STATE_DIR) / "command_history.txt"
 
-# Database URL (depends on _DEFAULT_SQLITE_FILE)
-DBOS_DATABASE_URL = os.environ.get(
-    "DBOS_SYSTEM_DATABASE_URL", f"sqlite:///{_DEFAULT_SQLITE_FILE}"
-)
-# DBOS enable switch is controlled solely via puppy.cfg using key 'enable_dbos'.
-# Default: True (DBOS enabled) unless explicitly disabled.
+def _xdg_data_dir() -> str:
+    """Return the XDG data directory (respects pup-ex isolation)."""
+    return _override_str("DATA_DIR") or _get_xdg_dir("XDG_DATA_HOME", ".local/share")
+
+
+def _xdg_cache_dir() -> str:
+    """Return the XDG cache directory (respects pup-ex isolation)."""
+    return _override_str("CACHE_DIR") or _get_xdg_dir("XDG_CACHE_HOME", ".cache")
+
+
+def _xdg_state_dir() -> str:
+    """Return the XDG state directory (respects pup-ex isolation)."""
+    return _override_str("STATE_DIR") or _get_xdg_dir("XDG_STATE_HOME", ".local/state")
+
+
+def _path_config_file() -> pathlib.Path:
+    """Return the config file path (respects pup-ex isolation)."""
+    return _override_path("CONFIG_FILE") or pathlib.Path(_xdg_config_dir()) / "puppy.cfg"
+
+
+def _path_mcp_servers_file() -> pathlib.Path:
+    """Return the MCP servers file path (respects pup-ex isolation)."""
+    return _override_path("MCP_SERVERS_FILE") or pathlib.Path(_xdg_config_dir()) / "mcp_servers.json"
+
+
+def _path_agents_dir() -> pathlib.Path:
+    """Return the agents directory path (respects pup-ex isolation)."""
+    return _override_path("AGENTS_DIR") or pathlib.Path(_xdg_data_dir()) / "agents"
+
+
+def _path_skills_dir() -> pathlib.Path:
+    """Return the skills directory path (respects pup-ex isolation)."""
+    return _override_path("SKILLS_DIR") or pathlib.Path(_xdg_data_dir()) / "skills"
+
+
+def _path_autosave_dir() -> pathlib.Path:
+    """Return the autosave directory path (respects pup-ex isolation)."""
+    return _override_path("AUTOSAVE_DIR") or pathlib.Path(_xdg_cache_dir()) / "autosaves"
+
+
+def _path_command_history_file() -> pathlib.Path:
+    """Return the command history file path (respects pup-ex isolation)."""
+    return _override_path("COMMAND_HISTORY_FILE") or pathlib.Path(_xdg_state_dir()) / "command_history.txt"
+
+
+def _path_default_sqlite_file() -> pathlib.Path:
+    """Return the DBOS SQLite file path (respects pup-ex isolation)."""
+    return _override_path("_DEFAULT_SQLITE_FILE") or pathlib.Path(_xdg_data_dir()) / "dbos_store.sqlite"
+
+
+# Lazy name → factory for ``__getattr__``.  External code doing
+# ``from code_puppy.config import CONFIG_FILE`` or ``config.CONFIG_FILE``
+# will hit ``__getattr__`` and get a freshly-computed value.
+_LAZY_PATH_FACTORIES: dict[str, Callable[[], object]] = {
+    "CONFIG_DIR": lambda: _xdg_config_dir(),
+    "DATA_DIR": lambda: _xdg_data_dir(),
+    "CACHE_DIR": lambda: _xdg_cache_dir(),
+    "STATE_DIR": lambda: _xdg_state_dir(),
+    "CONFIG_FILE": lambda: _path_config_file(),
+    "MCP_SERVERS_FILE": lambda: _path_mcp_servers_file(),
+    "MODELS_FILE": lambda: pathlib.Path(_xdg_data_dir()) / "models.json",
+    "EXTRA_MODELS_FILE": lambda: pathlib.Path(_xdg_data_dir()) / "extra_models.json",
+    "AGENTS_DIR": lambda: _path_agents_dir(),
+    "SKILLS_DIR": lambda: _path_skills_dir(),
+    "CONTEXTS_DIR": lambda: pathlib.Path(_xdg_data_dir()) / "contexts",
+    "_DEFAULT_SQLITE_FILE": lambda: _path_default_sqlite_file(),
+    "CHATGPT_MODELS_FILE": lambda: pathlib.Path(_xdg_data_dir()) / "chatgpt_models.json",
+    "CLAUDE_MODELS_FILE": lambda: pathlib.Path(_xdg_data_dir()) / "claude_models.json",
+    "AUTOSAVE_DIR": lambda: _path_autosave_dir(),
+    "COMMAND_HISTORY_FILE": lambda: _path_command_history_file(),
+    "DBOS_DATABASE_URL": lambda: os.environ.get(
+        "DBOS_SYSTEM_DATABASE_URL",
+        f"sqlite:///{_path_default_sqlite_file()}",
+    ),
+}
+
+
+def __getattr__(name: str):
+    """Lazy path resolution for external attribute access.
+
+    Per PEP 562, this is called when *name* is not found in the module's
+    ``__dict__``.  It provides backward-compatible access to the path
+    constants that were previously computed eagerly at import time.
+
+    IMPORTANT: This is NOT called for bare-name access *within* this module.
+    Internal code must use the ``_xdg_*()`` / ``_path_*()`` helpers.
+    """
+    if name in _LAZY_PATH_FACTORIES:
+        return _LAZY_PATH_FACTORIES[name]()
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+
+
+for _lazy_name in _LAZY_PATH_FACTORIES:
+    globals().pop(_lazy_name, None)
 
 
 @_registered_cache
@@ -605,13 +731,15 @@ def ensure_config_exists():
     Returns configparser.ConfigParser for reading.
     """
     # Create all XDG directories with 0700 permissions per XDG spec
-    for directory in [CONFIG_DIR, DATA_DIR, CACHE_DIR, STATE_DIR, SKILLS_DIR]:
+    for directory in [_xdg_config_dir(), _xdg_data_dir(), _xdg_cache_dir(), _xdg_state_dir(), _path_skills_dir()]:
         if not os.path.exists(directory):
+            _assert_write_allowed(directory, "ensure_config_exists")
             os.makedirs(directory, mode=0o700, exist_ok=True)
-    exists = os.path.isfile(CONFIG_FILE)
+    config_file = _path_config_file()
+    exists = os.path.isfile(str(config_file))
     config = configparser.ConfigParser()
     if exists:
-        config.read(CONFIG_FILE)
+        config.read(str(config_file))
     missing = []
     if DEFAULT_SECTION not in config:
         config[DEFAULT_SECTION] = {}
@@ -641,7 +769,8 @@ def ensure_config_exists():
 
     # Write the config if we made any changes
     if missing or not exists:
-        with open(CONFIG_FILE, "w", encoding="utf-8") as f:
+        _assert_write_allowed(config_file, "ensure_config_exists")
+        with open(str(config_file), "w", encoding="utf-8") as f:
             config.write(f)
         _invalidate_config()
     return config
@@ -835,7 +964,9 @@ def set_config_value(key: str, value: str):
     content = buffer.getvalue()
 
     # Write atomically without re-reading (cache already invalidated)
-    atomic_write_text(Path(CONFIG_FILE), content)
+    # ADR-003: Guard against writing to wrong home when running as pup-ex
+    _assert_write_allowed(_path_config_file(), "set_config_value")
+    atomic_write_text(Path(_path_config_file()), content)
     _invalidate_config()  # Invalidate cache after write - no re-read needed
     # Also invalidate the typed config singleton (config_package.loader)
     # Lazy import to avoid circular imports at module load time
@@ -866,7 +997,9 @@ def reset_value(key: str) -> None:
         buffer = StringIO()
         config.write(buffer)
         content = buffer.getvalue()
-        atomic_write_text(Path(CONFIG_FILE), content)
+        # ADR-003: Guard against writing to wrong home when running as pup-ex
+        _assert_write_allowed(_path_config_file(), "reset_value")
+        atomic_write_text(Path(_path_config_file()), content)
     _invalidate_config()  # Invalidate cache after write
     # Also invalidate the typed config singleton (config_package.loader)
     try:
@@ -878,6 +1011,11 @@ def reset_value(key: str) -> None:
 
 
 # --- MODEL STICKY EXTENSION STARTS HERE ---
+# MCP config cache with mtime invalidation
+_MCP_CONFIG_CACHE = None
+_MCP_CONFIG_MTIME = 0
+
+
 def load_mcp_server_configs():
     """
     Loads the MCP server configurations from XDG_CONFIG_HOME/code_puppy/mcp_servers.json.
@@ -890,7 +1028,7 @@ def load_mcp_server_configs():
     from code_puppy.messaging.message_queue import emit_error
 
     try:
-        config_path = pathlib.Path(MCP_SERVERS_FILE)
+        config_path = pathlib.Path(_path_mcp_servers_file())
         mtime = config_path.stat().st_mtime if config_path.exists() else 0
 
         # Return cached result if file hasn't changed
@@ -1086,8 +1224,6 @@ def set_model_name(model: str):
     Updates runtime_state immediately for this process, and writes to the
     config file so new terminals will pick up this model as their default.
     """
-    from code_puppy import persistence
-
     # Update session cache immediately (runtime state, not config)
     runtime_state.set_session_model(model)
 
@@ -1098,21 +1234,11 @@ def set_model_name(model: str):
         config[DEFAULT_SECTION] = {}
     config[DEFAULT_SECTION]["model"] = model or ""
 
-    # Atomic write via persistence module (fixes CFG-M1)
-    import io
-
-    # Check if parent directory exists for atomic write (avoids exception overhead)
-    config_path = persistence.Path(CONFIG_FILE)
-    if config_path.parent.exists():
-        # Production path: atomic write via persistence
-        f = io.StringIO()
+    # Write config file (patch-friendly stdlib op, ADR-003 guard via _assert_write_allowed)
+    config_file = _path_config_file()
+    _assert_write_allowed(config_file, "set_model_name")
+    with open(str(config_file), "w", encoding="utf-8") as f:
         config.write(f)
-        f.seek(0)
-        persistence.atomic_write_text(config_path, f.read())
-    else:
-        # Test path: standard write for mock compatibility
-        with open(CONFIG_FILE, "w", encoding="utf-8") as cfg_file:
-            config.write(cfg_file)
     _invalidate_config()
 
     # Clear model cache when switching models to ensure fresh validation
@@ -1354,8 +1480,6 @@ def clear_model_settings(model_name: str) -> None:
     Args:
         model_name: The model name
     """
-    from code_puppy import persistence
-
     sanitized_name = _sanitize_model_name_for_key(model_name)
     prefix = f"model_settings_{sanitized_name}_"
 
@@ -1372,18 +1496,10 @@ def clear_model_settings(model_name: str) -> None:
         # Atomic write via persistence module (fixes CFG-M1)
         import io
 
-        # Check if parent directory exists for atomic write (avoids exception overhead)
-        config_path = persistence.Path(CONFIG_FILE)
-        if config_path.parent.exists():
-            # Production path: atomic write via persistence
-            f = io.StringIO()
-            config.write(f)
-            f.seek(0)
-            persistence.atomic_write_text(config_path, f.read())
-        else:
-            # Test path: standard write for mock compatibility
-            with open(CONFIG_FILE, "w", encoding="utf-8") as cfg_file:
-                config.write(cfg_file)
+        f = io.StringIO()
+        config.write(f)
+        f.seek(0)
+        _safe_atomic_write(_path_config_file(), f.read())
         _invalidate_config()
 
 
@@ -1478,8 +1594,8 @@ def get_user_agents_directory() -> str:
         Path to the user's Code Puppy agents directory.
     """
     # Ensure the agents directory exists
-    os.makedirs(AGENTS_DIR, exist_ok=True)
-    return AGENTS_DIR
+    _safe_mkdir_p(_path_agents_dir())
+    return _path_agents_dir()
 
 
 def get_project_agents_directory() -> str | None:
@@ -1501,28 +1617,38 @@ def get_project_agents_directory() -> str | None:
 def initialize_command_history_file():
     """Create the command history file if it doesn't exist.
     Handles migration from the old history file location for backward compatibility.
+
+    ADR-003 (bd-193): In pup-ex mode, the legacy copy+delete of
+    ``~/.code_puppy_history.txt`` is skipped because the legacy home is
+    read-only.  Only standard-pup mode performs the migration.
     """
     from pathlib import Path
+    from code_puppy.config_paths import is_pup_ex as _is_pup_ex
 
     # Ensure the state directory exists before trying to create the history file
-    if not os.path.exists(STATE_DIR):
-        os.makedirs(STATE_DIR, exist_ok=True)
+    # ADR-003: Guard against creating dirs in wrong home when running as pup-ex
+    if not os.path.exists(_xdg_state_dir()):
+        _assert_write_allowed(_xdg_state_dir(), "initialize_command_history_file")
+        os.makedirs(_xdg_state_dir(), mode=0o700, exist_ok=True)
 
-    command_history_exists = os.path.isfile(COMMAND_HISTORY_FILE)
+    command_history_file = _path_command_history_file()
+    command_history_exists = os.path.isfile(command_history_file)
     if not command_history_exists:
         try:
-            Path(COMMAND_HISTORY_FILE).touch()
+            _assert_write_allowed(command_history_file, "initialize_command_history_file")
+            Path(command_history_file).touch()
 
-            # For backwards compatibility, copy the old history file, then remove it
-            old_history_file = os.path.join(
-                os.path.expanduser("~"), ".code_puppy_history.txt"
-            )
-            old_history_exists = os.path.isfile(old_history_file)
-            if old_history_exists:
-                Path(old_history_file).copy(
-                    Path(COMMAND_HISTORY_FILE), preserve_metadata=True
+            # For backwards compatibility, copy the old history file, then remove it.
+            # ADR-003 (bd-193): In pup-ex mode, skip this — the legacy home is
+            # read-only and we must NOT delete files from it.
+            if not _is_pup_ex():
+                old_history_file = os.path.join(
+                    os.path.expanduser("~"), ".code_puppy_history.txt"
                 )
-                Path(old_history_file).unlink(missing_ok=True)
+                old_history_exists = os.path.isfile(old_history_file)
+                if old_history_exists:
+                    shutil.copy2(old_history_file, command_history_file)
+                    Path(old_history_file).unlink(missing_ok=True)
         except Exception as e:
             from code_puppy.messaging import emit_error
 
@@ -1735,13 +1861,14 @@ get_summarization_history_offload_enabled = _make_bool_getter(
 def get_summarization_history_dir() -> Path:
     """
     Returns the directory for history offload files.
-    Defaults to ~/.code_puppy/history/
+    Defaults to <active_home>/history/ (respects ADR-003 isolation).
     Configurable by 'summarization_history_dir' key.
     """
+    from code_puppy.config_paths import home_dir as _home_dir
     val = get_value("summarization_history_dir")
     if val:
         return Path(val).expanduser()
-    return Path.home() / ".code_puppy" / "history"
+    return _home_dir() / "history"
 
 
 
@@ -1845,9 +1972,9 @@ def save_command_to_history(command: str):
                 for char in command
             )
 
-        with open(
-            COMMAND_HISTORY_FILE, "a", encoding="utf-8", errors="surrogateescape"
-        ) as f:
+        history_file = _path_command_history_file()
+        _assert_write_allowed(history_file, "save_command_to_history")
+        with open(history_file, "a", encoding="utf-8", errors="surrogateescape") as f:
             f.write(f"\n# {timestamp}\n{command}\n")
     except Exception as e:
         from code_puppy.messaging import emit_error
@@ -2173,7 +2300,7 @@ def auto_save_session_if_enabled() -> bool:
 
         now = datetime.datetime.now()
         session_name = get_current_autosave_session_name()
-        autosave_dir = pathlib.Path(AUTOSAVE_DIR)
+        autosave_dir = pathlib.Path(_path_autosave_dir())
 
         # Token counting moved to background thread (fixes CFG-H2).
         # Previously: total_tokens = sum(...) blocked main thread 5-50ms.

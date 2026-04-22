@@ -7,12 +7,8 @@ from pathlib import Path
 from code_puppy.command_line.attachments import parse_prompt_attachments
 from code_puppy.config_package import env_bool
 from code_puppy.prompt_runner import run_prompt_with_attachments
-from code_puppy.config import (
-    AUTOSAVE_DIR,
-    COMMAND_HISTORY_FILE,
-    finalize_autosave_session,
-    save_command_to_history,
-)
+from code_puppy import config as puppy_config
+from code_puppy.config import finalize_autosave_session, save_command_to_history
 from code_puppy.keymap import get_cancel_agent_display_name
 from code_puppy.repl_session import (
     record_command,
@@ -23,6 +19,22 @@ from code_puppy.terminal_utils import (
     reset_windows_terminal_ansi,
     reset_windows_terminal_full,
 )
+
+
+def _command_history_file():
+    return globals().get("COMMAND_HISTORY_FILE", puppy_config.COMMAND_HISTORY_FILE)
+
+
+def _autosave_dir():
+    return globals().get("AUTOSAVE_DIR", puppy_config.AUTOSAVE_DIR)
+
+
+def __getattr__(name: str):
+    if name == "COMMAND_HISTORY_FILE":
+        return _command_history_file()
+    if name == "AUTOSAVE_DIR":
+        return _autosave_dir()
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
 
 def _sync_history_from_result(agent, result) -> None:
@@ -231,7 +243,7 @@ async def interactive_mode(message_renderer, initial_command: str = None) -> Non
 
                 # Use the async version of get_input_with_combined_completion
                 task = await get_input_with_combined_completion(
-                    get_prompt_with_active_model(), history_file=COMMAND_HISTORY_FILE
+                    get_prompt_with_active_model(), history_file=_command_history_file()
                 )
 
                 # Windows+uvx: Re-disable Ctrl+C after prompt_toolkit
@@ -404,7 +416,7 @@ async def interactive_mode(message_renderer, initial_command: str = None) -> Non
                                 continue
 
                             # Load the session (including persisted compacted hashes)
-                            base_dir = Path(AUTOSAVE_DIR)
+                            base_dir = Path(_autosave_dir())
                             history, compacted_hashes = load_session_with_hashes(
                                 chosen_session, base_dir
                             )
@@ -435,7 +447,7 @@ async def interactive_mode(message_renderer, initial_command: str = None) -> Non
                             display_resumed_history(history)
                         else:
                             # Fall back to old text-based picker for tests/non-TTY environments
-                            await restore_autosave_interactively(Path(AUTOSAVE_DIR))
+                            await restore_autosave_interactively(Path(_autosave_dir()))
 
                     except Exception as e:
                         from code_puppy.messaging import emit_error

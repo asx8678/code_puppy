@@ -38,6 +38,21 @@ from code_puppy.config_package._resolvers import (
 from code_puppy.constants import SUMMARIZATION_ABSOLUTE_PROTECTED_DEFAULT
 
 
+def _default_home() -> str:
+    """Get default home directory, respecting pup-ex isolation.
+
+    Returns the string form (with ~ expansion) of the active home dir
+    so it can be used as a default for env_path() calls.
+    Falls back to "~/.code_puppy" if config_paths is unavailable.
+    """
+    try:
+        from code_puppy.config_paths import home_dir
+
+        return str(home_dir())
+    except ImportError:
+        return "~/.code_puppy"
+
+
 # Singleton cache
 _cached_config: PuppyConfig | None = None
 _cache_lock = threading.Lock()
@@ -147,7 +162,7 @@ def load_puppy_config() -> PuppyConfig:
             )
         except Exception:
             data_dir = env_path(
-                "PUPPY_DATA_DIR", "CODE_PUPPY_DATA_DIR", default="~/.code_puppy"
+                "PUPPY_DATA_DIR", "CODE_PUPPY_DATA_DIR", default=_default_home()
             )
 
         try:
@@ -158,7 +173,7 @@ def load_puppy_config() -> PuppyConfig:
             )
         except Exception:
             config_dir = env_path(
-                "PUPPY_CONFIG_DIR", "CODE_PUPPY_CONFIG_DIR", default="~/.code_puppy"
+                "PUPPY_CONFIG_DIR", "CODE_PUPPY_CONFIG_DIR", default=_default_home()
             )
 
         try:
@@ -173,10 +188,10 @@ def load_puppy_config() -> PuppyConfig:
     else:
         # No legacy config — use env vars with hardcoded defaults
         data_dir = env_path(
-            "PUPPY_DATA_DIR", "CODE_PUPPY_DATA_DIR", default="~/.code_puppy"
+            "PUPPY_DATA_DIR", "CODE_PUPPY_DATA_DIR", default=_default_home()
         )
         config_dir = env_path(
-            "PUPPY_CONFIG_DIR", "CODE_PUPPY_CONFIG_DIR", default="~/.code_puppy"
+            "PUPPY_CONFIG_DIR", "CODE_PUPPY_CONFIG_DIR", default=_default_home()
         )
         config_file = config_dir / "puppy.cfg"
         models_file = data_dir / "models.json"

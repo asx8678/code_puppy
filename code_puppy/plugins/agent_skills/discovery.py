@@ -13,6 +13,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal
 
+from code_puppy.config_paths import resolve_path
 from code_puppy.plugins.agent_skills.config import get_skill_directories
 
 logger = logging.getLogger(__name__)
@@ -39,7 +40,7 @@ def get_default_skill_directories() -> list[Path]:
         - ./skills (project skills)
     """
     return [
-        Path.home() / ".code_puppy" / "skills",
+        resolve_path("skills"),
         Path.cwd() / ".code_puppy" / "skills",
         Path.cwd() / "skills",
     ]
@@ -96,7 +97,7 @@ def discover_skills(directories: list[Path] | None = None) -> list[SkillInfo]:
     else:
         # Standard precedence ordering: lowest to highest
         ordered_sources = [
-            (Path.home() / ".code_puppy" / "skills", "user"),
+            (resolve_path("skills"), "user"),
             (Path.cwd() / ".code_puppy" / "skills", "project_config"),
             (Path.cwd() / "skills", "project"),
         ]

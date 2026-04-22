@@ -17,14 +17,22 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-from code_puppy.config import CACHE_DIR, get_current_autosave_id
+from code_puppy import config as puppy_config
+from code_puppy.config import get_current_autosave_id
 from code_puppy.messaging import emit_success, emit_error
 
 logger = logging.getLogger(__name__)
 
-REPL_STATE_DIR = Path(CACHE_DIR) / "repl_state"
-REPL_STATE_FILE = REPL_STATE_DIR / "current_session.json"
-REPL_HISTORY_FILE = REPL_STATE_DIR / "repl_history.jsonl"
+def _repl_state_dir() -> Path:
+    return Path(puppy_config.CACHE_DIR) / "repl_state"
+
+
+def _repl_state_file() -> Path:
+    return _repl_state_dir() / "current_session.json"
+
+
+def _repl_history_file() -> Path:
+    return _repl_state_dir() / "repl_history.jsonl"
 
 
 @dataclass
@@ -108,8 +116,9 @@ _current_session: ReplSession | None = None
 
 def get_repl_state_dir() -> Path:
     """Get the REPL state directory, creating it if needed."""
-    REPL_STATE_DIR.mkdir(parents=True, exist_ok=True)
-    return REPL_STATE_DIR
+    state_dir = _repl_state_dir()
+    state_dir.mkdir(parents=True, exist_ok=True)
+    return state_dir
 
 
 def get_current_session() -> ReplSession:
@@ -124,9 +133,10 @@ def get_current_session() -> ReplSession:
 
 def load_session() -> ReplSession:
     """Load REPL session from disk, or create a new one."""
-    if REPL_STATE_FILE.exists():
+    state_file = _repl_state_file()
+    if state_file.exists():
         try:
-            with open(REPL_STATE_FILE, "r") as f:
+            with open(state_file, "r") as f:
                 data = json.load(f)
             session = ReplSession.from_dict(data)
             logger.debug(f"Loaded REPL session: {session.session_id}")
@@ -149,7 +159,7 @@ def save_session(session: ReplSession | None = None) -> None:
     get_repl_state_dir()
 
     try:
-        with open(REPL_STATE_FILE, "w") as f:
+        with open(_repl_state_file(), "w") as f:
             json.dump(session.to_dict(), f, indent=2)
         logger.debug(f"Saved REPL session: {session.session_id}")
     except Exception as e:
@@ -197,7 +207,7 @@ def record_command(command: str) -> None:
 
     # Append to history file
     try:
-        with open(REPL_HISTORY_FILE, "a") as f:
+        with open(_repl_history_file(), "a") as f:
             entry = {
                 "timestamp": time.time(),
                 "command": command,
@@ -212,11 +222,12 @@ def record_command(command: str) -> None:
 
 def get_command_history(limit: int = 100) -> list[dict[str, Any]]:
     """Get recent command history."""
-    if not REPL_HISTORY_FILE.exists():
+    history_file = _repl_history_file()
+    if not history_file.exists():
         return []
 
     try:
-        with open(REPL_HISTORY_FILE, "r") as f:
+        with open(history_file, "r") as f:
             lines = f.readlines()
 
         # Parse last N entries

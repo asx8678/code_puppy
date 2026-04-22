@@ -23,9 +23,21 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
+from code_puppy.config_paths import assert_write_allowed, resolve_path, safe_append, safe_mkdir_p
+
 _offload_lock = threading.Lock()
 
-DEFAULT_ARCHIVE_DIR = Path.home() / ".code_puppy" / "history"
+# Respects pup-ex isolation (ADR-003) — resolves under active home
+def _default_archive_dir() -> Path:
+    """Return the history archive directory under the active home."""
+    return resolve_path("history")
+
+
+def __getattr__(name: str):
+    """Lazy resolution of env-sensitive module-level names (bd-193)."""
+    if name == "DEFAULT_ARCHIVE_DIR":
+        return _default_archive_dir()
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 DEFAULT_MAX_ARCHIVE_SIZE_MB = 100  # Default max archive size before rotation
 
 
@@ -116,6 +128,8 @@ def _rotate_archive(archive_path: Path) -> None:
     rotated_path = archive_path.parent / rotated_name
 
     try:
+        assert_write_allowed(archive_path, "history_rotate_source")
+        assert_write_allowed(rotated_path, "history_rotate_dest")
         archive_path.rename(rotated_path)
         logger.debug("Rotated archive %s to %s", archive_path, rotated_path)
     except OSError as e:
@@ -223,7 +237,7 @@ def offload_evicted_messages(
     if not messages:
         return None
 
-    archive_dir = archive_dir or DEFAULT_ARCHIVE_DIR
+    archive_dir = archive_dir or _default_archive_dir()
 
     try:
         # Sanitize session_id to prevent path traversal via filename
@@ -231,7 +245,7 @@ def offload_evicted_messages(
 
         # Ensure archive_dir is a Path and create if needed
         archive_dir = Path(archive_dir)
-        archive_dir.mkdir(parents=True, exist_ok=True)
+        safe_mkdir_p(archive_dir)
 
         # Build archive path and verify containment using shared utility
         archive_path = archive_dir / f"{safe_session_id}.history.md"
@@ -255,9 +269,7 @@ def offload_evicted_messages(
             # Enforce size limit before writing (rotate if necessary)
             _enforce_archive_size_limit(archive_path, max_archive_size_mb)
 
-            with archive_path.open("a", encoding="utf-8") as f:
-                f.write(header)
-                f.write(body)
+            safe_append(archive_path, header + body, encoding="utf-8")
 
         logger.debug("Offloaded %d messages to %s", len(messages), archive_path)
         return archive_path

@@ -261,8 +261,9 @@ class PolicyEngine:
 
     def load_default_rules(self) -> None:
         """Load from standard locations: user then project (project wins)."""
+        from code_puppy.config_paths import resolve_path
         self.load_rules_from_file(
-            Path.home() / ".code_puppy" / "policy.json", source="user"
+            resolve_path("policy.json"), source="user"
         )
         self.load_rules_from_file(
             Path.cwd() / ".code_puppy" / "policy.json", source="project"

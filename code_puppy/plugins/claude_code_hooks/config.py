@@ -15,10 +15,31 @@ import os
 from pathlib import Path
 from typing import Any
 
+from code_puppy.config_paths import resolve_path
+
 logger = logging.getLogger(__name__)
 
 PROJECT_HOOKS_FILE = ".claude/settings.json"
-GLOBAL_HOOKS_FILE = os.path.expanduser("~/.code_puppy/hooks.json")
+
+
+# Respects pup-ex isolation (ADR-003) — resolves under active home
+def _global_hooks_file() -> str:
+    """Return the global hooks file path under the active home.
+
+    Honors a patched ``GLOBAL_HOOKS_FILE`` module attribute when present for
+    backward-compatible tests and explicit overrides.
+    """
+    override = globals().get("GLOBAL_HOOKS_FILE")
+    if override is not None:
+        return str(override)
+    return str(resolve_path("hooks.json"))
+
+
+def __getattr__(name: str):
+    """Lazy resolution of env-sensitive module-level names (bd-193)."""
+    if name == "GLOBAL_HOOKS_FILE":
+        return _global_hooks_file()
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
 
 def _deep_merge_hooks(base: dict[str, Any], overlay: dict[str, Any]) -> dict[str, Any]:
@@ -75,7 +96,7 @@ def load_hooks_config() -> dict[str, Any] | None:
     merged_config: dict[str, Any] = {}
 
     # Load global hooks first
-    global_config_path = Path(GLOBAL_HOOKS_FILE)
+    global_config_path = Path(_global_hooks_file())
 
     if global_config_path.exists():
         try:
@@ -83,16 +104,16 @@ def load_hooks_config() -> dict[str, Any] | None:
                 config = json.load(f)
             if "hooks" in config and isinstance(config["hooks"], dict):
                 logger.info(
-                    f"Loaded hooks configuration (wrapped format) from {GLOBAL_HOOKS_FILE}"
+                    f"Loaded hooks configuration (wrapped format) from {_global_hooks_file()}"
                 )
                 merged_config = _deep_merge_hooks(merged_config, config["hooks"])
             elif isinstance(config, dict):
-                logger.info(f"Loaded hooks configuration from {GLOBAL_HOOKS_FILE}")
+                logger.info(f"Loaded hooks configuration from {_global_hooks_file()}")
                 merged_config = _deep_merge_hooks(merged_config, config)
         except json.JSONDecodeError as e:
-            logger.error(f"Invalid JSON in {GLOBAL_HOOKS_FILE}: {e}")
+            logger.error(f"Invalid JSON in {_global_hooks_file()}: {e}")
         except Exception as e:
-            logger.error(f"Failed to load {GLOBAL_HOOKS_FILE}: {e}", exc_info=True)
+            logger.error(f"Failed to load {_global_hooks_file()}: {e}", exc_info=True)
 
     # Load and merge project-level hooks
     project_config_path = Path(os.getcwd()) / PROJECT_HOOKS_FILE
@@ -133,5 +154,5 @@ def get_hooks_config_paths() -> list:
     """
     return [
         str(Path(os.getcwd()) / PROJECT_HOOKS_FILE),
-        GLOBAL_HOOKS_FILE,
+        _global_hooks_file(),
     ]

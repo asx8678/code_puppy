@@ -8,6 +8,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from code_puppy.config_paths import resolve_path, safe_atomic_write
+
 logger = logging.getLogger(__name__)
 
 """Concurrency limiters for file operations and API calls.
@@ -17,7 +19,7 @@ This module provides configurable semaphores for controlling concurrent:
 - API calls (outbound model requests)
 - Tool executions
 
-Configuration is read from ~/.code_puppy/concurrency.toml with sensible defaults.
+Configuration is read from <active-home>/concurrency.toml with sensible defaults.
 """
 
 # Default concurrency limits
@@ -25,7 +27,10 @@ DEFAULT_FILE_OPS_LIMIT = 4  # Max concurrent file read/write operations
 DEFAULT_API_CALLS_LIMIT = 2  # Max concurrent outbound API requests
 DEFAULT_TOOL_CALLS_LIMIT = 8  # Max concurrent tool executions
 
-_CONFIG_PATH = Path.home() / ".code_puppy" / "concurrency.toml"
+# Respects pup-ex isolation (ADR-003) — resolves under active home
+def _config_path() -> Path:
+    """Return the concurrency config path under the active home."""
+    return resolve_path("concurrency.toml")
 
 # Global semaphores (initialized lazily)
 _file_ops_semaphore: TrackedSemaphore | None = None
@@ -118,21 +123,21 @@ def _read_config() -> ConcurrencyConfig:
         if _cached_config is not None:
             return _cached_config
 
-        if not _CONFIG_PATH.exists():
+        if not _config_path().exists():
             _cached_config = ConcurrencyConfig()
             return _cached_config
 
         try:
             import tomllib  # Python 3.11+
 
-            with open(_CONFIG_PATH, "rb") as fh:
+            with open(_config_path(), "rb") as fh:
                 data = tomllib.load(fh)
 
             _cached_config = ConcurrencyConfig.from_dict(data.get("concurrency", {}))
             return _cached_config
 
         except Exception as exc:
-            logger.warning("Failed to read concurrency config %s: %s", _CONFIG_PATH, exc)
+            logger.warning("Failed to read concurrency config %s: %s", _config_path(), exc)
             _cached_config = ConcurrencyConfig()
             return _cached_config
 
@@ -451,8 +456,7 @@ tool_calls_limit = 8
 
 def ensure_config_file() -> Path:
     """Ensure the configuration file exists with defaults."""
-    if not _CONFIG_PATH.exists():
-        _CONFIG_PATH.parent.mkdir(parents=True, exist_ok=True)
-        _CONFIG_PATH.write_text(create_default_config())
-        logger.info("Created default concurrency config at %s", _CONFIG_PATH)
-    return _CONFIG_PATH
+    if not _config_path().exists():
+        safe_atomic_write(_config_path(), create_default_config())
+        logger.info("Created default concurrency config at %s", _config_path())
+    return _config_path()

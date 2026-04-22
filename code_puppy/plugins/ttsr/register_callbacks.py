@@ -13,6 +13,7 @@ from pathlib import Path
 from typing import Any
 
 from code_puppy.callbacks import register_callback
+from code_puppy.config_paths import resolve_path
 
 from .rule_loader import TtsrRule, load_rules_from_dir
 from .stream_watcher import TtsrStreamWatcher
@@ -52,8 +53,8 @@ def _rule_directories() -> list[Path]:
     project_rules = Path.cwd() / ".code_puppy" / "rules"
     dirs.append(project_rules)
 
-    # User-level: ~/.code_puppy/rules/
-    user_rules = Path.home() / ".code_puppy" / "rules"
+    # User-level: active-home/rules/ (respects pup-ex isolation)
+    user_rules = resolve_path("rules")
     dirs.append(user_rules)
 
     return dirs

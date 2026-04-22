@@ -25,11 +25,17 @@ Rules JSON format::
 
 from pathlib import Path
 
+from code_puppy.config_paths import resolve_path
 from code_puppy.policy_engine import PolicyEngine
 
 # Standard search paths (user then project; project rules win because
 # they are loaded last and can have higher priority values).
-_USER_POLICY = Path.home() / ".code_puppy" / "policy.json"
+# Respects pup-ex isolation (ADR-003) — user policy resolves under active home.
+def _user_policy_path() -> Path:
+    """Return the user policy path under the active home."""
+    return resolve_path("policy.json")
+
+
 _PROJECT_POLICY = Path.cwd() / ".code_puppy" / "policy.json"
 
 
@@ -49,7 +55,7 @@ def load_policy_rules(
     Returns:
         Total number of rules loaded across all files.
     """
-    user_path = user_policy if user_policy is not None else _USER_POLICY
+    user_path = user_policy if user_policy is not None else _user_policy_path()
     proj_path = project_policy if project_policy is not None else _PROJECT_POLICY
 
     total = 0

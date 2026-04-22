@@ -10,6 +10,7 @@ from typing import Any
 
 from code_puppy import config
 from code_puppy.callbacks import register_callback
+from code_puppy.config_paths import resolve_path
 from code_puppy.dbos_utils import reinitialize_dbos
 from code_puppy.messaging import emit_error, emit_info, emit_success, emit_warning
 
@@ -53,7 +54,7 @@ def _cache_targets() -> list[tuple[str, Path, str]]:
         ("Browser workflows", Path(config.DATA_DIR) / "browser_workflows", "dir"),
         (
             "Skills cache",
-            Path.home() / ".code_puppy" / "cache" / "skills_catalog.json",
+            resolve_path("cache") / "skills_catalog.json",
             "file",
         ),
         ("API server PID", Path(config.STATE_DIR) / "api_server.pid", "file"),

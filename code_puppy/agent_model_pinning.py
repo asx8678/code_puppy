@@ -62,6 +62,8 @@ def _save_json_agent_config(path: str, cfg: dict) -> None:
     # Ensure parent directory exists
     Path(path).parent.mkdir(parents=True, exist_ok=True)
 
+    from code_puppy.config_paths import assert_write_allowed
+    assert_write_allowed(path, "save_json_agent_config")
     with open(path, "w", encoding="utf-8") as f:
         json.dump(cfg, f, indent=2, ensure_ascii=False)
 

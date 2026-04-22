@@ -47,6 +47,8 @@ def set_last_agent(agent_name: str) -> None:
 
         # Write atomically (write to temp file, then rename)
         temp_file = _LAST_AGENT_FILE.with_suffix(".tmp")
+        from code_puppy.config_paths import assert_write_allowed
+        assert_write_allowed(temp_file, "save_last_agent")
         with open(temp_file, "w", encoding="utf-8") as f:
             json.dump(data, f, indent=2)
         temp_file.replace(_LAST_AGENT_FILE)

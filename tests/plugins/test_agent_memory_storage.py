@@ -21,7 +21,7 @@ from unittest.mock import patch
 
 import pytest
 
-from code_puppy.plugins.agent_memory.storage import FileMemoryStorage, _MEMORY_DIR
+from code_puppy.plugins.agent_memory.storage import FileMemoryStorage, _memory_dir
 
 # ============================================================================
 # Fixtures
@@ -40,18 +40,10 @@ def temp_memory_dir(tmp_path: Path) -> Path:
 def isolated_storage(temp_memory_dir: Path) -> type[FileMemoryStorage]:
     """Provide FileMemoryStorage class with isolated memory directory."""
     with patch(
-        "code_puppy.plugins.agent_memory.storage._MEMORY_DIR",
-        temp_memory_dir,
+        "code_puppy.plugins.agent_memory.storage._memory_dir",
+        return_value=temp_memory_dir,
     ):
-        # Also need to patch in the module namespace for existing instances
-        original_dir = _MEMORY_DIR
-        try:
-            import code_puppy.plugins.agent_memory.storage as storage_module
-
-            storage_module._MEMORY_DIR = temp_memory_dir
-            yield FileMemoryStorage
-        finally:
-            storage_module._MEMORY_DIR = original_dir
+        yield FileMemoryStorage
 
 
 @pytest.fixture

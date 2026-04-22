@@ -22,6 +22,58 @@ _created_dirs: set[Path] = set()
 _created_dirs_lock = threading.Lock()
 
 
+def _check_isolation_guard(path: Path) -> None:
+    """Check ADR-003 isolation guard for writes targeting config-home paths.
+
+    This is a belt-and-suspenders check: if the target path is under a
+    config home directory (``~/.code_puppy/`` or ``~/.code_puppy_ex/``),
+    we delegate to the config_paths module's isolation guard.  For paths
+    outside these directories (e.g. project files), the check is skipped.
+
+    **Canonical resolution** is used so that symlinks whose lexical path
+    is outside the config home but whose real target is inside are still
+    caught (and vice-versa).  This blocks the bypass where a non-home
+    lexical path is symlinked into the legacy home.
+
+    This design avoids a hard dependency on the config_paths module for
+    all persistence operations while still catching config-home writes.
+
+    Raises:
+        ConfigIsolationViolation: If the write would violate isolation.
+    """
+    try:
+        from code_puppy.config_paths import (
+            assert_write_allowed,
+            legacy_home_dir,
+            home_dir,
+            _canonical,
+        )
+
+        # Use CANONICAL (realpath) comparison so symlinks are resolved
+        # before the prefix check.  This prevents bypasses where a lexical
+        # non-home path is symlinked into a config home.
+        path_canonical = _canonical(path)
+        for home_fn in (legacy_home_dir, home_dir):
+            home_canonical = _canonical(home_fn())
+            if (
+                path_canonical == home_canonical
+                or path_canonical.startswith(home_canonical + os.sep)
+            ):
+                assert_write_allowed(path, "atomic_write")
+                return
+    except ImportError:
+        # config_paths module not available yet — skip guard
+        pass
+    except Exception as e:
+        # Let ConfigIsolationViolation propagate — this is an intentional block
+        from code_puppy.config_paths import ConfigIsolationViolation
+        if isinstance(e, ConfigIsolationViolation):
+            raise
+        # Defensive: never block a write due to a guard bug
+        logger.debug("isolation guard check failed for %s", path, exc_info=True)
+
+
+
 def safe_resolve_path(path: Path, allowed_parent: Path | None = None) -> Path:
     """Resolve path to absolute and optionally verify it's within allowed_parent.
 
@@ -93,8 +145,12 @@ def atomic_write_text(path: Path, content: str, encoding: str = "utf-8") -> None
 
     Raises:
         OSError: If write fails
+        ConfigIsolationViolation: If path is outside the active home (pup-ex mode)
     """
     path = safe_resolve_path(path)
+
+    # ADR-003: Check isolation guard for config-home paths
+    _check_isolation_guard(path)
 
     # Ensure parent directory exists (cached to avoid redundant calls)
     _ensure_parent_dir(path)

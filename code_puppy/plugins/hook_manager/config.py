@@ -11,14 +11,20 @@ Hooks from both sources are loaded and can be managed independently in the TUI.
 import copy
 import json
 import logging
-import os
 from pathlib import Path
 from typing import Any, Literal
+
+from code_puppy.config_paths import resolve_path, safe_atomic_write
 
 logger = logging.getLogger(__name__)
 
 _SETTINGS_FILENAME = ".claude/settings.json"
-_GLOBAL_HOOKS_FILE = os.path.expanduser("~/.code_puppy/hooks.json")
+
+
+# Respects pup-ex isolation (ADR-003) — resolves under active home
+def _global_hooks_file() -> Path:
+    """Return the global hooks file path under the active home."""
+    return resolve_path("hooks.json")
 
 HookSource = Literal["project", "global"]
 
@@ -35,7 +41,7 @@ def _find_settings_path() -> Path:
 
 def _load_global_hooks_config() -> dict[str, Any]:
     """Load hooks from ~/.code_puppy/hooks.json."""
-    path = Path(_GLOBAL_HOOKS_FILE)
+    path = _global_hooks_file()
     if not path.exists():
         return {}
     try:
@@ -131,9 +137,8 @@ def save_global_hooks_config(hooks: dict[str, Any]) -> Path:
 
     Returns the path written.
     """
-    path = Path(_GLOBAL_HOOKS_FILE)
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(hooks, indent=2) + "\n", encoding="utf-8")
+    path = _global_hooks_file()
+    safe_atomic_write(path, json.dumps(hooks, indent=2) + "\n")
     logger.debug("Saved global hooks config to %s", path)
     return path
 

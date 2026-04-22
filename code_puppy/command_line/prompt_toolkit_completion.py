@@ -41,12 +41,8 @@ from code_puppy.command_line.model_picker_completion import (
 from code_puppy.command_line.pin_command_completion import PinCompleter, UnpinCompleter
 from code_puppy.command_line.skills_completion import SkillsCompleter
 from code_puppy.command_line.utils import list_directory
-from code_puppy.config import (
-    COMMAND_HISTORY_FILE,
-    get_config_keys,
-    get_puppy_name,
-    get_value,
-)
+from code_puppy import config as puppy_config
+from code_puppy.config import get_config_keys, get_puppy_name, get_value
 
 
 def _sanitize_for_encoding(text: str) -> str:
@@ -835,7 +831,7 @@ if __name__ == "__main__":
         while True:
             try:
                 inp = await get_input_with_combined_completion(
-                    get_prompt_with_active_model(), history_file=COMMAND_HISTORY_FILE
+                    get_prompt_with_active_model(), history_file=puppy_config.COMMAND_HISTORY_FILE
                 )
                 print(f"You entered: {inp}")
             except KeyboardInterrupt:

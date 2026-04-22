@@ -17,15 +17,34 @@ import re
 import sys
 import threading
 from pathlib import Path
-from typing import TYPE_CHECKING
-
-if TYPE_CHECKING:
-    from code_puppy.callbacks import PhaseType
-
 logger = logging.getLogger(__name__)
 
-# User plugins directory
-USER_PLUGINS_DIR = Path.home() / ".code_puppy" / "plugins"
+
+# Respects pup-ex isolation (ADR-003) — resolves under active home
+def _user_plugins_dir() -> Path:
+    """Return the user plugins directory under the active home.
+
+    Honors a patched ``USER_PLUGINS_DIR`` module attribute when present so
+    existing tests and callers can override the location explicitly.
+    """
+    override = globals().get("USER_PLUGINS_DIR")
+    if override is not None:
+        return Path(override)
+
+    from code_puppy.config_paths import resolve_path
+
+    return resolve_path("plugins")
+
+
+def __getattr__(name: str):
+    """Lazy resolution of env-sensitive module-level names (bd-193).
+
+    ``USER_PLUGINS_DIR`` is now computed on every access so that env-var
+    changes (e.g. ``PUP_EX_HOME`` set after import) are always respected.
+    """
+    if name == "USER_PLUGINS_DIR":
+        return _user_plugins_dir()
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
 # Track if plugins have already been discovered to prevent duplicate work
 _PLUGINS_DISCOVERED = False
@@ -155,13 +174,13 @@ def _create_loader_user(
         plugin_name: Name of the plugin.
         callbacks_file: Path to the register_callbacks.py file.
         base_dir: Optional base directory for path traversal protection.
-                  Defaults to ~/.code_puppy/plugins if not provided.
+                  Defaults to active-home/plugins if not provided.
 
     Returns:
         A callable that loads the plugin, or a no-op loader if the plugin file is unsafe.
     """
     # SECURITY: Path traversal protection - validate path before creating loader
-    expected_base = (base_dir or Path.home() / ".code_puppy" / "plugins").resolve()
+    expected_base = (base_dir or _user_plugins_dir()).resolve()
 
     # Validate the path - use the validated path for all future operations
     validated_path = _validate_plugin_path(plugin_name, callbacks_file, expected_base)
@@ -500,12 +519,12 @@ def load_plugin_callbacks() -> dict[str, list[str]]:
         builtin_loaded.append(plugin_name)
 
     # Discover user plugins
-    user_discovered = _discover_user_plugins(USER_PLUGINS_DIR)
+    user_discovered = _discover_user_plugins(_user_plugins_dir())
     user_loaded = []
     for plugin_name, phases in user_discovered:
-        callbacks_file = USER_PLUGINS_DIR / plugin_name / "register_callbacks.py"
+        callbacks_file = _user_plugins_dir() / plugin_name / "register_callbacks.py"
         load_func = _create_loader_user(
-            plugin_name, callbacks_file, base_dir=USER_PLUGINS_DIR
+            plugin_name, callbacks_file, base_dir=_user_plugins_dir()
         )
 
         # Register this plugin for lazy loading on each of its phases
@@ -567,7 +586,7 @@ def ensure_plugins_loaded_for_phase(phase: str) -> list[str]:
 
 def get_user_plugins_dir() -> Path:
     """Return the path to the user plugins directory."""
-    return USER_PLUGINS_DIR
+    return _user_plugins_dir()
 
 
 def ensure_user_plugins_dir() -> Path:
@@ -575,5 +594,7 @@ def ensure_user_plugins_dir() -> Path:
 
     Returns the path to the directory.
     """
-    USER_PLUGINS_DIR.mkdir(parents=True, exist_ok=True)
-    return USER_PLUGINS_DIR
+    from code_puppy.config_paths import safe_mkdir_p
+
+    safe_mkdir_p(_user_plugins_dir())
+    return _user_plugins_dir()
