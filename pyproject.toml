@@ -98,5 +98,4 @@ override-dependencies = [
 [dependency-groups]
 dev = [
     "ruff>=0.15.8",
-    "pexpect>=4.9.0",
 ]
