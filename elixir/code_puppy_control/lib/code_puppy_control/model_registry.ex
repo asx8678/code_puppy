@@ -51,16 +51,16 @@ defmodule CodePuppyControl.ModelRegistry do
 
   ## Examples
 
-      iex> ModelRegistry.get_config("zai-glm-5-turbo-coding")
+      iex> ModelRegistry.get_config("wafer-glm-5.1")
       %{
-        "type" => "zai_coding",
-        "provider" => "zai",
-        "name" => "glm-5-turbo",
+        "type" => "custom_openai",
+        "provider" => "wafer",
+        "name" => "GLM-5.1",
         "context_length" => 200000
       }
 
       iex> ModelRegistry.list_model_names()
-      ["firepass-kimi-k2p5-turbo", "zai-glm-5-turbo-coding", ...]
+      ["firepass-kimi-k2p5-turbo", "wafer-glm-5.1", ...]
 
       iex> ModelRegistry.type_supported?("openai")
       true
@@ -115,8 +115,8 @@ defmodule CodePuppyControl.ModelRegistry do
 
   ## Examples
 
-      iex> ModelRegistry.get_config("zai-glm-5-turbo-coding")
-      %{"type" => "zai_coding", "provider" => "zai", ...}
+      iex> ModelRegistry.get_config("wafer-glm-5.1")
+      %{"type" => "custom_openai", "provider" => "wafer", ...}
 
       iex> ModelRegistry.get_config("nonexistent-model")
       nil
@@ -140,7 +140,7 @@ defmodule CodePuppyControl.ModelRegistry do
 
       iex> ModelRegistry.get_all_configs()
       %{
-        "zai-glm-5-turbo-coding" => %{"type" => "zai_coding", ...},
+        "wafer-glm-5.1" => %{"type" => "custom_openai", ...},
         "firepass-kimi-k2p5-turbo" => %{...}
       }
   """
@@ -196,7 +196,7 @@ defmodule CodePuppyControl.ModelRegistry do
   ## Examples
 
       iex> ModelRegistry.list_model_names()
-      ["firepass-kimi-k2p5-turbo", "zai-glm-5-turbo-coding", ...]
+      ["firepass-kimi-k2p5-turbo", "wafer-glm-5.1", ...]
   """
   @spec list_model_names() :: [String.t()]
   def list_model_names do
@@ -213,7 +213,7 @@ defmodule CodePuppyControl.ModelRegistry do
   ## Examples
 
       iex> ModelRegistry.list_model_types()
-      ["custom_openai", "zai_api", "zai_coding"]
+      ["custom_openai"]
   """
   @spec list_model_types() :: [String.t()]
   def list_model_types do

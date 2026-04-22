@@ -78,8 +78,8 @@ defmodule CodePuppyControl.ModelPacksTest do
       assert coding.name == "coding"
       assert coding.description == "Optimized for coding tasks with specialized models"
 
-      assert coding.roles["coder"].primary == "zai-glm-5.1-coding"
-      assert coding.roles["coder"].fallbacks == ["synthetic-GLM-5", "firepass-kimi-k2p5-turbo"]
+      assert coding.roles["coder"].primary == "wafer-glm-5.1"
+      assert coding.roles["coder"].fallbacks == ["firepass-kimi-k2p5-turbo", "wafer-qwen3.5-397b"]
       assert coding.roles["coder"].trigger == "provider_failure"
 
       assert coding.roles["planner"].primary == "claude-sonnet-4"
@@ -92,7 +92,7 @@ defmodule CodePuppyControl.ModelPacksTest do
       assert economical.description == "Cost-effective model selection for budget-conscious usage"
 
       assert economical.roles["planner"].primary == "gemini-2.5-flash"
-      assert economical.roles["coder"].primary == "synthetic-GLM-5"
+      assert economical.roles["coder"].primary == "firepass-kimi-k2p5-turbo"
       assert economical.roles["reviewer"].primary == "gpt-4o-mini"
     end
 
@@ -101,8 +101,8 @@ defmodule CodePuppyControl.ModelPacksTest do
       assert capacity.name == "capacity"
       assert capacity.description == "Models with large context windows for big tasks"
 
-      assert capacity.roles["planner"].primary == "synthetic-Kimi-K2.5-Thinking"
-      assert capacity.roles["coder"].primary == "synthetic-qwen3.5-397b"
+      assert capacity.roles["planner"].primary == "firepass-kimi-k2p5-turbo"
+      assert capacity.roles["coder"].primary == "wafer-qwen3.5-397b"
 
       # All roles in capacity pack use context_overflow trigger
       assert capacity.roles["planner"].trigger == "context_overflow"
@@ -204,20 +204,20 @@ defmodule CodePuppyControl.ModelPacksTest do
   describe "get_model_for_role/1" do
     test "returns primary model for a role in current pack" do
       ModelPacks.set_current_pack("coding")
-      assert ModelPacks.get_model_for_role("coder") == "zai-glm-5.1-coding"
+      assert ModelPacks.get_model_for_role("coder") == "wafer-glm-5.1"
       assert ModelPacks.get_model_for_role("planner") == "claude-sonnet-4"
     end
 
     test "uses default_role when role is nil" do
       ModelPacks.set_current_pack("coding")
       # coding pack's default_role is "coder"
-      assert ModelPacks.get_model_for_role(nil) == "zai-glm-5.1-coding"
+      assert ModelPacks.get_model_for_role(nil) == "wafer-glm-5.1"
     end
 
     test "falls back to default_role for unknown role" do
       ModelPacks.set_current_pack("coding")
       # Unknown role should fall back to default_role (coder)
-      assert ModelPacks.get_model_for_role("unknown-role") == "zai-glm-5.1-coding"
+      assert ModelPacks.get_model_for_role("unknown-role") == "wafer-glm-5.1"
     end
 
     test "returns auto for single pack roles" do
@@ -232,7 +232,7 @@ defmodule CodePuppyControl.ModelPacksTest do
       ModelPacks.set_current_pack("coding")
       chain = ModelPacks.get_fallback_chain("coder")
 
-      assert chain == ["zai-glm-5.1-coding", "synthetic-GLM-5", "firepass-kimi-k2p5-turbo"]
+      assert chain == ["wafer-glm-5.1", "firepass-kimi-k2p5-turbo", "wafer-qwen3.5-397b"]
     end
 
     test "returns single item when no fallbacks" do
@@ -247,7 +247,7 @@ defmodule CodePuppyControl.ModelPacksTest do
       chain = ModelPacks.get_fallback_chain(nil)
 
       # Should use coder role (the default)
-      assert chain == ["zai-glm-5.1-coding", "synthetic-GLM-5", "firepass-kimi-k2p5-turbo"]
+      assert chain == ["wafer-glm-5.1", "firepass-kimi-k2p5-turbo", "wafer-qwen3.5-397b"]
     end
   end
 

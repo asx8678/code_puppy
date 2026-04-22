@@ -19,11 +19,11 @@ defmodule CodePuppyControl.LLMTest do
   end
 
   describe "provider_for/1" do
-    test "resolves openai type to OpenAI provider" do
-      # The test models.json has an "openai" type model
-      case LLM.provider_for("zai-glm-5-turbo-coding") do
+    test "resolves custom_openai type to OpenAI provider" do
+      # The test models.json has custom_openai type models
+      case LLM.provider_for("wafer-glm-5.1") do
         {:ok, mod} ->
-          # zai_coding maps to OpenAI
+          # custom_openai maps to OpenAI
           assert mod == OpenAI
 
         {:error, {:unknown_model, _}} ->

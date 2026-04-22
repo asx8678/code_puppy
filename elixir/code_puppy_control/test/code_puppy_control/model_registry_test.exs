@@ -25,15 +25,15 @@ defmodule CodePuppyControl.ModelRegistryTest do
       # The registry should have started in setup and loaded models
       configs = ModelRegistry.get_all_configs()
       assert is_map(configs)
-      assert map_size(configs) >= 5
+      assert map_size(configs) >= 3
     end
 
     test "loaded models have expected keys" do
-      config = ModelRegistry.get_config("zai-glm-5-turbo-coding")
+      config = ModelRegistry.get_config("wafer-glm-5.1")
       assert is_map(config)
-      assert config["type"] == "zai_coding"
-      assert config["provider"] == "zai"
-      assert config["name"] == "glm-5-turbo"
+      assert config["type"] == "custom_openai"
+      assert config["provider"] == "wafer"
+      assert config["name"] == "GLM-5.1"
       assert config["context_length"] == 200_000
     end
   end
@@ -56,17 +56,15 @@ defmodule CodePuppyControl.ModelRegistryTest do
 
     test "handles multiple model lookups" do
       models = [
-        "zai-glm-5-turbo-coding",
-        "zai-glm-5-turbo-api",
-        "zai-glm-5.1-coding",
-        "zai-glm-5.1-api"
+        "firepass-kimi-k2p5-turbo",
+        "wafer-qwen3.5-397b",
+        "wafer-glm-5.1"
       ]
 
       for model <- models do
         config = ModelRegistry.get_config(model)
         assert is_map(config), "Expected config for #{model}"
-        assert config["type"] in ["zai_coding", "zai_api"]
-        assert config["provider"] == "zai"
+        assert config["type"] == "custom_openai"
       end
     end
   end
@@ -77,7 +75,7 @@ defmodule CodePuppyControl.ModelRegistryTest do
       assert is_map(configs)
 
       # Should include all bundled models
-      assert "zai-glm-5-turbo-coding" in Map.keys(configs)
+      assert "wafer-glm-5.1" in Map.keys(configs)
       assert "firepass-kimi-k2p5-turbo" in Map.keys(configs)
 
       # Each config should be a map
@@ -119,7 +117,7 @@ defmodule CodePuppyControl.ModelRegistryTest do
 
       # Verify still works after reload
       assert is_map(ModelRegistry.get_all_configs())
-      assert ModelRegistry.get_config("zai-glm-5-turbo-coding") != nil
+      assert ModelRegistry.get_config("wafer-glm-5.1") != nil
     end
   end
 
@@ -146,8 +144,8 @@ defmodule CodePuppyControl.ModelRegistryTest do
     end
 
     test "works with actual loaded configs" do
-      config = ModelRegistry.get_config("zai-glm-5-turbo-coding")
-      assert ModelRegistry.get_model_type(config) == "zai_coding"
+      config = ModelRegistry.get_config("wafer-glm-5.1")
+      assert ModelRegistry.get_model_type(config) == "custom_openai"
     end
   end
 
@@ -207,9 +205,7 @@ defmodule CodePuppyControl.ModelRegistryTest do
       types = ModelRegistry.list_model_types()
       assert is_list(types)
 
-      # Based on bundled models.json, should have these types
-      assert "zai_coding" in types
-      assert "zai_api" in types
+      # Based on bundled models.json, should have custom_openai type
       assert "custom_openai" in types
     end
 
@@ -228,14 +224,12 @@ defmodule CodePuppyControl.ModelRegistryTest do
     test "returns all model names" do
       names = ModelRegistry.list_model_names()
       assert is_list(names)
-      assert length(names) >= 5
+      assert length(names) >= 3
 
       # Check for expected models from bundled models.json
-      assert "zai-glm-5-turbo-coding" in names
       assert "firepass-kimi-k2p5-turbo" in names
-      assert "zai-glm-5-turbo-api" in names
-      assert "zai-glm-5.1-coding" in names
-      assert "zai-glm-5.1-api" in names
+      assert "wafer-qwen3.5-397b" in names
+      assert "wafer-glm-5.1" in names
     end
 
     test "returns sorted list" do
@@ -262,7 +256,7 @@ defmodule CodePuppyControl.ModelRegistryTest do
       tasks =
         for _ <- 1..100 do
           Task.async(fn ->
-            ModelRegistry.get_config("zai-glm-5-turbo-coding")
+            ModelRegistry.get_config("wafer-glm-5.1")
           end)
         end
 
@@ -293,7 +287,7 @@ defmodule CodePuppyControl.ModelRegistryTest do
       results = Task.await_many(tasks)
 
       # All should return positive counts
-      assert Enum.all?(results, fn count -> count >= 5 end)
+      assert Enum.all?(results, fn count -> count >= 3 end)
     end
 
     test "reads during reload are safe" do
@@ -302,7 +296,7 @@ defmodule CodePuppyControl.ModelRegistryTest do
         for _ <- 1..50 do
           Task.async(fn ->
             for _ <- 1..10 do
-              _ = ModelRegistry.get_config("zai-glm-5-turbo-coding")
+              _ = ModelRegistry.get_config("wafer-glm-5.1")
               _ = ModelRegistry.list_model_names()
               :ok
             end
@@ -322,8 +316,8 @@ defmodule CodePuppyControl.ModelRegistryTest do
 
       # Verify data integrity after reload
       configs = ModelRegistry.get_all_configs()
-      assert map_size(configs) >= 5
-      assert ModelRegistry.get_config("zai-glm-5-turbo-coding") != nil
+      assert map_size(configs) >= 3
+      assert ModelRegistry.get_config("wafer-glm-5.1") != nil
     end
   end
 
@@ -332,25 +326,21 @@ defmodule CodePuppyControl.ModelRegistryTest do
   # ============================================================================
 
   describe "integration with actual loaded data" do
-    test "loaded zai models have correct structure" do
-      zai_models = [
-        "zai-glm-5-turbo-coding",
-        "zai-glm-5-turbo-api",
-        "zai-glm-5.1-coding",
-        "zai-glm-5.1-api"
+    test "loaded bundled models have correct structure" do
+      bundled_models = [
+        "firepass-kimi-k2p5-turbo",
+        "wafer-qwen3.5-397b",
+        "wafer-glm-5.1"
       ]
 
-      for model_name <- zai_models do
+      for model_name <- bundled_models do
         config = ModelRegistry.get_config(model_name)
         assert is_map(config), "Expected config for #{model_name}"
 
         # Verify required keys
         assert config["type"] != nil, "#{model_name} should have a type"
-        assert config["provider"] == "zai", "#{model_name} should have provider 'zai'"
+        assert config["type"] == "custom_openai", "#{model_name} should have type 'custom_openai'"
         assert is_integer(config["context_length"]), "#{model_name} should have context_length"
-
-        assert config["context_length"] == 200_000,
-               "#{model_name} should have context_length 200000"
       end
     end
 
@@ -392,7 +382,7 @@ defmodule CodePuppyControl.ModelRegistryTest do
   describe "edge cases" do
     test "handles model names with special characters" do
       # Verify that existing models with dashes and dots work
-      assert ModelRegistry.get_config("zai-glm-5.1-coding") != nil
+      assert ModelRegistry.get_config("wafer-glm-5.1") != nil
       assert ModelRegistry.get_config("firepass-kimi-k2p5-turbo") != nil
     end
 
@@ -538,7 +528,7 @@ defmodule CodePuppyControl.ModelRegistryTest do
 
       try do
         assert :ok = ModelRegistry.reload()
-        assert ModelRegistry.get_config("zai-glm-5-turbo-coding") != nil
+        assert ModelRegistry.get_config("wafer-glm-5.1") != nil
       after
         if old_home,
           do: System.put_env("PUP_EX_HOME", old_home),

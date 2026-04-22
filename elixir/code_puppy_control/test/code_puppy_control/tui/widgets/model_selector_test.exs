@@ -75,7 +75,7 @@ defmodule CodePuppyControl.TUI.Widgets.ModelSelectorTest do
 
   describe "model_info structure" do
     test "display_name strips common provider prefixes" do
-      # Verify short_name logic: "zai-glm-5" → "glm-5", "openai-gpt-4" → "gpt-4"
+      # Verify short_name logic: "firepass-kimi-k2p5-turbo" → "kimi-k2p5-turbo", "openai-gpt-4" → "gpt-4"
       # We test indirectly via list_models: display_name should not start with
       # known prefixes when the model name does
       models = ModelSelector.list_models()

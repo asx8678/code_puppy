@@ -10,7 +10,7 @@ defmodule CodePuppyControl.ModelFactory.Handle do
 
   ## Fields
 
-  - `model_name` — Original registry name (e.g. `"zai-glm-5-turbo-coding"`)
+  - `model_name` — Original registry name (e.g. `"wafer-glm-5.1"`)
   - `provider_module` — The LLM provider module (e.g. `Providers.OpenAI`)
   - `provider_config` — The raw model config map from ModelRegistry
   - `api_key` — Resolved API key string (or `nil` for OAuth models)

@@ -129,7 +129,7 @@ defmodule CodePuppyControl.TUI.Widgets.ModelSelector do
     }
   end
 
-  # Strip common prefix patterns for display: "zai-glm-5-turbo-coding" → "glm-5-turbo-coding"
+  # Strip common prefix patterns for display: "firepass-kimi-k2p5-turbo" → "kimi-k2p5-turbo"
   defp short_name(name) do
     name
     |> String.replace(~r/^(zai|firepass|openai|anthropic)-/, "")

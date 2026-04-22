@@ -304,7 +304,7 @@ defmodule CodePuppyControl.CLI.SlashCommands.Commands.PackTest do
         end)
 
       # coding pack coder role has fallbacks
-      assert output =~ "zai-glm-5.1-coding"
+      assert output =~ "wafer-glm-5.1"
     end
 
     test "switches back to single from coding" do

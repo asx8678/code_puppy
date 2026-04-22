@@ -49,10 +49,10 @@ defmodule CodePuppyControl.ModelPacks do
       :ok
 
       iex> ModelPacks.get_model_for_role("coder")
-      "zai-glm-5.1-coding"
+      "wafer-glm-5.1"
 
       iex> ModelPacks.get_fallback_chain("coder")
-      ["zai-glm-5.1-coding", "synthetic-GLM-5", "firepass-kimi-k2p5-turbo"]
+      ["wafer-glm-5.1", "firepass-kimi-k2p5-turbo", "wafer-qwen3.5-397b"]
   """
 
   use GenServer
@@ -391,8 +391,8 @@ defmodule CodePuppyControl.ModelPacks do
           trigger: "context_overflow"
         },
         "coder" => %RoleConfig{
-          primary: "zai-glm-5.1-coding",
-          fallbacks: ["synthetic-GLM-5", "firepass-kimi-k2p5-turbo"],
+          primary: "wafer-glm-5.1",
+          fallbacks: ["firepass-kimi-k2p5-turbo", "wafer-qwen3.5-397b"],
           trigger: "provider_failure"
         },
         "reviewer" => %RoleConfig{
@@ -426,8 +426,8 @@ defmodule CodePuppyControl.ModelPacks do
           trigger: "context_overflow"
         },
         "coder" => %RoleConfig{
-          primary: "synthetic-GLM-5",
-          fallbacks: ["gemini-2.5-flash"],
+          primary: "firepass-kimi-k2p5-turbo",
+          fallbacks: ["wafer-glm-5.1"],
           trigger: "provider_failure"
         },
         "reviewer" => %RoleConfig{
@@ -455,23 +455,23 @@ defmodule CodePuppyControl.ModelPacks do
       description: "Models with large context windows for big tasks",
       roles: %{
         "planner" => %RoleConfig{
-          primary: "synthetic-Kimi-K2.5-Thinking",
-          fallbacks: ["firepass-kimi-k2p5-turbo"],
+          primary: "firepass-kimi-k2p5-turbo",
+          fallbacks: ["wafer-qwen3.5-397b"],
           trigger: "context_overflow"
         },
         "coder" => %RoleConfig{
-          primary: "synthetic-qwen3.5-397b",
-          fallbacks: ["synthetic-Kimi-K2.5-Thinking"],
+          primary: "wafer-qwen3.5-397b",
+          fallbacks: ["firepass-kimi-k2p5-turbo"],
           trigger: "context_overflow"
         },
         "reviewer" => %RoleConfig{
-          primary: "synthetic-Kimi-K2.5-Thinking",
+          primary: "firepass-kimi-k2p5-turbo",
           fallbacks: ["claude-sonnet-4"],
           trigger: "context_overflow"
         },
         "summarizer" => %RoleConfig{
-          primary: "synthetic-Kimi-K2.5-Thinking",
-          fallbacks: ["synthetic-qwen3.5-397b"],
+          primary: "wafer-qwen3.5-397b",
+          fallbacks: ["firepass-kimi-k2p5-turbo"],
           trigger: "context_overflow"
         },
         "title" => %RoleConfig{
