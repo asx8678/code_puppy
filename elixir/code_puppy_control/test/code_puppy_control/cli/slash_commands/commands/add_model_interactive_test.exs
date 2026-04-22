@@ -189,9 +189,16 @@ defmodule CodePuppyControl.CLI.SlashCommands.Commands.AddModelInteractiveTest do
   # ── ModelRegistry.reload invocation ─────────────────────────────────────
 
   describe "ModelRegistry.reload/0 invocation via Interactive" do
-    setup do
+    setup context do
       ensure_fixture_registry!()
-      :ok
+
+      # Start ModelRegistry so we can verify reload makes models available
+      case Process.whereis(CodePuppyControl.ModelRegistry) do
+        nil -> start_supervised!({CodePuppyControl.ModelRegistry, []})
+        _pid -> :ok
+      end
+
+      {:ok, context}
     end
 
     test "add_model_to_config/2 does NOT call ModelRegistry.reload (that's Interactive's job)" do
@@ -205,9 +212,14 @@ defmodule CodePuppyControl.CLI.SlashCommands.Commands.AddModelInteractiveTest do
       assert {:ok, _key} = result
     end
 
-    test "Interactive.do_add_model/2 calls ModelRegistry.reload on success" do
+    test "Interactive.do_add_model/2 reloads ModelRegistry and makes model immediately available" do
       provider = %ProviderInfo{id: "openai", name: "OpenAI", env: ["OPENAI_API_KEY"]}
       model = %ModelInfo{provider_id: "openai", model_id: "gpt-5-reg", name: "GPT-5 Reg", context_length: 128_000, tool_call: true}
+      model_key = "openai-gpt-5-reg"
+
+      # Pre-condition: model is NOT yet in the registry
+      assert CodePuppyControl.ModelRegistry.get_config(model_key) == nil,
+             "model #{model_key} should not be in registry before add"
 
       output =
         ExUnit.CaptureIO.capture_io(fn ->
@@ -217,9 +229,10 @@ defmodule CodePuppyControl.CLI.SlashCommands.Commands.AddModelInteractiveTest do
       # The do_add_model path should print "Added" and attempt reload
       assert output =~ "Added"
 
-      # If ModelRegistry is running, "reloaded" appears; if not, "reload failed"
-      # Both are acceptable — the key invariant is that reload was attempted
-      assert output =~ "reloaded" or output =~ "reload failed" or output =~ "Added"
+      # Post-condition: model IS now available in the registry after reload
+      config = CodePuppyControl.ModelRegistry.get_config(model_key)
+      assert config != nil, "model #{model_key} should be in registry after add+reload"
+      assert Map.get(config, "type") != nil, "persisted config should have a 'type' field"
     end
   end
 
