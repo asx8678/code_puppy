@@ -312,8 +312,24 @@ def _register_turbo_execute_tool(agent):
                 ]
 
             # Add human-readable summary if requested
+            # bd-208: Summary generation is non-fatal — if summarization raises,
+            # return the structured response with a fallback summary so the
+            # caller always gets success_count / error_count.
             if summarize:
-                response["summary"] = summarize_plan_result(result)
+                try:
+                    response["summary"] = summarize_plan_result(result)
+                except Exception as exc:
+                    logger.warning(
+                        "Summarization failed for plan %s",
+                        result.plan_id,
+                        exc_info=True,
+                    )
+                    response["summary"] = (
+                        f"⚠️ Summary generation failed for plan {result.plan_id}. "
+                        f"Structured results are included below.\n"
+                        f"{result.success_count} success, {result.error_count} errors, "
+                        f"{result.total_duration_ms:.0f}ms"
+                    )
                 response["quick_summary"] = (
                     f"{result.success_count} success, {result.error_count} errors in {result.total_duration_ms:.0f}ms"
                 )

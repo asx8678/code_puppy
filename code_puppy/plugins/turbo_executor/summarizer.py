@@ -65,8 +65,60 @@ def _truncate_content(
     return result
 
 
+def _normalize_list_files_content(data: dict[str, Any]) -> tuple[list[str], str, bool]:
+    """Normalize list_files content into a list of entries and a display string.
+
+    Handles the various shapes that data["content"] can take at runtime:
+    - str: legacy text-based listing (split on newlines)
+    - list[str]: structured list of file paths (current orchestrator output)
+    - dict with "files" key: wrapped dict payloads
+    - None / empty / unexpected: treated as empty
+
+    Args:
+        data: The operation result data dict
+
+    Returns:
+        Tuple of (entries_list, display_text, known_shape) where display_text
+        is suitable for preview/truncation and known_shape is True when the
+        payload matches a recognized structure (list, str, or {"files": [...]}).
+    """
+    content = data.get("content")
+
+    # None or empty → nothing to summarize
+    if not content:
+        return [], "", True
+
+    # Structured list of file paths (current orchestrator output)
+    if isinstance(content, list):
+        entries = [str(item) for item in content if item is not None]
+        display = "\n".join(entries)
+        return entries, display, True
+
+    # Wrapped dict payloads like {"files": [...]}
+    if isinstance(content, dict):
+        if "files" in content and isinstance(content["files"], list):
+            entries = [str(f) for f in content["files"] if f is not None]
+            display = "\n".join(entries)
+            return entries, display, True
+        # Unknown dict shape; best-effort serialization
+        display = str(content)
+        return [display], display, False
+
+    # Legacy string content
+    if isinstance(content, str):
+        lines = [line for line in content.split("\n") if line.strip()]
+        return lines, content, True
+
+    # Fallback: stringify whatever we got
+    display = str(content)
+    return [display], display, False
+
+
 def _summarize_list_files(data: dict[str, Any]) -> str:
     """Summarize list_files operation result.
+
+    Handles all content shapes returned by the runtime:
+    string listings, structured file lists, wrapped dicts, and empty/malformed data.
 
     Args:
         data: The operation result data
@@ -77,28 +129,36 @@ def _summarize_list_files(data: dict[str, Any]) -> str:
     if data.get("error"):
         return f"⚠️ **Error:** {data['error']}"
 
-    content = data.get("content", "")
-    if not content:
+    entries, display_text, known_shape = _normalize_list_files_content(data)
+
+    if not entries:
         return "📂 *Directory is empty or no files found*"
 
-    # Count files and directories from the listing
-    lines = content.split("\n")
-    file_count = 0
-    dir_count = 0
-
-    for line in lines:
-        # Look for patterns like "filename (type=file)" or "filename (type=directory)"
-        if "(type=file)" in line or "(type=" not in line and "." in line:
-            file_count += 1
-        elif "(type=directory)" in line:
-            dir_count += 1
-
     # Provide a preview of the listing
-    preview = _truncate_content(content, max_length=3000, max_lines=30)
+    preview = _truncate_content(display_text, max_length=3000, max_lines=30)
 
     summary_parts = ["📂 **Directory Listing**"]
-    if file_count or dir_count:
-        summary_parts.append(f"*Found {file_count} files, {dir_count} directories*")
+
+    if not known_shape:
+        # Unrecognized payload - do not claim false file counts
+        summary_parts.append("*unrecognized list_files payload*")
+    else:
+        # Count files and directories from the entries
+        file_count = 0
+        dir_count = 0
+
+        for entry in entries:
+            if "(type=file)" in entry or "(type=" not in entry and "." in entry:
+                file_count += 1
+            elif "(type=directory)" in entry:
+                dir_count += 1
+
+        if file_count == 0 and dir_count == 0 and entries:
+            file_count = len(entries)
+
+        if file_count or dir_count:
+            summary_parts.append(f"*Found {file_count} files, {dir_count} directories*")
+
     summary_parts.append("")
     summary_parts.append("```")
     summary_parts.append(preview)
@@ -230,6 +290,9 @@ _OPERATION_SUMMARIZERS: dict[OperationType, Callable] = {
 def summarize_operation_result(result: OperationResult) -> str:
     """Generate a human-readable summary for a single operation result.
 
+    If the per-type summarizer raises, returns a neutral fallback instead
+    of propagating the exception so that plan-level summaries remain intact.
+
     Args:
         result: The operation result to summarize
 
@@ -243,7 +306,13 @@ def summarize_operation_result(result: OperationResult) -> str:
     if not summarizer:
         return f"📋 **{result.type.value}** (no summary available)"
 
-    return summarizer(result.data)
+    try:
+        return summarizer(result.data)
+    except Exception:
+        return (
+            f"⚠️ **{result.type.value}** — summary unavailable "
+            f"(structured data returned successfully)"
+        )
 
 
 def summarize_plan_result(
