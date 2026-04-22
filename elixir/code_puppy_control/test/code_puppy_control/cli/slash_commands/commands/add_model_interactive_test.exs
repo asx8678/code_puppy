@@ -14,7 +14,11 @@ defmodule CodePuppyControl.CLI.SlashCommands.Commands.AddModelInteractiveTest do
   alias CodePuppyControl.CLI.SlashCommands.Commands.AddModel
   alias CodePuppyControl.CLI.SlashCommands.Commands.AddModel.Interactive
   alias CodePuppyControl.CLI.SlashCommands.Commands.AddModelPersistence
+  alias CodePuppyControl.ModelsDevParser
   alias CodePuppyControl.ModelsDevParser.{ModelInfo, ProviderInfo}
+
+  # Fixture path — relative from this test file to test/support/
+  @fixture_path Path.join([__DIR__, "../../../../support/models_dev_parser_test_data.json"])
 
   setup do
     # Start the SlashCommands Registry GenServer if not already running
@@ -186,19 +190,7 @@ defmodule CodePuppyControl.CLI.SlashCommands.Commands.AddModelInteractiveTest do
 
   describe "ModelRegistry.reload/0 invocation via Interactive" do
     setup do
-      test_json = Path.join([__DIR__, "../../../support/models_dev_parser_test_data.json"])
-
-      case Process.whereis(CodePuppyControl.ModelsDevParser.Registry) do
-        nil ->
-          {:ok, _pid} =
-            start_supervised!(
-              {CodePuppyControl.ModelsDevParser.Registry, json_path: test_json}
-            )
-
-        _pid ->
-          :ok
-      end
-
+      ensure_fixture_registry!()
       :ok
     end
 
@@ -235,18 +227,7 @@ defmodule CodePuppyControl.CLI.SlashCommands.Commands.AddModelInteractiveTest do
 
   describe "run_with_inputs/1 end-to-end" do
     setup do
-      test_json = Path.join([__DIR__, "../../../support/models_dev_parser_test_data.json"])
-
-      case Process.whereis(CodePuppyControl.ModelsDevParser.Registry) do
-        nil ->
-          {:ok, _pid} =
-            start_supervised!(
-              {CodePuppyControl.ModelsDevParser.Registry, json_path: test_json}
-            )
-
-        _pid ->
-          :ok
-      end
+      ensure_fixture_registry!()
 
       case Process.whereis(AddModelPersistence.LockKeeper) do
         nil -> start_supervised!({AddModelPersistence.LockKeeper, []})
@@ -306,6 +287,11 @@ defmodule CodePuppyControl.CLI.SlashCommands.Commands.AddModelInteractiveTest do
   # ── handle_add_model/2 ─────────────────────────────────────────────────
 
   describe "handle_add_model/2" do
+    setup do
+      ensure_fixture_registry!()
+      :ok
+    end
+
     test "returns continue tuple" do
       output =
         ExUnit.CaptureIO.capture_io(fn ->
@@ -314,5 +300,124 @@ defmodule CodePuppyControl.CLI.SlashCommands.Commands.AddModelInteractiveTest do
 
       assert is_binary(output)
     end
+
+    test "delegates to Interactive.run_interactive/0 with fixture registry", %{tmp_dir: tmp_dir} do
+      # Drive handle_add_model/2 through stdin — selects provider 1, model 1
+      {result, output} =
+        ExUnit.CaptureIO.with_io([input: "1\n1\n"], fn ->
+          AddModel.handle_add_model("/add_model", %{})
+        end)
+
+      assert result == {:continue, %{}}
+      assert output =~ "Added"
+
+      # Verify persistence on disk
+      path = Path.join(tmp_dir, "extra_models.json")
+      assert File.exists?(path)
+    end
+  end
+
+  # ── run_interactive/0 end-to-end via stdin ────────────────────────────────
+
+  describe "Interactive.run_interactive/0 — real stdin-driven flow" do
+    setup do
+      ensure_fixture_registry!()
+
+      case Process.whereis(AddModelPersistence.LockKeeper) do
+        nil -> start_supervised!({AddModelPersistence.LockKeeper, []})
+        _pid -> :ok
+      end
+
+      :ok
+    end
+
+    test "tool-calling model: provider → model → persist", %{tmp_dir: tmp_dir} do
+      # Fixture data sorted by name: 1=Another Provider (1 model), 2=Test Provider (3 models)
+      # Select provider 1 (Another Provider), then model 1 (GPT Model, tool_call=true)
+      output =
+        ExUnit.CaptureIO.capture_io([input: "1\n1\n"], fn ->
+          Interactive.run_interactive()
+        end)
+
+      # Should show provider list, model list, and persist
+      assert output =~ "Add Model"
+      assert output =~ "Added"
+      assert output =~ "gpt-model"
+
+      # Verify persistence on disk
+      path = Path.join(tmp_dir, "extra_models.json")
+      assert File.exists?(path), "extra_models.json should exist after persist"
+      {:ok, data} = Jason.decode(File.read!(path))
+      assert Enum.any?(Map.keys(data), &String.contains?(&1, "gpt-model"))
+    end
+
+    test "non-tool-calling model: confirmation y → persist", %{tmp_dir: tmp_dir} do
+      # Select provider 2 (Test Provider), model 1 (Cheap Model, tool_call=false)
+      # Then confirm with 'y' at the warning prompt
+      output =
+        ExUnit.CaptureIO.capture_io([input: "2\n1\ny\n"], fn ->
+          Interactive.run_interactive()
+        end)
+
+      assert output =~ "does NOT support tool calling"
+      assert output =~ "Added"
+
+      # Verify persistence on disk
+      path = Path.join(tmp_dir, "extra_models.json")
+      assert File.exists?(path)
+      {:ok, data} = Jason.decode(File.read!(path))
+      assert Enum.any?(Map.keys(data), &String.contains?(&1, "cheap-model"))
+    end
+
+    test "non-tool-calling model: confirmation n → cancel", %{tmp_dir: tmp_dir} do
+      # Select provider 2, model 1 (Cheap Model), then cancel at confirmation
+      output =
+        ExUnit.CaptureIO.capture_io([input: "2\n1\nn\n"], fn ->
+          Interactive.run_interactive()
+        end)
+
+      assert output =~ "does NOT support tool calling"
+      assert output =~ "Cancelled"
+      refute output =~ "Added"
+
+      # Verify nothing was persisted
+      path = Path.join(tmp_dir, "extra_models.json")
+      refute File.exists?(path)
+    end
+
+    test "cancel at provider selection", %{tmp_dir: tmp_dir} do
+      output =
+        ExUnit.CaptureIO.capture_io([input: "q\n"], fn ->
+          Interactive.run_interactive()
+        end)
+
+      assert output =~ "Cancelled"
+      refute output =~ "Added"
+    end
+  end
+
+  # ── Private helpers ────────────────────────────────────────────────────────
+
+  # Starts a fixture-backed ModelsDevParser.Registry, ensuring we never
+  # silently reuse an already-running instance that might have different data.
+  defp ensure_fixture_registry! do
+    # Stop any existing registry so we get a clean one with fixture data
+    case Process.whereis(ModelsDevParser.Registry) do
+      nil -> :ok
+      pid ->
+        ref = Process.monitor(pid)
+        GenServer.stop(pid, :shutdown, 5_000)
+        receive do
+          {:DOWN, ^ref, :process, ^pid, _} -> :ok
+        after
+          5_000 -> Process.demonitor(ref, [:flush])
+        end
+    end
+
+    start_supervised!(
+      {ModelsDevParser.Registry, json_path: @fixture_path}
+    )
+
+    :ok
   end
 end
