@@ -129,7 +129,7 @@ defmodule CodePuppyControl.Scheduler.Task do
           changeset
 
         {:error, reason} ->
-          add_error(changeset, :schedule, "invalid cron expression: #{inspect(reason)}")
+          add_error(changeset, :schedule, "invalid cron expression: #{to_string(reason)}")
       end
     end
   end
