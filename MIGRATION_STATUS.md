@@ -2,11 +2,7 @@
 
 > **Document purpose:** Consolidated view of Python → Elixir runtime migration. **Rust has been completely eliminated.**
 > **Last updated:** 2026-04-17 (bd-167 - Rust eliminated, pure Elixir+Python architecture achieved)
-> **Previous docs consolidated:**
-> - `ELIXIR_MIGRATION_ROADMAP.md` → Archived (historical analysis)
-> - `fast_puppy_elixir_rewrite_plan.md` → Archived (historical)
-> - `rewrite/ELIXIR_FIRST_REWRITE_ANALYSIS.md` → Archived (Repo Compass slice analysis)
-> - `rewrite/code_puppy_elixir_rewrite_bundle/PLAN/code_puppy_python_to_elixir_plan.md` → Archived (PR sequence)
+> **Earlier migration planning docs were archived/removed during cleanup.**
 
 ---
 
@@ -315,19 +311,6 @@ The repository had **four competing migration documents** with:
 **Resolution:** This document + archived historical docs.
 
 ---
-
-## Reading Guide for Historical Docs
-
-| Document | Status | Read If You Need |
-|----------|--------|------------------|
-| `docs/archived/ELIXIR_MIGRATION_ROADMAP.md` | 📁 Archived | Tiered migration candidate analysis (which components should migrate) |
-| `docs/archived/fast_puppy_elixir_rewrite_plan.md` | 📁 Archived (historical) | Elixir rewrite plan from early migration era |
-| `docs/archived/PROTOCOL_COMPARISON_TABLE.md` | 📁 Archived | Protocol comparison reference |
-| `docs/archived/PROTOCOL_DRIFT_ANALYSIS.md` | 📁 Archived | Historical protocol drift analysis |
-
----
-
-## Decision Log
 
 | Date | Decision | Rationale |
 |------|----------|-----------|

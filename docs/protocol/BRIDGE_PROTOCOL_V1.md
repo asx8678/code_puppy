@@ -786,8 +786,6 @@ send_notification("run.status", {
 
 - [JSON-RPC 2.0 Specification](https://www.jsonrpc.org/specification)
 - [Language Server Protocol](https://microsoft.github.io/language-server-protocol/) (inspiration for Content-Length framing)
-- `PROTOCOL_DRIFT_ANALYSIS.md` - Analysis of protocol incompatibilities
-- `PROTOCOL_COMPARISON_TABLE.md` - Quick reference of mismatches
 - `docs/adr/ADR-001-elixir-python-worker-protocol.md` - Original ADR
 
 ---

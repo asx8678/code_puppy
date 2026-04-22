@@ -6,7 +6,7 @@
 
 ## Context
 
-The Python↔Elixir bridge protocol had significant drift (documented in `PROTOCOL_DRIFT_ANALYSIS.md`). The core issue was:
+The Python↔Elixir bridge protocol had significant drift. The core issue was:
 
 - Python emitted events as generic `"event"` method with `event_type` in `params`
 - Elixir expected specific method names like `"run.status"`, `"run.completed"`, etc.
@@ -265,8 +265,6 @@ Elixir supports both:
 ## Related Issues
 
 - **bd-26 through bd-33**: Elixir migration epic (all CLOSED)
-- **PROTOCOL_DRIFT_ANALYSIS.md**: Original drift analysis (now historical)
-- **PROTOCOL_COMPARISON_TABLE.md**: Updated comparison
 
 ## References
 

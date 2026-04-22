@@ -77,7 +77,7 @@ Types: `feat`, `fix`, `docs`, `refactor`, `test`, `chore`
 
 All changes require review. The Python freeze policy (above) will be strictly enforced during the migration period.
 
-Note: the `python-freeze-check.yml` workflow posts advisory warnings only; enforcement is reviewer-driven.
+Note: reviewer enforcement only — no CI gate.
 
 ### Automated Code Review for Test Files
 
@@ -98,17 +98,14 @@ All new and modified test files must pass automated review before merge. This en
 ```bash
 # Review specific test files or directories
 ./scripts/review-tests.sh elixir/code_puppy_control/test/llm/
-./scripts/review-tests.sh tests/test_config.py
 
 # Multiple paths
 ./scripts/review-tests.sh elixir/code_puppy_control/test/ tests/plugins/
 
 # Treat findings as blocking (for CI gates)
-REVIEW_BLOCKING=1 ./scripts/review-tests.sh tests/
 
 # Or invoke agents directly for more control
 code-puppy --agent elixir-reviewer --prompt "Review test file: path/to/test.exs"
-code-puppy --agent python-reviewer --prompt "Review test file: path/to/test.py"
 code-puppy --agent qa-expert --prompt "Analyze test coverage for: path/to/tests/"
 ```
 
@@ -117,7 +114,7 @@ code-puppy --agent qa-expert --prompt "Analyze test coverage for: path/to/tests/
 - **All new test files** must be reviewed by the appropriate language reviewer
 - **Test suite changes** (adding/removing tests, modifying test infrastructure) require `qa-expert` coverage analysis
 - **Pre-push hook** runs advisory review on `.exs` test files automatically
-- **CI workflow** (`.github/workflows/test-review.yml`) posts review comments on PRs
+- **Local review** — run review scripts locally; CI comments are advisory for now
 
 #### Current Status
 
