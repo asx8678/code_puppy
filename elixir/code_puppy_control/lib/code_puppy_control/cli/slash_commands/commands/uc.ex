@@ -230,7 +230,11 @@ defmodule CodePuppyControl.CLI.SlashCommands.Commands.UC do
 
   # ── Source File Manipulation ──────────────────────────────────────────
 
-  defp toggle_enabled_in_source(source_path, current_enabled) do
+  # Public entry-point for toggle so tests can call it directly without
+  # needing a running UC Registry (bd-269).
+  @doc false
+  @spec toggle_enabled_in_source(String.t(), boolean()) :: :ok | {:error, String.t()}
+  def toggle_enabled_in_source(source_path, current_enabled) do
     case File.read(source_path) do
       {:ok, content} ->
         new_enabled = not current_enabled
@@ -277,40 +281,30 @@ defmodule CodePuppyControl.CLI.SlashCommands.Commands.UC do
     end
   end
 
-  # Replace only the 'enabled' field inside the @uc_tool %{ ... } block.
-  # Scans for '@uc_tool %{' then replaces the first 'enabled: true/false'
-  # found after it (within the map boundary).
+  # Replace only the TOP-LEVEL 'enabled' field inside the @uc_tool %{ ... } block.
+  # Uses line-by-line parsing with brace-depth and string tracking so that
+  # nested maps or string literals containing "enabled:" are never touched.
+  #
+  # This is the structural fix for bd-269: the old regex-based approach
+  # (~r/^\s*enabled:\s*(true|false)/m) could match `enabled:` keys inside
+  # nested maps or string literals within the block.
   defp replace_enabled_in_uc_tool_block(content, new_value) do
-    # Find the start of @uc_tool %{ ... }
     case Regex.run(~r/@uc_tool\s+%\{/, content, return: :index) do
       [{block_start, match_len}] ->
-        # The map opening is at block_start + match_len
         map_open_end = block_start + match_len
 
-        # Find the closing brace for the @uc_tool map.
-        # We track brace depth starting from the opening we just found.
         case find_closing_brace(content, map_open_end) do
           {:ok, closing_pos} ->
-            # Extract the @uc_tool block (including the @uc_tool prefix)
             before_block = binary_part(content, 0, block_start)
             block_content = binary_part(content, block_start, closing_pos - block_start + 1)
+            after_block = binary_part(content, closing_pos + 1, byte_size(content) - closing_pos - 1)
 
-            after_block =
-              binary_part(content, closing_pos + 1, byte_size(content) - closing_pos - 1)
-
-            # Replace enabled: true/false only within the block.
-            # Only match 'enabled:' at the start of a line (after optional whitespace).
-            # This targets only the top-level field, avoiding strings and nested maps.
-            enabled_pattern = ~r/^(\s*enabled:\s*)(true|false|True|False)/m
-
-            case Regex.replace(enabled_pattern, block_content, fn _full, prefix, _old ->
-                   prefix <> new_value
-                 end) do
-              ^block_content ->
-                {:error, "Could not find 'enabled:' field in @uc_tool"}
-
-              new_block ->
+            case replace_top_level_enabled_in_block(block_content, new_value) do
+              {:ok, new_block} ->
                 {:ok, before_block <> new_block <> after_block}
+
+              {:error, reason} ->
+                {:error, reason}
             end
 
           :error ->
@@ -320,6 +314,86 @@ defmodule CodePuppyControl.CLI.SlashCommands.Commands.UC do
       nil ->
         {:error, "Could not find @uc_tool attribute"}
     end
+  end
+
+  # ── Structural replacement helpers (bd-269) ──────────────────────────
+
+  # Split the block into lines, walk them tracking brace-depth and string
+  # state, and replace ONLY the first `enabled:` that sits at depth 1
+  # (the top-level map body) and outside any string literal.
+  defp replace_top_level_enabled_in_block(block_content, new_value) do
+    lines = String.split(block_content, "\n")
+
+    {modified_lines, replaced?} =
+      walk_lines_for_enabled(lines, new_value, _replaced? = false, _in_string? = false, _depth = 0)
+
+    if replaced? do
+      {:ok, Enum.join(modified_lines, "\n")}
+    else
+      {:error, "Could not find top-level 'enabled:' field in @uc_tool"}
+    end
+  end
+
+  defp walk_lines_for_enabled([], _new_value, replaced?, _in_string?, _depth) do
+    {[], replaced?}
+  end
+
+  defp walk_lines_for_enabled([line | rest], new_value, replaced?, in_string?, depth) do
+    {next_in_string, next_depth} = scan_line_for_depth(line, in_string?, depth)
+
+    # A top-level key lives at depth 1 (inside the outermost %{...}).
+    # We must NOT be inside a string, and we must not have replaced already.
+    should_replace =
+      not replaced? and
+        not in_string? and
+        next_depth == 1 and
+        line =~ ~r/^\s*enabled:\s*(true|false)/
+
+    new_line =
+      if should_replace do
+        Regex.replace(~r/(^\s*enabled:\s*)(true|false)/, line, "\\1#{new_value}")
+      else
+        line
+      end
+
+    {rest_lines, final_replaced?} =
+      walk_lines_for_enabled(rest, new_value, should_replace or replaced?, next_in_string, next_depth)
+
+    {[new_line | rest_lines], final_replaced?}
+  end
+
+  # Character-level scanner that tracks whether we are inside a double-quoted
+  # string and the current brace nesting depth.  Respects escaped quotes (\")
+  # so that `"foo\"bar"` is treated as one continuous string.
+  defp scan_line_for_depth(line, in_string?, depth) do
+    line
+    |> String.graphemes()
+    |> Enum.reduce({in_string?, depth, _escaped? = false}, fn
+      # Backslash outside escape: marks next char as escaped
+      "\\", {str, d, false} ->
+        {str, d, true}
+
+      # Escaped quote inside a string: don't toggle
+      "\"", {str, d, true} ->
+        {str, d, false}
+
+      # Unescaped quote: toggle string state
+      "\"", {str, d, false} ->
+        {not str, d, false}
+
+      # Opening brace outside a string: increment depth
+      "{", {false = _str, d, _esc} ->
+        {false, d + 1, false}
+
+      # Closing brace outside a string: decrement depth
+      "}", {false = _str, d, _esc} ->
+        {false, d - 1, false}
+
+      # Any other character: clear the escape flag
+      _char, {str, d, _esc} ->
+        {str, d, false}
+    end)
+    |> then(fn {str, d, _} -> {str, d} end)
   end
 
   # Find the position of the closing '}' for a map that starts at `from_pos`.

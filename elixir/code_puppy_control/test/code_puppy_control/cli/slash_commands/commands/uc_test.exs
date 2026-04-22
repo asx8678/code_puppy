@@ -525,6 +525,192 @@ defmodule CodePuppyControl.CLI.SlashCommands.Commands.UCTest do
     end
   end
 
+  describe "structural toggle — nested map inside @uc_tool (bd-269)" do
+    setup do
+      # File with a nested map INSIDE @uc_tool containing its own enabled: key.
+      # The registry cannot parse this, so we test toggle_enabled_in_source directly.
+      dir = Path.join(System.tmp_dir!(), "uc_struct_#{:erlang.unique_integer([:positive])}")
+      File.mkdir_p!(dir)
+
+      file_path = Path.join(dir, "nested_map.ex")
+
+      content = """
+      defmodule NestedMapTool do
+        @uc_tool %{
+          name: "nested_map",
+          namespace: "",
+          description: "Tool with nested config",
+          enabled: true,
+          version: "1.0.0",
+          author: "test",
+          config: %{
+            enabled: false,
+            label: "inner"
+          }
+        }
+
+        def run(_args), do: :ok
+      end
+      """
+
+      File.write!(file_path, content)
+
+      on_exit(fn -> File.rm_rf!(dir) end)
+
+      %{file_path: file_path, dir: dir}
+    end
+
+    test "toggle replaces only top-level enabled, not nested map's enabled", %{file_path: path} do
+      assert :ok = UC.toggle_enabled_in_source(path, true)
+
+      content = File.read!(path)
+
+      # Top-level enabled should be toggled to false
+      assert content =~ ~r/@uc_tool %\{.*enabled: false/s
+
+      # Nested config.enabled must remain false (unchanged)
+      assert content =~ ~r/config: %\{.*enabled: false/s
+    end
+
+    test "toggle round-trip preserves nested map", %{file_path: path} do
+      assert :ok = UC.toggle_enabled_in_source(path, true)
+      assert :ok = UC.toggle_enabled_in_source(path, false)
+
+      content = File.read!(path)
+
+      # Top-level enabled should be back to true
+      assert content =~ ~r/@uc_tool %\{.*enabled: true/s
+
+      # Nested config.enabled must still be false
+      assert content =~ ~r/config: %\{.*enabled: false/s
+    end
+  end
+
+  describe "structural toggle — string with enabled: inside @uc_tool (bd-269)" do
+    setup do
+      dir = Path.join(System.tmp_dir!(), "uc_struct_#{:erlang.unique_integer([:positive])}")
+      File.mkdir_p!(dir)
+
+      file_path = Path.join(dir, "string_enabled.ex")
+
+      # The description string contains "enabled: true" as text.
+      # The toggle must NOT replace the text inside the string.
+      content = """
+      defmodule StringEnabledTool do
+        @uc_tool %{
+          name: "string_enabled",
+          namespace: "",
+          description: "Contains enabled: true in text",
+          enabled: true,
+          version: "1.0.0",
+          author: "test"
+        }
+
+        def run(_args), do: :ok
+      end
+      """
+
+      File.write!(file_path, content)
+
+      on_exit(fn -> File.rm_rf!(dir) end)
+
+      %{file_path: file_path}
+    end
+
+    test "toggle does not replace enabled: inside a string literal", %{file_path: path} do
+      assert :ok = UC.toggle_enabled_in_source(path, true)
+
+      content = File.read!(path)
+
+      # Top-level enabled should be toggled to false
+      assert content =~ ~r/enabled: false/
+
+      # The description string must still contain 'enabled: true' as text
+      assert content =~ ~r/description: "Contains enabled: true in text"/
+    end
+
+    test "toggle round-trip preserves string content", %{file_path: path} do
+      assert :ok = UC.toggle_enabled_in_source(path, true)
+      assert :ok = UC.toggle_enabled_in_source(path, false)
+
+      content = File.read!(path)
+
+      # Top-level enabled should be back to true
+      assert content =~ ~r/enabled: true/
+
+      # The description string must still contain 'enabled: true' as text
+      assert content =~ ~r/description: "Contains enabled: true in text"/
+    end
+  end
+
+  describe "structural toggle — top-level enabled IS changed (bd-269)" do
+    setup do
+      dir = Path.join(System.tmp_dir!(), "uc_struct_#{:erlang.unique_integer([:positive])}")
+      File.mkdir_p!(dir)
+
+      file_path = Path.join(dir, "toplevel.ex")
+
+      content = """
+      defmodule TopLevelTool do
+        @uc_tool %{
+          name: "toplevel",
+          namespace: "",
+          description: "Simple tool",
+          enabled: true,
+          version: "1.0.0",
+          author: "test"
+        }
+
+        def run(_args), do: :ok
+      end
+      """
+
+      File.write!(file_path, content)
+
+      on_exit(fn -> File.rm_rf!(dir) end)
+
+      %{file_path: file_path}
+    end
+
+    test "toggle flips top-level enabled from true to false", %{file_path: path} do
+      assert :ok = UC.toggle_enabled_in_source(path, true)
+      content = File.read!(path)
+      assert content =~ "enabled: false"
+      refute content =~ "enabled: true"
+    end
+
+    test "toggle flips top-level enabled from false to true" do
+      dir = Path.join(System.tmp_dir!(), "uc_struct_#{:erlang.unique_integer([:positive])}")
+      File.mkdir_p!(dir)
+
+      file_path = Path.join(dir, "disabled_tool.ex")
+
+      content = """
+      defmodule DisabledTool do
+        @uc_tool %{
+          name: "disabled",
+          namespace: "",
+          description: "Starts disabled",
+          enabled: false,
+          version: "1.0.0",
+          author: "test"
+        }
+
+        def run(_args), do: :ok
+      end
+      """
+
+      File.write!(file_path, content)
+
+      assert :ok = UC.toggle_enabled_in_source(file_path, false)
+      new_content = File.read!(file_path)
+      assert new_content =~ "enabled: true"
+      refute new_content =~ "enabled: false"
+
+      File.rm_rf!(dir)
+    end
+  end
+
   describe "/uc without running registry" do
     test "shows friendly error when registry is not running" do
       # Temporarily unregister the name to test the graceful fallback.
