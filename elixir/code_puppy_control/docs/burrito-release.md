@@ -29,7 +29,7 @@ Burrito uses [Zig](https://ziglang.org/) to compile the native wrapper binary. Y
 Use the provided helper script:
 
 ```bash
-# Build all targets (macOS arm64, macOS x86_64, Linux x86_64, Linux arm64, Windows x86_64)
+# Build all targets
 scripts/build-burrito.sh
 
 # Build only for the current host platform
@@ -38,6 +38,7 @@ scripts/build-burrito.sh --host-only
 # Build a specific target
 scripts/build-burrito.sh --target macos_arm64
 scripts/build-burrito.sh --target linux_x86_64
+scripts/build-burrito.sh --target linux_musl_x86_64
 scripts/build-burrito.sh --target windows_x86_64
 ```
 
@@ -61,6 +62,8 @@ burrito_out/
 ├── code_puppy_control_macos_x86_64
 ├── code_puppy_control_linux_x86_64
 ├── code_puppy_control_linux_arm64
+├── code_puppy_control_linux_musl_x86_64
+├── code_puppy_control_linux_musl_arm64
 └── code_puppy_control_windows_x86_64.exe
 ```
 
@@ -125,13 +128,24 @@ The CI-produced binaries are **unsigned**. Codesigning is tracked separately:
 - **Windows Authenticode** → bd-240
 - **macOS codesigning/notarization** → bd-241
 
+### Musl-based Linux (Alpine)
+
+The `linux_musl_x86_64` and `linux_musl_arm64` targets produce binaries linked against musl libc instead of glibc. These run natively on Alpine Linux, Void Linux (musl), OpenWrt, and other musl-based distributions.
+
+Burrito uses Zig's built-in musl cross-compilation support — no separate musl toolchain is needed on the build host. The musl libc runtime is automatically fetched from Burrito's CDN during the build.
+
+```bash
+# Build the musl target for Alpine
+scripts/build-burrito.sh --target linux_musl_x86_64
+```
+
+When using `--host-only` on a musl-based system (detected via `/etc/alpine-release` or `ldd --version` containing "musl"), the script automatically selects the `linux_musl_*` target.
+
 ### Missing targets
 
 | Target | Status |
 |--------|--------|
-| `linux_arm64` | Tracked in bd-239 area |
 | `macos_x86_64` | Not yet tracked (follow-up needed) |
-| `linux_musl` (Alpine) | Tracked in bd-239 |
 
 ## Known Issues
 
@@ -153,9 +167,9 @@ Windows SmartScreen may flag unsigned executables with an "unrecognized app" war
 
 ### Linux (musl/Alpine)
 
-The default Linux target links against glibc. Users on Alpine Linux or other musl-based distributions will need a separate musl target. This is not yet configured in the release matrix.
+Use the `linux_musl_x86_64` or `linux_musl_arm64` target for musl-based distributions (Alpine, Void musl, etc.). These targets link against musl libc via Zig's cross-compilation toolchain and include a musl libc runtime shim automatically fetched by Burrito.
 
-> **Future work:** Add `linux_musl_x86_64` target with a custom ERTS build.
+See [Musl-based Linux (Alpine)](#musl-based-linux-alpine) above for details.
 
 ## Troubleshooting
 
