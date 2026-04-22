@@ -1,24 +1,28 @@
 defmodule CodePuppyControl.CLI.SlashCommands.Commands.ModelSettings do
   @moduledoc """
-  Model settings slash command: /model_settings --show [model_name].
+  Model settings slash command: /model_settings [--show] [model_name].
 
-  Read-only summary of per-model settings (temperature, seed, top_p, etc.).
-  Ports the Python `show_model_settings_summary()` from
+  Read-only summary (`--show`) and interactive editor for per-model settings
+  (temperature, seed, top_p, etc.).
+
+  Ports the Python `show_model_settings_summary()` and
+  `interactive_model_settings()` from
   `code_puppy/command_line/model_settings_menu.py`.
-
-  The interactive editor (bd-271) is NOT part of this implementation.
 
   ## Usage
 
+    /model_settings                  — interactive editor for the current global model
+    /model_settings gpt-5            — interactive editor for a specific model
     /model_settings --show           — show settings for the current global model
     /model_settings --show gpt-5     — show settings for a specific model
-    /ms --show                       — alias
+    /ms                              — alias (interactive)
+    /ms gpt-5                        — alias (interactive, specific model)
     /ms --show claude-opus-4         — alias with model name
   """
 
   alias CodePuppyControl.Config.Models
 
-  @usage "Usage: /model_settings --show [model_name]  (alias: /ms)"
+  @usage "Usage: /model_settings [--show] [model_name]  (alias: /ms)"
 
   # Mirrors Python's SETTING_DEFINITIONS for display purposes.
   # Only the fields needed for rendering are included.
@@ -81,11 +85,13 @@ defmodule CodePuppyControl.CLI.SlashCommands.Commands.ModelSettings do
     }
   }
 
+  alias __MODULE__.Interactive
+
   @doc """
   Handles `/model_settings` and `/ms` commands.
 
-  Currently only supports the `--show` flag for read-only display.
-  Without `--show`, prints a usage hint (the interactive editor is bd-271).
+  - `--show [model]` → read-only summary
+  - `<model>` or no args → interactive editor
   """
   @spec handle_model_settings(String.t(), any()) :: {:continue, any()}
   def handle_model_settings(line, state) do
@@ -96,8 +102,8 @@ defmodule CodePuppyControl.CLI.SlashCommands.Commands.ModelSettings do
       {:show, nil} ->
         show_summary(nil)
 
-      :no_show_flag ->
-        print_usage()
+      {:interactive, model_name} ->
+        Interactive.run(model_name)
 
       :invalid ->
         print_usage()
@@ -265,25 +271,23 @@ defmodule CodePuppyControl.CLI.SlashCommands.Commands.ModelSettings do
         "    #{@usage}" <> IO.ANSI.reset()
     )
 
-    IO.puts(
-      "    #{IO.ANSI.faint()}The interactive editor is not yet available in Elixir (bd-271).#{IO.ANSI.reset()}"
-    )
-
     IO.puts("")
   end
 
-  # Parses "/model_settings --show [model_name]" or "/ms --show [model_name]"
+  # Parses "/model_settings [--show] [model_name]" or "/ms [--show] [model_name]"
   # Returns:
-  #   {:show, "model_name"}  — show settings for a specific model
-  #   {:show, nil}            — show settings for the current model
-  #   :no_show_flag            — no --show flag present
-  #   :invalid                 — unrecognized arguments
-  @spec parse_args(String.t()) :: {:show, String.t() | nil} | :no_show_flag | :invalid
+  #   {:show, "model_name"}    — show settings for a specific model
+  #   {:show, nil}              — show settings for the current model
+  #   {:interactive, "model"}   — interactive editor for a specific model
+  #   {:interactive, nil}       — interactive editor for the current model
+  #   :invalid                   — unrecognized arguments
+  @spec parse_args(String.t()) ::
+          {:show, String.t() | nil} | {:interactive, String.t() | nil} | :invalid
   defp parse_args("/" <> rest) do
     case String.split(rest, ~r/\s+/, trim: true) do
       [_cmd] ->
-        # Just "/model_settings" or "/ms" — no --show flag
-        :no_show_flag
+        # Just "/model_settings" or "/ms" — interactive mode for current model
+        {:interactive, nil}
 
       [_cmd, "--show"] ->
         {:show, nil}
@@ -291,9 +295,13 @@ defmodule CodePuppyControl.CLI.SlashCommands.Commands.ModelSettings do
       [_cmd, "--show", model_name] ->
         {:show, model_name}
 
-      [_cmd, other | _rest] when other != "--show" ->
-        # Some argument other than --show
-        :no_show_flag
+      [_cmd, model_name] ->
+        # "/model_settings gpt-5" — interactive mode for a specific model
+        {:interactive, model_name}
+
+      [_cmd, model_name, "--show"] ->
+        # Allow model name before --show too
+        {:show, model_name}
 
       _ ->
         :invalid

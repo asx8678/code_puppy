@@ -3,6 +3,7 @@ defmodule CodePuppyControl.CLI.SlashCommands.Commands.ModelSettingsTest do
 
   alias CodePuppyControl.CLI.SlashCommands.{CommandInfo, Dispatcher, Registry}
   alias CodePuppyControl.CLI.SlashCommands.Commands.ModelSettings
+  alias ModelSettings.Interactive
 
   # async: false because Registry is a named singleton.
 
@@ -20,9 +21,9 @@ defmodule CodePuppyControl.CLI.SlashCommands.Commands.ModelSettingsTest do
       Registry.register(
         CommandInfo.new(
           name: "model_settings",
-          description: "Show per-model settings",
+          description: "Configure per-model settings",
           handler: &ModelSettings.handle_model_settings/2,
-          usage: "/model_settings --show [model_name]",
+          usage: "/model_settings [--show] [model_name]",
           aliases: ["ms"],
           category: "config"
         )
@@ -213,34 +214,39 @@ defmodule CodePuppyControl.CLI.SlashCommands.Commands.ModelSettingsTest do
     end
   end
 
-  # ── Without --show flag ───────────────────────────────────────────────────
+  # ── Without --show flag (interactive editor) ─────────────────────────────
 
-  describe "/model_settings without --show" do
-    test "prints usage hint" do
+  describe "/model_settings without --show — interactive mode" do
+    test "enters interactive editor for current model" do
+      # The interactive editor reads from IO.gets, so we simulate
+      # an immediate 'q' to quit.
       output =
-        ExUnit.CaptureIO.capture_io(fn ->
+        ExUnit.CaptureIO.capture_io([input: "q\n"], fn ->
           assert {:continue, _} = ModelSettings.handle_model_settings("/model_settings", %{})
         end)
 
-      assert output =~ "Usage:"
+      # Should show the editor header
+      assert output =~ "Model Settings Editor"
     end
 
-    test "mentions --show flag in usage" do
+    test "/model_settings <model_name> enters interactive editor for that model" do
       output =
-        ExUnit.CaptureIO.capture_io(fn ->
-          assert {:continue, _} = ModelSettings.handle_model_settings("/model_settings", %{})
+        ExUnit.CaptureIO.capture_io([input: "q\n"], fn ->
+          assert {:continue, _} =
+                   ModelSettings.handle_model_settings("/model_settings gpt-5", %{})
         end)
 
-      assert output =~ "--show"
+      assert output =~ "Model Settings Editor"
+      assert output =~ "gpt-5"
     end
 
-    test "mentions bd-271 for interactive editor" do
+    test "/ms without --show enters interactive editor" do
       output =
-        ExUnit.CaptureIO.capture_io(fn ->
-          assert {:continue, _} = ModelSettings.handle_model_settings("/model_settings", %{})
+        ExUnit.CaptureIO.capture_io([input: "q\n"], fn ->
+          assert {:continue, _} = ModelSettings.handle_model_settings("/ms", %{})
         end)
 
-      assert output =~ "bd-271"
+      assert output =~ "Model Settings Editor"
     end
   end
 
@@ -353,13 +359,13 @@ defmodule CodePuppyControl.CLI.SlashCommands.Commands.ModelSettingsTest do
       assert result == {:continue, %{foo: "bar"}}
     end
 
-    test "handles /ms without --show" do
+    test "handles /ms without --show (enters interactive)" do
       output =
-        ExUnit.CaptureIO.capture_io(fn ->
+        ExUnit.CaptureIO.capture_io([input: "q\n"], fn ->
           assert {:continue, _} = ModelSettings.handle_model_settings("/ms", %{})
         end)
 
-      assert output =~ "Usage:"
+      assert output =~ "Model Settings Editor"
     end
   end
 
@@ -431,6 +437,126 @@ defmodule CodePuppyControl.CLI.SlashCommands.Commands.ModelSettingsTest do
     test "does not crash for known models with supported_settings" do
       result = ModelSettings.get_display_settings("firepass-kimi-k2p5-turbo")
       assert is_map(result)
+    end
+  end
+
+  # ── Interactive editor (bd-271) ──────────────────────────────────────────
+
+  describe "Interactive.init/1" do
+    test "initializes with model name and settings" do
+      assert {:ok, state} = Interactive.init(%{model_name: "gpt-5"})
+      assert state.model_name == "gpt-5"
+      assert is_map(state.settings)
+    end
+  end
+
+  describe "Interactive.render/1" do
+    test "shows the editor header with model name" do
+      {:ok, state} = Interactive.init(%{model_name: "gpt-5"})
+      rendered = Interactive.render(state)
+      assert rendered =~ "Model Settings Editor"
+      assert rendered =~ "gpt-5"
+    end
+
+    test "shows numbered setting options" do
+      {:ok, state} = Interactive.init(%{model_name: "gpt-5"})
+      rendered = Interactive.render(state)
+      assert rendered =~ "1."
+      assert rendered =~ "Temperature"
+      assert rendered =~ "2."
+      assert rendered =~ "Seed"
+      assert rendered =~ "3."
+      assert rendered =~ "Top-P"
+    end
+
+    test "shows input instructions" do
+      {:ok, state} = Interactive.init(%{model_name: "gpt-5"})
+      rendered = Interactive.render(state)
+      assert rendered =~ "q to quit"
+      assert rendered =~ "r <number>"
+    end
+
+    test "shows transient message when present" do
+      {:ok, state} = Interactive.init(%{model_name: "gpt-5"})
+      state = %{state | message: "  ✓ Test message"}
+      rendered = Interactive.render(state)
+      assert rendered =~ "Test message"
+    end
+  end
+
+  describe "Interactive.handle_input/2" do
+    setup do
+      {:ok, state} = Interactive.init(%{model_name: "gpt-5"})
+      {:ok, state: state}
+    end
+
+    test "'q' returns :quit", %{state: state} do
+      assert Interactive.handle_input("q", state) == :quit
+    end
+
+    test "'Q' returns :quit", %{state: state} do
+      assert Interactive.handle_input("Q", state) == :quit
+    end
+
+    test "invalid input shows warning", %{state: state} do
+      assert {:ok, new_state} = Interactive.handle_input("xyz", state)
+      assert new_state.message =~ "Invalid input"
+    end
+
+    test "out-of-range option number shows warning", %{state: state} do
+      assert {:ok, new_state} = Interactive.handle_input("99 blah", state)
+      assert new_state.message =~ "Invalid option number"
+    end
+
+    test "reset out-of-range shows warning", %{state: state} do
+      assert {:ok, new_state} = Interactive.handle_input("r 99", state)
+      assert new_state.message =~ "Invalid option number"
+    end
+
+    test "set temperature with valid value", %{state: state} do
+      assert {:ok, new_state} = Interactive.handle_input("1 0.7", state)
+      assert new_state.message =~ "Set Temperature"
+    end
+
+    test "set temperature with out-of-range value shows error", %{state: state} do
+      assert {:ok, new_state} = Interactive.handle_input("1 3.0", state)
+      assert new_state.message =~ "out of range"
+    end
+
+    test "set seed with valid value", %{state: state} do
+      assert {:ok, new_state} = Interactive.handle_input("2 42", state)
+      assert new_state.message =~ "Set Seed"
+    end
+
+    test "set top_p with valid value", %{state: state} do
+      assert {:ok, new_state} = Interactive.handle_input("3 0.9", state)
+      assert new_state.message =~ "Set Top-P"
+    end
+
+    test "set invalid choice shows error", %{state: state} do
+      assert {:ok, new_state} = Interactive.handle_input("4 invalid", state)
+      assert new_state.message =~ "Invalid choice"
+    end
+
+    test "reset a setting", %{state: state} do
+      # First set, then reset
+      {:ok, state} = Interactive.handle_input("1 0.5", state)
+      assert {:ok, new_state} = Interactive.handle_input("r 1", state)
+      assert new_state.message =~ "Reset Temperature"
+    end
+  end
+
+  describe "Interactive.editable_fields/0" do
+    test "has 6 editable fields" do
+      fields = Interactive.editable_fields()
+      assert length(fields) == 6
+    end
+
+    test "fields have expected keys" do
+      fields = Interactive.editable_fields()
+
+      keys = Enum.map(fields, & &1.key)
+      assert keys == ["temperature", "seed", "top_p", "reasoning_effort", "summary", "verbosity"]
     end
   end
 end
