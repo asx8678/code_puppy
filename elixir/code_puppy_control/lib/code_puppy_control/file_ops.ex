@@ -1,6 +1,6 @@
 defmodule CodePuppyControl.FileOps do
   @moduledoc """
-  Native Elixir file operations - port of turbo_ops.
+  Native Elixir file operations.
 
   Provides list_files, grep, read_file, read_files with:
   - Concurrent processing via Task.async_stream

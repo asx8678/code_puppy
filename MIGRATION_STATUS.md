@@ -4,7 +4,7 @@
 > **Last updated:** 2026-04-17 (bd-167 - Rust eliminated, pure Elixir+Python architecture achieved)
 > **Previous docs consolidated:**
 > - `ELIXIR_MIGRATION_ROADMAP.md` → Archived (historical analysis)
-> - `fast_puppy_elixir_rewrite_plan.md` → Archived (historical, pre-Zig-cleanup)
+> - `fast_puppy_elixir_rewrite_plan.md` → Archived (historical)
 > - `rewrite/ELIXIR_FIRST_REWRITE_ANALYSIS.md` → Archived (Repo Compass slice analysis)
 > - `rewrite/code_puppy_elixir_rewrite_bundle/PLAN/code_puppy_python_to_elixir_plan.md` → Archived (PR sequence)
 
@@ -306,19 +306,9 @@ migrated to Elixir:
 
 ## Historical Context
 
-### What Was Removed
-
-| Component | Removal Date | Notes |
-|-----------|--------------|-------|
-| Zig runtime | Early 2026 | `code_puppy/zig_bridge/` deleted |
-| `turbo_ops` Zig path | Early 2026 | Replaced with Elixir implementation |
-| Hybrid Zig/Rust model | Early 2026 | Simplified to Elixir/Rust only |
-
-### Why the Consolidation (bd-12)
 
 The repository had **four competing migration documents** with:
 - Overlapping phase descriptions with different numbering
-- Stale Zig references (pre-cleanup architecture)
 - No single source of truth for "what's done vs in-progress"
 - bd-* references that didn't match filed issues
 
@@ -331,7 +321,7 @@ The repository had **four competing migration documents** with:
 | Document | Status | Read If You Need |
 |----------|--------|------------------|
 | `docs/archived/ELIXIR_MIGRATION_ROADMAP.md` | 📁 Archived | Tiered migration candidate analysis (which components should migrate) |
-| `docs/archived/fast_puppy_elixir_rewrite_plan.md` | 📁 Archived (historical) | 5-phase rewrite plan from pre-Zig-cleanup era |
+| `docs/archived/fast_puppy_elixir_rewrite_plan.md` | 📁 Archived (historical) | Elixir rewrite plan from early migration era |
 | `docs/archived/PROTOCOL_COMPARISON_TABLE.md` | 📁 Archived | Protocol comparison reference |
 | `docs/archived/PROTOCOL_DRIFT_ANALYSIS.md` | 📁 Archived | Historical protocol drift analysis |
 
@@ -341,7 +331,6 @@ The repository had **four competing migration documents** with:
 
 | Date | Decision | Rationale |
 |------|----------|-----------|
-| 2026-Q1 | Zig removal | Simplified to Elixir/Rust only; Zig added complexity without clear wins |
 | 2026-Q1 | `NativeBackend` creation | Single Python entry point to prevent bridge sprawl |
 | 2026-Q1 | Elixir-first default | Better supervision, concurrency, and I/O handling for file ops |
 | 2026-Q2 | Rust core retention | Message pruning and token estimation too performance-critical |

@@ -1,12 +1,10 @@
 # Elixir Control Plane Remediation Plan
-> **Historical note**: This document predates the removal of the Zig MCP runner from the runtime. It is preserved for reference. The MCP server now uses a direct Elixir Port; Zig is not on the active runtime path.
 
 
 ## Executive Summary
 
 **Current State**: 5.5/10 implementation quality
 
-**Current reality**: The MCP server now uses a direct Elixir Port; Zig is not on the active runtime path.
 
 The Elixir control plane (`elixir/code_puppy_control/`) implements the coordination layer between Python agent workers and the Phoenix/WebSocket frontend. While the architecture is sound, the implementation suffers from protocol drift, OTP anti-patterns, and correctness bugs that must be addressed before the system is production-ready.
 
@@ -15,7 +13,7 @@ The Elixir control plane (`elixir/code_puppy_control/`) implements the coordinat
 2. **Critical Correctness Bugs**: Run ID confusion, request tracking race conditions, and atom exhaustion vulnerabilities
 3. **OTP Anti-Patterns**: Polling instead of event-driven state machines, insufficient supervision strategies, and unbounded memory growth vectors
 
-**Recommended Path**: **Fix before expand**. The current foundation is too unstable to build upon. Zig has been removed from the critical path; the MCP server now uses a direct Elixir Port.
+**Recommended Path**: **Fix before expand**. The current foundation is too unstable to build upon. The MCP server uses a direct Elixir Port.
 
 ---
 
@@ -27,7 +25,6 @@ Based on the hybrid migration ADR and current implementation audit:
 |-----------|---------|------------|-----------|
 | **Python** | Keep | ~25% | Thin shell: CLI, TUI, agent orchestration only |
 | **Elixir** | Keep & Expand | ~75% | ALL runtime operations (file ops, parsing, messages, scheduling) |
-| **Zig** | Removed (historical) | 0% | No longer on the active runtime path; references below are historical |
 
 
 **Architecture Summary**:
@@ -58,21 +55,6 @@ This creates confusion and potential message corruption when messages cross boun
 **Fix Approach**: Standardize on **Content-Length framing everywhere**. Remove `{:packet, 4}` from MCP server.
 
 ```elixir
-# IN mcp/server.ex - Replace this:
-port = Port.open({:spawn_executable, zig_runner}, [
-  :binary,
-  :exit_status,
-  {:packet, 4}  # <-- REMOVE THIS
-])
-
-# WITH this:
-port = Port.open({:spawn_executable, zig_runner}, [
-  :binary,
-  :exit_status
-  # No {:packet, N} - we handle framing in Protocol
-])
-
-# Ensure Zig runner speaks Content-Length framing
 ```
 
 **Verification**: All messages in protocol integration tests should parse successfully when mixed in a single buffer.
@@ -328,14 +310,14 @@ end
 
 ```elixir
 # lib/code_puppy_control/mcp/server.ex:264
-port = Port.open({:spawn_executable, zig_runner}, [
+port = Port.open({:spawn_executable, executable}, [
   :binary,
   :exit_status,
   # REMOVED: {:packet, 4}
 ])
 ```
 
-Ensure the Zig process_runner speaks Content-Length framing on stdin/stdout.
+Ensure the process speaks Content-Length framing on stdin/stdout.
 
 **Verification**: MCP integration tests should pass with mixed message types (requests, notifications, responses).
 
@@ -626,23 +608,6 @@ Also add this to `EventStore` if not already present (it has `@max_events_per_se
 - No polling loops
 - Bounded memory usage
 - Proper state machine visualization possible
-
-### Phase 4: Zig Removal (Historical — Completed)
-
-> **Note**: This phase has been completed. The Zig MCP runner and its build dependencies have been fully removed. The MCP server now uses a direct Elixir Port. The items below are preserved as a historical record of the removal work.
-
-**What was done**:
-- Zig build dependencies were removed from the main build
-- MCP server launching was moved to direct Elixir Port execution (Zig wrapper removed)
-- Architecture docs were updated to reflect the simplified runtime
-
-**Outcome**:
-- `mix compile` no longer requires Zig
-- All tests pass without Zig components
-
----
-
-## Testing Requirements
 
 ### True Interop Tests
 

@@ -16,7 +16,6 @@ logger = logging.getLogger(__name__)
 def _log_indexer_status():
     """Log which indexer backend is active at startup."""
     status = get_indexer_status()
-    # bd-83: Report actual backend (elixir/python), not stale "turbo_ops"
     backend = status.get("backend", "python")
     if status.get("elixir_available") or backend == "elixir":
         logger.debug(f"Repo Compass using native backend ({backend})")

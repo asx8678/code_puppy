@@ -6,9 +6,8 @@
 
 ## Context
 
-The hybrid Elixir/Zig migration (bd-26) requires defining how Elixir control plane communicates with Python agent workers.
+The Elixir migration (bd-26) requires defining how Elixir control plane communicates with Python agent workers.
 
-> **Historical context**: This ADR was authored during the Elixir/Zig migration phase. The Zig runner has since been removed from the runtime, while the protocol decision documented here remains valid. The Python singleton audit (bd-41) revealed that the current architecture is already message-oriented with:
 
 - Bidirectional asyncio.Queue (Agent→UI, UI→Agent)
 - Correlation IDs via `prompt_id → asyncio.Future`

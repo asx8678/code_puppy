@@ -1,6 +1,6 @@
 defmodule CodePuppyControl.Indexer.Constants do
   @moduledoc """
-  Constants for directory indexing. Ported from turbo_ops/src/indexer.rs.
+  Constants for directory indexing.
   """
 
   @ignored_dirs MapSet.new([

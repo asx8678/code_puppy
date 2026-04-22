@@ -2,7 +2,7 @@ defmodule CodePuppyControl.Indexer.DirectoryIndexer do
   @moduledoc """
   Indexes a directory and returns file summaries with symbols.
 
-  This is the Elixir port of turbo_ops/src/indexer.rs.
+  Elixir-native directory indexer.
 
   ## Features
 

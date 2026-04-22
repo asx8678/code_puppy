@@ -2,7 +2,7 @@
 Standalone Elixir transport client for file operations.
 
 This module provides a Python client adapter that communicates with the
-Elixir stdio service via JSON-RPC. It mimics the turbo_ops FileOps API
+Elixir stdio service via JSON-RPC. Provides FileOps API
 for drop-in replacement.
 
 ## Usage
