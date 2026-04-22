@@ -86,35 +86,8 @@ target-version = "py314"
 "code_puppy/scheduler/__init__.py" = ["E402"]
 "code_puppy/config.py" = ["F821"]  # Lazy-evaluated path constants via __getattr__
 
-[tool.pytest.ini_options]
-addopts = "-n auto --dist=loadgroup --cov=code_puppy --cov-report=term-missing"
-testpaths = ["tests"]
-asyncio_mode = "auto"
-markers = [
-    "eval: LLM evaluation test (skipped unless RUN_EVALS=1 is set)",
-    "slow: marks tests as slow (deselect with '-m \"not slow\"')",
-    "serial: marks tests that must run serially (not parallel-safe)",
-]
-
-[tool.coverage.run]
-# Enable parallel mode to prevent race conditions when running with pytest-xdist
-parallel = true
-# omit = ["code_puppy/main.py"]  # Temporarily disabled for complete coverage tracking
-
-[tool.coverage.report]
-fail_under = 70
-# Per-module coverage gates for plugins (audit-driven quality)
-# See docs/CONTRIBUTING.md for coverage maintenance guidelines
-show_missing = true
-skip_covered = false
-
 # Plugin modules requiring >=85% coverage
 # Format: pattern = minimum percentage
-[tool.coverage.plugins]
-paths = [
-    "code_puppy/plugins/pack_parallelism/*",
-]
-min_coverage = 85
 
 [tool.uv]
 python-preference = "only-managed"
@@ -124,12 +97,6 @@ override-dependencies = [
 
 [dependency-groups]
 dev = [
-    "pytest>=9.0.2",
-    "pytest-cov>=7.1.0",
-    "pytest-asyncio>=1.3.0",
-    "pytest-xdist>=3.6.0",
     "ruff>=0.15.8",
     "pexpect>=4.9.0",
-    "hypothesis>=6.150.0",
-    "pytest-randomly>=4.0.1",
 ]

@@ -837,7 +837,7 @@ The agent system supports future expansion:
 - **Core Implementation**: `code_puppy/agents/json_agent.py`
 - **Agent Discovery**: Integrated in `code_puppy/agents/agent_manager.py`
 - **Command Interface**: Works through existing `/agent` command
-- **Testing**: Comprehensive test suite in `tests/test_json_agents.py`
+- **Testing**: Elixir test suite (see `elixir/code_puppy_control/test/`)
 
 ### JSON Agent Loading Process
 1. System scans `~/.code_puppy/agents/` for `*-agent.json` files

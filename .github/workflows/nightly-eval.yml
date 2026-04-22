@@ -98,85 +98,12 @@ jobs:
           path: evals/logs/elixir/*.json
           if-no-files-found: ignore
 
-  # Run Python eval tests (only if evals/ directory exists)
-  python-eval:
-    name: Python Eval Tests
-    runs-on: ubuntu-latest
-    needs: budget-gate
-    if: needs.budget-gate.outputs.should_run == 'true'
-
-    outputs:
-      python_exit_code: ${{ steps.run_python.outputs.exit_code }}
-      has_evals_dir: ${{ steps.check.outputs.has_evals_dir }}
-
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Check for evals directory
-        id: check
-        run: |
-          if [ -d "evals" ]; then
-            echo "has_evals_dir=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "has_evals_dir=false" >> "$GITHUB_OUTPUT"
-            echo "::notice::No evals/ directory found, skipping Python eval tests"
-          fi
-
-      - name: Setup Python
-        if: steps.check.outputs.has_evals_dir == 'true'
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.14'
-
-      - name: Install uv
-        if: steps.check.outputs.has_evals_dir == 'true'
-        run: |
-          curl -LsSf https://astral.sh/uv/install.sh | sh
-          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
-
-      - name: Restore uv cache
-        if: steps.check.outputs.has_evals_dir == 'true'
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/.cache/uv
-            .venv
-          key: ${{ runner.os }}-uv-${{ hashFiles('uv.lock') }}
-          restore-keys: ${{ runner.os }}-uv-
-
-      - name: Install dependencies
-        if: steps.check.outputs.has_evals_dir == 'true'
-        run: |
-          uv sync --frozen
-
-      - name: Run Python eval tests
-        id: run_python
-        if: steps.check.outputs.has_evals_dir == 'true'
-        run: |
-          mkdir -p evals/logs
-          # Run eval tests with pytest - capture exit code but don't fail job
-          uv run pytest evals/ -v -m eval || EXIT_CODE=$?
-          echo "exit_code=${EXIT_CODE:-0}" >> "$GITHUB_OUTPUT"
-          exit 0
-        env:
-          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
-          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-          RUN_EVALS: '1'
-
-      - name: Upload Python logs
-        if: always() && steps.check.outputs.has_evals_dir == 'true'
-        uses: actions/upload-artifact@v4
-        with:
-          name: python-eval-logs
-          path: evals/logs/*.json
-          if-no-files-found: ignore
-
   # Compare outputs and generate parity report
   parity-diff:
     name: Parity Diff
     runs-on: ubuntu-latest
-    needs: [elixir-eval, python-eval]
-    if: always() && needs.elixir-eval.result != 'cancelled' && needs.python-eval.result != 'cancelled'
+    needs: [elixir-eval]
+    if: always() && needs.elixir-eval.result != 'cancelled'
 
     outputs:
       parity_passed: ${{ steps.compare.outputs.parity_passed }}
@@ -280,7 +207,7 @@ jobs:
   post-results:
     name: Post Results
     runs-on: ubuntu-latest
-    needs: [elixir-eval, python-eval, parity-diff]
+    needs: [elixir-eval, parity-diff]
     if: always()
 
     permissions:
@@ -297,7 +224,7 @@ jobs:
           DIFF_SUMMARY="${{ needs.parity-diff.outputs.diff_summary }}"
 
           # Determine overall status
-          if [ "$ELIXIR_STATUS" = "success" ] && [ "$PYTHON_STATUS" = "success" ] && [ "$PARITY_STATUS" = "true" ]; then
+          if [ "$ELIXIR_STATUS" = "success" ] && [ "$PARITY_STATUS" = "true" ]; then
             OVERALL="✅ PASSED"
             STATUS_CODE=0
           else
@@ -318,7 +245,7 @@ jobs:
           | Component | Status | Details |
           |-----------|--------|---------|
           | Elixir Eval | ${{ needs.elixir-eval.result == 'success' && '✅ Passed' || '❌ Failed' }} | Exit: ${{ needs.elixir-eval.outputs.elixir_exit_code }} |
-          | Python Eval | ${{ needs.python-eval.result == 'success' && '✅ Passed' || needs.python-eval.result == 'skipped' && '⏭️ Skipped' || '❌ Failed' }} | ${{ needs.python-eval.outputs.has_evals_dir == 'false' && 'No evals/ dir' || 'Exit: '${{ needs.python-eval.outputs.python_exit_code }} }} |
+          | Python Eval | ⏭️ Removed | Tests migrated to Elixir |
           | Parity Diff | $PARITY_STATUS | $DIFF_SUMMARY |
 
           ### Cost Summary
@@ -330,7 +257,6 @@ jobs:
           ### Artifacts
 
           - [Elixir Eval Logs](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})
-          - [Python Eval Logs](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})
           - [Parity Comparison](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})
 
           ---

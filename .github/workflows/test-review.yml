@@ -1,14 +1,13 @@
 name: Test File Review
 
 # Automated code review for test file changes.
-# Runs elixir-reviewer and qa-expert on changed test files.
+# Runs elixir-reviewer on changed test files.
 # Advisory only — does NOT block merge.
 
 on:
   pull_request:
     paths:
       - 'elixir/code_puppy_control/test/**_test.exs'
-      - 'tests/**/*.py'
 
 jobs:
   detect-files:
@@ -16,7 +15,6 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       elixir_files: ${{ steps.filter.outputs.elixir_files }}
-      python_files: ${{ steps.filter.outputs.python_files }}
       has_changes: ${{ steps.filter.outputs.has_changes }}
     steps:
       - uses: actions/checkout@v4
@@ -31,12 +29,8 @@ jobs:
           ELIXIR_FILES=$(echo "$FILES" | grep -E 'elixir/code_puppy_control/test/.*_test\.exs$' || true)
           echo "elixir_files=${ELIXIR_FILES}" >> "$GITHUB_OUTPUT"
 
-          # Filter for Python test files
-          PYTHON_FILES=$(echo "$FILES" | grep -E 'tests/.*test_.*\.py$|tests/.*_test\.py$' || true)
-          echo "python_files=${PYTHON_FILES}" >> "$GITHUB_OUTPUT"
-
           # Determine if we have anything to review
-          if [[ -n "$ELIXIR_FILES" || -n "$PYTHON_FILES" ]]; then
+          if [[ -n "$ELIXIR_FILES" ]]; then
             echo "has_changes=true" >> "$GITHUB_OUTPUT"
           else
             echo "has_changes=false" >> "$GITHUB_OUTPUT"
@@ -96,60 +90,6 @@ jobs:
               body: output
             });
 
-  python-review:
-    name: Python test review
-    needs: detect-files
-    if: needs.detect-files.outputs.python_files != ''
-    runs-on: ubuntu-latest
-    continue-on-error: true  # Advisory — don't block the pipeline
-
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Set up Code Puppy
-        run: |
-          if ! command -v code-puppy >/dev/null 2>&1; then
-            echo "::notice::code-puppy CLI not available — posting manual review instructions"
-          fi
-
-      - name: Run python-reviewer
-        id: review
-        run: |
-          PYTHON_FILES="${{ needs.detect-files.outputs.python_files }}"
-          echo "Reviewing Python test files:"
-          echo "$PYTHON_FILES"
-
-          REVIEW_OUTPUT="## 🐍 Python Test Review (advisory)\n\n"
-
-          if command -v code-puppy >/dev/null 2>&1; then
-            for file in $PYTHON_FILES; do
-              RESULT=$(code-puppy --agent python-reviewer --prompt "Review test file: ${file}" 2>&1 || echo "Review failed")
-              REVIEW_OUTPUT+="- **${file}**: ${RESULT}\n"
-            done
-          else
-            REVIEW_OUTPUT+="> code-puppy CLI not available in CI.\n"
-            REVIEW_OUTPUT+="> Run locally: \`code-puppy --agent python-reviewer --prompt 'Review test file: <path>'\`\n\n"
-            for file in $PYTHON_FILES; do
-              REVIEW_OUTPUT+="- ⏳ **${file}**: Pending manual review\n"
-            done
-          fi
-
-          echo "review_output<<EOF" >> "$GITHUB_OUTPUT"
-          echo -e "$REVIEW_OUTPUT" >> "$GITHUB_OUTPUT"
-          echo "EOF" >> "$GITHUB_OUTPUT"
-
-      - name: Post review comment
-        uses: actions/github-script@v7
-        with:
-          script: |
-            const output = `${{ steps.review.outputs.review_output }}`;
-            await github.rest.issues.createComment({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              issue_number: context.issue.number,
-              body: output
-            });
-
   qa-review:
     name: QA coverage analysis
     needs: detect-files
@@ -163,7 +103,7 @@ jobs:
       - name: Run qa-expert
         id: review
         run: |
-          ALL_FILES="${{ needs.detect-files.outputs.elixir_files }} ${{ needs.detect-files.outputs.python_files }}"
+          ALL_FILES="${{ needs.detect-files.outputs.elixir_files }}"
           echo "QA coverage analysis for:"
           echo "$ALL_FILES"
 

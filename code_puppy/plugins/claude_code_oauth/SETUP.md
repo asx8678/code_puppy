@@ -74,16 +74,6 @@ Change these only if Anthropic updates their endpoints or scopes.
 └── extra_models.json        # Extended model registry
 ```
 
-## Manual Testing
-
-Run the helper script for sanity checks:
-
-```bash
-python code_puppy/plugins/claude_code_oauth/test_plugin.py
-```
-
-It verifies imports, configuration values, and filesystem expectations without hitting the Anthropic API.
-
 ## Security Notes
 
 - Tokens are stored locally and never transmitted elsewhere

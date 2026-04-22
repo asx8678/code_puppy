@@ -2,13 +2,13 @@
 #
 # Automated Code Review for Test Files
 #
-# Invokes elixir-reviewer (for .exs) or python-reviewer (for .py) and
+# Invokes elixir-reviewer (for .exs) and
 # qa-expert agents on test files, producing pass/fail results.
 #
 # Usage:
 #   ./scripts/review-tests.sh <file_or_dir> [file_or_dir ...]
 #   ./scripts/review-tests.sh elixir/code_puppy_control/test/llm/
-#   ./scripts/review-tests.sh tests/test_foo.py elixir/code_puppy_control/test/bar_test.exs
+#   ./scripts/review-tests.sh elixir/code_puppy_control/test/bar_test.exs
 #
 # Exit codes:
 #   0 - All reviews passed (or only advisory findings)
@@ -49,7 +49,7 @@ Options:
 
 Examples:
   $(basename "$0") elixir/code_puppy_control/test/llm/
-  $(basename "$0") tests/test_foo.py elixir/code_puppy_control/test/bar_test.exs
+  $(basename "$0") elixir/code_puppy_control/test/bar_test.exs
 
 Environment:
   REVIEW_BLOCKING=1   Treat findings as blocking (default: advisory)
@@ -66,7 +66,6 @@ reviewer_for() {
   local file="$1"
   case "$file" in
     *_test.exs|*.exs)  echo "elixir-reviewer" ;;
-    *.py)               echo "python-reviewer" ;;
     *)                  echo "none" ;;
   esac
 }
@@ -81,7 +80,7 @@ collect_files() {
       # Find test files in directory
       while IFS= read -r -d '' f; do
         files+=("$f")
-      done < <(find "$target" -type f \( -name "*_test.exs" -o -name "test_*.py" -o -name "*_test.py" \) -print0 2>/dev/null)
+      done < <(find "$target" -type f -name "*_test.exs" -print0 2>/dev/null)
     else
       warn "Path not found, skipping: $target"
     fi
