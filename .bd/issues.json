@@ -6111,7 +6111,113 @@
         "Claimed by planning-agent-019db4 - work in progress",
         "\u2705 COMPLETE - Config migration finished!\n\n## Changes Made (141 lines across 3 files)\n\n### debug.ex (+22 lines)\n- adaptive_rendering_enabled?/0 - env: PUP_ADAPTIVE_RENDERING\n- post_edit_validation_enabled?/0 - env: PUP_POST_EDIT_VALIDATION\n\n### limits.ex (+41 lines)\n- ws_history_ttl_seconds/0 - env: PUPPY_WS_HISTORY_TTL_SECONDS\n- memory_extraction_model/0\n- summarization_model/0\n- summarization_max_input_tokens/0\n- auto_summarize_enabled?/0\n- summarization_min_messages/0\n\n### models.ex (+78 lines)\n- context_length/1 - reads from models.json with prefix matching\n- Cached via :persistent_term\n- Known defaults for Claude (200k), GPT (128k), Gemini (1M)\n\n## Status\nConfig migration: 100% complete\nPre-existing compile warning in port.ex (unrelated)"
       ]
+    },
+    "bd-304": {
+      "id": "bd-304",
+      "title": "test",
+      "description": "",
+      "status": "closed",
+      "priority": 2,
+      "type": "epic",
+      "labels": [],
+      "dependencies": {},
+      "created_at": "2026-04-22T17:27:50.182530",
+      "updated_at": "2026-04-22T17:27:53.456471",
+      "comments": []
+    },
+    "bd-305": {
+      "id": "bd-305",
+      "title": "Audit and fix outdated architectural documentation",
+      "description": "Comprehensive audit revealed outdated architectural files, broken paths, stale references to elixir/code_puppy_control/ directory structure, missing files referenced in mix aliases, incomplete API docs, and non-existent workflow/ADR file references. See audit details in planning session.",
+      "status": "open",
+      "priority": 2,
+      "type": "epic",
+      "labels": [
+        "docs",
+        "audit",
+        "maintenance"
+      ],
+      "dependencies": {},
+      "created_at": "2026-04-22T17:28:30.816149",
+      "updated_at": "2026-04-22T17:28:30.816158",
+      "comments": []
+    },
+    "bd-306": {
+      "id": "bd-306",
+      "title": "Fix stale elixir/code_puppy_control/ path references",
+      "description": "Fix all stale references to elixir/code_puppy_control/ across SCHEDULER_MIGRATION.md, docs/decisions/bd-175-evals-port.md, docs/burrito-release.md, bench/indexer_bench.exs, lib/mix/tasks/bench.ex, and test/support/stdio_test_helper.ex",
+      "status": "open",
+      "priority": 2,
+      "type": "task",
+      "labels": [
+        "docs"
+      ],
+      "dependencies": {
+        "discovered-from": [
+          "bd-305"
+        ]
+      },
+      "created_at": "2026-04-22T17:28:50.389663",
+      "updated_at": "2026-04-22T17:28:50.389670",
+      "comments": []
+    },
+    "bd-307": {
+      "id": "bd-307",
+      "title": "Fix README.md outdated structure and references",
+      "description": "Update README.md: fix directory structure diagram, expand API endpoints table, update env var names to PUP_* prefix, fix IEx example signature, fix or remove broken ADR-003 and .github/workflows links",
+      "status": "open",
+      "priority": 2,
+      "type": "task",
+      "labels": [
+        "docs"
+      ],
+      "dependencies": {
+        "discovered-from": [
+          "bd-305"
+        ]
+      },
+      "created_at": "2026-04-22T17:28:52.557276",
+      "updated_at": "2026-04-22T17:28:52.557284",
+      "comments": []
+    },
+    "bd-308": {
+      "id": "bd-308",
+      "title": "Fix SCHEDULER_MIGRATION.md outdated config and migrations",
+      "description": "Update SCHEDULER_MIGRATION.md: fix project root paths, update migration count from 3 to 5, add missing workflow_steps and chat_sessions migrations, update Oban config to include workflows: 5 queue",
+      "status": "open",
+      "priority": 2,
+      "type": "task",
+      "labels": [
+        "docs"
+      ],
+      "dependencies": {
+        "discovered-from": [
+          "bd-305"
+        ]
+      },
+      "created_at": "2026-04-22T17:28:57.194182",
+      "updated_at": "2026-04-22T17:28:57.194190",
+      "comments": []
+    },
+    "bd-309": {
+      "id": "bd-309",
+      "title": "Fix burrito docs and mix.exs seeds alias",
+      "description": "Fix docs/burrito-release.md: update macos_x86_64 status from 'Not yet tracked' to supported, fix signing script path, fix or remove broken .github/workflows/burrito-release.yml reference. Also fix mix.exs ecto.setup alias referencing non-existent priv/repo/seeds.exs",
+      "status": "open",
+      "priority": 2,
+      "type": "task",
+      "labels": [
+        "docs"
+      ],
+      "dependencies": {
+        "discovered-from": [
+          "bd-305"
+        ]
+      },
+      "created_at": "2026-04-22T17:29:00.451678",
+      "updated_at": "2026-04-22T17:29:00.451688",
+      "comments": []
     }
   },
-  "counter": 303
+  "counter": 309
 }
