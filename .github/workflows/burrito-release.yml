@@ -105,6 +105,109 @@ jobs:
             exit 1
           fi
 
+      # ── Windows Authenticode signing (bd-240) ──────────────────────────
+      # Signs the Windows binary with signtool.exe to avoid SmartScreen
+      # "unrecognized app" warnings. Requires two repository secrets:
+      #   WINDOWS_CODESIGN_CERT_BASE64 – base64-encoded PFX certificate
+      #   WINDOWS_CODESIGN_PASSWORD   – PFX encryption password
+      # The step is silently skipped when secrets are absent, so the
+      # workflow still works for forks / test runs without a cert.
+
+      - name: Authenticode-sign Windows binary
+        if: >-
+          matrix.burrito_target == 'windows_x86_64'
+          && secrets.WINDOWS_CODESIGN_CERT_BASE64 != ''
+          && secrets.WINDOWS_CODESIGN_PASSWORD != ''
+        shell: pwsh
+        env:
+          CODESIGN_CERT_BASE64: ${{ secrets.WINDOWS_CODESIGN_CERT_BASE64 }}
+          CODESIGN_PASSWORD: ${{ secrets.WINDOWS_CODESIGN_PASSWORD }}
+        run: |
+          # Locate the .exe produced by Burrito
+          $exePath = Get-ChildItem -Path burrito_out -Filter *.exe -Recurse |
+            Select-Object -First 1 -ExpandProperty FullName
+
+          if (-not $exePath) {
+            Write-Error "No .exe found in burrito_out/ — cannot sign"
+            exit 1
+          }
+
+          Write-Host "Signing: $exePath"
+
+          # Decode base64 PFX to a temporary file (never written to disk
+          # in cleartext; the PFX itself is encrypted at rest).
+          $pfxPath = Join-Path $env:RUNNER_TEMP 'codesign.pfx'
+          [Convert]::FromBase64String($env:CODESIGN_CERT_BASE64) |
+            Set-Content -Path $pfxPath -AsByteStream
+
+          try {
+            # Import cert into the current-user "My" store so signtool can
+            # find it by subject name.  -Exportable lets us clean up later.
+            $pwd = ConvertTo-SecureString $env:CODESIGN_PASSWORD -AsPlainText -Force
+            Import-PfxCertificate -FilePath $pfxPath `
+              -CertStoreLocation Cert:\CurrentUser\My `
+              -Password $pwd -Exportable
+
+            # Determine the certificate subject / SHA-1 thumbprint.
+            # signtool supports /sha1 (thumbprint) for unambiguous selection.
+            $cert = Get-PfxData -FilePath $pfxPath -Password $pwd |
+              Select-Object -ExpandProperty EndEntityCertificates |
+              Select-Object -First 1
+            $thumbprint = $cert.Certificate.Thumbprint
+            Write-Host "Certificate thumbprint: $thumbprint"
+
+            # ── signtool.exe ────────────────────────────────────────────
+            # Windows SDK ships signtool.  windows-latest images include
+            # it; locate it via the installed SDK path.
+            $signtool = Get-ChildItem -Path 'C:\Program Files (x86)\Windows Kits\10\bin' `
+              -Recurse -Filter signtool.exe |
+              Where-Object { $_.FullName -match '\\x64\\' } |
+              Sort-Object FullName -Descending |
+              Select-Object -First 1 -ExpandProperty FullName
+
+            if (-not $signtool) {
+              Write-Error 'signtool.exe not found — is Windows SDK installed?'
+              exit 1
+            }
+
+            Write-Host "Using signtool: $signtool"
+
+            # Sign with SHA-256 digest (modern Authenticode).
+            # /tr  — RFC 3161 timestamp server (DigiCert)
+            # /td  — timestamp digest algorithm
+            # /fd  — file digest algorithm
+            & $signtool sign /sha1 $thumbprint `
+              /fd SHA256 `
+              /tr http://timestamp.digicert.com `
+              /td SHA256 `
+              /a `
+              $exePath
+
+            if ($LASTEXITCODE -ne 0) {
+              Write-Error "signtool exited with code $LASTEXITCODE"
+              exit $LASTEXITCODE
+            }
+
+            Write-Host '✅ Authenticode signing succeeded'
+
+            # Verify signature
+            & $signtool verify /pa $exePath
+            if ($LASTEXITCODE -ne 0) {
+              Write-Error "Signature verification failed (exit $LASTEXITCODE)"
+              exit $LASTEXITCODE
+            }
+            Write-Host '✅ Signature verification passed'
+          }
+          finally {
+            # ── Cleanup ────────────────────────────────────────────────
+            # Remove cert from user store regardless of signing outcome.
+            Get-ChildItem Cert:\CurrentUser\My |
+              Where-Object { $_.Thumbprint -eq $thumbprint } |
+              Remove-Item
+
+            Remove-Item -Force -ErrorAction SilentlyContinue $pfxPath
+          }
+
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
@@ -151,7 +254,7 @@ jobs:
           body: |
             ## Burrito single-binary release
 
-            Unsigned binaries produced by `.github/workflows/burrito-release.yml` (bd-236).
+            Binaries produced by `.github/workflows/burrito-release.yml` (bd-236).
 
             | Platform | File |
             |---|---|
@@ -162,7 +265,7 @@ jobs:
             ### Known limitations (follow-up tickets tracked)
 
             - **No macOS codesigning/notarization** (bd-241) — run `xattr -c <binary>` to bypass Gatekeeper
-            - **No Windows Authenticode signing** (bd-240) — SmartScreen may warn
+            - **Windows Authenticode signing** (bd-240) — applied when `WINDOWS_CODESIGN_CERT_BASE64` and `WINDOWS_CODESIGN_PASSWORD` secrets are configured; SmartScreen may still warn if unsigned (e.g. fork builds)
             - **No `linux_arm64` / `macos_x86_64` / `linux_musl`** (bd-239, follow-ups)
 
             ### Verification

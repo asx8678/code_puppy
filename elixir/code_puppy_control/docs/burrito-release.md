@@ -120,10 +120,61 @@ On a tag push, each platform builds a Burrito binary, uploads it as a workflow a
 
 ### Codesigning
 
-The CI-produced binaries are **unsigned**. Codesigning is tracked separately:
+| Platform | Status | Issue |
+|----------|--------|-------|
+| Windows (Authenticode) | ✅ Signed when secrets configured | bd-240 |
+| macOS (codesign + notarize) | ❌ Unsigned | bd-241 |
 
-- **Windows Authenticode** → bd-240
-- **macOS codesigning/notarization** → bd-241
+#### Windows Authenticode Signing (bd-240)
+
+The Windows binary is automatically signed with `signtool.exe` during CI when the following **repository secrets** are configured:
+
+| Secret | Description |
+|--------|-------------|
+| `WINDOWS_CODESIGN_CERT_BASE64` | Base64-encoded PFX code-signing certificate (EV or OV) |
+| `WINDOWS_CODESIGN_PASSWORD` | Password protecting the PFX file |
+
+**If either secret is absent, the signing step is silently skipped** — the workflow still succeeds, but the binary will be unsigned and Windows SmartScreen may warn on launch.
+
+##### Setting up the secrets
+
+1. Obtain an **OV or EV code-signing certificate** from a trusted CA (DigiCert, Sectigo, GlobalSign, etc.).
+2. Export the certificate as a **PFX** (.pfx / .p12) file with a strong password.
+3. Base64-encode the PFX:
+   ```bash
+   base64 -i codesign.pfx | pbcopy   # macOS
+   # or:  certutil -encode codesign.pfx codesign.b64  # Windows
+   ```
+4. In GitHub → **Settings → Secrets and variables → Actions**, add:
+   - `WINDOWS_CODESIGN_CERT_BASE64` = the base64 content
+   - `WINDOWS_CODESIGN_PASSWORD` = the PFX password
+
+##### How it works in CI
+
+The signing step runs **after** the Burrito build and **before** artifact upload:
+
+1. Decode `WINDOWS_CODESIGN_CERT_BASE64` to a temporary `.pfx` file
+2. Import the PFX into the current-user "My" certificate store
+3. Sign the `.exe` with `signtool.exe sign /sha1 <thumbprint> /fd SHA256 /tr http://timestamp.digicert.com /td SHA256`
+4. Verify the signature with `signtool.exe verify /pa`
+5. Remove the certificate from the store and delete the `.pfx` file
+
+The timestamp server (`http://timestamp.digicert.com`) ensures the signature remains valid after the certificate expires.
+
+##### Signing locally
+
+If you need to sign a Windows binary outside CI (e.g. a manual release), use the provided helper script:
+
+```powershell
+# From the project root, after building the Windows target:
+powershell -File scripts/sign-windows.ps1 -ExePath elixir/code_puppy_control/burrito_out/code_puppy_control_windows_x86_64.exe
+```
+
+Or directly with `signtool.exe`:
+```powershell
+signtool sign /f codesign.pfx /p <password> /fd SHA256 /tr http://timestamp.digicert.com /td SHA256 <binary.exe>
+signtool verify /pa <binary.exe>
+```
 
 ### Missing targets
 
@@ -147,9 +198,12 @@ xattr -c ./code_puppy_control_macos_arm64
 
 ### Windows SmartScreen
 
-Windows SmartScreen may flag unsigned executables with an "unrecognized app" warning. Users can click "More info" → "Run anyway".
+Windows SmartScreen flags unsigned executables with an "unrecognized app" warning.
 
-> **Future work:** Authenticode signing with a code-signing certificate.
+- **With Authenticode signing** (bd-240): If the CI secrets `WINDOWS_CODESIGN_CERT_BASE64` and `WINDOWS_CODESIGN_PASSWORD` are configured, the Windows binary is signed and SmartScreen will not warn. An **EV certificate** provides immediate SmartScreen trust; an **OV certificate** requires the binary to build reputation over time.
+- **Without signing**: Users can click "More info" → "Run anyway".
+
+See [Windows Authenticode Signing](#windows-authenticode-signing-bd-240) above for setup instructions.
 
 ### Linux (musl/Alpine)
 
