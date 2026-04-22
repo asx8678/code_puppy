@@ -109,18 +109,19 @@ defmodule CodePuppyControl.LLM.Providers.Anthropic do
   defp build_request(messages, tools, opts) do
     base_url = Keyword.get(opts, :base_url, @default_base_url)
     model = Keyword.get(opts, :model, @default_model)
-    api_key = Keyword.get(opts, :api_key) || resolve_api_key()
+    api_key = Keyword.get(opts, :api_key)
     stream = Keyword.get(opts, :stream, false)
     max_tokens = Keyword.get(opts, :max_tokens, 4096)
+    extra_headers = Keyword.get(opts, :extra_headers, [])
 
     url = "#{base_url}/v1/messages"
 
     headers =
       [
-        {"x-api-key", api_key},
         {"anthropic-version", @api_version},
         {"content-type", "application/json"}
       ]
+      |> maybe_put_api_key(api_key, extra_headers)
       |> merge_extra_headers(opts)
 
     {system_text, chat_messages} = extract_system_messages(messages)
@@ -575,6 +576,33 @@ defmodule CodePuppyControl.LLM.Providers.Anthropic do
   end
 
   # ── Private: Config ───────────────────────────────────────────────────────
+
+  defp maybe_put_api_key(headers, api_key, extra_headers) do
+    cond do
+      has_authorization_header?(extra_headers) ->
+        headers
+
+      is_binary(api_key) and String.trim(api_key) != "" ->
+        [{"x-api-key", api_key} | headers]
+
+      true ->
+        resolved = resolve_api_key()
+
+        if is_binary(resolved) and String.trim(resolved) != "" do
+          [{"x-api-key", resolved} | headers]
+        else
+          headers
+        end
+    end
+  end
+
+  defp has_authorization_header?(headers) when is_list(headers) do
+    Enum.any?(headers, fn {name, value} ->
+      String.downcase(name) == "authorization" and is_binary(value) and String.trim(value) != ""
+    end)
+  end
+
+  defp has_authorization_header?(_), do: false
 
   # Merge extra_headers from opts into the header list.
   # extra_headers is a list of {key, value} tuples from Handle.to_provider_opts/1.

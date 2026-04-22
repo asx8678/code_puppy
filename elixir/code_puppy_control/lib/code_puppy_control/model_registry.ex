@@ -31,6 +31,7 @@ defmodule CodePuppyControl.ModelRegistry do
   - `"zai_api"` - ZAI API models
   - `"cerebras"` - Cerebras models
   - `"claude_code"` - Claude Code OAuth models
+  - `"chatgpt_oauth"` - ChatGPT OAuth Codex models
   - `"openrouter"` - OpenRouter multi-provider gateway
   - `"round_robin"` - Round-robin model rotation
   - `"gemini"` - Google Gemini models
@@ -87,6 +88,7 @@ defmodule CodePuppyControl.ModelRegistry do
     "zai_api",
     "cerebras",
     "claude_code",
+    "chatgpt_oauth",
     "openrouter",
     "round_robin",
     "gemini",

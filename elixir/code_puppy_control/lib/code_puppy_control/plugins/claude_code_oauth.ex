@@ -12,6 +12,7 @@ defmodule CodePuppyControl.Plugins.ClaudeCodeOAuth do
 
   alias CodePuppyControl.Callbacks
   alias CodePuppyControl.Auth.ClaudeOAuth
+  alias CodePuppyControl.Config.Isolation
 
   @impl true
   def name, do: "claude_code_oauth"
@@ -37,10 +38,13 @@ defmodule CodePuppyControl.Plugins.ClaudeCodeOAuth do
       {:ok, tokens} ->
         if tokens["access_token"] do
           case ClaudeOAuth.get_valid_access_token() do
-            nil ->
-              IO.puts("⚠️ Claude Code OAuth token expired. Run /claude-code-auth to re-authenticate.")
-            _token ->
+            {:ok, _token} ->
               :ok
+
+            {:error, _} ->
+              IO.puts(
+                "⚠️ Claude Code OAuth token expired. Run /claude-code-auth to re-authenticate."
+              )
           end
         end
 
@@ -53,7 +57,8 @@ defmodule CodePuppyControl.Plugins.ClaudeCodeOAuth do
   def _custom_help do
     [
       {"claude-code-auth", "Authenticate with Claude Code via OAuth and import available models"},
-      {"claude-code-status", "Check Claude Code OAuth authentication status and configured models"},
+      {"claude-code-status",
+       "Check Claude Code OAuth authentication status and configured models"},
       {"claude-code-logout", "Remove Claude Code OAuth tokens and imported models"}
     ]
   end
@@ -63,15 +68,23 @@ defmodule CodePuppyControl.Plugins.ClaudeCodeOAuth do
     case name do
       "claude-code-auth" ->
         IO.puts("Starting Claude Code OAuth authentication…")
-        # TODO(bd-287): Implement full PKCE browser flow
-        IO.puts("🐾 OAuth browser flow not yet implemented in Elixir. Track bd-287 for updates.")
-        :handled
+
+        case ClaudeOAuth.run_oauth_flow() do
+          :ok ->
+            IO.puts("✅ Claude Code OAuth authentication complete")
+
+          {:error, reason} ->
+            IO.puts("❌ Claude Code OAuth failed: #{inspect(reason)}")
+        end
+
+        true
 
       "claude-code-status" ->
         case ClaudeOAuth.load_tokens() do
           {:ok, tokens} when is_map_key(tokens, "access_token") ->
             IO.puts("✅ Claude Code OAuth: Authenticated")
             expires_at = tokens["expires_at"]
+
             if expires_at do
               remaining = max(0, trunc(expires_at - System.system_time(:second)))
               hours = div(remaining, 3600)
@@ -83,18 +96,30 @@ defmodule CodePuppyControl.Plugins.ClaudeCodeOAuth do
             IO.puts("🔓 Claude Code OAuth: Not authenticated")
             IO.puts("Run /claude-code-auth to begin the browser sign-in flow.")
         end
-        :handled
+
+        true
 
       "claude-code-logout" ->
         path = ClaudeOAuth.token_storage_path()
+
         if File.exists?(path) do
-          File.rm!(path)
+          Isolation.safe_rm!(path)
           IO.puts("Removed Claude Code OAuth tokens")
         end
-        removed = ClaudeOAuth.remove_models()
-        IO.puts("Removed #{removed} Claude Code models from configuration")
+
+        case ClaudeOAuth.remove_models() do
+          {:ok, count} when count > 0 ->
+            IO.puts("Removed #{count} Claude Code models from configuration")
+
+          {:ok, 0} ->
+            :ok
+
+          {:error, reason} ->
+            IO.puts("Failed to remove models: #{inspect(reason)}")
+        end
+
         IO.puts("✅ Claude Code logout complete")
-        :handled
+        true
 
       _ ->
         nil
@@ -110,16 +135,24 @@ defmodule CodePuppyControl.Plugins.ClaudeCodeOAuth do
 
   @doc false
   def create_model(model_name, model_config, _config) do
-    # TODO(bd-287): Full model creation with ClaudeCacheAsyncClient
-    # For now, return a placeholder that will be wired when the full
-    # LLM provider integration lands.
     IO.puts("Creating Claude Code model: #{model_name}")
-    access_token = ClaudeOAuth.get_valid_access_token()
-    if access_token do
-      %{type: "claude_code", name: model_name, api_key: access_token}
-    else
-      IO.puts("⚠️ No valid access token for Claude Code model #{model_name}")
-      nil
+
+    case ClaudeOAuth.get_valid_access_token() do
+      {:ok, access_token} ->
+        custom_endpoint = Map.get(model_config, "custom_endpoint", %{})
+
+        _updated_model_config =
+          Map.put(
+            model_config,
+            "custom_endpoint",
+            Map.put(custom_endpoint, "api_key", access_token)
+          )
+
+        %{type: "claude_code", name: model_name, api_key: access_token}
+
+      {:error, _reason} ->
+        IO.puts("⚠️ No valid access token for Claude Code model #{model_name}")
+        nil
     end
   end
 end

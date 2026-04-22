@@ -146,13 +146,17 @@ defmodule CodePuppyControl.Auth.ClaudeOAuth do
     case File.read(path) do
       {:ok, data} ->
         case Jason.decode(data) do
-          {:ok, tokens} when is_map(tokens) -> {:ok, tokens}
+          {:ok, tokens} when is_map(tokens) ->
+            {:ok, tokens}
+
           {:error, reason} ->
             Logger.error("Failed to parse OAuth tokens: #{inspect(reason)}")
             {:error, reason}
         end
 
-      {:error, :enoent} -> {:error, :not_found}
+      {:error, :enoent} ->
+        {:error, :not_found}
+
       {:error, reason} ->
         Logger.error("Failed to load OAuth tokens: #{inspect(reason)}")
         {:error, reason}
@@ -180,7 +184,9 @@ defmodule CodePuppyControl.Auth.ClaudeOAuth do
   @spec token_expired?(map()) :: boolean()
   def token_expired?(tokens) when is_map(tokens) do
     case get_expires_at(tokens) do
-      nil -> false
+      nil ->
+        false
+
       expires_at ->
         buffer = calculate_refresh_buffer(tokens["expires_in"])
         System.system_time(:second) >= expires_at - buffer
@@ -245,7 +251,9 @@ defmodule CodePuppyControl.Auth.ClaudeOAuth do
     models
     |> Enum.reduce(%{}, fn name, acc ->
       case parse_model_name(name) do
-        nil -> acc
+        nil ->
+          acc
+
         {family, major, minor, date} ->
           Map.update(acc, family, [{name, major, minor, date}], fn existing ->
             [{name, major, minor, date} | existing]
@@ -272,13 +280,17 @@ defmodule CodePuppyControl.Auth.ClaudeOAuth do
     case File.read(path) do
       {:ok, data} ->
         case Jason.decode(data) do
-          {:ok, models} when is_map(models) -> {:ok, filter_blocked_models(models)}
+          {:ok, models} when is_map(models) ->
+            {:ok, filter_blocked_models(models)}
+
           {:error, reason} ->
             Logger.error("Failed to parse Claude models: #{inspect(reason)}")
             {:ok, %{}}
         end
 
-      {:error, :enoent} -> {:ok, %{}}
+      {:error, :enoent} ->
+        {:ok, %{}}
+
       {:error, reason} ->
         Logger.error("Failed to load Claude models: #{inspect(reason)}")
         {:ok, %{}}
@@ -304,16 +316,17 @@ defmodule CodePuppyControl.Auth.ClaudeOAuth do
   @spec add_models([String.t()]) :: {:ok, non_neg_integer()} | {:error, term()}
   def add_models(model_names) when is_list(model_names) do
     filtered = Enum.reject(model_names, &blocked_model?/1)
+    access_token = current_access_token()
 
     {models, added} =
       Enum.reduce(filtered, {%{}, 0}, fn name, {acc, count} ->
         prefixed = "#{@prefix}#{name}"
-        entry = build_model_entry(name, @default_context_length)
+        entry = build_model_entry(name, @default_context_length, access_token)
         new_acc = Map.put(acc, prefixed, entry)
 
         if name in @long_context_models do
           long_prefixed = "#{@prefix}#{name}-long"
-          long_entry = build_model_entry(name, @long_context_length)
+          long_entry = build_model_entry(name, @long_context_length, access_token)
           {Map.put(new_acc, long_prefixed, long_entry), count + 2}
         else
           {new_acc, count + 1}
@@ -325,7 +338,9 @@ defmodule CodePuppyControl.Auth.ClaudeOAuth do
       Logger.info("Added #{added} Claude Code models")
       {:ok, added}
     rescue
-      e -> Logger.error("Error adding models: #{inspect(e)}"); {:error, e}
+      e ->
+        Logger.error("Error adding models: #{inspect(e)}")
+        {:error, e}
     end
   end
 
@@ -347,7 +362,9 @@ defmodule CodePuppyControl.Auth.ClaudeOAuth do
             Logger.info("Removed #{length(to_remove)} Claude Code models")
             {:ok, length(to_remove)}
           rescue
-            e -> Logger.error("Error removing models: #{inspect(e)}"); {:error, e}
+            e ->
+              Logger.error("Error removing models: #{inspect(e)}")
+              {:error, e}
           end
         end
     end
@@ -376,7 +393,8 @@ defmodule CodePuppyControl.Auth.ClaudeOAuth do
         date = if date_s == "", do: 99_999_999, else: String.to_integer(date_s)
         {family, major, 0, date}
 
-      true -> nil
+      true ->
+        nil
     end
   end
 
@@ -425,24 +443,36 @@ defmodule CodePuppyControl.Auth.ClaudeOAuth do
   defp get_expires_at(_), do: nil
 
   defp calculate_refresh_buffer(nil), do: @token_refresh_buffer_seconds
+
   defp calculate_refresh_buffer(expires_in) when is_number(expires_in) do
-    min(@token_refresh_buffer_seconds,
-        max(@min_refresh_buffer_seconds, trunc(expires_in * 0.1)))
+    min(
+      @token_refresh_buffer_seconds,
+      max(@min_refresh_buffer_seconds, trunc(expires_in * 0.1))
+    )
   end
+
   defp calculate_refresh_buffer(_), do: @token_refresh_buffer_seconds
 
   # ── Private: Model Entry Builder ──────────────────────────────────────
 
-  defp build_model_entry(model_name, context_length) do
-    settings = base_supported_settings() ++
-      if String.contains?(String.downcase(model_name), "opus"), do: ["effort"], else: []
+  defp current_access_token do
+    case load_tokens() do
+      {:ok, %{"access_token" => access_token}} when is_binary(access_token) -> access_token
+      _ -> ""
+    end
+  end
+
+  defp build_model_entry(model_name, context_length, access_token) do
+    settings =
+      base_supported_settings() ++
+        if String.contains?(String.downcase(model_name), "opus"), do: ["effort"], else: []
 
     %{
       "type" => "claude_code",
       "name" => model_name,
       "custom_endpoint" => %{
         "url" => @api_base_url,
-        "api_key" => "",
+        "api_key" => access_token,
         "headers" => %{
           "anthropic-beta" => "oauth-2025-04-20,interleaved-thinking-2025-05-14",
           "x-app" => "cli",
@@ -462,16 +492,21 @@ defmodule CodePuppyControl.Auth.ClaudeOAuth do
   # ── Private: HTTP ─────────────────────────────────────────────────────
 
   defp httpc_opts do
-    [timeout: 30_000, connect_timeout: 10_000,
-     ssl: [verify: :verify_peer, cacerts: :public_key.cacerts_get()]]
+    [
+      timeout: 30_000,
+      connect_timeout: 10_000,
+      ssl: [verify: :verify_peer, cacerts: :public_key.cacerts_get()]
+    ]
   end
 
   defp parse_models_response(body) do
     case Jason.decode(body) do
       {:ok, %{"data" => models}} when is_list(models) ->
-        names = models
+        names =
+          models
           |> Enum.map(fn m -> m["id"] || m["name"] end)
           |> Enum.filter(&is_binary/1)
+
         {:ok, names}
 
       {:ok, _} ->
@@ -489,7 +524,65 @@ defmodule CodePuppyControl.Auth.ClaudeOAuth do
   @type max_per_family :: pos_integer() | %{String.t() => pos_integer()}
 
   defp resolve_limit(_, max) when is_integer(max), do: max
+
   defp resolve_limit(family, max) when is_map(max) do
     Map.get(max, family, Map.get(max, "default", 2))
+  end
+
+  # ── Public API: Token Refresh & Model Token Updates ───────────────────
+
+  @doc """
+  Run the interactive Claude Code OAuth browser flow.
+  """
+  @spec run_oauth_flow() :: :ok | {:error, term()}
+  def run_oauth_flow do
+    CodePuppyControl.Auth.ClaudeOAuth.Flow.run_oauth_flow()
+  end
+
+  @doc """
+  Get a valid access token, refreshing if needed.
+  """
+  @spec get_valid_access_token() :: {:ok, String.t()} | {:error, term()}
+  def get_valid_access_token do
+    CodePuppyControl.Auth.ClaudeOAuth.Flow.get_valid_access_token()
+  end
+
+  @doc """
+  Refresh the access token using the stored refresh token.
+  """
+  @spec refresh_access_token() :: {:ok, String.t()} | {:error, term()}
+  def refresh_access_token do
+    CodePuppyControl.Auth.ClaudeOAuth.Flow.refresh_access_token()
+  end
+
+  @doc """
+  Update the access token in all saved Claude Code model entries.
+
+  This preserves the Python plugin semantic where the live OAuth access token
+  is stored in `custom_endpoint.api_key` for `oauth_source == "claude-code-plugin"`.
+  """
+  @spec update_model_tokens(String.t()) :: :ok | {:error, term()}
+  def update_model_tokens(access_token) when is_binary(access_token) do
+    {:ok, models} = load_models()
+
+    updated =
+      models
+      |> Enum.map(fn {name, config} ->
+        if config["oauth_source"] == "claude-code-plugin" do
+          custom_endpoint = Map.get(config, "custom_endpoint", %{})
+          updated_endpoint = Map.put(custom_endpoint, "api_key", access_token)
+          {name, Map.put(config, "custom_endpoint", updated_endpoint)}
+        else
+          {name, config}
+        end
+      end)
+      |> Map.new()
+
+    try do
+      save_models(updated)
+      :ok
+    rescue
+      e -> {:error, e}
+    end
   end
 end

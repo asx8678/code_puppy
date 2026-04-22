@@ -5,6 +5,7 @@ defmodule CodePuppyControl.Auth.ChatGptOAuth do
 
   require Logger
   alias CodePuppyControl.Config.{Isolation, Paths}
+  alias CodePuppyControl.Auth.{BrowserHelper, OAuthHtml}
 
   @config %{
     issuer: "https://auth.openai.com",
@@ -444,8 +445,7 @@ defmodule CodePuppyControl.Auth.ChatGptOAuth do
   end
 
   @doc """
-  Run the full OAuth flow: start callback server, open browser, wait for callback.
-  Returns  on success,  on failure.
+  Run the full OAuth flow: start callback server, open browser, and wait for the callback.
   """
   @spec run_oauth_flow() :: :ok | {:error, term()}
   def run_oauth_flow do
@@ -461,7 +461,7 @@ defmodule CodePuppyControl.Auth.ChatGptOAuth do
     case start_callback_server(context) do
       {:ok, server_ref} ->
         Logger.info("Open this URL in your browser: " <> auth_url)
-        open_browser(auth_url)
+        BrowserHelper.open_url(auth_url)
         Logger.info("Waiting for authentication callback...")
 
         case wait_for_callback(server_ref, @config.callback_timeout) do
@@ -493,29 +493,13 @@ defmodule CodePuppyControl.Auth.ChatGptOAuth do
     end
   end
 
-  @doc "Open a URL in the user browser (best-effort)."
-  @spec open_browser(String.t()) :: :ok
-  def open_browser(url) do
-    case :os.type() do
-      {:unix, :darwin} -> System.cmd("open", [url], stderr_to_stdout: true)
-      {:unix, _} -> System.cmd("xdg-open", [url], stderr_to_stdout: true)
-      {:win32, _} -> System.cmd("cmd", ["/c", "start", url], stderr_to_stdout: true)
-    end
-
-    :ok
-  rescue
-    e ->
-      Logger.warning("Could not open browser automatically: " <> Exception.message(e))
-      :ok
-  end
-
   defp start_callback_server(context) do
     parent = self()
 
     Task.start(fn ->
       case :gen_tcp.listen(@config.required_port, [
              :binary,
-             packet: :http,
+             packet: :raw,
              active: false,
              reuseaddr: true
            ]) do
@@ -560,7 +544,7 @@ defmodule CodePuppyControl.Auth.ChatGptOAuth do
         handle_callback(sock, query, context, parent)
 
       {:ok, "/success", _query} ->
-        respond_html(sock, 200, oauth_success_html())
+        respond_html(sock, 200, OAuthHtml.success_html("ChatGPT"))
         send(parent, :auth_displayed)
 
       _ ->
@@ -591,12 +575,17 @@ defmodule CodePuppyControl.Auth.ChatGptOAuth do
             send(parent, {:auth_success, final_tokens})
 
           {:error, reason} ->
-            respond_html(sock, 500, "Token exchange failed: " <> inspect(reason))
+            respond_html(
+              sock,
+              500,
+              OAuthHtml.failure_html("ChatGPT", "Token exchange failed: " <> inspect(reason))
+            )
+
             send(parent, {:auth_error, reason})
         end
 
       _ ->
-        respond_html(sock, 400, "Missing auth code")
+        respond_html(sock, 400, OAuthHtml.failure_html("ChatGPT", "Missing auth code"))
         send(parent, {:auth_error, :missing_code})
     end
   end
@@ -605,7 +594,7 @@ defmodule CodePuppyControl.Auth.ChatGptOAuth do
     case String.split(request, "
 ", parts: 2) do
       [first_line | _] ->
-        case String.split(first_line, " ") do
+        case String.split(String.trim(first_line), " ") do
           [_method, full_path, _version] ->
             %{path: path, query: query} = URI.parse(full_path)
             {:ok, path, query || ""}
@@ -634,6 +623,7 @@ defmodule CodePuppyControl.Auth.ChatGptOAuth do
     response = header <> "
 content-type: text/html; charset=utf-8
 content-length: " <> cl <> "
+connection: close
 
 " <> body
     :gen_tcp.send(sock, response)
@@ -643,17 +633,10 @@ content-length: " <> cl <> "
     response = "HTTP/1.1 302 Found
 location: " <> url <> "
 content-length: 0
+connection: close
 
 "
     :gen_tcp.send(sock, response)
-  end
-
-  defp oauth_success_html do
-    dog = <<0xF0, 0x9F, 0x90, 0xB6>>
-
-    ~s(<html><body style="font-family:sans-serif;text-align:center;padding:3em;"><h1>) <>
-      dog <>
-      ~s( ChatGPT Authentication Successful!</h1><p>You can now close this window and return to Code Puppy.</p></body></html>)
   end
 
   defp wait_for_callback(_server_ref, timeout_secs) do

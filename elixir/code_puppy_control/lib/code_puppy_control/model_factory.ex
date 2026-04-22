@@ -37,14 +37,15 @@ defmodule CodePuppyControl.ModelFactory do
   | `gemini`           | ✅ Full  | Google Gemini                   |
   | `gemini_oauth`     | ✅ Full  | Gemini OAuth (OpenAI-compat)    |
   | `custom_gemini`    | ✅ Full  | Custom Gemini-compatible        |
-  | `claude_code`      | ⏳ Stub  | Phase 4 (bd-166) OAuth          |
-  | `chatgpt_oauth`    | ⏳ Stub  | Phase 4 (bd-166) OAuth          |
+  | `claude_code`      | ✅ Full  | Claude Code OAuth bearer auth   |
+  | `chatgpt_oauth`    | ⚠️ Partial | Runtime auth wired; full Codex Responses parity pending |
   | `round_robin`      | ➡️ Defer | Handled by routing/             |
   """
 
+  alias CodePuppyControl.Auth.RuntimeConnection
   alias CodePuppyControl.ModelFactory.{Credentials, Handle}
   alias CodePuppyControl.ModelRegistry
-  alias CodePuppyControl.LLM.Providers.{OpenAI, Anthropic}
+  alias CodePuppyControl.LLM.Providers.{OpenAI, Anthropic, Google, Azure, Groq, Together}
 
   require Logger
 
@@ -54,15 +55,18 @@ defmodule CodePuppyControl.ModelFactory do
     "anthropic" => Anthropic,
     "custom_openai" => OpenAI,
     "custom_anthropic" => Anthropic,
-    "azure_openai" => OpenAI,
+    "azure_openai" => Azure,
     "cerebras" => OpenAI,
     "zai_coding" => OpenAI,
     "zai_api" => OpenAI,
     "openrouter" => OpenAI,
-    "gemini" => OpenAI,
-    "gemini_oauth" => OpenAI,
-    "custom_gemini" => OpenAI,
-    "claude_code" => Anthropic
+    "gemini" => Google,
+    "gemini_oauth" => Google,
+    "custom_gemini" => Google,
+    "claude_code" => Anthropic,
+    "chatgpt_oauth" => OpenAI,
+    "groq" => Groq,
+    "together" => Together
   }
 
   # Default API base URLs per provider type
@@ -71,10 +75,13 @@ defmodule CodePuppyControl.ModelFactory do
     "anthropic" => "https://api.anthropic.com",
     "cerebras" => "https://api.cerebras.ai",
     "openrouter" => "https://openrouter.ai/api",
-    "gemini" => "https://generativelanguage.googleapis.com/v1beta/openai"
+    "gemini" => "https://generativelanguage.googleapis.com",
+    "groq" => "https://api.groq.com",
+    "together" => "https://api.together.xyz",
+    "azure_openai" => "https://YOUR_RESOURCE.openai.azure.com"
   }
 
-  # OAuth types deferred to Phase 4
+  # OAuth-backed model types requiring runtime credential resolution
   @oauth_types ["claude_code", "chatgpt_oauth"]
 
   # ============================================================================
@@ -227,12 +234,6 @@ defmodule CodePuppyControl.ModelFactory do
   # Private: Provider Resolution
   # ============================================================================
 
-  # OAuth types → return stub error
-  defp do_resolve(model_name, _config, provider_type) when provider_type in @oauth_types do
-    Logger.debug("ModelFactory: #{provider_type} model '#{model_name}' is Phase 4 (bd-166)")
-    {:error, {:oauth_phase_4, provider_type, model_name}}
-  end
-
   # Round-robin → not handled here, delegates to routing
   defp do_resolve(_model_name, _config, "round_robin") do
     {:error, :round_robin_use_routing}
@@ -250,57 +251,34 @@ defmodule CodePuppyControl.ModelFactory do
   end
 
   defp build_handle(model_name, provider_type, provider_mod) do
-    config = ModelRegistry.get_config(model_name)
-    api_key = Credentials.resolve_api_key(provider_type, config)
+    config = ModelRegistry.get_config(model_name) || %{}
 
-    {base_url, extra_headers} = resolve_endpoint(config, provider_type)
+    with {:ok, runtime} <- RuntimeConnection.resolve(config, model_name) do
+      api_key = resolve_handle_api_key(provider_type, config, runtime.api_key)
+      base_url = runtime.base_url || Map.get(@default_base_urls, provider_type)
+      extra_headers = runtime.extra_headers
 
-    # Build model opts: the API-facing model name + any config overrides
-    api_model_name = Map.get(config, "name", model_name)
+      # Build model opts: the API-facing model name + any config overrides
+      api_model_name = Map.get(config, "name", model_name)
 
-    model_opts =
-      []
-      |> maybe_put_kw(:model, api_model_name)
-      |> maybe_put_kw(:temperature, Map.get(config, "temperature"))
-      |> maybe_put_kw(:max_tokens, Map.get(config, "max_output_tokens"))
-      |> merge_config_opts(config)
+      model_opts =
+        []
+        |> maybe_put_kw(:model, api_model_name)
+        |> maybe_put_kw(:temperature, Map.get(config, "temperature"))
+        |> maybe_put_kw(:max_tokens, Map.get(config, "max_output_tokens"))
+        |> merge_config_opts(config)
 
-    handle = %Handle{
-      model_name: model_name,
-      provider_module: provider_mod,
-      provider_config: config,
-      api_key: api_key,
-      base_url: base_url,
-      extra_headers: extra_headers,
-      model_opts: model_opts
-    }
+      handle = %Handle{
+        model_name: model_name,
+        provider_module: provider_mod,
+        provider_config: config,
+        api_key: api_key,
+        base_url: base_url,
+        extra_headers: extra_headers,
+        model_opts: model_opts
+      }
 
-    {:ok, handle}
-  end
-
-  # ── Endpoint Resolution ───────────────────────────────────────────────────
-
-  # Custom endpoints: extract URL, headers, and optional api_key from config
-  defp resolve_endpoint(config, _provider_type) do
-    case Map.get(config, "custom_endpoint") do
-      nil ->
-        # Use provider default base URL
-        provider_type = ModelRegistry.get_model_type(config)
-        base_url = Map.get(@default_base_urls, provider_type)
-        {base_url, []}
-
-      custom_config ->
-        case Credentials.resolve_custom_endpoint(custom_config) do
-          {:ok, {url, headers, _custom_api_key}} ->
-            {url, headers}
-
-          {:error, reason} ->
-            Logger.warning(
-              "ModelFactory: custom endpoint config error for #{inspect(config)}: #{inspect(reason)}"
-            )
-
-            {nil, []}
-        end
+      {:ok, handle}
     end
   end
 
@@ -308,6 +286,17 @@ defmodule CodePuppyControl.ModelFactory do
 
   defp maybe_put_kw(opts, _key, nil), do: opts
   defp maybe_put_kw(opts, key, value), do: Keyword.put(opts, key, value)
+
+  defp resolve_handle_api_key(provider_type, _config, runtime_api_key)
+       when provider_type in @oauth_types do
+    runtime_api_key
+  end
+
+  defp resolve_handle_api_key(provider_type, config, nil) do
+    Credentials.resolve_api_key(provider_type, config)
+  end
+
+  defp resolve_handle_api_key(_provider_type, _config, runtime_api_key), do: runtime_api_key
 
   # Merge any extra opts from model config (e.g., "extra_body", "http2", etc.)
   defp merge_config_opts(opts, config) do

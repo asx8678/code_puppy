@@ -39,6 +39,7 @@ defmodule CodePuppyControl.LLM do
   model name from the registry config.
   """
 
+  alias CodePuppyControl.Auth.RuntimeConnection
   alias CodePuppyControl.LLM.Provider
   alias CodePuppyControl.ModelFactory.Handle
   alias CodePuppyControl.ModelRegistry
@@ -54,15 +55,18 @@ defmodule CodePuppyControl.LLM do
     "anthropic" => CodePuppyControl.LLM.Providers.Anthropic,
     "custom_openai" => CodePuppyControl.LLM.Providers.OpenAI,
     "custom_anthropic" => CodePuppyControl.LLM.Providers.Anthropic,
-    "azure_openai" => CodePuppyControl.LLM.Providers.OpenAI,
+    "azure_openai" => CodePuppyControl.LLM.Providers.Azure,
     "cerebras" => CodePuppyControl.LLM.Providers.OpenAI,
     "zai_coding" => CodePuppyControl.LLM.Providers.OpenAI,
     "zai_api" => CodePuppyControl.LLM.Providers.OpenAI,
     "openrouter" => CodePuppyControl.LLM.Providers.OpenAI,
-    "gemini" => CodePuppyControl.LLM.Providers.OpenAI,
-    "gemini_oauth" => CodePuppyControl.LLM.Providers.OpenAI,
-    "custom_gemini" => CodePuppyControl.LLM.Providers.OpenAI,
-    "claude_code" => CodePuppyControl.LLM.Providers.Anthropic
+    "gemini" => CodePuppyControl.LLM.Providers.Google,
+    "gemini_oauth" => CodePuppyControl.LLM.Providers.Google,
+    "custom_gemini" => CodePuppyControl.LLM.Providers.Google,
+    "claude_code" => CodePuppyControl.LLM.Providers.Anthropic,
+    "chatgpt_oauth" => CodePuppyControl.LLM.Providers.OpenAI,
+    "groq" => CodePuppyControl.LLM.Providers.Groq,
+    "together" => CodePuppyControl.LLM.Providers.Together
   }
 
   # ── chat/2,3 ──────────────────────────────────────────────────────────────
@@ -85,15 +89,6 @@ defmodule CodePuppyControl.LLM do
     result
   end
 
-  @doc """
-  Non-streaming chat completion via model name or explicit provider.
-
-  ## Options
-
-  - `:model` — Model name for registry lookup (required unless `:provider` given)
-  - `:provider` — Provider module override (skips registry lookup)
-  - All other options are forwarded to the provider
-  """
   @spec chat([Provider.message()], [Provider.tool()], keyword()) ::
           {:ok, Provider.response()} | {:error, term()}
   def chat(messages, tools, opts)
@@ -130,9 +125,6 @@ defmodule CodePuppyControl.LLM do
     result
   end
 
-  @doc """
-  Streaming chat completion via model name or explicit provider.
-  """
   @spec stream_chat(
           [Provider.message()],
           [Provider.tool()],
@@ -201,15 +193,21 @@ defmodule CodePuppyControl.LLM do
         {:ok, provider_mod, opts}
 
       model_name = Keyword.get(opts, :model) ->
+        config = ModelRegistry.get_config(model_name) || %{}
+
         case provider_for(model_name) do
           {:ok, provider_mod} ->
-            resolved_opts =
-              opts
-              |> resolve_api_key(provider_mod, model_name)
-              |> resolve_base_url(model_name)
-              |> Keyword.put(:model, resolve_model_api_name(model_name))
+            with {:ok, runtime} <- RuntimeConnection.resolve(config, model_name) do
+              resolved_opts =
+                opts
+                |> maybe_put_opt(:api_key, runtime.api_key)
+                |> maybe_put_opt(:base_url, runtime.base_url)
+                |> merge_extra_headers(runtime.extra_headers)
+                |> resolve_api_key(provider_mod, model_name)
+                |> Keyword.put(:model, resolve_model_api_name(model_name))
 
-            {:ok, provider_mod, resolved_opts}
+              {:ok, provider_mod, resolved_opts}
+            end
 
           error ->
             error
@@ -225,21 +223,15 @@ defmodule CodePuppyControl.LLM do
       opts
     else
       config = ModelRegistry.get_config(model_name) || %{}
-      api_key_env = config["api_key_env"] || default_api_key_env(provider_mod)
-      api_key = CodePuppyControl.ModelFactory.Credentials.env_or_store(api_key_env)
-      Keyword.put(opts, :api_key, api_key)
-    end
-  end
 
-  defp resolve_base_url(opts, model_name) do
-    if Keyword.has_key?(opts, :base_url) do
-      opts
-    else
-      config = ModelRegistry.get_config(model_name) || %{}
+      case ModelRegistry.get_model_type(config) do
+        provider_type when provider_type in ["claude_code", "chatgpt_oauth"] ->
+          opts
 
-      case config["custom_endpoint"] do
-        %{"url" => url} -> Keyword.put(opts, :base_url, url)
-        _ -> opts
+        _ ->
+          api_key_env = config["api_key_env"] || default_api_key_env(provider_mod)
+          api_key = CodePuppyControl.ModelFactory.Credentials.env_or_store(api_key_env)
+          Keyword.put(opts, :api_key, api_key)
       end
     end
   end
@@ -249,8 +241,23 @@ defmodule CodePuppyControl.LLM do
     config["name"] || model_name
   end
 
+  defp maybe_put_opt(opts, _key, nil), do: opts
+  defp maybe_put_opt(opts, _key, []), do: opts
+  defp maybe_put_opt(opts, key, value), do: Keyword.put_new(opts, key, value)
+
+  defp merge_extra_headers(opts, []), do: opts
+
+  defp merge_extra_headers(opts, extra_headers) when is_list(extra_headers) do
+    existing = Keyword.get(opts, :extra_headers, [])
+    Keyword.put(opts, :extra_headers, existing ++ extra_headers)
+  end
+
   defp default_api_key_env(CodePuppyControl.LLM.Providers.OpenAI), do: "OPENAI_API_KEY"
   defp default_api_key_env(CodePuppyControl.LLM.Providers.Anthropic), do: "ANTHROPIC_API_KEY"
+  defp default_api_key_env(CodePuppyControl.LLM.Providers.Google), do: "GOOGLE_API_KEY"
+  defp default_api_key_env(CodePuppyControl.LLM.Providers.Azure), do: "AZURE_OPENAI_API_KEY"
+  defp default_api_key_env(CodePuppyControl.LLM.Providers.Groq), do: "GROQ_API_KEY"
+  defp default_api_key_env(CodePuppyControl.LLM.Providers.Together), do: "TOGETHER_API_KEY"
   defp default_api_key_env(_), do: "API_KEY"
 
   # ── Rate Limiter Integration (bd-151) ──────────────────────────────────────

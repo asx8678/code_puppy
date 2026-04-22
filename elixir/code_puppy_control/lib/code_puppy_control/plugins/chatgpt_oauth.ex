@@ -1,13 +1,12 @@
 defmodule CodePuppyControl.Plugins.ChatGptOAuth do
   @moduledoc """
-  ChatGPT OAuth plugin - registers auth commands and proactive token refresh.
+  ChatGPT OAuth plugin.
 
-  Implements  to hook into:
-  -  - proactive token refresh at boot
-  -  - , , 
-  -  - help entries for custom commands
+  Registers startup refresh behavior plus the `/chatgpt-auth`,
+  `/chatgpt-status`, and `/chatgpt-logout` custom commands.
 
-  The core OAuth logic lives in .
+  The core OAuth flow and token/model management live in
+  `CodePuppyControl.Auth.ChatGptOAuth`.
   """
 
   use CodePuppyControl.Plugins.PluginBehaviour
