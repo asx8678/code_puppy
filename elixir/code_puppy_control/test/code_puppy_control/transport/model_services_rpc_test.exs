@@ -400,6 +400,56 @@ defmodule CodePuppyControl.Transport.ModelServicesRpcTest do
   end
 
   # ============================================================================
+  # JSON-RPC ID Threading Regression Tests (bd-273)
+  # ============================================================================
+
+  describe "JSON-RPC id threading (bd-273 regression)" do
+    test "workflow.get_status error response echoes request id" do
+      request = %{
+        "jsonrpc" => "2.0",
+        "id" => 42,
+        "method" => "workflow.get_status",
+        "params" => %{"workflow_id" => "nonexistent"}
+      }
+
+      output =
+        capture_stdio([Jason.encode!(request)], fn ->
+          StdioService.run()
+        end)
+
+      response = Jason.decode!(output)
+      assert response["id"] == 42,
+             "JSON-RPC id must be echoed in error response, got: #{inspect(response["id"])}"
+
+      assert response["error"]["code"] == -32_001
+      assert response["error"]["message"] =~ "Workflow not found"
+      # The id must NOT appear in error data (was the pre-bd-273 bug)
+      refute Map.has_key?(response["error"], "data"),
+             "error.data should not contain the request id (was the bd-273 bug)"
+    end
+
+    test "workflow.cancel error response echoes request id" do
+      request = %{
+        "jsonrpc" => "2.0",
+        "id" => 99,
+        "method" => "workflow.cancel",
+        "params" => %{"workflow_id" => "nonexistent"}
+      }
+
+      output =
+        capture_stdio([Jason.encode!(request)], fn ->
+          StdioService.run()
+        end)
+
+      response = Jason.decode!(output)
+      assert response["id"] == 99,
+             "JSON-RPC id must be echoed in error response, got: #{inspect(response["id"])}"
+
+      assert response["error"]["code"] == -32_001
+    end
+  end
+
+  # ============================================================================
   # Helper Functions
   # ============================================================================
 

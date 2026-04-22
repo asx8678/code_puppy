@@ -42,7 +42,7 @@ defmodule CodePuppyControl.Scheduler.TaskTest do
 
       changeset = Task.changeset(%Task{}, attrs)
       refute changeset.valid?
-      assert %{schedule: ["invalid cron expression: _"]} = errors_on(changeset)
+      assert %{schedule: ["invalid cron expression: " <> _]} = errors_on(changeset)
     end
 
     test "accepts valid cron expression" do

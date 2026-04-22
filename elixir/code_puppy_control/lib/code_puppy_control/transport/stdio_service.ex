@@ -2333,7 +2333,7 @@ defmodule CodePuppyControl.Transport.StdioService do
         )
 
       {:error, reason} ->
-        Protocol.encode_error(-32_000, "Workflow invocation failed: #{inspect(reason)}", id)
+        Protocol.encode_error(-32_000, "Workflow invocation failed: #{inspect(reason)}", nil, id)
     end
   end
 
@@ -2358,7 +2358,7 @@ defmodule CodePuppyControl.Transport.StdioService do
           )
 
         {:error, :not_found} ->
-          Protocol.encode_error(-32_001, "Workflow not found", id)
+          Protocol.encode_error(-32_001, "Workflow not found", nil, id)
       end
     end
   end
@@ -2374,7 +2374,7 @@ defmodule CodePuppyControl.Transport.StdioService do
           Protocol.encode_response(%{"cancelled" => true, "workflow_id" => workflow_id}, id)
 
         {:error, :not_found} ->
-          Protocol.encode_error(-32_001, "Workflow not found", id)
+          Protocol.encode_error(-32_001, "Workflow not found", nil, id)
       end
     end
   end
