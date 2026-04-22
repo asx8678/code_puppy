@@ -3124,9 +3124,10 @@
         ]
       },
       "created_at": "2026-04-18T19:48:03.359737",
-      "updated_at": "2026-04-20T07:07:44.541324",
+      "updated_at": "2026-04-22T10:36:16.973446",
       "comments": [
-        "Claimed by planning-agent-019da8 - creating execution plan for 49 plugin ports"
+        "Claimed by planning-agent-019da8 - creating execution plan for 49 plugin ports",
+        "Significant progress in this session: bd-286 (4 utility plugins), bd-289 (3 core plugins), bd-284 (3 agent plugins) all merged to main. Remaining: agent_skills (from bd-284), plus bd-285 scope (file_permission_handler, universal_constructor, elixir_bridge completion, shell_safety completion)."
       ]
     },
     "bd-159": {
@@ -3330,10 +3331,11 @@
         ]
       },
       "created_at": "2026-04-18T19:48:17.188100",
-      "updated_at": "2026-04-19T09:43:02.760709",
+      "updated_at": "2026-04-22T10:36:16.983440",
       "comments": [
         "## \u26a0\ufe0f Isolation Requirement (added per bd-186)\n\nThis task MUST:\n- Write only to ~/.code_puppy_ex/ (never ~/.code_puppy/)\n- Pass the bd-186 CI gates (no-writes-to-python-home, fresh-install-works, existing-install-untouched)\n- Run all tests against temp directories, never the user's real home\n- Respect the Python freeze policy (bd-187) \u2014 do not modify code_puppy/**/*.py\n\n## OAuth Strategy Decision (per user directive)\n\nElixir runs its OWN OAuth flows independently. Do NOT attempt to import or share tokens from ~/.code_puppy/. User will re-authenticate under pup-ex.",
-        "bd-186 isolation infrastructure has landed. This issue's implementation MUST:\n\n1. Write only to ~/.code_puppy_ex/ via Paths.* helpers\n   (never hardcode ~/.code_puppy/ paths)\n2. Use Isolation.safe_write! / safe_mkdir_p! / safe_rm! / safe_rm_rf!\n   for ALL filesystem mutations on user-home paths\n3. Use Isolation.read_only_legacy/1 if reading from ~/.code_puppy/\n   during one-time migration imports (and only then)\n\nRelevant commits:\n- 86b05f29 \u2014 Config.Paths extension + Config.Isolation guard module\n- 2ea04ea9 \u2014 8 hardcoded callsites routed through Paths\n- 438685ac \u2014 FirstRun + pup_ex.import/doctor/auth.login CLI\n- b692dfdb \u2014 5 ADR CI gates + GitHub Actions workflow\n\nADR-003 is the canonical design doc:\ndocs/adr/ADR-003-dual-home-config-isolation.md\n\nAny PR touching config, session, OAuth, secrets, or compat tests will\nhave to pass `mix gates.isolation` in CI. Start there."
+        "bd-186 isolation infrastructure has landed. This issue's implementation MUST:\n\n1. Write only to ~/.code_puppy_ex/ via Paths.* helpers\n   (never hardcode ~/.code_puppy/ paths)\n2. Use Isolation.safe_write! / safe_mkdir_p! / safe_rm! / safe_rm_rf!\n   for ALL filesystem mutations on user-home paths\n3. Use Isolation.read_only_legacy/1 if reading from ~/.code_puppy/\n   during one-time migration imports (and only then)\n\nRelevant commits:\n- 86b05f29 \u2014 Config.Paths extension + Config.Isolation guard module\n- 2ea04ea9 \u2014 8 hardcoded callsites routed through Paths\n- 438685ac \u2014 FirstRun + pup_ex.import/doctor/auth.login CLI\n- b692dfdb \u2014 5 ADR CI gates + GitHub Actions workflow\n\nADR-003 is the canonical design doc:\ndocs/adr/ADR-003-dual-home-config-isolation.md\n\nAny PR touching config, session, OAuth, secrets, or compat tests will\nhave to pass `mix gates.isolation` in CI. Start there.",
+        "Core OAuth infrastructure merged to main. ClaudeOAuth and ChatGPTOAuth core modules created with token management and model discovery. REMAINING: PKCE browser flows for both providers, and oauth_puppy_html.py utility (bd-288)."
       ]
     },
     "bd-167": {
@@ -4886,7 +4888,7 @@
       "id": "bd-244",
       "title": "Menu wizard slash commands port",
       "description": "Port the menu-wizard slash commands from Python to Elixir: /add_model, /model_settings, /uc, /mcp install, /autosave, /diff. These require interactive menu flows (TUI widgets or prompts). Discovered from bd-163 (slash-command dispatch).",
-      "status": "open",
+      "status": "closed",
       "priority": 2,
       "type": "task",
       "labels": [
@@ -4906,7 +4908,7 @@
         ]
       },
       "created_at": "2026-04-21T08:47:53.402244",
-      "updated_at": "2026-04-22T09:37:40.830817",
+      "updated_at": "2026-04-22T10:36:17.009518",
       "comments": [
         "Menu wizard slash commands appear fully implemented in Elixir. All 6 commands (/add_model, /model_settings, /uc, /mcp, /autosave, /diff) exist with handlers registered in the dispatcher. Needs verification QA to close."
       ]
@@ -5689,8 +5691,10 @@
         ]
       },
       "created_at": "2026-04-22T09:37:25.607726",
-      "updated_at": "2026-04-22T09:37:25.607733",
-      "comments": []
+      "updated_at": "2026-04-22T10:36:16.929685",
+      "comments": [
+        "Partially merged to main. agent_memory, agent_trace, and loop_detection plugins ported with submodules (1,821 lines). agent_skills plugin still missing \u2014 will create follow-up issue."
+      ]
     },
     "bd-285": {
       "id": "bd-285",
@@ -5764,7 +5768,7 @@
       "id": "bd-289",
       "title": "bd-158-a: Port Tier A remaining core plugins",
       "description": "Port fast_puppy (27 lines), file_mentions (310 lines), turbo_executor (525 lines) to Elixir. These are small-to-medium critical plugins that provide native acceleration, file mention support, and batch execution capabilities. Source location: code_puppy/plugins/fast_puppy/, code_puppy/plugins/file_mentions/, code_puppy/plugins/turbo_executor/",
-      "status": "open",
+      "status": "closed",
       "priority": 1,
       "type": "task",
       "labels": [],
@@ -5774,8 +5778,10 @@
         ]
       },
       "created_at": "2026-04-22T09:37:37.596646",
-      "updated_at": "2026-04-22T09:37:37.596655",
-      "comments": []
+      "updated_at": "2026-04-22T10:36:16.965223",
+      "comments": [
+        "Merged to main. Ported 3 Tier A core plugins: fast_puppy, file_mentions, turbo_executor. All follow PluginBehaviour and compile cleanly."
+      ]
     },
     "bd-290": {
       "id": "bd-290",
@@ -5791,9 +5797,62 @@
         ]
       },
       "created_at": "2026-04-22T09:37:37.602252",
-      "updated_at": "2026-04-22T09:37:37.602261",
+      "updated_at": "2026-04-22T10:36:16.998458",
+      "comments": [
+        "Core infrastructure merged to main. CodePuppyControl.Auth.ChatGPTOAuth module (360 lines) and plugin wrapper created. Token storage, model fetching with ChatGPT-Account-Id header, and model registry management implemented. REMAINING: PKCE browser flow for /chatgpt-auth command."
+      ]
+    },
+    "bd-291": {
+      "id": "bd-291",
+      "title": "bd-284-followup: Port agent_skills plugin",
+      "description": "agent_skills is the remaining plugin from bd-284 Tier B agent plugins. Source: code_puppy/plugins/agent_skills/ (1235 lines across 11 files). Port to Elixir as CodePuppyControl.Plugins.AgentSkills with submodules.",
+      "status": "open",
+      "priority": 2,
+      "type": "task",
+      "labels": [],
+      "dependencies": {
+        "blocks": [
+          "bd-284"
+        ]
+      },
+      "created_at": "2026-04-22T10:36:20.189088",
+      "updated_at": "2026-04-22T10:36:20.189095",
+      "comments": []
+    },
+    "bd-292": {
+      "id": "bd-292",
+      "title": "bd-288: Port oauth_puppy_html.py utility",
+      "description": "Port code_puppy/plugins/oauth_puppy_html.py to Elixir. HTML generation for OAuth callback landing page.",
+      "status": "open",
+      "priority": 2,
+      "type": "task",
+      "labels": [],
+      "dependencies": {
+        "blocks": [
+          "bd-166"
+        ]
+      },
+      "created_at": "2026-04-22T10:36:20.192273",
+      "updated_at": "2026-04-22T10:36:20.192279",
+      "comments": []
+    },
+    "bd-293": {
+      "id": "bd-293",
+      "title": "bd-166-followup: Implement PKCE browser flows for OAuth",
+      "description": "Both Claude Code and ChatGPT OAuth plugins need full PKCE browser flow implementation: code verifier generation, browser launch, callback server, token exchange. Currently stubbed with TODO markers.",
+      "status": "open",
+      "priority": 2,
+      "type": "task",
+      "labels": [],
+      "dependencies": {
+        "blocks": [
+          "bd-166"
+        ]
+      },
+      "created_at": "2026-04-22T10:36:45.267335",
+      "updated_at": "2026-04-22T10:36:45.267342",
       "comments": []
     }
   },
-  "counter": 290
+  "counter": 293
 }
