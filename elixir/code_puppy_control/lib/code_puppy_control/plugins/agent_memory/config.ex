@@ -11,7 +11,7 @@ defmodule CodePuppyControl.Plugins.AgentMemory.Config do
     - memory_extraction_enabled (default: true)
   """
 
-  @default_config %{
+  @default_config [
     enabled: false,
     debounce_seconds: 30,
     debounce_ms: 30_000,
@@ -23,7 +23,7 @@ defmodule CodePuppyControl.Plugins.AgentMemory.Config do
     max_preference_signals_per_fact: 10,
     preference_signal_decay_hours: 168.0,
     preference_rate_limit_seconds: 60
-  }
+  ]
 
   @type t :: %__MODULE__{
     enabled: boolean(),
