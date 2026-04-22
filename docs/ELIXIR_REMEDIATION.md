@@ -27,10 +27,8 @@ Based on the hybrid migration ADR and current implementation audit:
 |-----------|---------|------------|-----------|
 | **Python** | Keep | ~25% | Thin shell: CLI, TUI, agent orchestration only |
 | **Elixir** | Keep & Expand | ~75% | ALL runtime operations (file ops, parsing, messages, scheduling) |
-| **Rust** | **REMOVED** | 0% | **Completely eliminated as of bd-167 (2026-04-17)** |
 | **Zig** | Removed (historical) | 0% | No longer on the active runtime path; references below are historical |
 
-> **Update (bd-167, 2026-04-17):** The architecture has shifted to **pure Elixir + Python**. Rust has been completely eliminated.
 
 **Architecture Summary**:
 - **Current**: Python + Elixir — Elixir provides full functionality for all accelerated operations

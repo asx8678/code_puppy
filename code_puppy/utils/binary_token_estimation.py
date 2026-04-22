@@ -1,6 +1,5 @@
 """Shared binary content token estimation.
 
-bd-50: Rust bridge paths removed - now Python only.
 Provides a single source of truth for estimating the token cost
 of binary content (images, PDFs, generic files).
 """

@@ -46,7 +46,6 @@ NativeBackend.set_backend_preference("elixir_first")
 NativeBackend.set_backend_preference("python_only")
 ```
 
-> **Note:** The `rust_only` profile has been removed as of bd-167 — Rust has been completely eliminated from the architecture.
 
 ## Why This Architecture?
 
@@ -56,7 +55,7 @@ NativeBackend.set_backend_preference("python_only")
 | **Python** | Agent orchestration, CLI, TUI | Rich ecosystem for LLM integration, rapid development |
 
 **Benefits of pure Elixir + Python:**
-- **Simpler builds**: No Rust toolchain, no PyO3, no maturin
+- **Simpler builds**: No Rust toolchain required
 - **Faster CI**: Python-only builds, no native compilation
 - **Easier onboarding**: Just Python + Elixir knowledge required
 - **Consistent performance**: Single optimized backend (Elixir BEAM/OTP)
@@ -91,7 +90,6 @@ Environment variables to control acceleration:
 | `PUP_DISABLE_ELIXIR` | Disable Elixir routing (use Python fallbacks) |
 | `PUP_DISABLE_ACCELERATION` | Disable all native acceleration (pure Python mode) |
 
-> **Note:** `PUP_DISABLE_RUST` has been removed as Rust is no longer part of the architecture (bd-167).
 
 ## Fallback Chain
 
@@ -131,7 +129,6 @@ No additional build steps required — the Python layer communicates with Elixir
 - **bd-167**: Rust has been completely eliminated from the architecture
 - **bd-93**: Parse operations route through `NativeBackend` with Elixir-first routing
 - **bd-94**: File operations route through Elixir
-- Direct `turbo_parse_bridge` imports are deprecated — use `NativeBackend`
 
 ## Future Considerations
 
@@ -177,19 +174,5 @@ for cap, info in NativeBackend.get_status().items():
 NativeBackend.is_available(NativeBackend.Capabilities.PARSE)  # bool
 NativeBackend.is_active(NativeBackend.Capabilities.PARSE)     # bool (available AND enabled)
 ```
-
-### Direct Bridge Imports (Deprecated)
-
-Direct imports from `turbo_parse_bridge` are **deprecated** (bd-13). Use NativeBackend methods instead:
-
-| Deprecated Import | NativeBackend Equivalent |
-|-------------------|--------------------------|
-| `turbo_parse_bridge.parse_source(src, lang)` | `NativeBackend.parse_source(src, lang)` |
-| `turbo_parse_bridge.parse_file(path, lang)` | `NativeBackend.parse_file(path, lang)` |
-| `turbo_parse_bridge.extract_symbols(src, lang)` | `NativeBackend.extract_symbols(src, lang)` |
-| `turbo_parse_bridge.stats()` | `NativeBackend.parse_stats()` |
-| `turbo_parse_bridge.health_check()` | `NativeBackend.parse_health_check()` |
-| `turbo_parse_bridge.TURBO_PARSE_AVAILABLE` | `NativeBackend.is_available(NativeBackend.Capabilities.PARSE)` |
-| `turbo_parse_bridge.parse_files_batch(paths)` | `NativeBackend.parse_batch(paths)` |
 
 A CI lint guard (`tests/test_no_direct_bridge_imports.py`) enforces this.

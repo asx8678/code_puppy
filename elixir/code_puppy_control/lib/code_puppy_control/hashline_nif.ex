@@ -1,9 +1,6 @@
 defmodule CodePuppyControl.HashlineNif do
   @moduledoc """
   Compatibility wrapper: delegates to pure Elixir `CodePuppyControl.HashLine`.
-
-  The original Rust NIF (`native/hashline_nif/`) has been removed in bd-152.
-  All functionality is now provided by the pure Elixir implementation which
   uses the `xxhash` library for identical xxHash32 computation.
 
   This module is kept for API compatibility. New code should use

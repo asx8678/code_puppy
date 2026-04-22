@@ -120,7 +120,7 @@
 | Item | Status | Issue | Notes |
 |------|--------|-------|-------|
 | NativeBackend parse methods | ✅ Done | **bd-11** | `extract_syntax_diagnostics()`, `parse_health_check()` |
-| Elixir NIF routing | ✅ Done | — | `turbo_parse_nif` → Rust (Routed via Elixir) |
+| Elixir NIF routing | ✅ Done | — | Routed via Elixir |
 | Symbol extraction | ✅ Done | — | Production stable |
 | Diagnostics | ✅ Done | — | Production stable |
 | Folds / Highlights | 📋 Pending | — | Tier 2 priority |
@@ -351,59 +351,6 @@ The repository had **four competing migration documents** with:
 
 ---
 
-## Phase 6: Final Rust Deletion (COMPLETE ✅)
-
-### DELETED: message_core (bd-167)
-The final Rust components have been eliminated. The "no Rust, thin Python"
-end state has been achieved.
-
-**~1,300 lines** in `code_puppy_core/` → **DELETED** ✅
-
-| Issue | Component | Lines | Elixir Destination |
-|-------|-----------|-------|-------------------|
-| bd-44 | token_estimation.rs | 335 | Elixir + ETS |
-| bd-45 | pruning.rs | 289 | Elixir |
-| bd-47 | serialization.rs | 91 | Elixir (msgpack) |
-| bd-48 | message_hashing.rs | 121 | Elixir (FxHash equiv) |
-| — | types.rs + lib.rs | 464 | Elixir |
-| — | **Total** | **~1,300** | **Delete Cargo workspace** |
-
-### Decision Pending: turbo_parse (Inherently Native)
-Tree-sitter parsing requires C core bindings. Currently exposed to
-Elixir via `turbo_parse_nif` (Rustler NIF).
-
-**~13,100 lines** in `turbo_parse/` + `turbo_parse_core/`
-
-**Options for Phase 6:**
-1. **Full Elixir rewrite:** Port tree-sitter logic to pure Elixir (major effort)
-2. **Alternative native bindings:** OCaml or other C binding
-3. **Keep NIF:** Minimal Rust NIF wrapper (violates "no Rust" end state)
-
-**Decision target:** 2026-Q3
-
-### Migrated to Elixir: Text/Edit Operations (✅ COMPLETE)
-All portable text processing has been migrated from Rust to Elixir:
-
-| Phase | Module | Rust Lines | Elixir Module | Issue |
-|-------|--------|-----------|---------------|-------|
-| 1 | content_prep | 425 | Text.ContentPrep | bd-34 |
-| 1 | path_classify | 1,047 | FileOps.PathClassifier | bd-35 |
-| 2 | line_numbers | 389 | Text.LineNumbers | bd-36 |
-| 3 | unified_diff | 239 | Text.Diff | bd-37 |
-| 3 | fuzzy_match | 409 | Text.FuzzyMatch | bd-38 |
-| 3 | replace_engine | 337 | Text.ReplaceEngine | bd-39 |
-| 5 | hashline | 199 | HashlineNif (Rustler NIF) | bd-88 |
-| **Total** | **7 modules** | **~3,045 lines** | | |
-
-### Routing Summary (Current)
-| Capability | Route | Backend | Future |
-|-----------|-------|---------|--------|
-| message_core | Python → Elixir | Elixir MessageCore | ✅ Complete (bd-167) |
-| file_ops | Python → Elixir → Python fallback | Elixir FileOps | Elixir complete ✅ |
-| edit_ops | Python → Elixir → Python fallback | Elixir Text.* | Elixir complete ✅ |
-| parse | Python → Elixir NIF → Rust → Python | turbo_parse_nif | Decision pending (bd-51) |
-
-### Dual-Home Config Isolation (bd-186, ~80% Complete — Phases 1-4 shipped)
 
 Elixir pup-ex uses `~/.code_puppy_ex/` (not `~/.code_puppy/`) as its home directory.
 Isolation is enforced via guard wrappers (`safe_write!`, `safe_mkdir_p!`, etc.)

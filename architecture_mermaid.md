@@ -303,7 +303,6 @@ code_puppy/
 │   └── config.py
 ├── elixir/code_puppy_control/  # Elixir OTP application (FULL BACKEND)
 │   ├── lib/                    # OTP app, protocol, file_ops, scheduler
-│   └── native/                 # Rust NIFs (tree-sitter bindings)
 ├── tests/                      # Python test suite
 ├── pyproject.toml              # Python build
 └── lefthook.yml                # Git hooks

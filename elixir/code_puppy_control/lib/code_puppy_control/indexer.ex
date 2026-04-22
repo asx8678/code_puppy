@@ -3,7 +3,7 @@ defmodule CodePuppyControl.Indexer do
   Directory indexing for repository structure analysis.
 
   Provides fast file discovery, categorization, and symbol extraction.
-  This is an Elixir-native implementation, replacing the Python→Rust bridge.
+  This is an Elixir-native implementation, replacing the Python bridge.
 
   ## Usage
 

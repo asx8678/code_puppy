@@ -18,13 +18,13 @@ def load_baseline():
 
 def run_benchmark():
     """Run the benchmark."""
-    print("Running bench_rust_vs_python.py...")
+    print("Running benchmark...")
     result = subprocess.run(
         [
             sys.executable,
             "-m",
             "pytest",
-            "tests/bench_rust_vs_python.py",
+            "tests/bench_benchmark.py",
             "-v",
             "-s",
             "--no-cov",

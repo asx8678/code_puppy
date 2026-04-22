@@ -32,7 +32,7 @@ Code Puppy has a **runtime backend selector** called `fast_puppy` that routes pe
 | `repo_index` | `repo_index` | Repository indexing |
 | `parse` | `CodePuppyControl.Parsing.Parser` | Pure-Elixir parsers (elixir, erlang, python, javascript, typescript, tsx, rust) |
 
-**Phase 4 Update (revised in bd-208):** The native acceleration layer (turbo_parse_bridge, native_backend, acceleration/) has been fully removed. Parse / symbol operations now live exclusively in Elixir under `CodePuppyControl.Parsing.Parser` (see `elixir/code_puppy_control/lib/code_puppy_control/parsing/`).
+**Phase 4 Update (bd-208):** The native acceleration layer has been fully removed. Parse operations now live exclusively in Elixir under `CodePuppyControl.Parsing.Parser`.
 
 Python access pattern:
 ```python

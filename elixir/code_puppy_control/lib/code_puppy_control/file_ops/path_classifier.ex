@@ -6,7 +6,6 @@ defmodule CodePuppyControl.FileOps.PathClassifier do
   - Glob pattern matching for gitignore-style patterns (using Gitignore.Pattern)
   - Sensitive path detection for credentials, keys, etc.
 
-  Ported from Rust: `code_puppy_core/src/path_classify/`
 
   ## Usage
 
@@ -22,8 +21,8 @@ defmodule CodePuppyControl.FileOps.PathClassifier do
   alias CodePuppyControl.Gitignore.Pattern
 
   # ============================================================================
-  # PATTERN DEFINITIONS (Ported from Rust patterns.rs)
-  # NOTE: Keep in sync with Rust DIR_PATTERNS and FILE_PATTERNS
+  # PATTERN DEFINITIONS
+  
   # ============================================================================
 
   # Directory-only patterns
@@ -336,7 +335,7 @@ defmodule CodePuppyControl.FileOps.PathClassifier do
   ]
 
   # ============================================================================
-  # SENSITIVE PATH DEFINITIONS (Ported from Rust sensitive.rs)
+  # SENSITIVE PATH DEFINITIONS
   # ============================================================================
 
   @sensitive_dir_prefixes [

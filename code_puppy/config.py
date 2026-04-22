@@ -2444,7 +2444,6 @@ _CODEPUPPY_ENV_ALLOWLIST: set[str] = {
     "PUPPY_PROTECTED_TOKEN_COUNT",
     # Feature toggles
     "PUP_DISABLE_CALLBACK_PLUGIN_LOADING",
-    # bd-50: PUPPY_DISABLE_RUST_AUTOBUILD removed - Rust integration deleted
     "CODE_PUPPY_SKIP_TUTORIAL",
     "CODE_PUPPY_NO_TUI",
     "CODE_PUPPY_NO_COLOR",
@@ -2681,8 +2680,6 @@ def get_memory_extraction_model() -> str | None:
 
 
 # bd-176: Rust acceleration backend config removed (was bd-50 dead code).
-# Fast Puppy now uses Elixir-first routing via fast_puppy.native_backend.
-# bd-113: Hard token budgets for session and run
 get_max_session_tokens = _make_int_getter(
     "max_session_tokens",
     0,

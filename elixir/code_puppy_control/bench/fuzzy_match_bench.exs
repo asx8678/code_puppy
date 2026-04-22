@@ -2,14 +2,14 @@
 
 defmodule FuzzyMatchBench do
   @moduledoc """
-  Benchmark for Text.FuzzyMatch vs expected Rust performance.
+  Benchmark for Text.FuzzyMatch performance analysis.
 
-  Port of comparison with `code_puppy_core/src/fuzzy_match.rs`.
+  Performance benchmark for the Elixir implementation.
 
   ## Performance Targets
 
-  Based on Rust implementation, the Elixir version is expected to be slower.
-  Target: < 3x slower on 100KB files before considering Rustler NIF.
+  The Elixir implementation aims for competitive performance.
+  Target: < 2x slower than comparable implementations on 100KB files.
 
   ## Running
 
@@ -152,8 +152,6 @@ defmodule FuzzyMatchBench do
       end)
 
       IO.puts("")
-      IO.puts("Recommendation: Consider Rustler NIF if production workloads")
-      IO.puts("               exceed 100KB files or require <100ms latency.")
     end
 
     IO.puts("")

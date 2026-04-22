@@ -262,24 +262,6 @@ Key unclassified top-level modules:
 | ├─ Fuzzy Match | Rust `fuzzy_match.rs` | `Text.FuzzyMatch` | bd-38 |
 | ├─ Replace Engine | Rust `replace_engine.rs` | `Text.ReplaceEngine` | bd-39 |
 | └─ Hashline | Rust `hashline.rs` | `HashlineNif` (Elixir NIF) | bd-88 |
-
-### Migration Completed ✅
-
-> **Historical Note:** All Rust code was removed from the codebase in favor of Elixir NIFs for native operations. The original Rust crates (`code_puppy_core/`, `turbo_parse/`, `turbo_parse_core/`) were successfully migrated to Elixir, with parsing now handled via `turbo_parse_nif` (Elixir NIF).
-
-| Category | Original Component | Elixir Replacement | Issue | Status |
-|----------|------------------|-------------------|-------|--------|
-| **Message Core** | `code_puppy_core/` (Rust) | Pure Elixir | bd-43 | ✅ Migrated |
-| ├─ Token Estimation | `token_estimation.rs` | Elixir + ETS memoization | bd-44 | ✅ Migrated |
-| ├─ Message Pruning | `pruning.rs` | Elixir | bd-45 | ✅ Migrated |
-| ├─ Serialization | `serialization.rs` | Elixir (msgpack) | bd-47 | ✅ Migrated |
-| └─ Message Hashing | `message_hashing.rs` | Elixir (FxHash equiv) | bd-48 | ✅ Migrated |
-| **Parsing** | `turbo_parse/` + `turbo_parse_core/` (Rust) | `turbo_parse_nif` (Elixir NIF) | bd-51 | ✅ Migrated |
-
-### Candidate for Deletion (Post-Elixir Migration)
-
-| Category | Python Module | Rationale |
-|----------|---------------|-----------|
 | **API Layer** | `api/*.py` | May be replaced by Elixir Phoenix controllers |
 | **MCP Python** | `mcp_/*.py` | Elixir has native MCP implementation |
 | **Scheduler CLI** | `scheduler/cli.py` | Elixir provides CLI |
@@ -464,9 +446,7 @@ RuntimeError               # Elixir returned error response
 |-------|-------|-----------|-------|
 | Python Thin Shell | ~110-130 | ~35,000 | CLI, TUI, agent loop, bridge, command_line/ |
 | Elixir Runtime | ~150+ | ~40,000 | All services, NIFs |
-| ~~Rust (Decision Pending)~~ | ~~0~~ | ~~0~~ | **Removed** — Decision resolved: Full migration to Elixir complete |
 
-**Deletion Target:** ~350-400 Python files, ~0 Rust lines (Rust migration complete)
 
 ---
 
