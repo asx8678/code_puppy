@@ -45,6 +45,38 @@ defmodule CodePuppyControl.LLM.ResponsesAPICollectorSSETest do
 
       assert {:error, _} = ResponsesAPI.chat(@messages, [], @opts)
     end
+
+    test "chat/3 error path does not kill the caller via linked collector exit" do
+      # Regression: spawn_link + Process.exit(collector, :shutdown) on the
+      # error path propagated the :shutdown exit back to the caller, killing
+      # it. The fix unlinks before exiting the collector. Verify the caller
+      # process survives and returns {:error, _} normally.
+      MockLLMHTTP.register(fn :post, url, _opts ->
+        if url =~ "/responses" do
+          {:error, :connection_refused}
+        else
+          {:passthrough}
+        end
+      end)
+
+      caller_pid = self()
+      ref = Process.monitor(caller_pid)
+
+      # chat/3 itself runs in this test process; if the exit propagated,
+      # the test process would die and the monitor would fire.
+      result = ResponsesAPI.chat(@messages, [], @opts)
+
+      # The caller must still be alive — receive any DOWN within a short window.
+      receive do
+        {:DOWN, ^ref, :process, ^caller_pid, reason} ->
+          flunk("Caller process died with reason: #{inspect(reason)}")
+      after
+        50 -> :ok
+      end
+
+      assert {:error, _} = result
+      Process.demonitor(ref, [:flush])
+    end
   end
 
   describe "SSE done-event parity (bd-166 #4)" do

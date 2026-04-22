@@ -190,6 +190,9 @@ defmodule CodePuppyControl.LLM.Providers.ResponsesAPI do
 
       {:error, reason} ->
         # Stream errored — kill collector and flush any stale messages.
+        # Unlink first so the collector exit does NOT propagate
+        # back to the caller (who is not trapping exits).
+        Process.unlink(collector_pid)
         Process.exit(collector_pid, :shutdown)
         flush_collector_response(collector_ref)
         {:error, reason}
