@@ -234,6 +234,16 @@ defmodule CodePuppyControl.CLI.SlashCommands.Registry do
         category: "context"
       ),
       CommandInfo.new(
+        name: "uc",
+        description: "Browse and manage Universal Constructor tools",
+        handler: &Commands.UC.handle_uc/2,
+        usage: "/uc [toggle <name> | info <name>]",
+        aliases: ["universal_constructor"],
+        category: "context",
+        detailed_help:
+          "List, toggle, and inspect UC tools. Use '/uc' to list all tools, '/uc toggle <name>' to enable/disable, '/uc info <name>' for details."
+      ),
+      CommandInfo.new(
         name: "flags",
         description: "Show current workflow flags and state",
         handler: &Commands.Flags.handle_flags/2,
