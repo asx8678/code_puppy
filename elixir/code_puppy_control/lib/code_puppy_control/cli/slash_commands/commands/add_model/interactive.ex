@@ -210,7 +210,10 @@ defmodule CodePuppyControl.CLI.SlashCommands.Commands.AddModel.Interactive do
 
   # ── Add execution (with tool-calling confirmation) ─────────────────────
 
-  defp execute_add_model(model, provider) do
+  @doc false
+  # Public for testability — tests call this directly to exercise the
+  # real confirmation + persistence + reload flow.
+  def execute_add_model(model, provider) do
     # Warn about non-tool-calling models
     if not model.tool_call do
       IO.puts("")
@@ -245,7 +248,10 @@ defmodule CodePuppyControl.CLI.SlashCommands.Commands.AddModel.Interactive do
     end
   end
 
-  defp do_add_model(model, provider) do
+  @doc false
+  # Public for testability — tests call this directly to exercise the
+  # persistence + reload path without the confirmation prompt.
+  def do_add_model(model, provider) do
     case AddModel.add_model_to_config(model, provider) do
       {:ok, model_key} ->
         IO.puts("")

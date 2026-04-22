@@ -131,40 +131,44 @@ defmodule CodePuppyControl.CLI.SlashCommands.Commands.AddModelPersistence do
 
   Exception-safe: `File.Error`, `Jason.EncodeError`, and
   `IsolationViolation` are all caught and converted to `{:error, _}`
-  tuples.  The same `tmp_path` is cleaned up in the `after` block if
-  the operation did not succeed, preventing orphan temp files even when
-  an unexpected exception crashes the LockKeeper call.
+  tuples.  The `File.rename/2` result is checked explicitly so that a
+  rename failure returns `{:error, _}` instead of raising `MatchError`.
+  The temp file is cleaned up in every error path (rename failure or
+  rescued exception), preventing orphan temp files even when an
+  unexpected exception crashes the LockKeeper call.
   """
   @spec atomic_write_json(String.t(), map()) :: {:ok, String.t()} | {:error, term()}
   def atomic_write_json(path, data) do
     dir = Path.dirname(path)
     tmp_path = make_temp_path(path)
-    success = false
 
-    result =
-      try do
-        :ok = safe_mkdir_p(dir)
-        json = Jason.encode!(data, pretty: true)
-        :ok = safe_write(tmp_path, json)
-        :ok = File.rename(tmp_path, path)
-        success = true
-        {:ok, path}
-      rescue
-        e in File.Error ->
-          {:error, Exception.message(e)}
+    try do
+      :ok = safe_mkdir_p(dir)
+      json = Jason.encode!(data, pretty: true)
+      :ok = safe_write(tmp_path, json)
 
-        e in Jason.EncodeError ->
-          {:error, Exception.message(e)}
+      case File.rename(tmp_path, path) do
+        :ok ->
+          {:ok, path}
 
-        e in CodePuppyControl.Config.Isolation.IsolationViolation ->
-          {:error, Exception.message(e)}
-      after
-        unless success do
+        {:error, rename_reason} ->
+          # Rename failed — clean up the orphaned temp file
           safe_remove_tmp(tmp_path)
-        end
+          {:error, "rename failed: #{inspect(rename_reason)}"}
       end
+    rescue
+      e in File.Error ->
+        safe_remove_tmp(tmp_path)
+        {:error, Exception.message(e)}
 
-    result
+      e in Jason.EncodeError ->
+        safe_remove_tmp(tmp_path)
+        {:error, Exception.message(e)}
+
+      e in CodePuppyControl.Config.Isolation.IsolationViolation ->
+        safe_remove_tmp(tmp_path)
+        {:error, Exception.message(e)}
+    end
   end
 
   # ── Private ─────────────────────────────────────────────────────────────
