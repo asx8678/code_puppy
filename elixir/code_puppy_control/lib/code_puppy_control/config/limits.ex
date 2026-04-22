@@ -139,6 +139,29 @@ defmodule CodePuppyControl.Config.Limits do
     end
   end
 
+  # ── WebSocket & Memory ──────────────────────────────────────────────
+
+  @doc """
+  WebSocket history TTL in seconds.
+  Env override: PUPPY_WS_HISTORY_TTL_SECONDS
+  Default: 3600 (1 hour)
+  """
+  def ws_history_ttl_seconds do
+    case System.get_env("PUPPY_WS_HISTORY_TTL_SECONDS") do
+      nil -> parse_int("ws_history_ttl_seconds", 3600, 60)
+      val -> max(60, String.to_integer(val))
+    end
+  end
+
+  @doc "Memory extraction model override. Returns nil if not set."
+  def memory_extraction_model do
+    case Loader.get_value("memory_extraction_model") do
+      nil -> nil
+      "" -> nil
+      val -> val
+    end
+  end
+
   # ── Summarization settings ──────────────────────────────────────────────
 
   @doc "Return summarization trigger fraction (default `0.85`, range `0.5–0.95`)."
@@ -195,6 +218,24 @@ defmodule CodePuppyControl.Config.Limits do
         end
     end
   end
+
+  @doc "Model to use for summarization. Default: claude-3-haiku"
+  def summarization_model do
+    case Loader.get_value("summarization_model") do
+      nil -> "claude-3-haiku"
+      "" -> "claude-3-haiku"
+      val -> val
+    end
+  end
+
+  @doc "Maximum input tokens for summarization. Default: 100_000"
+  def summarization_max_input_tokens, do: parse_int("summarization_max_input_tokens", 100_000, 1000)
+
+  @doc "Enable automatic summarization. Default: true"
+  def auto_summarize_enabled?, do: truthy?("auto_summarize", true)
+
+  @doc "Minimum messages before summarization. Default: 10"
+  def summarization_min_messages, do: parse_int("summarization_min_messages", 10, 1)
 
   # ── Context length (helper) ─────────────────────────────────────────────
 

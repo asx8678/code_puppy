@@ -18,6 +18,7 @@ defmodule CodePuppyControl.Config.Models do
   """
 
   alias CodePuppyControl.Config.Loader
+  alias CodePuppyControl.Config.Paths
 
   # ── Global model ────────────────────────────────────────────────────────
 
@@ -232,6 +233,83 @@ defmodule CodePuppyControl.Config.Models do
     else
       {:error, "Invalid verbosity '#{value}'. Allowed: #{Enum.join(@allowed_verbosity, ", ")}"}
     end
+  end
+
+  # ── Context Length ──────────────────────────────────────────────────
+
+  @default_context_length 128_000
+
+  @known_context_lengths %{
+    "claude-3" => 200_000,
+    "claude-3-5" => 200_000,
+    "claude-4" => 200_000,
+    "gpt-4-turbo" => 128_000,
+    "gpt-4o" => 128_000,
+    "gpt-5" => 128_000,
+    "gemini-1.5" => 1_000_000,
+    "gemini-2" => 1_000_000
+  }
+
+  @doc """
+  Get context length for a specific model.
+
+  Priority:
+  1. models.json override in config dir
+  2. Known model prefix defaults
+  3. @default_context_length (128_000)
+  """
+  @spec context_length(String.t()) :: pos_integer()
+  def context_length(model_name) when is_binary(model_name) do
+    case get_from_models_json(model_name) do
+      {:ok, length} -> length
+      :not_found -> lookup_known_default(model_name)
+    end
+  end
+
+  def context_length(_), do: @default_context_length
+
+  defp get_from_models_json(model_name) do
+    models = load_models_json()
+
+    case models[model_name] do
+      %{"context_length" => len} when is_integer(len) -> {:ok, len}
+      _ -> :not_found
+    end
+  end
+
+  defp load_models_json do
+    key = {__MODULE__, :models_json}
+
+    case :persistent_term.get(key, :not_loaded) do
+      :not_loaded ->
+        result = do_load_models_json()
+        :persistent_term.put(key, result)
+        result
+
+      cached ->
+        cached
+    end
+  end
+
+  defp do_load_models_json do
+    path = Paths.models_file()
+
+    case File.read(path) do
+      {:ok, content} ->
+        case Jason.decode(content) do
+          {:ok, map} when is_map(map) -> map
+          _ -> %{}
+        end
+
+      {:error, _} ->
+        %{}
+    end
+  end
+
+  defp lookup_known_default(model_name) do
+    Enum.find_value(@known_context_lengths, @default_context_length, fn {prefix, length} ->
+      if String.starts_with?(model_name, prefix), do: length
+    end)
   end
 
   # ── Private ─────────────────────────────────────────────────────────────

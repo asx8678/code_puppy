@@ -72,6 +72,28 @@ defmodule CodePuppyControl.Config.Debug do
   @spec mcp_disabled?() :: boolean()
   def mcp_disabled?, do: truthy?("disable_mcp", false)
 
+  @doc """
+  Adaptive rendering enabled.
+  Env override: PUP_ADAPTIVE_RENDERING
+  """
+  def adaptive_rendering_enabled? do
+    case System.get_env("PUP_ADAPTIVE_RENDERING") do
+      nil -> truthy?("adaptive_rendering", true)
+      val -> val not in ["0", "false", "no"]
+    end
+  end
+
+  @doc """
+  Post-edit validation enabled.
+  Env override: PUP_POST_EDIT_VALIDATION
+  """
+  def post_edit_validation_enabled? do
+    case System.get_env("PUP_POST_EDIT_VALIDATION") do
+      nil -> truthy?("post_edit_validation", true)
+      val -> val not in ["0", "false", "no"]
+    end
+  end
+
   # ── Setters ─────────────────────────────────────────────────────────────
 
   @doc "Enable or disable the Universal Constructor."
