@@ -121,6 +121,17 @@ defmodule CodePuppyControl.Tools.UniversalConstructor.Registry do
     GenServer.call(__MODULE__, :tools_dir)
   end
 
+  @doc """
+  Sets the tools directory and rescans.
+
+  Primarily intended for testing — allows reconfiguring the registry
+  to use an isolated directory without restarting the GenServer.
+  """
+  @spec set_tools_dir(String.t()) :: non_neg_integer()
+  def set_tools_dir(dir) do
+    GenServer.call(__MODULE__, {:set_tools_dir, dir})
+  end
+
   # ============================================================================
   # Server Callbacks
   # ============================================================================
@@ -207,6 +218,14 @@ defmodule CodePuppyControl.Tools.UniversalConstructor.Registry do
   @impl true
   def handle_call(:tools_dir, _from, state) do
     {:reply, state.tools_dir, state}
+  end
+
+  @impl true
+  def handle_call({:set_tools_dir, dir}, _from, state) do
+    new_state = %{state | tools_dir: Path.expand(dir)}
+    new_state = do_scan(new_state)
+    count = map_size(new_state.tools)
+    {:reply, count, new_state}
   end
 
   # ============================================================================

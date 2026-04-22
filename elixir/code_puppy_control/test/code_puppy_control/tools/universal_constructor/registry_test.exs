@@ -14,12 +14,27 @@ defmodule CodePuppyControl.Tools.UniversalConstructor.RegistryTest do
     # Ensure test directory exists
     File.mkdir_p!(@test_dir)
 
-    # Create registry instance for testing
-    {:ok, registry_pid} = Registry.start_link(tools_dir: @test_dir)
+    # If the registry is already running (application supervisor), repoint
+    # it to our test directory. Otherwise, start a fresh instance.
+    case Process.whereis(Registry) do
+      nil ->
+        {:ok, _registry_pid} = Registry.start_link(tools_dir: @test_dir)
+
+      _pid ->
+        Registry.set_tools_dir(@test_dir)
+    end
+
+    original_tools_dir = Registry.tools_dir()
 
     on_exit(fn ->
+      # Restore original tools dir so we don't pollute other tests
+      try do
+        Registry.set_tools_dir(original_tools_dir)
+      catch
+        :exit, _ -> :ok
+      end
+
       File.rm_rf!(@test_dir)
-      Process.exit(registry_pid, :normal)
     end)
 
     :ok
