@@ -86,6 +86,8 @@ defmodule CodePuppyControl.Application do
       CodePuppyControl.Tool.Registry,
       # Slash command registry (ETS-backed) for REPL command dispatch (bd-163)
       CodePuppyControl.CLI.SlashCommands.Registry,
+      # Serialises /add_model persistence to prevent lost-update races (bd-268)
+      CodePuppyControl.CLI.SlashCommands.Commands.AddModelPersistence.LockKeeper,
       # Staged changes sandbox for diff-preview system (bd-150)
       CodePuppyControl.Tools.StagedChanges,
       {CodePuppyControl.Run.Supervisor, []},

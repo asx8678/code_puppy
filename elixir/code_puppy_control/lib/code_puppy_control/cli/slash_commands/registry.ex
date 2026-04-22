@@ -268,6 +268,16 @@ defmodule CodePuppyControl.CLI.SlashCommands.Registry do
         detailed_help:
           "View and manage MCP servers. Subcommands: list, help, status, start, stop, restart, start-all, stop-all."
       ),
+      # Add Model command
+      CommandInfo.new(
+        name: "add_model",
+        description: "Browse and add models from models.dev catalog",
+        handler: &Commands.AddModel.handle_add_model/2,
+        usage: "/add_model",
+        category: "context",
+        detailed_help:
+          "Interactively browse providers and models from the models.dev catalog. Select a model to add it to your extra_models.json configuration, making it immediately available for use."
+      ),
       # Session commands
       CommandInfo.new(
         name: "compact",

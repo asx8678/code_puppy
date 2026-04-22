@@ -37,7 +37,8 @@ defmodule CodePuppyControl.REPL.Completion do
     "/tui",
     "/cd",
     "/compact",
-    "/truncate"
+    "/truncate",
+    "/add_model"
   ]
 
   # Returns the list of slash commands for completion.  When the ETS-backed

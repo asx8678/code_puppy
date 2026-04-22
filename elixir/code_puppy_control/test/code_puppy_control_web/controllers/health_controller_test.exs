@@ -6,6 +6,7 @@ defmodule CodePuppyControlWeb.HealthControllerTest do
       conn =
         build_conn()
         |> get("/health/runtime")
+
       body = json_response(conn, 200)
 
       assert %{"processes" => %{"current" => _, "limit" => _}} = body
