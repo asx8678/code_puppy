@@ -95,7 +95,11 @@ defmodule CodePuppyControl.CLI.SlashCommands.Commands.AddModel.Interactive do
           IO.puts(IO.ANSI.faint() <> "    No providers match '#{query}'." <> IO.ANSI.reset())
           browse_providers(providers, page)
         else
-          IO.puts(IO.ANSI.faint() <> "    Filtered: #{length(filtered)} provider(s) match '#{query}'." <> IO.ANSI.reset())
+          IO.puts(
+            IO.ANSI.faint() <>
+              "    Filtered: #{length(filtered)} provider(s) match '#{query}'." <> IO.ANSI.reset()
+          )
+
           browse_providers(filtered, 0)
         end
 
@@ -112,7 +116,10 @@ defmodule CodePuppyControl.CLI.SlashCommands.Commands.AddModel.Interactive do
     end
   end
 
-  defp select_model_interactive(provider) do
+  @doc false
+  # Public for testability — tests call this directly to verify unsupported
+  # provider rejection without driving the full provider-selection IO flow.
+  def select_model_interactive(provider) do
     if AddModel.unsupported_provider?(provider.id) do
       reason = AddModel.unsupported_reason(provider.id)
 
@@ -129,7 +136,9 @@ defmodule CodePuppyControl.CLI.SlashCommands.Commands.AddModel.Interactive do
           IO.puts(IO.ANSI.red() <> "    Error loading models: #{reason}" <> IO.ANSI.reset())
 
         {:ok, []} ->
-          IO.puts(IO.ANSI.yellow() <> "    No models found for #{provider.name}." <> IO.ANSI.reset())
+          IO.puts(
+            IO.ANSI.yellow() <> "    No models found for #{provider.name}." <> IO.ANSI.reset()
+          )
 
         {:ok, models} ->
           IO.puts("")
@@ -191,7 +200,11 @@ defmodule CodePuppyControl.CLI.SlashCommands.Commands.AddModel.Interactive do
           IO.puts(IO.ANSI.faint() <> "    No models match '#{query}'." <> IO.ANSI.reset())
           browse_models(models, provider, page)
         else
-          IO.puts(IO.ANSI.faint() <> "    Filtered: #{length(filtered)} model(s) match '#{query}'." <> IO.ANSI.reset())
+          IO.puts(
+            IO.ANSI.faint() <>
+              "    Filtered: #{length(filtered)} model(s) match '#{query}'." <> IO.ANSI.reset()
+          )
+
           browse_models(filtered, provider, 0)
         end
 
@@ -252,7 +265,7 @@ defmodule CodePuppyControl.CLI.SlashCommands.Commands.AddModel.Interactive do
   # Public for testability — tests call this directly to exercise the
   # persistence + reload path without the confirmation prompt.
   def do_add_model(model, provider) do
-    case AddModel.add_model_to_config(model, provider) do
+    case safe_persist(model, provider) do
       {:ok, model_key} ->
         IO.puts("")
 
@@ -263,7 +276,7 @@ defmodule CodePuppyControl.CLI.SlashCommands.Commands.AddModel.Interactive do
         )
 
         # Reload ModelRegistry so the new model is immediately available
-        case CodePuppyControl.ModelRegistry.reload() do
+        case safe_registry_reload() do
           :ok ->
             IO.puts(
               IO.ANSI.faint() <>
@@ -286,6 +299,17 @@ defmodule CodePuppyControl.CLI.SlashCommands.Commands.AddModel.Interactive do
         IO.puts(IO.ANSI.cyan() <> "    Model already in extra_models.json." <> IO.ANSI.reset())
         IO.puts("")
 
+      {:error, :not_running} ->
+        IO.puts("")
+
+        IO.puts(
+          IO.ANSI.red() <>
+            "    ❌ Error adding model: persistence service not running" <>
+            IO.ANSI.reset()
+        )
+
+        IO.puts("")
+
       {:error, reason} ->
         IO.puts("")
 
@@ -297,6 +321,28 @@ defmodule CodePuppyControl.CLI.SlashCommands.Commands.AddModel.Interactive do
 
         IO.puts("")
     end
+  end
+
+  # ── Safe GenServer wrappers ────────────────────────────────────────────
+
+  # Wraps AddModel.add_model_to_config/2 so that a crashed or missing
+  # LockKeeper (GenServer :noproc) does not kill the caller.
+  defp safe_persist(model, provider) do
+    AddModel.add_model_to_config(model, provider)
+  catch
+    :exit, {:noproc, _} -> {:error, :not_running}
+    :exit, {:shutdown, _} -> {:error, :not_running}
+    :exit, {:timeout, _} -> {:error, :timeout}
+  end
+
+  # Wraps ModelRegistry.reload/0 so that a missing ModelRegistry
+  # does not kill the caller.
+  defp safe_registry_reload do
+    CodePuppyControl.ModelRegistry.reload()
+  catch
+    :exit, {:noproc, _} -> {:error, :not_running}
+    :exit, {:shutdown, _} -> {:error, :not_running}
+    :exit, {:timeout, _} -> {:error, :timeout}
   end
 
   # ── Display helpers ────────────────────────────────────────────────────
@@ -376,8 +422,15 @@ defmodule CodePuppyControl.CLI.SlashCommands.Commands.AddModel.Interactive do
 
   defp get_models_list(provider_id) do
     case Process.whereis(CodePuppyControl.ModelsDevParser.Registry) do
-      nil -> {:error, "ModelsDev registry not started"}
-      _pid -> {:ok, CodePuppyControl.ModelsDevParser.get_models(CodePuppyControl.ModelsDevParser.Registry, provider_id)}
+      nil ->
+        {:error, "ModelsDev registry not started"}
+
+      _pid ->
+        {:ok,
+         CodePuppyControl.ModelsDevParser.get_models(
+           CodePuppyControl.ModelsDevParser.Registry,
+           provider_id
+         )}
     end
   rescue
     e -> {:error, Exception.message(e)}

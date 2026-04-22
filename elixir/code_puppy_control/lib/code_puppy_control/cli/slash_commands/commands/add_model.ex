@@ -26,8 +26,11 @@ defmodule CodePuppyControl.CLI.SlashCommands.Commands.AddModel do
   alias CodePuppyControl.CLI.SlashCommands.Commands.AddModelPersistence
 
   # Providers that use non-OpenAI-compatible APIs or require special auth.
+  # These cannot be added via /add_model — the flow returns {:error, reason}.
   @unsupported_providers %{
     "amazon-bedrock" => "Requires AWS SigV4 authentication",
+    "azure" => "Requires Azure AD / managed identity authentication",
+    "azure-cognitive-services" => "Requires Azure AD / managed identity authentication",
     "google-vertex" => "Requires GCP service account authentication",
     "google-vertex-anthropic" => "Requires GCP service account authentication",
     "cloudflare-workers-ai" => "Requires account ID in URL Path",
@@ -50,44 +53,42 @@ defmodule CodePuppyControl.CLI.SlashCommands.Commands.AddModel do
   }
 
   # Map provider IDs to Code Puppy model types.
+  # Keys MUST match the IDs in the bundled models.dev catalog.
   @provider_type_map %{
     "openai" => "openai",
     "anthropic" => "anthropic",
     "google" => "gemini",
-    "google-vertex" => "gemini",
     "mistral" => "custom_openai",
     "groq" => "custom_openai",
-    "together-ai" => "custom_openai",
-    "fireworks" => "custom_openai",
+    "togetherai" => "custom_openai",
+    "fireworks-ai" => "custom_openai",
     "deepseek" => "custom_openai",
     "openrouter" => "custom_openai",
     "cerebras" => "cerebras",
     "cohere" => "custom_openai",
     "perplexity" => "custom_openai",
-    "minimax" => "custom_anthropic"
+    "minimax" => "custom_anthropic",
+    "xai" => "custom_openai"
   }
 
   # Map provider IDs to persisted provider identity strings.
+  # Keys MUST match the IDs in the bundled models.dev catalog.
   @provider_identity_map %{
     "openai" => "openai",
     "anthropic" => "anthropic",
     "google" => "google",
-    "google-vertex" => "google",
     "mistral" => "mistral",
     "groq" => "groq",
-    "together-ai" => "together_ai",
-    "fireworks" => "fireworks",
+    "togetherai" => "togetherai",
+    "fireworks-ai" => "fireworks_ai",
     "deepseek" => "deepseek",
     "openrouter" => "openrouter",
     "cerebras" => "cerebras",
     "cohere" => "cohere",
     "perplexity" => "perplexity",
     "minimax" => "minimax",
-    "azure-openai" => "azure_openai",
     "xai" => "xai"
   }
-
-  @page_size 15
 
   @doc """
   Handles `/add_model` — interactive model browser.
@@ -135,8 +136,18 @@ defmodule CodePuppyControl.CLI.SlashCommands.Commands.AddModel do
   This mirrors Python's `_build_model_config()` with the same type mapping,
   endpoint derivation, and supported_settings logic.
   """
-  @spec build_model_config(ModelInfo.t(), ProviderInfo.t()) :: map()
+  @spec build_model_config(ModelInfo.t(), ProviderInfo.t()) :: {:ok, map()} | {:error, String.t()}
   def build_model_config(%ModelInfo{} = model, %ProviderInfo{} = provider) do
+    if unsupported_provider?(provider.id) do
+      {:error, "Cannot add model from #{provider.name}: #{unsupported_reason(provider.id)}"}
+    else
+      {:ok, do_build_model_config(model, provider)}
+    end
+  end
+
+  # Internal builder — callers must check unsupported_provider? first.
+  @spec do_build_model_config(ModelInfo.t(), ProviderInfo.t()) :: map()
+  defp do_build_model_config(%ModelInfo{} = model, %ProviderInfo{} = provider) do
     model_type = Map.get(@provider_type_map, provider.id, "custom_openai")
 
     model_name =
@@ -195,20 +206,27 @@ defmodule CodePuppyControl.CLI.SlashCommands.Commands.AddModel do
       {:ok, providers} ->
         # First input: provider selection
         case inputs do
-          [] -> :cancelled
+          [] ->
+            :cancelled
+
           [provider_input | rest] ->
             case parse_selection(provider_input, length(providers)) do
               {:ok, provider_idx} ->
                 provider = Enum.at(providers, provider_idx)
 
                 if unsupported_provider?(provider.id) do
-                  {:error, "Cannot add model from #{provider.name}: #{unsupported_reason(provider.id)}"}
+                  {:error,
+                   "Cannot add model from #{provider.name}: #{unsupported_reason(provider.id)}"}
                 else
                   case get_models_list(provider.id) do
-                    {:error, reason} -> {:error, reason}
+                    {:error, reason} ->
+                      {:error, reason}
+
                     {:ok, models} ->
                       case rest do
-                        [] -> :cancelled
+                        [] ->
+                          :cancelled
+
                         [model_input | _rest] ->
                           case parse_selection(model_input, length(models)) do
                             {:ok, model_idx} ->
@@ -236,6 +254,7 @@ defmodule CodePuppyControl.CLI.SlashCommands.Commands.AddModel do
   @spec filter_providers([ProviderInfo.t()], String.t()) :: [ProviderInfo.t()]
   def filter_providers(providers, query) do
     q = String.downcase(query)
+
     Enum.filter(providers, fn p ->
       String.contains?(String.downcase(p.name), q) or
         String.contains?(String.downcase(p.id), q)
@@ -249,6 +268,7 @@ defmodule CodePuppyControl.CLI.SlashCommands.Commands.AddModel do
   @spec filter_models([ModelInfo.t()], String.t()) :: [ModelInfo.t()]
   def filter_models(models, query) do
     q = String.downcase(query)
+
     Enum.filter(models, fn m ->
       String.contains?(String.downcase(m.name), q) or
         String.contains?(String.downcase(m.model_id), q)
@@ -264,9 +284,14 @@ defmodule CodePuppyControl.CLI.SlashCommands.Commands.AddModel do
   @spec add_model_to_config(ModelInfo.t(), ProviderInfo.t()) ::
           {:ok, String.t()} | {:error, term()}
   def add_model_to_config(model, provider) do
-    config = build_model_config(model, provider)
-    model_key = build_model_key(provider, model)
-    AddModelPersistence.persist(model_key, config)
+    case build_model_config(model, provider) do
+      {:ok, config} ->
+        model_key = build_model_key(provider, model)
+        AddModelPersistence.persist(model_key, config)
+
+      {:error, reason} ->
+        {:error, reason}
+    end
   end
 
   # ── Private: data access ─────────────────────────────────────────────────

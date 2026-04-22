@@ -41,9 +41,13 @@ defmodule CodePuppyControl.CLI.SlashCommands.Commands.AddModelPersistence do
     def init(_opts), do: {:ok, %{}}
 
     @doc "Execute `fun` under the serialisation lock. Returns the fun's result."
-    @spec with_lock((() -> result)) :: result when result: var
+    @spec with_lock((-> result)) :: result when result: var
     def with_lock(fun) do
       GenServer.call(__MODULE__, {:run, fun}, 30_000)
+    catch
+      :exit, {:noproc, _} -> {:error, :not_running}
+      :exit, {:shutdown, _} -> {:error, :not_running}
+      :exit, {:timeout, _} -> {:error, :timeout}
     end
 
     @impl true

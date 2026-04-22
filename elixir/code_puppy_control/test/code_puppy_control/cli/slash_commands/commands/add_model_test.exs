@@ -36,13 +36,22 @@ defmodule CodePuppyControl.CLI.SlashCommands.Commands.AddModelTest do
       )
 
     # Start the LockKeeper for concurrency-safe persistence
-    case Process.whereis(CodePuppyControl.CLI.SlashCommands.Commands.AddModelPersistence.LockKeeper) do
-      nil -> start_supervised!({CodePuppyControl.CLI.SlashCommands.Commands.AddModelPersistence.LockKeeper, []})
-      _pid -> :ok
+    case Process.whereis(
+           CodePuppyControl.CLI.SlashCommands.Commands.AddModelPersistence.LockKeeper
+         ) do
+      nil ->
+        start_supervised!(
+          {CodePuppyControl.CLI.SlashCommands.Commands.AddModelPersistence.LockKeeper, []}
+        )
+
+      _pid ->
+        :ok
     end
 
     # Use a temp directory for extra_models.json
-    tmp_dir = Path.join(System.tmp_dir!(), "cp_add_model_test_#{:erlang.unique_integer([:positive])}")
+    tmp_dir =
+      Path.join(System.tmp_dir!(), "cp_add_model_test_#{:erlang.unique_integer([:positive])}")
+
     File.mkdir_p!(tmp_dir)
 
     original_env = System.get_env("PUP_EX_HOME")
@@ -105,9 +114,16 @@ defmodule CodePuppyControl.CLI.SlashCommands.Commands.AddModelTest do
   describe "build_model_config/2" do
     test "builds anthropic config correctly" do
       provider = %ProviderInfo{id: "anthropic", name: "Anthropic", env: ["ANTHROPIC_API_KEY"]}
-      model = %ModelInfo{provider_id: "anthropic", model_id: "claude-3-opus", name: "Claude 3 Opus", context_length: 200_000, tool_call: true}
 
-      config = AddModel.build_model_config(model, provider)
+      model = %ModelInfo{
+        provider_id: "anthropic",
+        model_id: "claude-3-opus",
+        name: "Claude 3 Opus",
+        context_length: 200_000,
+        tool_call: true
+      }
+
+      {:ok, config} = AddModel.build_model_config(model, provider)
 
       assert config["type"] == "anthropic"
       assert config["provider"] == "anthropic"
@@ -118,9 +134,16 @@ defmodule CodePuppyControl.CLI.SlashCommands.Commands.AddModelTest do
 
     test "builds openai config with gpt-5 reasoning effort" do
       provider = %ProviderInfo{id: "openai", name: "OpenAI", env: ["OPENAI_API_KEY"]}
-      model = %ModelInfo{provider_id: "openai", model_id: "gpt-5-turbo", name: "GPT-5 Turbo", context_length: 128_000, tool_call: true}
 
-      config = AddModel.build_model_config(model, provider)
+      model = %ModelInfo{
+        provider_id: "openai",
+        model_id: "gpt-5-turbo",
+        name: "GPT-5 Turbo",
+        context_length: 128_000,
+        tool_call: true
+      }
+
+      {:ok, config} = AddModel.build_model_config(model, provider)
 
       assert config["type"] == "openai"
       assert config["name"] == "gpt-5-turbo"
@@ -129,10 +152,22 @@ defmodule CodePuppyControl.CLI.SlashCommands.Commands.AddModelTest do
     end
 
     test "builds custom_openai config with endpoint" do
-      provider = %ProviderInfo{id: "groq", name: "Groq", env: ["GROQ_API_KEY"], api: "https://api.groq.com/openai/v1"}
-      model = %ModelInfo{provider_id: "groq", model_id: "llama-3", name: "Llama 3", context_length: 8192, tool_call: true}
+      provider = %ProviderInfo{
+        id: "groq",
+        name: "Groq",
+        env: ["GROQ_API_KEY"],
+        api: "https://api.groq.com/openai/v1"
+      }
 
-      config = AddModel.build_model_config(model, provider)
+      model = %ModelInfo{
+        provider_id: "groq",
+        model_id: "llama-3",
+        name: "Llama 3",
+        context_length: 8192,
+        tool_call: true
+      }
+
+      {:ok, config} = AddModel.build_model_config(model, provider)
 
       assert config["type"] == "custom_openai"
       assert config["custom_endpoint"]["url"] == "https://api.groq.com/openai/v1"
@@ -141,19 +176,101 @@ defmodule CodePuppyControl.CLI.SlashCommands.Commands.AddModelTest do
 
     test "builds custom_openai config with hardcoded fallback endpoint" do
       provider = %ProviderInfo{id: "groq", name: "Groq", env: ["GROQ_API_KEY"], api: ""}
-      model = %ModelInfo{provider_id: "groq", model_id: "llama-3", name: "Llama 3", context_length: 8192, tool_call: true}
 
-      config = AddModel.build_model_config(model, provider)
+      model = %ModelInfo{
+        provider_id: "groq",
+        model_id: "llama-3",
+        name: "Llama 3",
+        context_length: 8192,
+        tool_call: true
+      }
+
+      {:ok, config} = AddModel.build_model_config(model, provider)
 
       assert config["type"] == "custom_openai"
       assert config["custom_endpoint"]["url"] == "https://api.groq.com/openai/v1"
     end
 
-    test "builds minimax config with custom_anthropic and stripped /v1" do
-      provider = %ProviderInfo{id: "minimax", name: "MiniMax", env: ["MINIMAX_API_KEY"], api: "https://api.minimax.io/anthropic/v1"}
-      model = %ModelInfo{provider_id: "minimax", model_id: "minimax-01", name: "MiniMax 01", context_length: 100_000, tool_call: true}
+    test "builds togetherai config with custom_openai type" do
+      provider = %ProviderInfo{
+        id: "togetherai",
+        name: "Together AI",
+        env: ["TOGETHER_API_KEY"],
+        api: ""
+      }
 
-      config = AddModel.build_model_config(model, provider)
+      model = %ModelInfo{
+        provider_id: "togetherai",
+        model_id: "llama-3.1",
+        name: "Llama 3.1",
+        context_length: 128_000,
+        tool_call: true
+      }
+
+      {:ok, config} = AddModel.build_model_config(model, provider)
+
+      assert config["type"] == "custom_openai"
+      assert config["provider"] == "togetherai"
+      assert config["custom_endpoint"]["url"] == "https://api.together.xyz/v1"
+    end
+
+    test "builds fireworks-ai config with custom_openai type" do
+      provider = %ProviderInfo{
+        id: "fireworks-ai",
+        name: "Fireworks AI",
+        env: ["FIREWORKS_API_KEY"],
+        api: ""
+      }
+
+      model = %ModelInfo{
+        provider_id: "fireworks-ai",
+        model_id: "llama-v3p1",
+        name: "Llama v3.1",
+        context_length: 128_000,
+        tool_call: true
+      }
+
+      {:ok, config} = AddModel.build_model_config(model, provider)
+
+      assert config["type"] == "custom_openai"
+      assert config["provider"] == "fireworks_ai"
+    end
+
+    test "builds xai config with custom_openai type" do
+      provider = %ProviderInfo{id: "xai", name: "xAI", env: ["XAI_API_KEY"], api: ""}
+
+      model = %ModelInfo{
+        provider_id: "xai",
+        model_id: "grok-3",
+        name: "Grok 3",
+        context_length: 128_000,
+        tool_call: true
+      }
+
+      {:ok, config} = AddModel.build_model_config(model, provider)
+
+      assert config["type"] == "custom_openai"
+      assert config["provider"] == "xai"
+      assert config["custom_endpoint"]["url"] == "https://api.x.ai/v1"
+    end
+
+    test "builds minimax config with custom_anthropic and stripped /v1" do
+      provider = %ProviderInfo{
+        id: "minimax",
+        name: "MiniMax",
+        env: ["MINIMAX_API_KEY"],
+        api: "https://api.minimax.io/anthropic/v1"
+      }
+
+      model = %ModelInfo{
+        provider_id: "minimax",
+        model_id: "minimax-01",
+        name: "MiniMax 01",
+        context_length: 100_000,
+        tool_call: true
+      }
+
+      {:ok, config} = AddModel.build_model_config(model, provider)
 
       assert config["type"] == "custom_anthropic"
       assert config["custom_endpoint"]["url"] == "https://api.minimax.io/anthropic"
@@ -162,9 +279,16 @@ defmodule CodePuppyControl.CLI.SlashCommands.Commands.AddModelTest do
 
     test "builds gemini config" do
       provider = %ProviderInfo{id: "google", name: "Google", env: ["GOOGLE_API_KEY"]}
-      model = %ModelInfo{provider_id: "google", model_id: "gemini-2.5-pro", name: "Gemini 2.5 Pro", context_length: 1_000_000, tool_call: true}
 
-      config = AddModel.build_model_config(model, provider)
+      model = %ModelInfo{
+        provider_id: "google",
+        model_id: "gemini-2.5-pro",
+        name: "Gemini 2.5 Pro",
+        context_length: 1_000_000,
+        tool_call: true
+      }
+
+      {:ok, config} = AddModel.build_model_config(model, provider)
 
       assert config["type"] == "gemini"
       assert config["name"] == "gemini-2.5-pro"
@@ -173,27 +297,106 @@ defmodule CodePuppyControl.CLI.SlashCommands.Commands.AddModelTest do
 
     test "kimi-for-coding provider uses kimi-for-coding as name" do
       provider = %ProviderInfo{id: "kimi-for-coding", name: "Kimi", env: ["KIMI_API_KEY"]}
-      model = %ModelInfo{provider_id: "kimi-for-coding", model_id: "kimi-k2-thinking", name: "Kimi K2", context_length: 128_000, tool_call: true}
 
-      config = AddModel.build_model_config(model, provider)
+      model = %ModelInfo{
+        provider_id: "kimi-for-coding",
+        model_id: "kimi-k2-thinking",
+        name: "Kimi K2",
+        context_length: 128_000,
+        tool_call: true
+      }
+
+      {:ok, config} = AddModel.build_model_config(model, provider)
 
       assert config["name"] == "kimi-for-coding"
     end
 
     test "unknown provider falls back to custom_openai" do
-      provider = %ProviderInfo{id: "some-new-provider", name: "New Provider", env: ["NEW_API_KEY"], api: "https://api.newprovider.com/v1"}
-      model = %ModelInfo{provider_id: "some-new-provider", model_id: "cool-model", name: "Cool Model", context_length: 64_000, tool_call: true}
+      provider = %ProviderInfo{
+        id: "some-new-provider",
+        name: "New Provider",
+        env: ["NEW_API_KEY"],
+        api: "https://api.newprovider.com/v1"
+      }
 
-      config = AddModel.build_model_config(model, provider)
+      model = %ModelInfo{
+        provider_id: "some-new-provider",
+        model_id: "cool-model",
+        name: "Cool Model",
+        context_length: 64_000,
+        tool_call: true
+      }
+
+      {:ok, config} = AddModel.build_model_config(model, provider)
 
       assert config["type"] == "custom_openai"
     end
 
+    test "unsupported provider returns error" do
+      provider = %ProviderInfo{id: "azure", name: "Azure", env: ["AZURE_API_KEY"]}
+
+      model = %ModelInfo{
+        provider_id: "azure",
+        model_id: "gpt-4",
+        name: "GPT-4 Azure",
+        context_length: 128_000,
+        tool_call: true
+      }
+
+      assert {:error, reason} = AddModel.build_model_config(model, provider)
+      assert reason =~ "Azure"
+    end
+
+    test "unsupported azure-cognitive-services provider returns error" do
+      provider = %ProviderInfo{
+        id: "azure-cognitive-services",
+        name: "Azure Cognitive Services",
+        env: ["AZURE_API_KEY"]
+      }
+
+      model = %ModelInfo{
+        provider_id: "azure-cognitive-services",
+        model_id: "gpt-4",
+        name: "GPT-4",
+        context_length: 128_000,
+        tool_call: true
+      }
+
+      assert {:error, reason} = AddModel.build_model_config(model, provider)
+      assert reason =~ "Azure"
+    end
+
+    test "unsupported amazon-bedrock provider returns error" do
+      provider = %ProviderInfo{
+        id: "amazon-bedrock",
+        name: "Amazon Bedrock",
+        env: ["AWS_ACCESS_KEY"]
+      }
+
+      model = %ModelInfo{
+        provider_id: "amazon-bedrock",
+        model_id: "claude-3",
+        name: "Claude 3",
+        context_length: 200_000,
+        tool_call: true
+      }
+
+      assert {:error, reason} = AddModel.build_model_config(model, provider)
+      assert reason =~ "AWS SigV4"
+    end
+
     test "omits context_length when zero" do
       provider = %ProviderInfo{id: "openai", name: "OpenAI", env: ["OPENAI_API_KEY"]}
-      model = %ModelInfo{provider_id: "openai", model_id: "test-model", name: "Test", context_length: 0, tool_call: true}
 
-      config = AddModel.build_model_config(model, provider)
+      model = %ModelInfo{
+        provider_id: "openai",
+        model_id: "test-model",
+        name: "Test",
+        context_length: 0,
+        tool_call: true
+      }
+
+      {:ok, config} = AddModel.build_model_config(model, provider)
 
       refute Map.has_key?(config, "context_length")
     end
@@ -203,13 +406,37 @@ defmodule CodePuppyControl.CLI.SlashCommands.Commands.AddModelTest do
 
   describe "derive_provider_identity/1" do
     test "maps known providers to identity strings" do
-      assert AddModel.derive_provider_identity(%ProviderInfo{id: "openai", name: "OpenAI", env: []}) == "openai"
-      assert AddModel.derive_provider_identity(%ProviderInfo{id: "together-ai", name: "Together", env: []}) == "together_ai"
-      assert AddModel.derive_provider_identity(%ProviderInfo{id: "anthropic", name: "Anthropic", env: []}) == "anthropic"
+      assert AddModel.derive_provider_identity(%ProviderInfo{
+               id: "openai",
+               name: "OpenAI",
+               env: []
+             }) == "openai"
+
+      assert AddModel.derive_provider_identity(%ProviderInfo{
+               id: "togetherai",
+               name: "Together AI",
+               env: []
+             }) == "togetherai"
+
+      assert AddModel.derive_provider_identity(%ProviderInfo{
+               id: "anthropic",
+               name: "Anthropic",
+               env: []
+             }) == "anthropic"
+
+      assert AddModel.derive_provider_identity(%ProviderInfo{
+               id: "fireworks-ai",
+               name: "Fireworks AI",
+               env: []
+             }) == "fireworks_ai"
     end
 
     test "falls back to hyphen-to-underscore conversion" do
-      assert AddModel.derive_provider_identity(%ProviderInfo{id: "my-cool-provider", name: "Cool", env: []}) == "my_cool_provider"
+      assert AddModel.derive_provider_identity(%ProviderInfo{
+               id: "my-cool-provider",
+               name: "Cool",
+               env: []
+             }) == "my_cool_provider"
     end
   end
 
@@ -218,6 +445,14 @@ defmodule CodePuppyControl.CLI.SlashCommands.Commands.AddModelTest do
   describe "unsupported_provider?/1" do
     test "amazon-bedrock is unsupported" do
       assert AddModel.unsupported_provider?("amazon-bedrock")
+    end
+
+    test "azure is unsupported" do
+      assert AddModel.unsupported_provider?("azure")
+    end
+
+    test "azure-cognitive-services is unsupported" do
+      assert AddModel.unsupported_provider?("azure-cognitive-services")
     end
 
     test "google-vertex is unsupported" do
@@ -231,11 +466,27 @@ defmodule CodePuppyControl.CLI.SlashCommands.Commands.AddModelTest do
     test "anthropic is supported" do
       refute AddModel.unsupported_provider?("anthropic")
     end
+
+    test "togetherai is supported" do
+      refute AddModel.unsupported_provider?("togetherai")
+    end
+
+    test "fireworks-ai is supported" do
+      refute AddModel.unsupported_provider?("fireworks-ai")
+    end
   end
 
   describe "unsupported_reason/1" do
     test "returns reason for unsupported provider" do
       assert AddModel.unsupported_reason("amazon-bedrock") =~ "AWS SigV4"
+    end
+
+    test "returns reason for azure" do
+      assert AddModel.unsupported_reason("azure") =~ "Azure AD"
+    end
+
+    test "returns reason for azure-cognitive-services" do
+      assert AddModel.unsupported_reason("azure-cognitive-services") =~ "Azure AD"
     end
 
     test "returns nil for supported provider" do
@@ -298,6 +549,41 @@ defmodule CodePuppyControl.CLI.SlashCommands.Commands.AddModelTest do
       result = AddModel.filter_models(models, "gpt")
       assert length(result) == 1
       assert hd(result).model_id == "gpt-5-turbo"
+    end
+  end
+
+  # ── add_model_to_config/2 GenServer safety (bd-268 Blocker 2) ────────────
+
+  describe "add_model_to_config/2 when LockKeeper is down" do
+    test "returns error tuple instead of crashing when LockKeeper is unavailable" do
+      # Stop LockKeeper if running. The app supervisor may restart it
+      # before our call, so we accept either outcome — both prove
+      # the code doesn't crash with an unhandled exit.
+      lock_keeper_id =
+        CodePuppyControl.CLI.SlashCommands.Commands.AddModelPersistence.LockKeeper
+
+      case Process.whereis(lock_keeper_id) do
+        nil ->
+          :ok
+
+        pid ->
+          Process.unlink(pid)
+          GenServer.stop(pid, :shutdown, 5_000)
+      end
+
+      provider = %ProviderInfo{id: "openai", name: "OpenAI", env: ["OPENAI_API_KEY"]}
+
+      model = %ModelInfo{
+        provider_id: "openai",
+        model_id: "gpt-5-nolock",
+        name: "GPT-5 NoLock",
+        context_length: 128_000,
+        tool_call: true
+      }
+
+      # Should NOT crash — returns either {:ok, _} or {:error, _}
+      result = AddModel.add_model_to_config(model, provider)
+      assert match?({:ok, _}, result) or match?({:error, _}, result)
     end
   end
 end
