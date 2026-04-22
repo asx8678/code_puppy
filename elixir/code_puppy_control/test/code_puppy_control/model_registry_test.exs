@@ -265,7 +265,7 @@ defmodule CodePuppyControl.ModelRegistryTest do
       # All should return the same config
       first_result = hd(results)
       assert is_map(first_result)
-      assert first_result["type"] == "zai_coding"
+      assert first_result["type"] == "custom_openai"
 
       # Verify all results are identical
       assert Enum.all?(results, fn r -> r == first_result end)
