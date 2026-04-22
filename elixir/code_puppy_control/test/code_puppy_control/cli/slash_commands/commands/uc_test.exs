@@ -11,13 +11,17 @@ defmodule CodePuppyControl.CLI.SlashCommands.Commands.UCTest do
   setup do
     File.mkdir_p!(@test_uc_dir)
 
-    # Start the UC Registry GenServer with our test tools dir
+    # Ensure the UC Registry GenServer is running with our test tools dir.
+    # If already started (e.g. by the application supervisor), repoint it
+    # to our isolated test directory using set_tools_dir/1 rather than
+    # trying to stop and restart (which conflicts with the supervisor).
     case Process.whereis(UCRegistry) do
       nil ->
         start_supervised!({UCRegistry, tools_dir: @test_uc_dir})
 
       _pid ->
-        :ok
+        # Already running — repoint to test directory
+        UCRegistry.set_tools_dir(@test_uc_dir)
     end
 
     # Start the Slash Commands Registry GenServer if not already running
@@ -41,9 +45,18 @@ defmodule CodePuppyControl.CLI.SlashCommands.Commands.UCTest do
         )
       )
 
+    original_tools_dir = UCRegistry.tools_dir()
+
     on_exit(fn ->
       Registry.clear()
       Registry.register_builtin_commands()
+      # Restore original tools dir so we don't pollute other tests
+      try do
+        UCRegistry.set_tools_dir(original_tools_dir)
+      catch
+        :exit, _ -> :ok
+      end
+
       File.rm_rf!(@test_uc_dir)
     end)
 
@@ -354,6 +367,120 @@ defmodule CodePuppyControl.CLI.SlashCommands.Commands.UCTest do
     test "/uc usage is correct" do
       {:ok, cmd} = Registry.get("uc")
       assert cmd.usage =~ "/uc"
+    end
+  end
+
+  describe "register_builtin_commands/0" do
+    test "registers /uc after clear and re-register" do
+      Registry.clear()
+      # The built-in registration should add /uc back
+      Registry.register_builtin_commands()
+      assert {:ok, cmd} = Registry.get("uc")
+      assert cmd.name == "uc"
+    end
+
+    test "registers /uc with alias 'universal_constructor' via builtin" do
+      Registry.clear()
+      Registry.register_builtin_commands()
+      assert {:ok, cmd} = Registry.get("universal_constructor")
+      assert cmd.name == "uc"
+    end
+  end
+
+  describe "/uc toggle — targeted replacement" do
+    setup do
+      # Create a tool file with MULTIPLE 'enabled:' occurrences — one inside
+      # @uc_tool and one in regular code. Toggle must ONLY modify the @uc_tool one.
+      tool_content = """
+      defmodule TestTargetedToggle do
+        @uc_tool %{
+          name: "targeted",
+          namespace: "",
+          description: "Tests targeted toggle replacement",
+          enabled: true,
+          version: "1.0.0",
+          author: "test"
+        }
+
+        # Config that also has 'enabled:' — must NOT be modified
+        @feature_flag %{enabled: true, name: "other_feature"}
+
+        def run(_args) do
+          :ok
+        end
+      end
+      """
+
+      File.write!(Path.join(@test_uc_dir, "targeted.ex"), tool_content)
+      UCRegistry.reload()
+
+      :ok
+    end
+
+    test "toggle only rewrites @uc_tool enabled, not other enabled: occurrences" do
+      ExUnit.CaptureIO.capture_io(fn ->
+        assert {:continue, _} = UC.handle_uc("/uc toggle targeted", %{})
+      end)
+
+      content = File.read!(Path.join(@test_uc_dir, "targeted.ex"))
+
+      # The @uc_tool block should now have enabled: false
+      assert content =~ "enabled: false"
+
+      # The @feature_flag must still have enabled: true
+      assert content =~ "@feature_flag %{enabled: true"
+    end
+
+    test "toggle round-trips without corrupting other enabled: fields" do
+      # Toggle off
+      ExUnit.CaptureIO.capture_io(fn ->
+        assert {:continue, _} = UC.handle_uc("/uc toggle targeted", %{})
+      end)
+
+      # Toggle back on
+      ExUnit.CaptureIO.capture_io(fn ->
+        assert {:continue, _} = UC.handle_uc("/uc toggle targeted", %{})
+      end)
+
+      content = File.read!(Path.join(@test_uc_dir, "targeted.ex"))
+
+      # @uc_tool should be back to enabled: true
+      assert content =~ "enabled: true"
+
+      # @feature_flag must still be enabled: true throughout
+      assert content =~ "@feature_flag %{enabled: true"
+    end
+  end
+
+  describe "/uc without running registry" do
+    test "shows friendly error when registry is not running" do
+      # Temporarily unregister the name to test the graceful fallback.
+      # We use unregister/2 to detach the name without killing the process,
+      # then re-register after the test.
+      case Process.whereis(UCRegistry) do
+        nil ->
+          # Already not running — just test directly
+          output =
+            ExUnit.CaptureIO.capture_io(fn ->
+              assert {:continue, _} = UC.handle_uc("/uc", %{})
+            end)
+
+          assert output =~ "registry is not running"
+
+        pid ->
+          # Unregister the name so Process.whereis returns nil
+          :erlang.unregister(UCRegistry)
+
+          output =
+            ExUnit.CaptureIO.capture_io(fn ->
+              assert {:continue, _} = UC.handle_uc("/uc", %{})
+            end)
+
+          assert output =~ "registry is not running"
+
+          # Re-register the name so other tests work
+          :erlang.register(UCRegistry, pid)
+      end
     end
   end
 end

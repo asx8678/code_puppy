@@ -50,6 +50,10 @@ defmodule CodePuppyControl.CLI.SlashCommands.Commands.UC do
   # ── Subcommands ──────────────────────────────────────────────────────
 
   defp list_tools do
+    with_uc_registry(fn -> list_tools_impl() end)
+  end
+
+  defp list_tools_impl do
     tools = UCRegistry.list_tools(include_disabled: true)
     enabled_count = Enum.count(tools, & &1.meta.enabled)
     total_count = length(tools)
@@ -104,6 +108,10 @@ defmodule CodePuppyControl.CLI.SlashCommands.Commands.UC do
   end
 
   defp toggle_tool(tool_name) do
+    with_uc_registry(fn -> toggle_tool_impl(tool_name) end)
+  end
+
+  defp toggle_tool_impl(tool_name) do
     tool = UCRegistry.get_tool(tool_name)
 
     case tool do
@@ -142,6 +150,10 @@ defmodule CodePuppyControl.CLI.SlashCommands.Commands.UC do
   end
 
   defp show_tool_info(tool_name) do
+    with_uc_registry(fn -> show_tool_info_impl(tool_name) end)
+  end
+
+  defp show_tool_info_impl(tool_name) do
     tool = UCRegistry.get_tool(tool_name)
 
     case tool do
@@ -224,26 +236,127 @@ defmodule CodePuppyControl.CLI.SlashCommands.Commands.UC do
         new_enabled = not current_enabled
         new_value = to_string(new_enabled)
 
-        # Match enabled: true/false or enabled: True/False in @uc_tool map
-        pattern = ~r/(enabled:\s*)(true|false|True|False)/
+        # Targeted: only replace 'enabled' inside the @uc_tool metadata block.
+        # This avoids corrupting other 'enabled:' occurrences in the file.
+        #
+        # Strategy: find the @uc_tool %{ ... } block, then replace
+        # 'enabled: <bool>' only within that block.
+        case replace_enabled_in_uc_tool_block(content, new_value) do
+          {:ok, new_content} ->
+            # Atomic write: write to temp file then rename
+            tmp_path = source_path <> ".tmp#{:erlang.unique_integer([:positive])}"
 
-        case Regex.replace(pattern, content, fn _full, prefix, _old_value ->
-               prefix <> new_value
-             end) do
-          ^content ->
-            # No replacement made — enabled field not found
-            {:error, "Could not find 'enabled:' field in @uc_tool at #{source_path}"}
+            try do
+              case File.write(tmp_path, new_content) do
+                :ok ->
+                  case File.rename(tmp_path, source_path) do
+                    :ok ->
+                      :ok
 
-          new_content ->
-            case File.write(source_path, new_content) do
-              :ok -> :ok
-              {:error, reason} -> {:error, "Failed to write file: #{inspect(reason)}"}
+                    {:error, reason} ->
+                      File.rm(tmp_path)
+                      {:error, "Failed to rename temp file: #{inspect(reason)}"}
+                  end
+
+                {:error, reason} ->
+                  File.rm(tmp_path)
+                  {:error, "Failed to write temp file: #{inspect(reason)}"}
+              end
+            rescue
+              e ->
+                File.rm(tmp_path)
+                {:error, "Atomic write failed: #{inspect(e)}"}
             end
+
+          {:error, reason} ->
+            {:error, reason}
         end
 
       {:error, reason} ->
         {:error, "Could not read source file: #{inspect(reason)}"}
     end
+  end
+
+  # Replace only the 'enabled' field inside the @uc_tool %{ ... } block.
+  # Scans for '@uc_tool %{' then replaces the first 'enabled: true/false'
+  # found after it (within the map boundary).
+  defp replace_enabled_in_uc_tool_block(content, new_value) do
+    # Find the start of @uc_tool %{ ... }
+    case Regex.run(~r/@uc_tool\s+%\{/, content, return: :index) do
+      [{block_start, match_len}] ->
+        # The map opening is at block_start + match_len
+        map_open_end = block_start + match_len
+
+        # Find the closing brace for the @uc_tool map.
+        # We track brace depth starting from the opening we just found.
+        case find_closing_brace(content, map_open_end) do
+          {:ok, closing_pos} ->
+            # Extract the @uc_tool block (including the @uc_tool prefix)
+            before_block = binary_part(content, 0, block_start)
+            block_content = binary_part(content, block_start, closing_pos - block_start + 1)
+
+            after_block =
+              binary_part(content, closing_pos + 1, byte_size(content) - closing_pos - 1)
+
+            # Replace enabled: true/false only within the block
+            enabled_pattern = ~r/(enabled:\s*)(true|false|True|False)/
+
+            case Regex.replace(enabled_pattern, block_content, fn _full, prefix, _old ->
+                   prefix <> new_value
+                 end) do
+              ^block_content ->
+                {:error, "Could not find 'enabled:' field in @uc_tool"}
+
+              new_block ->
+                {:ok, before_block <> new_block <> after_block}
+            end
+
+          :error ->
+            {:error, "Could not find closing brace for @uc_tool block"}
+        end
+
+      nil ->
+        {:error, "Could not find @uc_tool attribute"}
+    end
+  end
+
+  # Find the position of the closing '}' for a map that starts at `from_pos`.
+  # Tracks brace depth, respecting string literals to avoid false matches.
+  defp find_closing_brace(content, from_pos) do
+    find_closing_brace(content, from_pos, 1, 0)
+  end
+
+  defp find_closing_brace(_content, pos, 0, _string_depth) when pos > 0 do
+    # We've closed the opening brace — return position of the closing '}'
+    {:ok, pos - 1}
+  end
+
+  defp find_closing_brace(content, pos, depth, string_depth) when pos <= byte_size(content) do
+    case :binary.at(content, pos) do
+      ?\" when string_depth == 0 ->
+        find_closing_brace(content, pos + 1, depth, 1)
+
+      ?\" when string_depth == 1 ->
+        # Check for escaped quote
+        if pos > 0 and :binary.at(content, pos - 1) == ?\\ do
+          find_closing_brace(content, pos + 1, depth, 1)
+        else
+          find_closing_brace(content, pos + 1, depth, 0)
+        end
+
+      ?{ when string_depth == 0 ->
+        find_closing_brace(content, pos + 1, depth + 1, 0)
+
+      ?} when string_depth == 0 ->
+        find_closing_brace(content, pos + 1, depth - 1, 0)
+
+      _ ->
+        find_closing_brace(content, pos + 1, depth, string_depth)
+    end
+  end
+
+  defp find_closing_brace(_content, _pos, _depth, _string_depth) do
+    :error
   end
 
   # ── Helpers ───────────────────────────────────────────────────────────
@@ -257,4 +370,19 @@ defmodule CodePuppyControl.CLI.SlashCommands.Commands.UC do
   end
 
   defp extract_args(_line), do: ""
+
+  # Graceful fallback when the UC Registry GenServer is not running.
+  # Prevents crashes from calling a non-existent process.
+  defp with_uc_registry(fun) do
+    case Process.whereis(UCRegistry) do
+      nil ->
+        IO.puts(
+          IO.ANSI.red() <>
+            "    Universal Constructor registry is not running" <> IO.ANSI.reset()
+        )
+
+      _pid ->
+        fun.()
+    end
+  end
 end
