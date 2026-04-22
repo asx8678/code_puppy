@@ -285,6 +285,16 @@ defmodule CodePuppyControl.CLI.SlashCommands.Registry do
         category: "session",
         detailed_help:
           "Trims the agent's message history to the last N messages. Depends on agent message history port."
+      ),
+      CommandInfo.new(
+        name: "autosave_load",
+        description: "Load the most recent autosaved session",
+        handler: &Commands.AutosaveLoad.handle_autosave_load/2,
+        usage: "/autosave_load",
+        aliases: ["resume"],
+        category: "session",
+        detailed_help:
+          "Loads the most recent autosaved session into the current REPL state. If multiple autosaves exist, shows a numbered list and loads the most recent one by default, or lets you pick by number. Alias: /resume."
       )
     ]
 
