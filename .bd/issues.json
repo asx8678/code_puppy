@@ -4706,7 +4706,7 @@
       "id": "bd-235",
       "title": "CI integration: nightly eval job with RUN_EVALS=1 + parity diff",
       "description": "Follow-up from bd-175.\n\nWire up a GitHub Actions (or equivalent) nightly job that:\n\n1. Runs `RUN_EVALS=1 mix test --only eval` in Elixir\n2. Runs `RUN_EVALS=1 pytest evals/ -v` in Python (when the corpus exists)\n3. Diffs the resulting `evals/logs/*.json` files modulo timestamp \u2014 jq\n   `del(.timestamp)` then `diff -r`\n4. Posts a summary (pass/fail per case, any schema diffs) to a comment\n   or issue\n\nAcceptance:\n- Nightly job runs on main\n- Secret handling for Anthropic + OpenAI API keys\n- Budget alert on per-run cost (set a cap)\n- Parity failures block the release pipeline (block bd-178 or wherever\n  release automation lands)\n\nDepends on the eval corpus (preceding issue) being populated.",
-      "status": "open",
+      "status": "closed",
       "priority": 3,
       "type": "task",
       "labels": [
@@ -4723,7 +4723,7 @@
         ]
       },
       "created_at": "2026-04-21T00:05:18.646767",
-      "updated_at": "2026-04-21T00:05:20.737358",
+      "updated_at": "2026-04-22T07:59:34.224262",
       "comments": []
     },
     "bd-236": {
@@ -4796,7 +4796,7 @@
       "id": "bd-239",
       "title": "Burrito: add linux_musl target for Alpine/musl distros",
       "description": "Out of scope for bd-171. Current Linux Burrito targets link against glibc,\nwhich excludes Alpine Linux and other musl-based distros. Add a\nlinux_musl_x86_64 target using a musl-cross Zig toolchain.\n\nSee docs/burrito-release.md Linux musl Alpine section.",
-      "status": "open",
+      "status": "closed",
       "priority": 3,
       "type": "task",
       "labels": [
@@ -4808,14 +4808,14 @@
         ]
       },
       "created_at": "2026-04-21T00:37:50.366556",
-      "updated_at": "2026-04-21T00:37:58.453845",
+      "updated_at": "2026-04-22T07:59:34.133390",
       "comments": []
     },
     "bd-240": {
       "id": "bd-240",
       "title": "Burrito: Windows Authenticode signing",
       "description": "Out of scope for bd-171. Sign windows_x86_64 Burrito binary with an\nAuthenticode code-signing cert to avoid SmartScreen unrecognized app warnings.\n\nRequires:\n- EV or OV code-signing certificate\n- signtool.exe integration in build pipeline\n- CI secret for cert + password\n\nSee docs/burrito-release.md Windows SmartScreen section.",
-      "status": "open",
+      "status": "closed",
       "priority": 3,
       "type": "task",
       "labels": [
@@ -4827,14 +4827,14 @@
         ]
       },
       "created_at": "2026-04-21T00:37:50.375350",
-      "updated_at": "2026-04-21T00:37:58.410027",
+      "updated_at": "2026-04-22T07:59:34.163847",
       "comments": []
     },
     "bd-241": {
       "id": "bd-241",
       "title": "Burrito: macOS codesigning + notarization",
       "description": "Out of scope for bd-171. Sign and notarize macOS Burrito binaries with Apple Developer ID so users do not need to bypass Gatekeeper. Requires: Apple Developer ID certificate, codesign step in build script, notarytool submission, CI secrets.",
-      "status": "open",
+      "status": "closed",
       "priority": 3,
       "type": "task",
       "labels": [
@@ -4846,7 +4846,7 @@
         ]
       },
       "created_at": "2026-04-21T00:37:55.336169",
-      "updated_at": "2026-04-21T00:37:58.401383",
+      "updated_at": "2026-04-22T07:59:34.194086",
       "comments": []
     },
     "bd-242": {
@@ -5553,7 +5553,126 @@
       "created_at": "2026-04-21T23:24:22.882304",
       "updated_at": "2026-04-21T23:24:25.988122",
       "comments": []
+    },
+    "bd-277": {
+      "id": "bd-277",
+      "title": "Add ResponseValidator for structured output (R1 mitigation)",
+      "description": "## Summary\n\nAdd an optional ResponseValidator module for structured LLM output validation, mitigating R1 risk from bd-132 (pydantic-ai has no Elixir equivalent).\n\n## Background\n\nAnalysis determined that:\n- The agent loop is already fully ported to Elixir\n- Tool dispatch is already ported\n- The only gap is **structured output validation** (getting typed structs from LLM text)\n- Elixir Instructor library exists but adds dependencies and conflicts with our loop design\n- **Decision: Roll our own using Ecto changesets (zero new deps)**\n\n## Deliverables\n\n1. `lib/code_puppy_control/agent/response_validator.ex`\n   - `ResponseValidator.Schema` behaviour (`changeset/2` callback)\n   - `validate/2` \u2014 validates response against optional schema\n   - `extract_json/1` \u2014 3-strategy JSON extraction\n   - `collect_errors/1` \u2014 flatten changeset errors\n\n2. `test/code_puppy_control/agent/response_validator_test.exs`\n   - 25 test cases (pass-through, validation, errors, malformed JSON)\n\n3. Integration into Agent.Behaviour (optional `response_schema/0` callback)\n\n## Code Status\n\nModule and test code are fully written and reviewed. Ready to commit.\n\n## Estimate\n\n~2 hours total (file creation + loop integration + testing)",
+      "status": "closed",
+      "priority": 2,
+      "type": "task",
+      "labels": [
+        "r1-mitigation",
+        "structured-output"
+      ],
+      "dependencies": {
+        "discovered-from": [
+          "bd-132"
+        ],
+        "blocks": [
+          "bd-278"
+        ]
+      },
+      "created_at": "2026-04-22T08:39:56.029515",
+      "updated_at": "2026-04-22T09:08:02.014647",
+      "comments": []
+    },
+    "bd-278": {
+      "id": "bd-278",
+      "title": "Integrate ResponseValidator into Agent.Behaviour (response_schema/0 callback)",
+      "description": "## Summary\n\nAdd optional `response_schema/0` callback to Agent.Behaviour that enables structured output validation via ResponseValidator.\n\n## Prerequisites\n\n- bd-277 (ResponseValidator module) must be completed first\n\n## Implementation\n\n1. Add optional callback to `lib/code_puppy_control/agent/behaviour.ex`:\n   ```elixir\n   @callback response_schema() :: module() | nil\n   @optional_callbacks [response_schema: 0]\n   ```\n\n2. Update `Agent.Loop` to call ResponseValidator after LLM response:\n   - Check if agent implements `response_schema/0`\n   - If yes, validate via `ResponseValidator.validate(response, schema)`\n   - On error, either retry or surface to caller (TBD: design decision)\n\n3. Add tests for loop integration\n\n4. Document in Agent.Behaviour moduledoc\n\n## Design Decisions Needed\n\n- On validation failure: retry with feedback to LLM, or return error?\n- Max retries if retry approach chosen?\n- Should validation errors be surfaced via EventBus?\n\n## Estimate\n\n~1-2 hours",
+      "status": "open",
+      "priority": 2,
+      "type": "task",
+      "labels": [
+        "r1-mitigation",
+        "structured-output"
+      ],
+      "dependencies": {},
+      "created_at": "2026-04-22T08:43:56.438788",
+      "updated_at": "2026-04-22T08:44:04.187752",
+      "comments": []
+    },
+    "bd-279": {
+      "id": "bd-279",
+      "title": "R5: Write config.py semantics spec (84KB)",
+      "description": "## Approach: FULL SPEC BEFORE PORTING\n\n**Decided:** 2026-04-22\n\nThe 84KB config.py semantics will be fully documented before porting to Elixir.\n\n### Rationale\n- Config is foundational - errors here cascade everywhere\n- Spec serves as migration validation checklist\n- Prevents accidental behavior changes\n\n### Deliverable\n- Complete spec document covering all config options\n- Organized by section/category\n- Include: option name, type, default, description, migration notes\n\n### Estimate\n- ~3-5 days for full spec document",
+      "status": "open",
+      "priority": 2,
+      "type": "doc",
+      "labels": [
+        "risk",
+        "config"
+      ],
+      "dependencies": {},
+      "created_at": "2026-04-22T08:48:46.428765",
+      "updated_at": "2026-04-22T08:52:18.381351",
+      "comments": []
+    },
+    "bd-280": {
+      "id": "bd-280",
+      "title": "R9: Decision - Plugin loading: compiled vs runtime",
+      "description": "## Decision: COMPILED PLUGINS ONLY\n\n**Decided:** 2026-04-22\n\nAll plugins will be compiled into the Elixir release. No runtime plugin loading for v1.\n\n### Rationale\n- Simpler implementation\n- Better startup performance\n- Easier to debug and maintain\n- Users who need custom plugins can fork/contribute\n\n### Impact\n- User plugins from ~/.code_puppy/plugins/ will NOT work in pup-ex v1\n- All shipped plugins compiled into binary\n- Adding new plugins requires new release\n\n### Follow-up\n- Document this limitation clearly in migration guide\n- Consider runtime loading for v1.1 based on user feedback",
+      "status": "open",
+      "priority": 2,
+      "type": "decision",
+      "labels": [
+        "risk",
+        "plugins"
+      ],
+      "dependencies": {},
+      "created_at": "2026-04-22T08:48:46.431863",
+      "updated_at": "2026-04-22T08:52:18.359101",
+      "comments": []
+    },
+    "bd-281": {
+      "id": "bd-281",
+      "title": "R3: Classify 49 plugins into Tier-A/B/C for v1",
+      "description": "## Plugin Classification \u2014 FINAL\n\n**Decided:** 2026-04-22\n\nSimplified to two tiers: **PORT** (v1) and **DROP**.\n\n---\n\n### \u2705 PORT FOR V1 (35 plugins)\n\n**Agent Core (5)**\n- agent_memory\n- agent_shortcuts\n- agent_skills\n- agent_trace\n- remember_last_agent\n\n**Auth/OAuth (3)**\n- chatgpt_oauth\n- claude_code_oauth\n- claude_code_hooks\n\n**File Operations (5)**\n- file_mentions\n- file_permission_handler\n- code_explorer\n- code_skeleton\n- repo_compass\n\n**Safety (5)**\n- shell_safety\n- tool_allowlist\n- error_classifier\n- error_logger\n- loop_detection\n\n**Infrastructure (6)**\n- dual_home\n- pack_parallelism\n- turbo_executor\n- scheduler\n- ollama_setup\n- universal_constructor\n\n**Commands (5)**\n- clean_command\n- pop_command\n- customizable_commands\n- hook_manager\n- prompt_store\n\n**Misc (6)**\n- auto_test_control\n- git_auto_commit\n- cost_estimator\n- completion_notifier\n- session_logger\n- supervisor_review\n\n---\n\n### \u274c DROP \u2014 NOT PORTING (12 plugins)\n\n- elixir_bridge (not needed in pure Elixir)\n- fast_puppy (not needed in pure Elixir)\n- tracing_langfuse\n- tracing_langsmith\n- theme_switcher\n- render_check\n- frontend_emitter\n- synthetic_status\n- example_custom_command\n- hook_creator\n- ttsr\n- proactive_guidance\n\n---\n\n### Summary\n\n| Category | Count |\n|----------|-------|\n| Port for v1 | 35 |\n| Drop | 12 |\n| **Total** | **47** |\n",
+      "status": "closed",
+      "priority": 2,
+      "type": "doc",
+      "labels": [
+        "risk",
+        "plugins"
+      ],
+      "dependencies": {},
+      "created_at": "2026-04-22T08:48:46.439010",
+      "updated_at": "2026-04-22T09:03:00.253747",
+      "comments": []
+    },
+    "bd-282": {
+      "id": "bd-282",
+      "title": "R6: Decision - Playwright: Python Port vs drop browser tools",
+      "description": "## Decision: DROP BROWSER AUTOMATION FOR V1\n\n**Decided:** 2026-04-22\n\nBrowser automation via Playwright will be removed for the v1 Elixir release.\n\n### Rationale\n- Simplifies architecture (no Python subprocess needed)\n- qa-kitten agent will be disabled/removed for v1\n- Can revisit post-v1 with Elixir-native alternatives (Wallaby, direct CDP)\n\n### Impact\n- qa-kitten agent: DISABLED for v1\n- Browser-based tests: Must use alternative approach or defer\n- Users needing browser automation: Stay on Python pup until post-v1\n\n### Follow-up\n- Create issue to re-evaluate browser automation for v1.1",
+      "status": "closed",
+      "priority": 1,
+      "type": "decision",
+      "labels": [
+        "risk",
+        "browser-automation"
+      ],
+      "dependencies": {},
+      "created_at": "2026-04-22T08:48:46.445140",
+      "updated_at": "2026-04-22T08:52:35.806072",
+      "comments": []
+    },
+    "bd-283": {
+      "id": "bd-283",
+      "title": "R2: Document Owl TUI prototype results vs Textual feature parity",
+      "description": "## Status: VALIDATED\n\n**Decided:** 2026-04-22\n\nOwl TUI library has been validated as sufficient for Code Puppy's needs.\n\n### Validation Notes\n- User confirmed Owl covers required Textual features\n- lib/code_puppy_control/tui/ implementation exists\n- No feature gap blocking v1\n\n### Next Steps\n- Continue with Owl-based TUI implementation\n- Document any Textual features intentionally not ported",
+      "status": "closed",
+      "priority": 2,
+      "type": "doc",
+      "labels": [
+        "risk",
+        "tui"
+      ],
+      "dependencies": {},
+      "created_at": "2026-04-22T08:48:57.896797",
+      "updated_at": "2026-04-22T08:52:35.811014",
+      "comments": []
     }
   },
-  "counter": 276
+  "counter": 283
 }

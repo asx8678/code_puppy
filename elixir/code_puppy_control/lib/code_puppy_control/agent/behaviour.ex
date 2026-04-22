@@ -82,6 +82,26 @@ defmodule CodePuppyControl.Agent.Behaviour do
   @callback model_preference() :: String.t() | {:pack, atom()}
 
   @doc """
+  Returns an optional Ecto schema module for validating text responses.
+
+  When defined and returning a module, the agent loop will pass text-only
+  responses (no tool calls) through `ResponseValidator.validate/2`. This
+  enables typed, validated structured output from LLMs.
+
+  Return `nil` to skip validation (default).
+
+  ## Example
+
+      @impl true
+      def response_schema, do: MyAgent.PlanResponse
+
+  See `CodePuppyControl.Agent.ResponseValidator` for schema requirements.
+  """
+  @callback response_schema() :: module() | nil
+
+  @optional_callbacks [response_schema: 0]
+
+  @doc """
   Called after a tool execution completes.
 
   The agent can inspect the result and either:
@@ -102,7 +122,10 @@ defmodule CodePuppyControl.Agent.Behaviour do
       @impl true
       def on_tool_result(_tool_name, _result, state), do: {:cont, state}
 
-      defoverridable on_tool_result: 3
+      @impl true
+      def response_schema, do: nil
+
+      defoverridable on_tool_result: 3, response_schema: 0
     end
   end
 end

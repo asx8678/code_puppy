@@ -15,14 +15,15 @@ defmodule CodePuppyControl.Agent.ResponseValidator do
   def validate(response, nil), do: {:ok, response}
 
   def validate(response, schema_module) when is_atom(schema_module) do
-    with {:ok, params} <- extract_json(response.text),
-         struct <- schema_module.__struct__(),
-         changeset <- schema_module.changeset(struct, params),
-         true <- changeset.valid? do
-      {:ok, Changeset.apply_changes(changeset)}
-    else
-      {:error, _} = json_error -> json_error
-      %Changeset{valid?: false} = changeset -> {:error, collect_errors(changeset)}
+    with {:ok, params} <- extract_json(response.text) do
+      struct = schema_module.__struct__()
+      changeset = schema_module.changeset(struct, params)
+
+      if changeset.valid? do
+        {:ok, Changeset.apply_changes(changeset)}
+      else
+        {:error, collect_errors(changeset)}
+      end
     end
   end
 
@@ -78,8 +79,9 @@ defmodule CodePuppyControl.Agent.ResponseValidator do
   end
 
   defp find_last_char(text, char) do
-    case :binary.match(text, char, scope: {:reverse, byte_size(text), 0}) do
-      {pos, _} -> {:ok, pos}
+    # :binary.match does not support reverse scope — search from the end manually
+    case String.reverse(text) |> :binary.match(String.reverse(char)) do
+      {rev_pos, _} -> {:ok, byte_size(text) - rev_pos - byte_size(char)}
       :nomatch -> {:error, :not_found}
     end
   end

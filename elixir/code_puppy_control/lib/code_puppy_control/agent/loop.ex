@@ -63,7 +63,7 @@ defmodule CodePuppyControl.Agent.Loop do
 
   require Logger
 
-  alias CodePuppyControl.Agent.{Events, Turn}
+  alias CodePuppyControl.Agent.{Events, ResponseValidator, Turn}
   alias CodePuppyControl.Compaction
   alias CodePuppyControl.Stream.{Event, Normalizer}
   alias CodePuppyControl.Tool.Runner
@@ -519,18 +519,39 @@ defmodule CodePuppyControl.Agent.Loop do
     Events.publish(Events.turn_ended(state.run_id, state.session_id, turn_number, :done))
 
     if Turn.has_pending_tools?(turn) == false and turn.accumulated_text != "" do
-      # Text-only response, no tools — run is complete
-      Events.publish(
-        Events.run_completed(state.run_id, state.session_id, %{
-          turns: turn_number,
-          reason: :text_response
-        })
-      )
+      # Text-only response, no tools — validate if schema defined, then complete
+      case validate_response_if_schema(state, turn) do
+        {:ok, _validated} ->
+          Events.publish(
+            Events.run_completed(state.run_id, state.session_id, %{
+              turns: turn_number,
+              reason: :text_response
+            })
+          )
+          {:ok, %{state | completed: true}}
 
-      {:ok, %{state | completed: true}}
+        {:error, validation_errors} ->
+          {:error, {:validation_failed, validation_errors}, state}
+      end
     else
       {:ok, state}
     end
+  end
+
+  # Validates response against agent's response_schema if defined.
+  # Returns {:ok, response} if no schema or validation passes.
+  # Returns {:error, errors} if validation fails.
+  defp validate_response_if_schema(state, turn) do
+    response = %{text: turn.accumulated_text, tool_calls: []}
+
+    schema =
+      if function_exported?(state.agent_module, :response_schema, 0) do
+        state.agent_module.response_schema()
+      else
+        nil
+      end
+
+    ResponseValidator.validate(response, schema)
   end
 
   defp handle_turn_result(state, %{state: :error, error: reason} = turn, turn_number) do
