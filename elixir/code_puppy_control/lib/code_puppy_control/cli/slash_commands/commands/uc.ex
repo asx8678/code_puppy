@@ -298,8 +298,10 @@ defmodule CodePuppyControl.CLI.SlashCommands.Commands.UC do
             after_block =
               binary_part(content, closing_pos + 1, byte_size(content) - closing_pos - 1)
 
-            # Replace enabled: true/false only within the block
-            enabled_pattern = ~r/(enabled:\s*)(true|false|True|False)/
+            # Replace enabled: true/false only within the block.
+            # Only match 'enabled:' at the start of a line (after optional whitespace).
+            # This targets only the top-level field, avoiding strings and nested maps.
+            enabled_pattern = ~r/^(\s*enabled:\s*)(true|false|True|False)/m
 
             case Regex.replace(enabled_pattern, block_content, fn _full, prefix, _old ->
                    prefix <> new_value

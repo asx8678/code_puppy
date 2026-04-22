@@ -452,6 +452,79 @@ defmodule CodePuppyControl.CLI.SlashCommands.Commands.UCTest do
     end
   end
 
+  describe "/uc toggle — safe replacement (bd-269 regression test)" do
+    setup do
+      # Create a tool file where @uc_tool has 'enabled:' in a description string.
+      # The toggle should only replace the top-level enabled field, not touch the string.
+      # Note: nested maps in @uc_tool break the registry's regex extraction, so we put
+      # the nested map in a separate module attribute to test it's not corrupted.
+      tool_content = """
+      defmodule SafeToggle2 do
+        @uc_tool %{
+          name: "safe_toggle2",
+          namespace: "",
+          description: "Has enabled: true in the string",
+          enabled: true,
+          version: "1.0.0",
+          author: "test"
+        }
+
+        # Config with nested enabled — should NOT be modified by toggle
+        @config %{nested: %{enabled: true, name: "inner"}}
+
+        def run(_args) do
+          :ok
+        end
+      end
+      """
+
+      File.write!(Path.join(@test_uc_dir, "safe_toggle2.ex"), tool_content)
+      UCRegistry.reload()
+
+      :ok
+    end
+
+    test "toggle only replaces top-level enabled, not strings or nested maps" do
+      ExUnit.CaptureIO.capture_io(fn ->
+        assert {:continue, _} = UC.handle_uc("/uc toggle safe_toggle2", %{})
+      end)
+
+      content = File.read!(Path.join(@test_uc_dir, "safe_toggle2.ex"))
+
+      # Top-level enabled should be toggled to false
+      assert content =~ ~r/@uc_tool %\{[^}]*enabled: false/s
+
+      # Description string must be unchanged (still has 'enabled: true' in the string)
+      assert content =~ ~r/description: "Has enabled: true in the string"/s
+
+      # The @config nested map must be unchanged
+      assert content =~ ~r/@config %\{nested: %\{enabled: true/s
+    end
+
+    test "toggle round-trip preserves strings and nested maps" do
+      # Toggle off
+      ExUnit.CaptureIO.capture_io(fn ->
+        assert {:continue, _} = UC.handle_uc("/uc toggle safe_toggle2", %{})
+      end)
+
+      # Toggle back on
+      ExUnit.CaptureIO.capture_io(fn ->
+        assert {:continue, _} = UC.handle_uc("/uc toggle safe_toggle2", %{})
+      end)
+
+      content = File.read!(Path.join(@test_uc_dir, "safe_toggle2.ex"))
+
+      # Top-level enabled should be back to true
+      assert content =~ ~r/@uc_tool %\{[^}]*enabled: true/s
+
+      # Description string must still be unchanged
+      assert content =~ ~r/description: "Has enabled: true in the string"/s
+
+      # The @config nested map must still be unchanged
+      assert content =~ ~r/@config %\{nested: %\{enabled: true/s
+    end
+  end
+
   describe "/uc without running registry" do
     test "shows friendly error when registry is not running" do
       # Temporarily unregister the name to test the graceful fallback.
