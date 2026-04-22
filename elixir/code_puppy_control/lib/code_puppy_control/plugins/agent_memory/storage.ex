@@ -131,9 +131,10 @@ defmodule CodePuppyControl.Plugins.AgentMemory.Storage do
     found = Enum.any?(facts, fn f -> Map.get(f, "text") == text end)
 
     if found do
-      updated = Enum.map(facts, fn f ->
-        if Map.get(f, "text") == text, do: Map.merge(f, updates), else: f
-      end)
+      updated =
+        Enum.map(facts, fn f ->
+          if Map.get(f, "text") == text, do: Map.merge(f, updates), else: f
+        end)
 
       save(agent_name, updated)
       true
@@ -154,14 +155,15 @@ defmodule CodePuppyControl.Plugins.AgentMemory.Storage do
     if found do
       now = DateTime.utc_now() |> DateTime.to_iso8601()
 
-      updated = Enum.map(facts, fn f ->
-        if Map.get(f, "text") == text do
-          f = Map.put(f, "last_reinforced", now)
-          if session_id, do: Map.put(f, "source_session", session_id), else: f
-        else
-          f
-        end
-      end)
+      updated =
+        Enum.map(facts, fn f ->
+          if Map.get(f, "text") == text do
+            f = Map.put(f, "last_reinforced", now)
+            if session_id, do: Map.put(f, "source_session", session_id), else: f
+          else
+            f
+          end
+        end)
 
       save(agent_name, updated)
       true

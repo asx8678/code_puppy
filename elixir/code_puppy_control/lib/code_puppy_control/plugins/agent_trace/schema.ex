@@ -7,31 +7,56 @@ defmodule CodePuppyControl.Plugins.AgentTrace.Schema do
   execution graph that the reducer assembles into TraceState.
   """
 
-  @type node_kind :: :user | :session | :agent_run | :model_call | :tool_call | :memory_snapshot | :artifact
-  @type transfer_kind :: :user_prompt | :system_instructions | :history_context |
-    :retrieved_context | :model_input | :model_output | :tool_args |
-    :tool_result | :delegate_prompt | :delegate_response |
-    :memory_append | :artifact_write | :artifact_read
-  @type token_class :: :input_tokens | :output_tokens | :reasoning_tokens | :cached_tokens | :estimated_tokens | :billable_tokens
+  @type node_kind ::
+          :user | :session | :agent_run | :model_call | :tool_call | :memory_snapshot | :artifact
+  @type transfer_kind ::
+          :user_prompt
+          | :system_instructions
+          | :history_context
+          | :retrieved_context
+          | :model_input
+          | :model_output
+          | :tool_args
+          | :tool_result
+          | :delegate_prompt
+          | :delegate_response
+          | :memory_append
+          | :artifact_write
+          | :artifact_read
+  @type token_class ::
+          :input_tokens
+          | :output_tokens
+          | :reasoning_tokens
+          | :cached_tokens
+          | :estimated_tokens
+          | :billable_tokens
   @type accounting_state :: :estimated_live | :provider_reported_exact | :reconciled | :unknown
-  @type event_type :: :span_started | :span_updated | :span_ended |
-    :transfer_started | :transfer_chunk | :transfer_completed |
-    :usage_reported | :usage_reconciled | :artifact_created | :artifact_read
+  @type event_type ::
+          :span_started
+          | :span_updated
+          | :span_ended
+          | :transfer_started
+          | :transfer_chunk
+          | :transfer_completed
+          | :usage_reported
+          | :usage_reconciled
+          | :artifact_created
+          | :artifact_read
 
   @type trace_event :: %{
-    event_id: String.t(),
-    trace_id: String.t(),
-    event_type: event_type(),
-    timestamp: String.t(),
-    span_id: String.t() | nil,
-    parent_span_id: String.t() | nil,
-    run_id: String.t() | nil,
-    session_id: String.t() | nil,
-    node: map() | nil,
-    transfer: map() | nil,
-    metrics: map() | nil,
-    extra: map()
-  }
+          event_id: String.t(),
+          trace_id: String.t(),
+          event_type: event_type(),
+          timestamp: String.t(),
+          span_id: String.t() | nil,
+          parent_span_id: String.t() | nil,
+          run_id: String.t() | nil,
+          session_id: String.t() | nil,
+          node: map() | nil,
+          transfer: map() | nil,
+          metrics: map() | nil,
+          extra: map()
+        }
 
   @doc "Generate a unique event ID."
   @spec make_event_id() :: String.t()
@@ -138,8 +163,12 @@ defmodule CodePuppyControl.Plugins.AgentTrace.Schema do
     reconciliation = %{
       node_id: node_id,
       estimated: %{input_tokens: est_input, output_tokens: est_output},
-      exact: %{input_tokens: exact_input, output_tokens: exact_output,
-               reasoning_tokens: exact_reasoning, cached_tokens: exact_cached},
+      exact: %{
+        input_tokens: exact_input,
+        output_tokens: exact_output,
+        reasoning_tokens: exact_reasoning,
+        cached_tokens: exact_cached
+      },
       drift: %{
         input_tokens: if(exact_input && est_input, do: exact_input - est_input),
         output_tokens: if(exact_output && est_output, do: exact_output - est_output)

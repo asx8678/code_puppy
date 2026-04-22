@@ -20,8 +20,12 @@ defmodule CodePuppyControl.Plugins.FileMentions do
   @state_key :code_puppy_file_mentions_state
 
   defp get_state do
-    Process.get(@state_key, %{enabled: true, stats: %{mentions_found: 0, files_resolved: 0, files_failed: 0}})
+    Process.get(@state_key, %{
+      enabled: true,
+      stats: %{mentions_found: 0, files_resolved: 0, files_failed: 0}
+    })
   end
+
   defp put_state(state), do: Process.put(@state_key, state)
 
   @doc false
@@ -54,6 +58,7 @@ defmodule CodePuppyControl.Plugins.FileMentions do
       if mention_boundary?(text, start) do
         raw = String.slice(text, raw_start, raw_len)
         cleaned = sanitize_mention_path(raw)
+
         if cleaned && path_like?(cleaned) && !MapSet.member?(seen, cleaned) do
           {[cleaned | acc], MapSet.put(seen, cleaned)}
         else
@@ -68,6 +73,7 @@ defmodule CodePuppyControl.Plugins.FileMentions do
   end
 
   def mention_boundary?(_text, 0), do: true
+
   def mention_boundary?(text, index) do
     String.at(text, index - 1)
     |> case do
@@ -83,6 +89,7 @@ defmodule CodePuppyControl.Plugins.FileMentions do
       |> then(&Regex.replace(@leading_punct_regex, &1, ""))
       |> then(&Regex.replace(@trailing_punct_regex, &1, ""))
       |> String.trim()
+
     if cleaned == "", do: nil, else: cleaned
   end
 
@@ -91,6 +98,7 @@ defmodule CodePuppyControl.Plugins.FileMentions do
   def resolve_mention_path(file_path, cwd \\ nil) do
     cwd = cwd || File.cwd!()
     candidate = Path.join(cwd, file_path)
+
     cond do
       File.exists?(candidate) -> Path.expand(candidate)
       Path.absname(file_path) == file_path and File.exists?(file_path) -> file_path
@@ -103,12 +111,15 @@ defmodule CodePuppyControl.Plugins.FileMentions do
       {:ok, %{size: size}} when size > max_size ->
         Logger.debug("file_mentions: skipping #{abs_path}")
         nil
+
       {:ok, _} ->
         case File.read(abs_path) do
           {:ok, content} -> content
           {:error, _} -> nil
         end
-      {:error, _} -> nil
+
+      {:error, _} ->
+        nil
     end
   end
 
@@ -117,12 +128,17 @@ defmodule CodePuppyControl.Plugins.FileMentions do
       {:ok, entries} ->
         sorted = Enum.sort(entries)
         shown = Enum.take(sorted, max_entries)
-        lines = Enum.map(shown, fn entry ->
-          suffix = if File.dir?(Path.join(abs_path, entry)), do: "/", else: ""
-          entry <> suffix
-        end)
+
+        lines =
+          Enum.map(shown, fn entry ->
+            suffix = if File.dir?(Path.join(abs_path, entry)), do: "/", else: ""
+            entry <> suffix
+          end)
+
         if length(lines) == 0, do: "(empty)", else: Enum.join(lines, "\n")
-      {:error, _} -> nil
+
+      {:error, _} ->
+        nil
     end
   end
 
@@ -134,6 +150,7 @@ defmodule CodePuppyControl.Plugins.FileMentions do
   defp build_context(mentions, cwd, opts) do
     max_files = Keyword.get(opts, :max_files, @default_max_files)
     parts = mentions |> Enum.take(max_files) |> Enum.flat_map(&build_part(&1, cwd))
+
     if parts == [],
       do: nil,
       else: "## Auto-loaded @file mentions\n\n" <> Enum.join(parts, "\n\n")
@@ -141,12 +158,19 @@ defmodule CodePuppyControl.Plugins.FileMentions do
 
   defp build_part(mention, cwd) do
     case resolve_mention_path(mention, cwd) do
-      nil -> []
+      nil ->
+        []
+
       resolved ->
         if File.dir?(resolved) do
           case list_directory(resolved) do
-            nil -> []
-            listing -> ["<file_mention path=\"#{mention}\" type=\"directory\">\n#{listing}\n</file_mention>"]
+            nil ->
+              []
+
+            listing ->
+              [
+                "<file_mention path=\"#{mention}\" type=\"directory\">\n#{listing}\n</file_mention>"
+              ]
           end
         else
           case read_file_content(resolved) do
@@ -165,6 +189,7 @@ defmodule CodePuppyControl.Plugins.FileMentions do
     state = get_state()
     "@file mentions: #{if state.enabled, do: "enabled", else: "disabled"}"
   end
+
   def handle_custom_command(_command, _name), do: nil
 
   def custom_command_help do

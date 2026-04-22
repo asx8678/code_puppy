@@ -284,4 +284,86 @@ defmodule CodePuppyControl.Test.MockLLMHTTP do
       "event: message_delta\ndata: #{Jason.encode!(%{"type" => "message_delta", "delta" => %{"stop_reason" => "tool_use"}, "usage" => %{"output_tokens" => 50}})}\n\n" <>
       "event: message_stop\ndata: #{Jason.encode!(%{"type" => "message_stop"})}\n\n"
   end
+
+  # ── Google Gemini Fixtures ───────────────────────────────────────────────
+
+  def google_chat_fixture(opts \\ []) do
+    id = Keyword.get(opts, :id, "gemini-test123")
+    model = Keyword.get(opts, :model, "gemini-1.5-flash")
+    content = Keyword.get(opts, :content, "Hello! How can I help you?")
+    finish_reason = Keyword.get(opts, :finish_reason, "STOP")
+    function_call = Keyword.get(opts, :function_call, nil)
+
+    parts = if content, do: [%{"text" => content}], else: []
+    parts = if function_call, do: parts ++ [function_call], else: parts
+
+    %{
+      "candidates" => [
+        %{
+          "content" => %{"parts" => parts, "role" => "model"},
+          "finishReason" => finish_reason
+        }
+      ],
+      "usageMetadata" => %{
+        "promptTokenCount" => 10,
+        "candidatesTokenCount" => 20,
+        "totalTokenCount" => 30
+      },
+      "responseId" => id,
+      "modelVersion" => model
+    }
+    |> Jason.encode!()
+  end
+
+  def google_stream_fixture(opts \\ []) do
+    chunks = Keyword.get(opts, :chunks, ["Hello", " there", "!"])
+    model = Keyword.get(opts, :model, "gemini-1.5-flash")
+    id = Keyword.get(opts, :id, "gemini-stream123")
+
+    parts =
+      Enum.map(chunks, fn text ->
+        data = %{
+          "candidates" => [
+            %{
+              "content" => %{"parts" => [%{"text" => text}], "role" => "model"},
+              "finishReason" => nil
+            }
+          ],
+          "responseId" => id,
+          "modelVersion" => model
+        }
+
+        "data: #{Jason.encode!(data)}\n\n"
+      end)
+
+    final = %{
+      "candidates" => [
+        %{
+          "content" => %{"parts" => [], "role" => "model"},
+          "finishReason" => "STOP"
+        }
+      ],
+      "usageMetadata" => %{
+        "promptTokenCount" => 10,
+        "candidatesTokenCount" => length(chunks),
+        "totalTokenCount" => 10 + length(chunks)
+      },
+      "responseId" => id,
+      "modelVersion" => model
+    }
+
+    (parts ++ ["data: #{Jason.encode!(final)}\n\n"])
+    |> Enum.join()
+  end
+
+  # ── Groq / Together / Azure Fixtures ──────────────────────────────────────
+  # These providers use OpenAI-compatible format, so the existing openai_*
+  # fixtures can be reused. These are aliases for clarity.
+
+  defdelegate groq_chat_fixture(opts), to: __MODULE__, as: :openai_chat_fixture
+  defdelegate groq_stream_fixture(opts), to: __MODULE__, as: :openai_stream_fixture
+  defdelegate together_chat_fixture(opts), to: __MODULE__, as: :openai_chat_fixture
+  defdelegate together_stream_fixture(opts), to: __MODULE__, as: :openai_stream_fixture
+  defdelegate azure_chat_fixture(opts), to: __MODULE__, as: :openai_chat_fixture
+  defdelegate azure_stream_fixture(opts), to: __MODULE__, as: :openai_stream_fixture
 end

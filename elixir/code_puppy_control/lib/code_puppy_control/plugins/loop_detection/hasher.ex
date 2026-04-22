@@ -65,11 +65,18 @@ defmodule CodePuppyControl.Plugins.LoopDetection.Hasher do
     num_lines = args["num_lines"]
     bucket_size = 200
 
-    start = case parse_int(start_line) do nil -> 1; n -> n end
+    start =
+      case parse_int(start_line) do
+        nil -> 1
+        n -> n
+      end
+
     bucket_start = max(div(start - 1, bucket_size), 0)
 
     case parse_int(num_lines) do
-      nil -> "#{path}:#{bucket_start}"
+      nil ->
+        "#{path}:#{bucket_start}"
+
       n ->
         end_line = start + n
         bucket_end = max(div(end_line - 1, bucket_size), 0)
@@ -96,11 +103,13 @@ defmodule CodePuppyControl.Plugins.LoopDetection.Hasher do
 
   defp parse_int(nil), do: nil
   defp parse_int(val) when is_integer(val), do: val
+
   defp parse_int(val) when is_binary(val) do
     case Integer.parse(val) do
       {n, _} -> n
       :error -> nil
     end
   end
+
   defp parse_int(_), do: nil
 end

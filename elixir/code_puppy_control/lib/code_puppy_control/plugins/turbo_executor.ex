@@ -165,7 +165,10 @@ defmodule CodePuppyControl.Plugins.TurboExecutor do
                   items: %{
                     type: "object",
                     properties: %{
-                      op: %{type: "string", description: "Operation: list_files, grep, read_files"},
+                      op: %{
+                        type: "string",
+                        description: "Operation: list_files, grep, read_files"
+                      },
                       path: %{type: "string", description: "Target path for the operation"},
                       pattern: %{type: "string", description: "Search pattern (grep only)"},
                       paths: %{

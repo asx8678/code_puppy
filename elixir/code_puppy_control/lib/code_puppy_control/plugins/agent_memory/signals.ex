@@ -12,11 +12,11 @@ defmodule CodePuppyControl.Plugins.AgentMemory.Signals do
 
   @type signal_type :: :correction | :reinforcement | :preference
   @type signal :: %{
-    signal_type: signal_type(),
-    confidence_delta: float(),
-    matched_text: String.t(),
-    context: map() | nil
-  }
+          signal_type: signal_type(),
+          confidence_delta: float(),
+          matched_text: String.t(),
+          context: map() | nil
+        }
 
   @correction_patterns [
     ~r/\bactually[,;]?\s+(that"?s|is)\b/i,
@@ -89,10 +89,11 @@ defmodule CodePuppyControl.Plugins.AgentMemory.Signals do
   end
 
   defp do_apply(user_msgs, facts, agent_name) do
-    {count, updated} = Enum.reduce(user_msgs, {0, facts}, fn msg, {c, f} ->
-      text = msg["content"] || ""
-      if text == "", do: {c, f}, else: apply_to_text(text, f, c)
-    end)
+    {count, updated} =
+      Enum.reduce(user_msgs, {0, facts}, fn msg, {c, f} ->
+        text = msg["content"] || ""
+        if text == "", do: {c, f}, else: apply_to_text(text, f, c)
+      end)
 
     if count > 0, do: CodePuppyControl.Plugins.AgentMemory.Storage.save(agent_name, updated)
     count
@@ -100,6 +101,7 @@ defmodule CodePuppyControl.Plugins.AgentMemory.Signals do
 
   defp apply_to_text(text, facts, count) do
     signals = detect_signals(text)
+
     Enum.reduce(signals, {count, facts}, fn sig, {c, f} ->
       apply_signal(sig, f, c)
     end)
@@ -108,13 +110,22 @@ defmodule CodePuppyControl.Plugins.AgentMemory.Signals do
   defp apply_signal(signal, facts, count) do
     Enum.reduce_while(facts, {count, facts}, fn fact, {c, all} ->
       ft = fact["text"] || ""
+
       if ft != "" and byte_size(ft) > 10 and has_word_overlap?(ft, signal.matched_text) do
         cur = Map.get(fact, "confidence", 0.5)
         new = (cur + signal.confidence_delta) |> max(0.0) |> min(1.0)
+
         if new != cur do
-          upd = Enum.map(all, fn f ->
-            if f["text"] == ft, do: f |> Map.put("confidence", new) |> Map.put("last_reinforced", signal.matched_text), else: f
-          end)
+          upd =
+            Enum.map(all, fn f ->
+              if f["text"] == ft,
+                do:
+                  f
+                  |> Map.put("confidence", new)
+                  |> Map.put("last_reinforced", signal.matched_text),
+                else: f
+            end)
+
           {:halt, {c + 1, upd}}
         else
           {:cont, {c, all}}
@@ -128,12 +139,13 @@ defmodule CodePuppyControl.Plugins.AgentMemory.Signals do
   defp has_word_overlap?(t1, t2) do
     w1 = extract_words(t1)
     w2 = extract_words(t2)
+
     if map_size(w1) == 0 or map_size(w2) == 0 do
       String.contains?(String.downcase(t1), String.downcase(t2)) or
-      String.contains?(String.downcase(t2), String.downcase(t1))
+        String.contains?(String.downcase(t2), String.downcase(t1))
     else
       MapSet.intersection(w1, w2) |> MapSet.size() >= 2 or
-      String.contains?(String.downcase(t1), String.downcase(t2))
+        String.contains?(String.downcase(t1), String.downcase(t2))
     end
   end
 
@@ -146,8 +158,11 @@ defmodule CodePuppyControl.Plugins.AgentMemory.Signals do
 
   defp maybe_add_signal(acc, type, delta, patterns, text) do
     case find_first_match(patterns, text) do
-      nil -> acc
-      match -> [%{signal_type: type, confidence_delta: delta, matched_text: match, context: nil} | acc]
+      nil ->
+        acc
+
+      match ->
+        [%{signal_type: type, confidence_delta: delta, matched_text: match, context: nil} | acc]
     end
   end
 

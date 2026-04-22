@@ -84,13 +84,14 @@ defmodule CodePuppyControl.Plugins.LoopDetection.State do
 
   @impl true
   def init(_opts) do
-    table = :ets.new(@table, [
-      :set,
-      :named_table,
-      :public,
-      read_concurrency: true,
-      write_concurrency: true
-    ])
+    table =
+      :ets.new(@table, [
+        :set,
+        :named_table,
+        :public,
+        read_concurrency: true,
+        write_concurrency: true
+      ])
 
     {:ok, %{table: table}}
   end
@@ -152,20 +153,22 @@ defmodule CodePuppyControl.Plugins.LoopDetection.State do
   def handle_call({:get_session_stats, session_id}, _from, state) do
     case :ets.lookup(@table, session_id) do
       [{^session_id, {history, warned}}] ->
-        {:reply, %{
-          session_id: session_id,
-          history_size: length(history),
-          warned_count: MapSet.size(warned),
-          unique_hashes: history |> Enum.uniq() |> length()
-        }, state}
+        {:reply,
+         %{
+           session_id: session_id,
+           history_size: length(history),
+           warned_count: MapSet.size(warned),
+           unique_hashes: history |> Enum.uniq() |> length()
+         }, state}
 
       [] ->
-        {:reply, %{
-          session_id: session_id,
-          history_size: 0,
-          warned_count: 0,
-          unique_hashes: 0
-        }, state}
+        {:reply,
+         %{
+           session_id: session_id,
+           history_size: 0,
+           warned_count: 0,
+           unique_hashes: 0
+         }, state}
     end
   end
 
@@ -183,11 +186,12 @@ defmodule CodePuppyControl.Plugins.LoopDetection.State do
         acc + MapSet.size(warned)
       end)
 
-    {:reply, %{
-      total_sessions: length(all_entries),
-      total_history_entries: total_history,
-      total_warned_hashes: total_warned
-    }, state}
+    {:reply,
+     %{
+       total_sessions: length(all_entries),
+       total_history_entries: total_history,
+       total_warned_hashes: total_warned
+     }, state}
   end
 
   # ── Private ─────────────────────────────────────────────────────

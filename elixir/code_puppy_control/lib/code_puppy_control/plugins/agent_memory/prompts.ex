@@ -25,7 +25,8 @@ defmodule CodePuppyControl.Plugins.AgentMemory.Prompts do
     current_chars = byte_size(hd(lines)) + 1
 
     {lines, _} =
-      Enum.reduce_while(Enum.take(sorted, max_facts), {lines, current_chars}, fn fact, {acc, chars} ->
+      Enum.reduce_while(Enum.take(sorted, max_facts), {lines, current_chars}, fn fact,
+                                                                                 {acc, chars} ->
         text = String.trim(Map.get(fact, "text", ""))
         confidence = Map.get(fact, "confidence", 0.5)
 
@@ -58,8 +59,9 @@ defmodule CodePuppyControl.Plugins.AgentMemory.Prompts do
     if not config.enabled do
       nil
     else
-      agent_name = Process.get(:current_agent_name) ||
-                   Application.get_env(:code_puppy_control, :current_agent_name)
+      agent_name =
+        Process.get(:current_agent_name) ||
+          Application.get_env(:code_puppy_control, :current_agent_name)
 
       if agent_name == nil do
         nil

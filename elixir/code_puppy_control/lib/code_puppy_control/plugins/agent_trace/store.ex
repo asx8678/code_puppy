@@ -24,6 +24,7 @@ defmodule CodePuppyControl.Plugins.AgentTrace.Store do
       dir = Path.dirname(path)
       File.mkdir_p!(dir)
       line = Schema.to_json(event) <> "\n"
+
       case File.write(path, line, [:append]) do
         :ok -> true
         {:error, _} -> false
@@ -41,6 +42,7 @@ defmodule CodePuppyControl.Plugins.AgentTrace.Store do
       dir = Path.dirname(path)
       File.mkdir_p!(dir)
       content = Enum.map_join(trace_events, "\n", &Schema.to_json/1) <> "\n"
+
       case File.write(path, content, [:append]) do
         :ok -> acc + length(trace_events)
         {:error, _} -> acc
@@ -90,6 +92,7 @@ defmodule CodePuppyControl.Plugins.AgentTrace.Store do
   @spec delete(String.t()) :: boolean()
   def delete(trace_id) do
     path = trace_path(trace_id)
+
     case File.rm(path) do
       :ok -> true
       {:error, _} -> false

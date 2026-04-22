@@ -41,7 +41,13 @@ defmodule CodePuppyControl.Plugins.AgentTrace do
   @doc false
   def on_agent_run_start(agent_name, _model, session_id) do
     trace_id = "trace-#{:crypto.strong_rand_bytes(6) |> Base.encode16(case: :lower)}"
-    event = Schema.span_started(trace_id, :agent_run, name: agent_name, session_id: session_id || "default")
+
+    event =
+      Schema.span_started(trace_id, :agent_run,
+        name: agent_name,
+        session_id: session_id || "default"
+      )
+
     state = Reducer.new(trace_id) |> Reducer.reduce_event(event)
     Store.append(event)
     Process.put({__MODULE__, :current_trace_id}, trace_id)
@@ -58,14 +64,18 @@ defmodule CodePuppyControl.Plugins.AgentTrace do
   def on_pre_tool_call(tool_name, _args, _ctx) do
     trace_id = Process.get({__MODULE__, :current_trace_id})
     agent_span = Process.get({__MODULE__, :agent_span_id})
+
     if trace_id && agent_span do
-      event = Schema.span_started(trace_id, :tool_call, name: tool_name, parent_span_id: agent_span)
+      event =
+        Schema.span_started(trace_id, :tool_call, name: tool_name, parent_span_id: agent_span)
+
       state = get_state(trace_id) || Reducer.new(trace_id)
       state = Reducer.reduce_event(state, event)
       Store.append(event)
       Process.put({__MODULE__, trace_id}, state)
       Process.put({__MODULE__, :current_tool_span_id}, event.span_id)
     end
+
     nil
   end
 
@@ -73,14 +83,23 @@ defmodule CodePuppyControl.Plugins.AgentTrace do
   def on_post_tool_call(tool_name, _args, _result, duration_ms, _ctx) do
     trace_id = Process.get({__MODULE__, :current_trace_id})
     tool_span = Process.get({__MODULE__, :current_tool_span_id})
+
     if trace_id && tool_span do
       state = get_state(trace_id) || Reducer.new(trace_id)
       node_id = (state.spans[tool_span] || %{})[:node_id] || ""
-      event = Schema.span_ended(trace_id, tool_span, node_id, :tool_call, name: tool_name, success: true, duration_ms: duration_ms)
+
+      event =
+        Schema.span_ended(trace_id, tool_span, node_id, :tool_call,
+          name: tool_name,
+          success: true,
+          duration_ms: duration_ms
+        )
+
       state = Reducer.reduce_event(state, event)
       Store.append(event)
       Process.put({__MODULE__, trace_id}, state)
     end
+
     nil
   end
 
@@ -88,17 +107,29 @@ defmodule CodePuppyControl.Plugins.AgentTrace do
   def on_agent_run_end(agent_name, _model, _session, success, error, _meta) do
     trace_id = Process.get({__MODULE__, :current_trace_id})
     agent_span = Process.get({__MODULE__, :agent_span_id})
+
     if trace_id && agent_span do
       state = get_state(trace_id) || Reducer.new(trace_id)
       node_id = (state.spans[agent_span] || %{})[:node_id] || ""
-      event = Schema.span_ended(trace_id, agent_span, node_id, :agent_run, name: agent_name, success: success, error: error)
+
+      event =
+        Schema.span_ended(trace_id, agent_span, node_id, :agent_run,
+          name: agent_name,
+          success: success,
+          error: error
+        )
+
       state = Reducer.reduce_event(state, event)
       Store.append(event)
       Process.put({__MODULE__, trace_id}, state)
+
       if state.total_input_tokens + state.total_output_tokens > 500 do
-        Logger.info("Trace #{trace_id}: #{state.total_input_tokens} in, #{state.total_output_tokens} out, #{map_size(state.spans)} spans")
+        Logger.info(
+          "Trace #{trace_id}: #{state.total_input_tokens} in, #{state.total_output_tokens} out, #{map_size(state.spans)} spans"
+        )
       end
     end
+
     :ok
   end
 
@@ -113,15 +144,32 @@ defmodule CodePuppyControl.Plugins.AgentTrace do
   defp do_handle(command) do
     parts = String.split(command)
     sub = if length(parts) > 1, do: Enum.at(parts, 1), else: "status"
+
     case sub do
-      "status" -> IO.puts("Trace system active")
-      "list" -> IO.puts("Traces: #{Enum.join(Enum.take(Store.list_traces(), 10), ", ")}")
+      "status" ->
+        IO.puts("Trace system active")
+
+      "list" ->
+        IO.puts("Traces: #{Enum.join(Enum.take(Store.list_traces(), 10), ", ")}")
+
       "show" ->
-        tid = if length(parts) > 2, do: Enum.at(parts, 2), else: Process.get({__MODULE__, :current_trace_id})
-        IO.puts(if tid, do: "Trace #{tid}: #{length(Store.read(tid))} events", else: "No active trace")
-      "clear" -> Process.delete({__MODULE__, :current_trace_id}); IO.puts("Trace state cleared")
-      _ -> IO.puts("Usage: /trace status|list|show [id]|clear")
+        tid =
+          if length(parts) > 2,
+            do: Enum.at(parts, 2),
+            else: Process.get({__MODULE__, :current_trace_id})
+
+        IO.puts(
+          if tid, do: "Trace #{tid}: #{length(Store.read(tid))} events", else: "No active trace"
+        )
+
+      "clear" ->
+        Process.delete({__MODULE__, :current_trace_id})
+        IO.puts("Trace state cleared")
+
+      _ ->
+        IO.puts("Usage: /trace status|list|show [id]|clear")
     end
+
     true
   end
 end

@@ -28,7 +28,9 @@ defmodule CodePuppyControl.LLM.ProviderParityTest do
     "gemini",
     "gemini_oauth",
     "custom_gemini",
-    "claude_code"
+    "claude_code",
+    "groq",
+    "together"
   ]
 
   # chatgpt_oauth is in @oauth_types in ModelFactory (deferred, Phase 4) but

@@ -75,13 +75,18 @@ defmodule CodePuppyControl.Plugins.LoopDetection do
       case State.check_and_record(session_id, call_hash) do
         {:block, count} ->
           Logger.error("Loop hard limit reached — blocking tool call",
-            session_id: session_id, call_hash: call_hash,
-            count: count, tool: tool_name)
+            session_id: session_id,
+            call_hash: call_hash,
+            count: count,
+            tool: tool_name
+          )
 
           hard = hard_threshold()
+
           %{
             "blocked" => true,
-            "reason" => "Loop detected: repeated #{tool_name} calls exceeded safety limit (#{hard})",
+            "reason" =>
+              "Loop detected: repeated #{tool_name} calls exceeded safety limit (#{hard})",
             "user_feedback" => block_user_feedback(tool_name, count, hard)
           }
 
@@ -106,16 +111,19 @@ defmodule CodePuppyControl.Plugins.LoopDetection do
           calls_until_block = max(0, hard - count)
 
           Logger.warning("Repetitive tool calls detected",
-            session_id: session_id, count: count, tool: tool_name)
+            session_id: session_id,
+            count: count,
+            tool: tool_name
+          )
 
           warning_text =
             "⚠️ LOOP WARNING: Tool '#{tool_name}' called #{count} times " <>
-            "with similar arguments. You may be stuck in a loop.\n\n" <>
-            "Please consider:\n" <>
-            "  1. Check if you're making progress\n" <>
-            "  2. Stop calling tools and summarize findings\n" <>
-            "  3. Ask the user for guidance if blocked\n\n" <>
-            "After #{calls_until_block} more identical call(s), tools will be blocked."
+              "with similar arguments. You may be stuck in a loop.\n\n" <>
+              "Please consider:\n" <>
+              "  1. Check if you're making progress\n" <>
+              "  2. Stop calling tools and summarize findings\n" <>
+              "  3. Ask the user for guidance if blocked\n\n" <>
+              "After #{calls_until_block} more identical call(s), tools will be blocked."
 
           Callbacks.trigger(:stream_event, ["warning", warning_text, session_id])
 
@@ -128,7 +136,8 @@ defmodule CodePuppyControl.Plugins.LoopDetection do
   end
 
   @doc false
-  @spec on_agent_run_end(String.t(), String.t(), String.t() | nil, boolean(), term(), term()) :: :ok
+  @spec on_agent_run_end(String.t(), String.t(), String.t() | nil, boolean(), term(), term()) ::
+          :ok
   def on_agent_run_end(_agent, _model, session_id, _success, _error, _meta) do
     if session_id, do: reset(to_string(session_id))
     :ok
@@ -142,14 +151,18 @@ defmodule CodePuppyControl.Plugins.LoopDetection do
 
   defp block_user_feedback(tool_name, count, hard) do
     remaining = hard - count
-    block_msg = if remaining > 0, do: "After #{remaining} more call(s), tools will be blocked.", else: "Tools will be blocked after this call."
+
+    block_msg =
+      if remaining > 0,
+        do: "After #{remaining} more call(s), tools will be blocked.",
+        else: "Tools will be blocked after this call."
 
     "🛑 LOOP DETECTED: Tool '#{tool_name}' called #{count} times " <>
-    "with identical arguments. This looks like an infinite loop.\n\n" <>
-    "Please stop calling tools and produce your final answer now. " <>
-    "If you cannot complete the task, summarize what you accomplished so far.\n\n" <>
-    "To override: add '#{tool_name}' to loop_detection_exempt_tools " <>
-    "or increase loop_detection_stop threshold.\n\n" <> block_msg
+      "with identical arguments. This looks like an infinite loop.\n\n" <>
+      "Please stop calling tools and produce your final answer now. " <>
+      "If you cannot complete the task, summarize what you accomplished so far.\n\n" <>
+      "To override: add '#{tool_name}' to loop_detection_exempt_tools " <>
+      "or increase loop_detection_stop threshold.\n\n" <> block_msg
   end
 
   defp extract_session_id(context) when is_map(context) do
@@ -158,6 +171,7 @@ defmodule CodePuppyControl.Plugins.LoopDetection do
       id -> to_string(id)
     end
   end
+
   defp extract_session_id(_), do: "default"
 
   defp exempt?(tool_name), do: tool_name in get_exempt_tools()
@@ -172,11 +186,17 @@ defmodule CodePuppyControl.Plugins.LoopDetection do
 
   defp get_exempt_tools do
     case Application.get_env(:code_puppy_control, :loop_detection_exempt_tools) do
-      nil -> @default_exempt_tools
-      tools when is_list(tools) -> tools
+      nil ->
+        @default_exempt_tools
+
+      tools when is_list(tools) ->
+        tools
+
       tools when is_binary(tools) ->
         tools |> String.split(",") |> Enum.map(&String.trim/1) |> Enum.reject(&(&1 == ""))
-      _ -> @default_exempt_tools
+
+      _ ->
+        @default_exempt_tools
     end
   end
 end

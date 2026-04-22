@@ -43,9 +43,13 @@ defmodule CodePuppyControl.Plugins.AgentMemory do
     config = Config.load()
 
     if config.enabled do
-      Logger.info("Agent Memory plugin activated (max_facts=#{config.max_facts}, token_budget=#{config.token_budget})")
+      Logger.info(
+        "Agent Memory plugin activated (max_facts=#{config.max_facts}, token_budget=#{config.token_budget})"
+      )
     else
-      Logger.debug("Agent Memory plugin loaded but disabled (set memory_enabled=true to activate)")
+      Logger.debug(
+        "Agent Memory plugin loaded but disabled (set memory_enabled=true to activate)"
+      )
     end
 
     :ok
@@ -65,7 +69,8 @@ defmodule CodePuppyControl.Plugins.AgentMemory do
   def on_shutdown, do: :ok
 
   @doc false
-  @spec on_agent_run_end(String.t(), String.t(), String.t() | nil, boolean(), term(), term()) :: :ok
+  @spec on_agent_run_end(String.t(), String.t(), String.t() | nil, boolean(), term(), term()) ::
+          :ok
   def on_agent_run_end(agent_name, _model_name, session_id, success, _error, metadata) do
     config = Config.load()
 

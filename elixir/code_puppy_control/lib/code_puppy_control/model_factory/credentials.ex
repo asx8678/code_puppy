@@ -34,7 +34,9 @@ defmodule CodePuppyControl.ModelFactory.Credentials do
     "openrouter" => "OPENROUTER_API_KEY",
     "gemini" => "GEMINI_API_KEY",
     "gemini_oauth" => "GEMINI_API_KEY",
-    "custom_gemini" => "GEMINI_API_KEY"
+    "custom_gemini" => "GEMINI_API_KEY",
+    "groq" => "GROQ_API_KEY",
+    "together" => "TOGETHER_API_KEY"
   }
 
   @doc """
