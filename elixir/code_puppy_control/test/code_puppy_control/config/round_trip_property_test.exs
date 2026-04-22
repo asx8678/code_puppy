@@ -46,7 +46,7 @@ defmodule CodePuppyControl.Config.RoundTripPropertyTest do
 
   # ── Shared Generator ─────────────────────────────────────────────────────
 
-  map_of_scalars =
+  defp map_of_scalars_gen do
     StreamData.map_of(
       StreamData.string(:ascii, min_length: 1, max_length: 8),
       StreamData.one_of([
@@ -57,6 +57,7 @@ defmodule CodePuppyControl.Config.RoundTripPropertyTest do
       ]),
       max_length: 6
     )
+  end
 
   ################################################################################
   # Deepened generators (bd-228)
@@ -64,16 +65,17 @@ defmodule CodePuppyControl.Config.RoundTripPropertyTest do
 
   # Binary-key generator: only string keys (canonical_json requirement).
   # Mix ASCII + UTF-8 to exercise unicode key handling.
-  string_key =
+  defp string_key_gen do
     StreamData.one_of([
       StreamData.string(:ascii, min_length: 1, max_length: 8),
       StreamData.string(:utf8, min_length: 1, max_length: 8)
     ])
+  end
 
   # UTF-8-aware string generator covering ASCII, multi-byte, and RTL.
   # `StreamData.string(:utf8, ...)` already covers multi-byte codepoints;
   # the explicit exemplars below make RTL/CJK/emoji cases likely to be exercised.
-  utf8_string =
+  defp utf8_string_gen do
     StreamData.one_of([
       StreamData.string(:ascii, max_length: 16),
       StreamData.string(:utf8, max_length: 16),
@@ -90,10 +92,11 @@ defmodule CodePuppyControl.Config.RoundTripPropertyTest do
         ""
       ])
     ])
+  end
 
   # Numeric edge cases: 0, negatives, very large ints, finite floats.
   # Floats kept bounded so Jason.encode! never raises on NaN/Infinity.
-  numeric =
+  defp numeric_gen do
     StreamData.one_of([
       StreamData.constant(0),
       StreamData.constant(-1),
@@ -107,31 +110,35 @@ defmodule CodePuppyControl.Config.RoundTripPropertyTest do
       ]),
       StreamData.float(min: -1.0e6, max: 1.0e6)
     ])
+  end
 
   # Scalar leaf for any nested tree.
-  scalar =
+  defp scalar_gen do
     StreamData.one_of([
-      utf8_string,
-      numeric,
+      utf8_string_gen(),
+      numeric_gen(),
       StreamData.boolean(),
       StreamData.constant(nil)
     ])
+  end
 
   # Recursive nested map/list tree via StreamData.tree.
   # Shape is bounded by StreamData's generation size, and tree/2 shrinks
   # toward shallower terms. `max_length: 4` keeps each level manageable.
-  nested_term =
-    StreamData.tree(scalar, fn child ->
+  defp nested_term_gen do
+    StreamData.tree(scalar_gen(), fn child ->
       StreamData.one_of([
         StreamData.list_of(child, max_length: 4),
-        StreamData.map_of(string_key, child, max_length: 4)
+        StreamData.map_of(string_key_gen(), child, max_length: 4)
       ])
     end)
+  end
 
   # Top-level term for canonical_json/normalize properties: must be a map
   # (since the production code paths consume map roots).
-  nested_map =
-    StreamData.map_of(string_key, nested_term, max_length: 6)
+  defp nested_map_gen do
+    StreamData.map_of(string_key_gen(), nested_term_gen(), max_length: 6)
+  end
 
   # ===========================================================================
   # INI Round-Trip
@@ -161,7 +168,7 @@ defmodule CodePuppyControl.Config.RoundTripPropertyTest do
 
   describe "canonical_json idempotency" do
     property "canonical_json is idempotent (nested + utf8 + numeric edges)" do
-      check all(m <- ^nested_map, max_runs: 100) do
+      check all(m <- nested_map_gen(), max_runs: 100) do
         once = ConfigFixtures.canonical_json(m)
         twice = ConfigFixtures.canonical_json(Jason.decode!(once))
         assert once == twice
@@ -169,7 +176,7 @@ defmodule CodePuppyControl.Config.RoundTripPropertyTest do
     end
 
     property "canonical_json is idempotent (flat scalars)" do
-      check all(m <- ^map_of_scalars, max_runs: 50) do
+      check all(m <- map_of_scalars_gen(), max_runs: 50) do
         once = ConfigFixtures.canonical_json(m)
         twice = ConfigFixtures.canonical_json(Jason.decode!(once))
         assert once == twice
@@ -206,7 +213,7 @@ defmodule CodePuppyControl.Config.RoundTripPropertyTest do
 
   describe "normalize idempotency" do
     property "normalize is idempotent (nested + utf8 + numeric edges)" do
-      check all(m <- ^nested_map, max_runs: 100) do
+      check all(m <- nested_map_gen(), max_runs: 100) do
         once = ConfigFixtures.normalize(m)
         twice = m |> ConfigFixtures.normalize() |> ConfigFixtures.normalize()
         assert once == twice
@@ -214,7 +221,7 @@ defmodule CodePuppyControl.Config.RoundTripPropertyTest do
     end
 
     property "normalize is idempotent (flat scalars)" do
-      check all(m <- ^map_of_scalars, max_runs: 50) do
+      check all(m <- map_of_scalars_gen(), max_runs: 50) do
         once = ConfigFixtures.normalize(m)
         twice = m |> ConfigFixtures.normalize() |> ConfigFixtures.normalize()
         assert once == twice
