@@ -214,7 +214,7 @@ defmodule CodePuppyControl.CLI.SlashCommands.Commands.AddModelTest do
       assert config["custom_endpoint"]["url"] == "https://api.together.xyz/v1"
     end
 
-    test "builds fireworks-ai config with custom_openai type" do
+    test "builds fireworks-ai config with custom_openai type and hardcoded endpoint" do
       provider = %ProviderInfo{
         id: "fireworks-ai",
         name: "Fireworks AI",
@@ -234,6 +234,7 @@ defmodule CodePuppyControl.CLI.SlashCommands.Commands.AddModelTest do
 
       assert config["type"] == "custom_openai"
       assert config["provider"] == "fireworks_ai"
+      assert config["custom_endpoint"]["url"] == "https://api.fireworks.ai/inference/v1"
     end
 
     test "builds xai config with custom_openai type" do
@@ -311,6 +312,97 @@ defmodule CodePuppyControl.CLI.SlashCommands.Commands.AddModelTest do
       assert config["name"] == "kimi-for-coding"
     end
 
+    test "builds deepseek config with custom_openai type and endpoint" do
+      provider = %ProviderInfo{
+        id: "deepseek",
+        name: "DeepSeek",
+        env: ["DEEPSEEK_API_KEY"],
+        api: ""
+      }
+
+      model = %ModelInfo{
+        provider_id: "deepseek",
+        model_id: "deepseek-r1",
+        name: "DeepSeek R1",
+        context_length: 128_000,
+        tool_call: true
+      }
+
+      {:ok, config} = AddModel.build_model_config(model, provider)
+
+      assert config["type"] == "custom_openai"
+      assert config["provider"] == "deepseek"
+      assert config["custom_endpoint"]["url"] == "https://api.deepseek.com/v1"
+    end
+
+    test "builds openrouter config with custom_openai type and endpoint" do
+      provider = %ProviderInfo{
+        id: "openrouter",
+        name: "OpenRouter",
+        env: ["OPENROUTER_API_KEY"],
+        api: ""
+      }
+
+      model = %ModelInfo{
+        provider_id: "openrouter",
+        model_id: "anthropic-claude-3",
+        name: "Claude 3 via OpenRouter",
+        context_length: 200_000,
+        tool_call: true
+      }
+
+      {:ok, config} = AddModel.build_model_config(model, provider)
+
+      assert config["type"] == "custom_openai"
+      assert config["provider"] == "openrouter"
+      assert config["custom_endpoint"]["url"] == "https://openrouter.ai/api/v1"
+    end
+
+    test "builds cerebras config with cerebras type" do
+      provider = %ProviderInfo{
+        id: "cerebras",
+        name: "Cerebras",
+        env: ["CEREBRAS_API_KEY"],
+        api: ""
+      }
+
+      model = %ModelInfo{
+        provider_id: "cerebras",
+        model_id: "llama-3.3-70b",
+        name: "Llama 3.3 70B",
+        context_length: 128_000,
+        tool_call: true
+      }
+
+      {:ok, config} = AddModel.build_model_config(model, provider)
+
+      assert config["type"] == "cerebras"
+      assert config["provider"] == "cerebras"
+    end
+
+    test "builds deepinfra config with custom_openai type and endpoint" do
+      provider = %ProviderInfo{
+        id: "deepinfra",
+        name: "DeepInfra",
+        env: ["DEEPINFRA_API_KEY"],
+        api: ""
+      }
+
+      model = %ModelInfo{
+        provider_id: "deepinfra",
+        model_id: "meta-llama-3",
+        name: "Llama 3 on DeepInfra",
+        context_length: 128_000,
+        tool_call: true
+      }
+
+      {:ok, config} = AddModel.build_model_config(model, provider)
+
+      assert config["type"] == "custom_openai"
+      assert config["provider"] == "deepinfra"
+      assert config["custom_endpoint"]["url"] == "https://api.deepinfra.com/v1/openai"
+    end
+
     test "unknown provider falls back to custom_openai" do
       provider = %ProviderInfo{
         id: "some-new-provider",
@@ -364,6 +456,44 @@ defmodule CodePuppyControl.CLI.SlashCommands.Commands.AddModelTest do
 
       assert {:error, reason} = AddModel.build_model_config(model, provider)
       assert reason =~ "Azure"
+    end
+
+    test "unsupported cloudflare-ai-gateway provider returns error" do
+      provider = %ProviderInfo{
+        id: "cloudflare-ai-gateway",
+        name: "Cloudflare AI Gateway",
+        env: ["CLOUDFLARE_API_KEY"]
+      }
+
+      model = %ModelInfo{
+        provider_id: "cloudflare-ai-gateway",
+        model_id: "some-model",
+        name: "Some Model",
+        context_length: 128_000,
+        tool_call: true
+      }
+
+      assert {:error, reason} = AddModel.build_model_config(model, provider)
+      assert reason =~ "Cloudflare"
+    end
+
+    test "unsupported lmstudio provider returns error" do
+      provider = %ProviderInfo{
+        id: "lmstudio",
+        name: "LM Studio",
+        env: []
+      }
+
+      model = %ModelInfo{
+        provider_id: "lmstudio",
+        model_id: "local-model",
+        name: "Local Model",
+        context_length: 4096,
+        tool_call: true
+      }
+
+      assert {:error, reason} = AddModel.build_model_config(model, provider)
+      assert reason =~ "LM Studio"
     end
 
     test "unsupported amazon-bedrock provider returns error" do
@@ -431,6 +561,22 @@ defmodule CodePuppyControl.CLI.SlashCommands.Commands.AddModelTest do
              }) == "fireworks_ai"
     end
 
+    test "maps deepinfra to identity string" do
+      assert AddModel.derive_provider_identity(%ProviderInfo{
+               id: "deepinfra",
+               name: "DeepInfra",
+               env: []
+             }) == "deepinfra"
+    end
+
+    test "maps aihubmix to identity string" do
+      assert AddModel.derive_provider_identity(%ProviderInfo{
+               id: "aihubmix",
+               name: "AIHubMix",
+               env: []
+             }) == "aihubmix"
+    end
+
     test "falls back to hyphen-to-underscore conversion" do
       assert AddModel.derive_provider_identity(%ProviderInfo{
                id: "my-cool-provider",
@@ -459,6 +605,14 @@ defmodule CodePuppyControl.CLI.SlashCommands.Commands.AddModelTest do
       assert AddModel.unsupported_provider?("google-vertex")
     end
 
+    test "cloudflare-ai-gateway is unsupported" do
+      assert AddModel.unsupported_provider?("cloudflare-ai-gateway")
+    end
+
+    test "lmstudio is unsupported" do
+      assert AddModel.unsupported_provider?("lmstudio")
+    end
+
     test "openai is supported" do
       refute AddModel.unsupported_provider?("openai")
     end
@@ -474,6 +628,22 @@ defmodule CodePuppyControl.CLI.SlashCommands.Commands.AddModelTest do
     test "fireworks-ai is supported" do
       refute AddModel.unsupported_provider?("fireworks-ai")
     end
+
+    test "deepseek is supported" do
+      refute AddModel.unsupported_provider?("deepseek")
+    end
+
+    test "openrouter is supported" do
+      refute AddModel.unsupported_provider?("openrouter")
+    end
+
+    test "cerebras is supported" do
+      refute AddModel.unsupported_provider?("cerebras")
+    end
+
+    test "deepinfra is supported" do
+      refute AddModel.unsupported_provider?("deepinfra")
+    end
   end
 
   describe "unsupported_reason/1" do
@@ -487,6 +657,14 @@ defmodule CodePuppyControl.CLI.SlashCommands.Commands.AddModelTest do
 
     test "returns reason for azure-cognitive-services" do
       assert AddModel.unsupported_reason("azure-cognitive-services") =~ "Azure AD"
+    end
+
+    test "returns reason for cloudflare-ai-gateway" do
+      assert AddModel.unsupported_reason("cloudflare-ai-gateway") =~ "Cloudflare"
+    end
+
+    test "returns reason for lmstudio" do
+      assert AddModel.unsupported_reason("lmstudio") =~ "LM Studio"
     end
 
     test "returns nil for supported provider" do

@@ -445,7 +445,7 @@ defmodule CodePuppyControl.CLI.SlashCommands.Commands.AddModelInteractiveTest do
       refute File.exists?(path)
     end
 
-    test "cancel at provider selection", %{tmp_dir: tmp_dir} do
+    test "cancel at provider selection" do
       output =
         ExUnit.CaptureIO.capture_io([input: "q\n"], fn ->
           Interactive.run_interactive()
@@ -620,6 +620,38 @@ defmodule CodePuppyControl.CLI.SlashCommands.Commands.AddModelInteractiveTest do
 
       assert output =~ "Cannot add model"
       assert output =~ "AWS SigV4"
+    end
+
+    test "select_model_interactive prints error for cloudflare-ai-gateway" do
+      provider = %ProviderInfo{
+        id: "cloudflare-ai-gateway",
+        name: "Cloudflare AI Gateway",
+        env: ["CLOUDFLARE_API_KEY"]
+      }
+
+      output =
+        ExUnit.CaptureIO.capture_io(fn ->
+          Interactive.select_model_interactive(provider)
+        end)
+
+      assert output =~ "Cannot add model"
+      assert output =~ "Cloudflare"
+    end
+
+    test "select_model_interactive prints error for lmstudio" do
+      provider = %ProviderInfo{
+        id: "lmstudio",
+        name: "LM Studio",
+        env: []
+      }
+
+      output =
+        ExUnit.CaptureIO.capture_io(fn ->
+          Interactive.select_model_interactive(provider)
+        end)
+
+      assert output =~ "Cannot add model"
+      assert output =~ "LM Studio"
     end
   end
 

@@ -34,9 +34,13 @@ defmodule CodePuppyControl.CLI.SlashCommands.Commands.AddModel do
     "google-vertex" => "Requires GCP service account authentication",
     "google-vertex-anthropic" => "Requires GCP service account authentication",
     "cloudflare-workers-ai" => "Requires account ID in URL Path",
+    "cloudflare-ai-gateway" => "Requires Cloudflare account ID in URL path",
     "vercel" => "Vercel AI Gateway - not yet supported",
     "v0" => "Vercel v0 - not yet supported",
-    "ollama-cloud" => "Requires user-specific Ollama instance URL"
+    "ollama-cloud" => "Requires user-specific Ollama instance URL",
+    "github-copilot" => "Requires GitHub Copilot OAuth flow",
+    "lmstudio" => "Requires local LM Studio instance URL",
+    "llama" => "Requires local Llama.cpp server URL"
   }
 
   # Hardcoded OpenAI-compatible endpoints for providers that have dedicated
@@ -49,7 +53,10 @@ defmodule CodePuppyControl.CLI.SlashCommands.Commands.AddModel do
     "togetherai" => "https://api.together.xyz/v1",
     "perplexity" => "https://api.perplexity.ai",
     "deepinfra" => "https://api.deepinfra.com/v1/openai",
-    "aihubmix" => "https://aihubmix.com/v1"
+    "aihubmix" => "https://aihubmix.com/v1",
+    "fireworks-ai" => "https://api.fireworks.ai/inference/v1",
+    "deepseek" => "https://api.deepseek.com/v1",
+    "openrouter" => "https://openrouter.ai/api/v1"
   }
 
   # Map provider IDs to Code Puppy model types.
@@ -68,7 +75,9 @@ defmodule CodePuppyControl.CLI.SlashCommands.Commands.AddModel do
     "cohere" => "custom_openai",
     "perplexity" => "custom_openai",
     "minimax" => "custom_anthropic",
-    "xai" => "custom_openai"
+    "xai" => "custom_openai",
+    "deepinfra" => "custom_openai",
+    "aihubmix" => "custom_openai"
   }
 
   # Map provider IDs to persisted provider identity strings.
@@ -87,7 +96,9 @@ defmodule CodePuppyControl.CLI.SlashCommands.Commands.AddModel do
     "cohere" => "cohere",
     "perplexity" => "perplexity",
     "minimax" => "minimax",
-    "xai" => "xai"
+    "xai" => "xai",
+    "deepinfra" => "deepinfra",
+    "aihubmix" => "aihubmix"
   }
 
   @doc """

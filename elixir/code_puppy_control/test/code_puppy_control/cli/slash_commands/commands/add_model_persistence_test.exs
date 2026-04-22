@@ -150,6 +150,30 @@ defmodule CodePuppyControl.CLI.SlashCommands.Commands.AddModelPersistenceTest do
       assert reason =~ "dictionary"
     end
 
+    test "returns error for JSON that is not a map (number)" do
+      uniq = :erlang.unique_integer([:positive])
+      path = Path.join(System.tmp_dir!(), "cp_number_json_#{uniq}.json")
+      File.write!(path, "42")
+
+      on_exit(fn -> File.rm(path) end)
+
+      assert {:error, reason} = AddModelPersistence.read_existing(path)
+      assert is_binary(reason)
+      assert reason =~ "dictionary"
+    end
+
+    test "returns error for JSON that is not a map (null)" do
+      uniq = :erlang.unique_integer([:positive])
+      path = Path.join(System.tmp_dir!(), "cp_null_json_#{uniq}.json")
+      File.write!(path, "null")
+
+      on_exit(fn -> File.rm(path) end)
+
+      assert {:error, reason} = AddModelPersistence.read_existing(path)
+      assert is_binary(reason)
+      assert reason =~ "dictionary"
+    end
+
     test "returns error for unreadable file" do
       # Use a path that cannot be read (a directory path with /dev/null
       # trick won't work portably, so use a deeply nested nonexistent
