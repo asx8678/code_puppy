@@ -71,11 +71,16 @@ defmodule CodePuppyControl.MixProject do
         include_erts: true,
         strip_beams: true,
         burrito: [
+          extra_steps: [
+            build: [pre: [CodePuppyControl.BurritoSteps.PatchMuslQualifier]]
+          ],
           targets: [
             macos_arm64: [os: :darwin, cpu: :aarch64],
             macos_x86_64: [os: :darwin, cpu: :x86_64],
             linux_x86_64: [os: :linux, cpu: :x86_64],
             linux_arm64: [os: :linux, cpu: :aarch64],
+            linux_musl_x86_64: [os: :linux, cpu: :x86_64, musl: true],
+            linux_musl_arm64: [os: :linux, cpu: :aarch64, musl: true],
             windows_x86_64: [os: :windows, cpu: :x86_64]
           ]
         ]

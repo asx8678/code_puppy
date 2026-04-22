@@ -68,7 +68,8 @@ while [[ $# -gt 0 ]]; do
     --help|-h)
       echo "Usage: $0 [--host-only|--target <target>]"
       echo ""
-      echo "Targets: macos_arm64, macos_x86_64, linux_x86_64, linux_arm64, windows_x86_64"
+      echo "Targets: macos_arm64, macos_x86_64, linux_x86_64, linux_arm64,"
+      echo "         linux_musl_x86_64, linux_musl_arm64, windows_x86_64"
       exit 0
       ;;
     *)
@@ -100,10 +101,23 @@ elif [[ "${HOST_ONLY}" == "true" ]]; then
       fi
       ;;
     Linux)
+      # Detect musl vs glibc by checking the dynamic linker
+      IS_MUSL=false
+      if [[ -f /etc/alpine-release ]] || ldd --version 2>&1 | grep -qi musl; then
+        IS_MUSL=true
+      fi
       if [[ "${ARCH}" == "aarch64" ]]; then
-        export BURRITO_TARGET="linux_arm64"
+        if [[ "${IS_MUSL}" == "true" ]]; then
+          export BURRITO_TARGET="linux_musl_arm64"
+        else
+          export BURRITO_TARGET="linux_arm64"
+        fi
       else
-        export BURRITO_TARGET="linux_x86_64"
+        if [[ "${IS_MUSL}" == "true" ]]; then
+          export BURRITO_TARGET="linux_musl_x86_64"
+        else
+          export BURRITO_TARGET="linux_x86_64"
+        fi
       fi
       ;;
     *)
