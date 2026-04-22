@@ -120,17 +120,24 @@ defmodule CodePuppyControl.LLM.Providers.ResponsesAPI.SSE do
   end
 
   # A new output item (message or function_call) has been added.
+  # IMPORTANT: If deltas arrived before this event (out-of-order delivery),
+  # we preserve the already-accumulated chunks rather than wiping them.
   def handle_sse_event("response.output_item.added", data, acc, callback_fn) do
     output_index = data["output_index"] || 0
     item = data["item"] || %{}
 
     case item["type"] do
       "message" ->
+        # Preserve existing chunks if this index already has content
+        # (out-of-order delta arrived before output_item.added).
+        existing = Map.get(acc.content_parts, output_index)
+        existing_chunks = if existing, do: existing.text_chunks, else: []
+
         parts =
           Map.put(acc.content_parts, output_index, %{
             type: :text,
             index: output_index,
-            text_chunks: []
+            text_chunks: existing_chunks
           })
 
         callback_fn.({:part_start, %{type: :text, index: output_index, id: nil}})
@@ -140,13 +147,20 @@ defmodule CodePuppyControl.LLM.Providers.ResponsesAPI.SSE do
         fc_id = item["call_id"] || item["id"] || ""
         fc_name = item["name"] || ""
 
+        # Preserve existing arg_chunks if this index already has content
+        # (out-of-order delta arrived before output_item.added).
+        existing = Map.get(acc.tool_calls, output_index)
+        existing_chunks = if existing, do: existing.arg_chunks, else: []
+        existing_id = if existing && existing.id, do: existing.id, else: fc_id
+        existing_name = if existing && existing.name, do: existing.name, else: fc_name
+
         tc_parts =
           Map.put(acc.tool_calls, output_index, %{
             type: :tool_call,
             index: output_index,
-            id: fc_id,
-            name: fc_name,
-            arg_chunks: []
+            id: existing_id,
+            name: existing_name,
+            arg_chunks: existing_chunks
           })
 
         callback_fn.({:part_start, %{type: :tool_call, index: output_index, id: fc_id}})
@@ -216,9 +230,33 @@ defmodule CodePuppyControl.LLM.Providers.ResponsesAPI.SSE do
     {:ok, acc}
   end
 
-  # Text done — full text available but we already streamed deltas.
-  def handle_sse_event("response.output_text.done", _data, acc, _callback_fn) do
-    {:ok, acc}
+  # Text done — full text available. If we have no accumulated chunks
+  # (e.g., only a done event with no deltas), backfill from the final text.
+  def handle_sse_event("response.output_text.done", data, acc, _callback_fn) do
+    output_index = data["output_index"] || 0
+    final_text = data["text"]
+
+    case Map.get(acc.content_parts, output_index) do
+      nil when is_binary(final_text) and final_text != "" ->
+        # No content part yet — backfill from the done event.
+        parts =
+          Map.put(acc.content_parts, output_index, %{
+            type: :text,
+            index: output_index,
+            text_chunks: [final_text]
+          })
+
+        {:ok, %{acc | content_parts: parts}}
+
+      %{:text_chunks => []} = part when is_binary(final_text) and final_text != "" ->
+        # Part exists but empty chunks — backfill from the done event.
+        parts = Map.put(acc.content_parts, output_index, %{part | text_chunks: [final_text]})
+        {:ok, %{acc | content_parts: parts}}
+
+      _ ->
+        # Chunks already accumulated from deltas — keep them.
+        {:ok, acc}
+    end
   end
 
   # Function call arguments delta.
@@ -251,9 +289,36 @@ defmodule CodePuppyControl.LLM.Providers.ResponsesAPI.SSE do
     {:ok, acc}
   end
 
-  # Function call arguments done.
-  def handle_sse_event("response.function_call_arguments.done", _data, acc, _callback_fn) do
-    {:ok, acc}
+  # Function call arguments done — full arguments available.
+  # If we have no accumulated arg_chunks (e.g., only a done event with no
+  # deltas), backfill from the final arguments string.
+  def handle_sse_event("response.function_call_arguments.done", data, acc, _callback_fn) do
+    output_index = data["output_index"] || 0
+    final_args = data["arguments"]
+
+    case Map.get(acc.tool_calls, output_index) do
+      nil when is_binary(final_args) and final_args != "" ->
+        # No tool call part yet — backfill from the done event.
+        tc_parts =
+          Map.put(acc.tool_calls, output_index, %{
+            type: :tool_call,
+            index: output_index,
+            id: nil,
+            name: nil,
+            arg_chunks: [final_args]
+          })
+
+        {:ok, %{acc | tool_calls: tc_parts}}
+
+      %{:arg_chunks => []} = part when is_binary(final_args) and final_args != "" ->
+        # Part exists but empty chunks — backfill from the done event.
+        tc_parts = Map.put(acc.tool_calls, output_index, %{part | arg_chunks: [final_args]})
+        {:ok, %{acc | tool_calls: tc_parts}}
+
+      _ ->
+        # Chunks already accumulated from deltas — keep them.
+        {:ok, acc}
+    end
   end
 
   # Output item completed — emit :part_end and record the index in ended_parts

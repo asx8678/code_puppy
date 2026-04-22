@@ -172,6 +172,7 @@ defmodule CodePuppyControl.LLM.Providers.ResponsesAPI do
 
     case stream_chat(messages, tools, opts, callback) do
       :ok ->
+        # Stream completed successfully — signal collector to finalize.
         send(collector_pid, :stream_done)
 
         receive do
@@ -188,10 +189,8 @@ defmodule CodePuppyControl.LLM.Providers.ResponsesAPI do
         end
 
       {:error, reason} ->
-        # Tell the collector to exit so it doesn't leak.
-        send(collector_pid, :stream_done)
-        # Flush the stale {:collected_response, _} the collector will
-        # send back, preventing mailbox pollution.
+        # Stream errored — kill collector and flush any stale messages.
+        Process.exit(collector_pid, :shutdown)
         flush_collector_response(collector_ref)
         {:error, reason}
     end
@@ -199,12 +198,16 @@ defmodule CodePuppyControl.LLM.Providers.ResponsesAPI do
 
   defp start_collector do
     parent = self()
-    pid = spawn(fn -> collect_events(parent, nil) end)
+    # Use spawn_link so collector dies if parent dies (no orphan leaks).
+    pid = spawn_link(fn -> collect_events(parent, nil) end)
     ref = Process.monitor(pid)
     {pid, ref}
   end
 
   defp flush_collector_response(collector_ref) do
+    # Flush any stale messages from the dead collector process.
+    # The collector may have sent {:collected_response, _} before we
+    # killed it, so we must drain it to avoid mailbox pollution.
     receive do
       {:collected_response, _} ->
         Process.demonitor(collector_ref, [:flush])
@@ -212,7 +215,9 @@ defmodule CodePuppyControl.LLM.Providers.ResponsesAPI do
       {:DOWN, ^collector_ref, :process, _pid, _reason} ->
         :ok
     after
-      2_000 ->
+      # Short timeout: collector is already dead (killed or linked),
+      # so any pending message should arrive near-instantly.
+      100 ->
         Process.demonitor(collector_ref, [:flush])
     end
   end
@@ -240,10 +245,10 @@ defmodule CodePuppyControl.LLM.Providers.ResponsesAPI do
              }}
         )
     after
-      10_000 ->
-        # Safety timeout: if no :stream_done arrives within 10 s, reply
-        # with whatever we have and exit.  Prevents infinite hangs when
-        # the caller crashes or forgets to send :stream_done.
+      # Hard safety timeout: only fires if caller never sends :stream_done
+      # (e.g., caller crashed). Prevents infinite hangs.  Under normal
+      # operation completion is driven by :stream_done, not this timeout.
+      30_000 ->
         send(
           parent,
           {:collected_response,

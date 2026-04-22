@@ -266,7 +266,7 @@ defmodule CodePuppyControl.ModelFactory do
         []
         |> maybe_put_kw(:model, api_model_name)
         |> maybe_put_kw(:temperature, Map.get(config, "temperature"))
-        |> maybe_put_kw(:max_tokens, Map.get(config, "max_output_tokens"))
+        |> maybe_put_kw(:max_output_tokens, Map.get(config, "max_output_tokens"))
         |> merge_config_opts(config)
         |> maybe_forward_chatgpt_oauth_settings(provider_type)
 
@@ -286,10 +286,13 @@ defmodule CodePuppyControl.ModelFactory do
 
   # ── Model Opts Helpers ────────────────────────────────────────────────────
   defp maybe_forward_chatgpt_oauth_settings(opts, "chatgpt_oauth") do
+    # Use put_new semantics: explicit model_opts / caller opts MUST win
+    # over auto-wired defaults. This aligns with the LLM.resolve_provider
+    # path which uses Keyword.put_new for the same settings.
     opts
-    |> maybe_put_kw(:reasoning_effort, Models.openai_reasoning_effort())
-    |> maybe_put_kw(:reasoning_summary, Models.openai_reasoning_summary())
-    |> maybe_put_kw(:text_verbosity, Models.openai_verbosity())
+    |> maybe_put_new_kw(:reasoning_effort, Models.openai_reasoning_effort())
+    |> maybe_put_new_kw(:reasoning_summary, Models.openai_reasoning_summary())
+    |> maybe_put_new_kw(:text_verbosity, Models.openai_verbosity())
   end
 
   defp maybe_forward_chatgpt_oauth_settings(opts, _provider_type), do: opts
@@ -297,6 +300,10 @@ defmodule CodePuppyControl.ModelFactory do
 
   defp maybe_put_kw(opts, _key, nil), do: opts
   defp maybe_put_kw(opts, key, value), do: Keyword.put(opts, key, value)
+
+  # put_new: does NOT overwrite existing keys — explicit opts win.
+  defp maybe_put_new_kw(opts, _key, nil), do: opts
+  defp maybe_put_new_kw(opts, key, value), do: Keyword.put_new(opts, key, value)
 
   defp resolve_handle_api_key(provider_type, _config, runtime_api_key)
        when provider_type in @oauth_types do
