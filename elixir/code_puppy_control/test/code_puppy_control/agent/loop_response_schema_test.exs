@@ -21,8 +21,8 @@ defmodule CodePuppyControl.Agent.LoopResponseSchemaTest do
 
     @primary_key false
     embedded_schema do
-      field :summary, :string
-      field :confidence, :float
+      field(:summary, :string)
+      field(:confidence, :float)
     end
 
     def changeset(struct, params) do

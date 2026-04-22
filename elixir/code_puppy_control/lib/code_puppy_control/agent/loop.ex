@@ -528,6 +528,7 @@ defmodule CodePuppyControl.Agent.Loop do
               reason: :text_response
             })
           )
+
           {:ok, %{state | completed: true}}
 
         {:error, validation_errors} ->

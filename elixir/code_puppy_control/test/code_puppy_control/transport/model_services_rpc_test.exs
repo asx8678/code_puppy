@@ -418,6 +418,7 @@ defmodule CodePuppyControl.Transport.ModelServicesRpcTest do
         end)
 
       response = Jason.decode!(output)
+
       assert response["id"] == 42,
              "JSON-RPC id must be echoed in error response, got: #{inspect(response["id"])}"
 
@@ -442,6 +443,7 @@ defmodule CodePuppyControl.Transport.ModelServicesRpcTest do
         end)
 
       response = Jason.decode!(output)
+
       assert response["id"] == 99,
              "JSON-RPC id must be echoed in error response, got: #{inspect(response["id"])}"
 

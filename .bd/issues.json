@@ -4906,8 +4906,10 @@
         ]
       },
       "created_at": "2026-04-21T08:47:53.402244",
-      "updated_at": "2026-04-21T19:37:22.224003",
-      "comments": []
+      "updated_at": "2026-04-22T09:37:40.830817",
+      "comments": [
+        "Menu wizard slash commands appear fully implemented in Elixir. All 6 commands (/add_model, /model_settings, /uc, /mcp, /autosave, /diff) exist with handlers registered in the dispatcher. Needs verification QA to close."
+      ]
     },
     "bd-245": {
       "id": "bd-245",
@@ -5581,7 +5583,7 @@
       "id": "bd-278",
       "title": "Integrate ResponseValidator into Agent.Behaviour (response_schema/0 callback)",
       "description": "## Summary\n\nAdd optional `response_schema/0` callback to Agent.Behaviour that enables structured output validation via ResponseValidator.\n\n## Prerequisites\n\n- bd-277 (ResponseValidator module) must be completed first\n\n## Implementation\n\n1. Add optional callback to `lib/code_puppy_control/agent/behaviour.ex`:\n   ```elixir\n   @callback response_schema() :: module() | nil\n   @optional_callbacks [response_schema: 0]\n   ```\n\n2. Update `Agent.Loop` to call ResponseValidator after LLM response:\n   - Check if agent implements `response_schema/0`\n   - If yes, validate via `ResponseValidator.validate(response, schema)`\n   - On error, either retry or surface to caller (TBD: design decision)\n\n3. Add tests for loop integration\n\n4. Document in Agent.Behaviour moduledoc\n\n## Design Decisions Needed\n\n- On validation failure: retry with feedback to LLM, or return error?\n- Max retries if retry approach chosen?\n- Should validation errors be surfaced via EventBus?\n\n## Estimate\n\n~1-2 hours",
-      "status": "open",
+      "status": "closed",
       "priority": 2,
       "type": "task",
       "labels": [
@@ -5590,14 +5592,14 @@
       ],
       "dependencies": {},
       "created_at": "2026-04-22T08:43:56.438788",
-      "updated_at": "2026-04-22T08:44:04.187752",
+      "updated_at": "2026-04-22T09:15:39.953021",
       "comments": []
     },
     "bd-279": {
       "id": "bd-279",
       "title": "R5: Write config.py semantics spec (84KB)",
       "description": "## Approach: FULL SPEC BEFORE PORTING\n\n**Decided:** 2026-04-22\n\nThe 84KB config.py semantics will be fully documented before porting to Elixir.\n\n### Rationale\n- Config is foundational - errors here cascade everywhere\n- Spec serves as migration validation checklist\n- Prevents accidental behavior changes\n\n### Deliverable\n- Complete spec document covering all config options\n- Organized by section/category\n- Include: option name, type, default, description, migration notes\n\n### Estimate\n- ~3-5 days for full spec document",
-      "status": "open",
+      "status": "closed",
       "priority": 2,
       "type": "doc",
       "labels": [
@@ -5606,7 +5608,7 @@
       ],
       "dependencies": {},
       "created_at": "2026-04-22T08:48:46.428765",
-      "updated_at": "2026-04-22T08:52:18.381351",
+      "updated_at": "2026-04-22T09:21:53.759769",
       "comments": []
     },
     "bd-280": {
@@ -5672,7 +5674,126 @@
       "created_at": "2026-04-22T08:48:57.896797",
       "updated_at": "2026-04-22T08:52:35.811014",
       "comments": []
+    },
+    "bd-284": {
+      "id": "bd-284",
+      "title": "bd-158-b: Port Tier B agent plugins",
+      "description": "Port agent_memory (875 lines), agent_trace (1135 lines), agent_skills (1235 lines), loop_detection (560 lines) to Elixir. These are agent-related plugins providing memory management, trace collection, skill registries, and conversation loop detection. Sources: code_puppy/plugins/agent_memory/, agent_trace/, agent_skills/, loop_detection/",
+      "status": "open",
+      "priority": 1,
+      "type": "task",
+      "labels": [],
+      "dependencies": {
+        "blocks": [
+          "bd-158"
+        ]
+      },
+      "created_at": "2026-04-22T09:37:25.607726",
+      "updated_at": "2026-04-22T09:37:25.607733",
+      "comments": []
+    },
+    "bd-285": {
+      "id": "bd-285",
+      "title": "bd-158-d: Port Tier C plugins + complete in-progress",
+      "description": "Port file_permission_handler (605 lines), universal_constructor (375 lines, note: tools/universal_constructor already exists in Elixir at code_puppy_control/lib/code_puppy_control/tools/universal_constructor.ex). Also complete the in-progress work on elixir_bridge and shell_safety (these are partially implemented).",
+      "status": "open",
+      "priority": 1,
+      "type": "task",
+      "labels": [],
+      "dependencies": {
+        "blocks": [
+          "bd-158"
+        ]
+      },
+      "created_at": "2026-04-22T09:37:25.615216",
+      "updated_at": "2026-04-22T09:37:25.615225",
+      "comments": []
+    },
+    "bd-286": {
+      "id": "bd-286",
+      "title": "bd-158-c: Port Tier B utility plugins",
+      "description": "Port error_classifier (325 lines), scheduler (725 lines), cost_estimator (270 lines), git_auto_commit (535 lines) to Elixir. These utility plugins provide error categorization, job scheduling, cost tracking, and automatic git commits. Sources: code_puppy/plugins/error_classifier/, scheduler/, cost_estimator/, git_auto_commit/",
+      "status": "open",
+      "priority": 1,
+      "type": "task",
+      "labels": [],
+      "dependencies": {
+        "blocks": [
+          "bd-158"
+        ]
+      },
+      "created_at": "2026-04-22T09:37:25.619199",
+      "updated_at": "2026-04-22T09:37:25.619206",
+      "comments": []
+    },
+    "bd-287": {
+      "id": "bd-287",
+      "title": "bd-166-a: Port Claude Code OAuth plugin",
+      "description": "Port Claude Code OAuth plugin to Elixir. Must handle PKCE flow, token refresh, and browser launch for Claude Code integration. Source: code_puppy/plugins/claude_code_oauth/ (525 lines). Note: Can be worked on in parallel with bd-166-b.",
+      "status": "open",
+      "priority": 1,
+      "type": "task",
+      "labels": [],
+      "dependencies": {
+        "blocks": [
+          "bd-166"
+        ]
+      },
+      "created_at": "2026-04-22T09:37:30.169255",
+      "updated_at": "2026-04-22T09:37:30.169264",
+      "comments": []
+    },
+    "bd-288": {
+      "id": "bd-288",
+      "title": "bd-166-c: Port oauth_puppy_html.py utility",
+      "description": "Port oauth_puppy_html.py to Elixir. HTML generation utility for OAuth callback pages. Source: code_puppy/plugins/oauth_puppy_html.py. Can be worked on in parallel with bd-166-a and bd-166-b.",
+      "status": "open",
+      "priority": 2,
+      "type": "task",
+      "labels": [],
+      "dependencies": {
+        "blocks": [
+          "bd-166"
+        ]
+      },
+      "created_at": "2026-04-22T09:37:30.177084",
+      "updated_at": "2026-04-22T09:37:30.177094",
+      "comments": []
+    },
+    "bd-289": {
+      "id": "bd-289",
+      "title": "bd-158-a: Port Tier A remaining core plugins",
+      "description": "Port fast_puppy (27 lines), file_mentions (310 lines), turbo_executor (525 lines) to Elixir. These are small-to-medium critical plugins that provide native acceleration, file mention support, and batch execution capabilities. Source location: code_puppy/plugins/fast_puppy/, code_puppy/plugins/file_mentions/, code_puppy/plugins/turbo_executor/",
+      "status": "open",
+      "priority": 1,
+      "type": "task",
+      "labels": [],
+      "dependencies": {
+        "blocks": [
+          "bd-158"
+        ]
+      },
+      "created_at": "2026-04-22T09:37:37.596646",
+      "updated_at": "2026-04-22T09:37:37.596655",
+      "comments": []
+    },
+    "bd-290": {
+      "id": "bd-290",
+      "title": "bd-166-b: Port ChatGPT OAuth plugin",
+      "description": "Port ChatGPT OAuth plugin to Elixir. Must handle PKCE flow, token refresh, and browser launch for ChatGPT integration. Source: code_puppy/plugins/chatgpt_oauth/ (430 lines). Note: Can be worked on in parallel with bd-166-a.",
+      "status": "open",
+      "priority": 1,
+      "type": "task",
+      "labels": [],
+      "dependencies": {
+        "blocks": [
+          "bd-166"
+        ]
+      },
+      "created_at": "2026-04-22T09:37:37.602252",
+      "updated_at": "2026-04-22T09:37:37.602261",
+      "comments": []
     }
   },
-  "counter": 283
+  "counter": 290
 }

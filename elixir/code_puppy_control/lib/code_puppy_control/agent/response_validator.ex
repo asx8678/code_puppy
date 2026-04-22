@@ -30,12 +30,14 @@ defmodule CodePuppyControl.Agent.ResponseValidator do
   @spec extract_json(String.t()) :: {:ok, map()} | {:error, errors()}
   def extract_json(text) when is_binary(text) do
     text = String.trim(text)
+
     case Jason.decode(text) do
       {:ok, params} when is_map(params) -> {:ok, params}
       {:ok, _not_a_map} -> try_fallback_extraction(text)
       {:error, _} -> try_fallback_extraction(text)
     end
   end
+
   def extract_json(_), do: {:error, %{json: ["response text is not a string"]}}
 
   @spec collect_errors(Changeset.t()) :: errors()
@@ -45,7 +47,9 @@ defmodule CodePuppyControl.Agent.ResponseValidator do
 
   defp try_fallback_extraction(text) do
     case extract_from_code_fence(text) do
-      {:ok, params} when is_map(params) -> {:ok, params}
+      {:ok, params} when is_map(params) ->
+        {:ok, params}
+
       _ ->
         case extract_from_braces(text) do
           {:ok, params} when is_map(params) -> {:ok, params}
@@ -90,6 +94,7 @@ defmodule CodePuppyControl.Agent.ResponseValidator do
     opts = Enum.into(opts, %{}, fn {k, v} -> {k, v} end)
     if opts[:count], do: String.replace(msg, "%{count}", to_string(opts[:count])), else: msg
   end
+
   defp format_error_message(msg) when is_binary(msg), do: msg
   defp format_error_message(other), do: inspect(other)
 end

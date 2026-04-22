@@ -9,8 +9,8 @@ defmodule CodePuppyControl.Agent.ResponseValidatorTest do
 
     @primary_key false
     embedded_schema do
-      field :summary, :string
-      field :confidence, :float
+      field(:summary, :string)
+      field(:confidence, :float)
     end
 
     def changeset(struct, params) do
@@ -27,10 +27,11 @@ defmodule CodePuppyControl.Agent.ResponseValidatorTest do
 
     @primary_key false
     embedded_schema do
-      field :plan_name, :string
+      field(:plan_name, :string)
+
       embeds_many :steps, Step do
-        field :action, :string
-        field :file_path, :string
+        field(:action, :string)
+        field(:file_path, :string)
       end
     end
 
@@ -65,17 +66,23 @@ defmodule CodePuppyControl.Agent.ResponseValidatorTest do
     test "validates JSON in code fence" do
       text = "```json\n{\"summary\": \"Test\", \"confidence\": 0.5}\n```"
       response = %{text: text, tool_calls: []}
-      assert {:ok, %SimpleSchema{summary: "Test"}} = ResponseValidator.validate(response, SimpleSchema)
+
+      assert {:ok, %SimpleSchema{summary: "Test"}} =
+               ResponseValidator.validate(response, SimpleSchema)
     end
 
     test "validates JSON in prose" do
       text = "Result is {\"summary\": \"Debug\"} here."
       response = %{text: text, tool_calls: []}
-      assert {:ok, %SimpleSchema{summary: "Debug"}} = ResponseValidator.validate(response, SimpleSchema)
+
+      assert {:ok, %SimpleSchema{summary: "Debug"}} =
+               ResponseValidator.validate(response, SimpleSchema)
     end
 
     test "validates nested schema" do
-      json = ~s({"plan_name": "Migrate", "steps": [{"action": "Create", "file_path": "lib/a.ex"}]})
+      json =
+        ~s({"plan_name": "Migrate", "steps": [{"action": "Create", "file_path": "lib/a.ex"}]})
+
       response = %{text: json, tool_calls: []}
       assert {:ok, struct} = ResponseValidator.validate(response, NestedSchema)
       assert struct.plan_name == "Migrate"

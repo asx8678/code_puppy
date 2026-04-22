@@ -1,9 +1,9 @@
 defmodule Mix.Tasks.PupEx.Auth.Login do
-  @shortdoc "Stub: scaffold auth directory for Elixir pup-ex (full OAuth in bd-166)"
+  @shortdoc "Authenticate with ChatGPT via OAuth (bd-290)"
   @moduledoc """
   Initialize the auth directory for Elixir pup-ex.
 
-  This is a STUB for bd-166 (full OAuth flow). It creates the
+  Initiates the ChatGPT OAuth PKCE flow via CodePuppyControl.Auth.ChatGptOAuth. It creates the
   `~/.code_puppy_ex/auth/` directory and a placeholder file to prove
   the isolation guard works end-to-end for auth paths.
 

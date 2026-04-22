@@ -42,7 +42,9 @@ defmodule CodePuppyControl.BurritoSteps.PatchMuslQualifierTest do
     end
 
     test "produces correct musl triplet after patching" do
-      %Target{} = target = Target.init_target(:linux_musl_x86_64, os: :linux, cpu: :x86_64, musl: true)
+      %Target{} =
+        target = Target.init_target(:linux_musl_x86_64, os: :linux, cpu: :x86_64, musl: true)
+
       patched_qualifiers = Keyword.put(target.qualifiers, :os, :linux)
       patched_target = %{target | qualifiers: patched_qualifiers}
 
@@ -51,7 +53,9 @@ defmodule CodePuppyControl.BurritoSteps.PatchMuslQualifierTest do
     end
 
     test "produces correct arm64 musl triplet after patching" do
-      %Target{} = target = Target.init_target(:linux_musl_arm64, os: :linux, cpu: :aarch64, musl: true)
+      %Target{} =
+        target = Target.init_target(:linux_musl_arm64, os: :linux, cpu: :aarch64, musl: true)
+
       patched_qualifiers = Keyword.put(target.qualifiers, :os, :linux)
       patched_target = %{target | qualifiers: patched_qualifiers}
 

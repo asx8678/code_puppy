@@ -297,7 +297,9 @@ defmodule CodePuppyControl.CLI.SlashCommands.Commands.UC do
           {:ok, closing_pos} ->
             before_block = binary_part(content, 0, block_start)
             block_content = binary_part(content, block_start, closing_pos - block_start + 1)
-            after_block = binary_part(content, closing_pos + 1, byte_size(content) - closing_pos - 1)
+
+            after_block =
+              binary_part(content, closing_pos + 1, byte_size(content) - closing_pos - 1)
 
             case replace_top_level_enabled_in_block(block_content, new_value) do
               {:ok, new_block} ->
@@ -325,7 +327,13 @@ defmodule CodePuppyControl.CLI.SlashCommands.Commands.UC do
     lines = String.split(block_content, "\n")
 
     {modified_lines, replaced?} =
-      walk_lines_for_enabled(lines, new_value, _replaced? = false, _in_string? = false, _depth = 0)
+      walk_lines_for_enabled(
+        lines,
+        new_value,
+        _replaced? = false,
+        _in_string? = false,
+        _depth = 0
+      )
 
     if replaced? do
       {:ok, Enum.join(modified_lines, "\n")}
@@ -357,7 +365,13 @@ defmodule CodePuppyControl.CLI.SlashCommands.Commands.UC do
       end
 
     {rest_lines, final_replaced?} =
-      walk_lines_for_enabled(rest, new_value, should_replace or replaced?, next_in_string, next_depth)
+      walk_lines_for_enabled(
+        rest,
+        new_value,
+        should_replace or replaced?,
+        next_in_string,
+        next_depth
+      )
 
     {[new_line | rest_lines], final_replaced?}
   end
