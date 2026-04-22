@@ -105,6 +105,173 @@ jobs:
             exit 1
           fi
 
+      # ── macOS codesigning + notarization (bd-241) ──────────────────────────
+      #
+      # These steps sign and notarize the macOS binary so users don't need to
+      # bypass Gatekeeper. The pipeline is:
+      #   1. Check if Apple signing secrets are configured
+      #   2. Import the Developer ID certificate into a temporary keychain
+      #   3. codesign with hardened runtime (required for notarization)
+      #   4. Submit for notarization via notarytool (zip + submit + wait)
+      #   5. Staple the notarization ticket to the binary
+      #   6. Clean up the temporary keychain (always, even on failure)
+      #
+      # Required GitHub Actions secrets:
+      #   APPLE_DEVELOPER_ID_CERT_P12_B64  — Base64-encoded PKCS12 certificate
+      #   APPLE_DEVELOPER_ID_CERT_PASSWORD — Password for the PKCS12 certificate
+      #   APPLE_DEVELOPER_ID_SIGNING_IDENTITY — e.g. "Developer ID Application: Team (TEAMID)"
+      #   APPLE_ID                         — Apple ID email for notarization
+      #   APPLE_APP_PASSWORD               — App-specific password for notarization
+      #   APPLE_TEAM_ID                    — Apple Developer Team ID
+      #
+      # When secrets are not configured (e.g. on forks), signing is skipped with
+      # a warning and the unsigned binary is uploaded. The release notes will
+      # reflect the signing status.
+
+      - name: Check Apple signing availability
+        if: runner.os == 'macOS'
+        id: check_apple_signing
+        shell: bash
+        run: |
+          if [[ -n "${{ secrets.APPLE_DEVELOPER_ID_CERT_P12_B64 }}" ]]; then
+            echo "available=true" >> "$GITHUB_OUTPUT"
+            echo "✅ Apple signing secrets configured — will sign + notarize"
+          else
+            echo "available=false" >> "$GITHUB_OUTPUT"
+            echo "::warning::Apple signing secrets not configured — skipping codesigning/notarization (bd-241)"
+            echo "::warning::Users will need to run: xattr -c <binary> to bypass Gatekeeper"
+          fi
+
+      - name: Import Apple Developer ID certificate
+        if: runner.os == 'macOS' && steps.check_apple_signing.outputs.available == 'true'
+        shell: bash
+        run: |
+          # Create a temporary keychain to isolate the signing certificate.
+          # This is the standard pattern for CI codesigning — we never import
+          # into the user's default keychain.
+          CERT_PATH="$RUNNER_TEMP/build-cert.p12"
+          KEYCHAIN_PATH="$RUNNER_TEMP/signing.keychain-db"
+          KEYCHAIN_PASSWORD="$(openssl rand -base64 24)"
+
+          # Mask the generated keychain password in logs
+          echo "::add-mask::$KEYCHAIN_PASSWORD"
+
+          # Persist keychain path for cleanup step
+          echo "KEYCHAIN_PATH=$KEYCHAIN_PATH" >> "$GITHUB_ENV"
+
+          # Decode the base64-encoded PKCS12 certificate
+          echo "${{ secrets.APPLE_DEVELOPER_ID_CERT_P12_B64 }}" | base64 --decode > "$CERT_PATH"
+
+          # Create and configure the temporary keychain
+          security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security set-keychain-settings -lut 900 "$KEYCHAIN_PATH"
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+
+          # Import the certificate
+          security import "$CERT_PATH" \
+            -P "${{ secrets.APPLE_DEVELOPER_ID_CERT_PASSWORD }}" \
+            -A -t cert -f pkcs12 \
+            -k "$KEYCHAIN_PATH"
+
+          # Grant codesign access to the imported key
+          security set-key-partition-list \
+            -S apple-tool:,apple: \
+            -k "$KEYCHAIN_PASSWORD" \
+            "$KEYCHAIN_PATH"
+
+          # Add to keychain search list so codesign can find the identity
+          security list-keychain -d user -s "$KEYCHAIN_PATH"
+
+          # Clean up the decoded certificate file (no longer needed)
+          rm -f "$CERT_PATH"
+
+          echo "✅ Certificate imported into temporary keychain"
+
+      - name: Codesign macOS binary
+        if: runner.os == 'macOS' && steps.check_apple_signing.outputs.available == 'true'
+        shell: bash
+        run: |
+          BINARY="$(ls burrito_out/code_puppy_control_macos_*)"
+
+          echo "Signing binary: $BINARY"
+          echo "  Identity: ${{ secrets.APPLE_DEVELOPER_ID_SIGNING_IDENTITY }}"
+
+          codesign --sign "${{ secrets.APPLE_DEVELOPER_ID_SIGNING_IDENTITY }}" \
+            --options runtime \
+            --force \
+            --timestamp \
+            --verbose=2 \
+            "$BINARY"
+
+          echo "✅ Verifying signature..."
+          codesign --verify --verbose=2 "$BINARY"
+
+      - name: Notarize macOS binary
+        if: runner.os == 'macOS' && steps.check_apple_signing.outputs.available == 'true'
+        shell: bash
+        run: |
+          BINARY="$(ls burrito_out/code_puppy_control_macos_*)"
+
+          # notarytool requires a .zip, .dmg, or .pkg — not a raw binary.
+          # ditto creates a macOS-compatible zip preserving extended attributes.
+          ZIP_PATH="$RUNNER_TEMP/notarization_submit.zip"
+          ditto -c -k --keepParent "$BINARY" "$ZIP_PATH"
+
+          echo "Submitting for notarization (may take several minutes)..."
+
+          # Submit and wait for the result. --wait blocks until Apple finishes.
+          SUBMIT_OUTPUT=$(notarytool submit "$ZIP_PATH" \
+            --apple-id "${{ secrets.APPLE_ID }}" \
+            --password "${{ secrets.APPLE_APP_PASSWORD }}" \
+            --team-id "${{ secrets.APPLE_TEAM_ID }}" \
+            --wait \
+            2>&1) || true
+
+          echo "$SUBMIT_OUTPUT"
+
+          # Check the notarization result
+          if echo "$SUBMIT_OUTPUT" | grep -q "status: Accepted"; then
+            echo "✅ Notarization successful"
+          else
+            echo "::error::Notarization failed — fetching detailed log"
+            notarytool log \
+              --apple-id "${{ secrets.APPLE_ID }}" \
+              --password "${{ secrets.APPLE_APP_PASSWORD }}" \
+              --team-id "${{ secrets.APPLE_TEAM_ID }}" \
+              last 2>/dev/null || true
+            rm -f "$ZIP_PATH"
+            exit 1
+          fi
+
+          rm -f "$ZIP_PATH"
+
+      - name: Staple notarization ticket
+        if: runner.os == 'macOS' && steps.check_apple_signing.outputs.available == 'true'
+        shell: bash
+        run: |
+          BINARY="$(ls burrito_out/code_puppy_control_macos_*)"
+
+          echo "Stapling notarization ticket..."
+          xcrun stapler staple "$BINARY"
+
+          echo "Validating staple..."
+          xcrun stapler validate "$BINARY"
+
+          echo "✅ Notarization ticket stapled"
+
+      - name: Clean up signing keychain
+        if: always() && runner.os == 'macOS'
+        shell: bash
+        run: |
+          # Always clean up the temporary keychain, even if signing failed.
+          # The KEYCHAIN_PATH env var is set by the import step.
+          if [[ -n "${KEYCHAIN_PATH:-}" && -f "${KEYCHAIN_PATH}" ]]; then
+            security delete-keychain "$KEYCHAIN_PATH" 2>/dev/null || true
+            echo "🗑️ Temporary keychain removed"
+          fi
+
+      # ── End bd-241 codesigning ─────────────────────────────────────────────
+
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
@@ -151,7 +318,7 @@ jobs:
           body: |
             ## Burrito single-binary release
 
-            Unsigned binaries produced by `.github/workflows/burrito-release.yml` (bd-236).
+            Binaries produced by `.github/workflows/burrito-release.yml` (bd-236).
 
             | Platform | File |
             |---|---|
@@ -159,9 +326,25 @@ jobs:
             | Linux x86_64 (glibc) | `code_puppy_control_linux_x86_64` |
             | Windows x86_64 | `code_puppy_control_windows_x86_64.exe` |
 
+            ### macOS codesigning + notarization (bd-241)
+
+            macOS binaries are **signed and notarized** when the required Apple
+            Developer ID secrets are configured in the repository. If signing
+            secrets are unavailable (e.g. on forks), the binary is unsigned and
+            you'll need to bypass Gatekeeper:
+
+            ```bash
+            xattr -c code_puppy_control_macos_arm64
+            ```
+
+            To verify a signed binary:
+
+            ```bash
+            codesign --verify --verbose=2 code_puppy_control_macos_arm64
+            ```
+
             ### Known limitations (follow-up tickets tracked)
 
-            - **No macOS codesigning/notarization** (bd-241) — run `xattr -c <binary>` to bypass Gatekeeper
             - **No Windows Authenticode signing** (bd-240) — SmartScreen may warn
             - **No `linux_arm64` / `macos_x86_64` / `linux_musl`** (bd-239, follow-ups)
 
