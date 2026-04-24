@@ -24,7 +24,7 @@ These read a single key from the `[puppy]` section of `puppy.cfg` via
 | `get_auto_save_session` | `auto_save_session` | `bool` | `True` | — | yes | Set to `true` by `ensure_config_exists()` |
 | `get_max_saved_sessions` | `max_saved_sessions` | `int` | `20` | — | yes | min 0 |
 | `get_allow_recursion` | `allow_recursion` | `bool` | `True` | — | yes | |
-| `get_enable_gitignore_filtering` | `enable_gitignore_filtering` | `bool` | `False` | — | yes | Higher-risk flag (bd code_puppy-31a.9) |
+| `get_enable_gitignore_filtering` | `enable_gitignore_filtering` | `bool` | `False` | — | yes | Higher-risk flag |
 | `get_enable_streaming` | `enable_streaming` | `bool` | `True` | — | yes | Controls SSE streaming |
 | `get_http2` | `http2` | `bool` | `False` | — | yes | |
 | `get_mcp_disabled` | `disable_mcp` | `bool` | `False` | — | yes | Negated key name (`disable_`) |

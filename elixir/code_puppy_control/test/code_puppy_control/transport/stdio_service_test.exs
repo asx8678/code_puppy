@@ -23,7 +23,7 @@ defmodule CodePuppyControl.Transport.StdioServiceTest do
 
     File.write!(
       Path.join(@test_dir, "file2.ex"),
-      "defmodule Test do\n  def hello do\n    :world\n  end\nend"
+      "defmodule Test do\n def hello do\n :world\n end\nend"
     )
 
     # Create subdirectory with more files
@@ -32,7 +32,7 @@ defmodule CodePuppyControl.Transport.StdioServiceTest do
 
     File.write!(
       Path.join(subdir, "nested.ex"),
-      "defmodule Nested do\n  def run do\n    :ok\n  end\nend"
+      "defmodule Nested do\n def run do\n :ok\n end\nend"
     )
 
     on_exit(fn ->
@@ -581,7 +581,7 @@ defmodule CodePuppyControl.Transport.StdioServiceTest do
   end
 
   # ============================================================================
-  # Text Replace Tests (bd-39)
+  # Text Replace Tests
   # ============================================================================
 
   describe "text_replace" do
@@ -653,10 +653,10 @@ defmodule CodePuppyControl.Transport.StdioServiceTest do
   end
 
   # ============================================================================
-  # Hashline Tests (bd-88)
+  # Hashline Tests
   # ============================================================================
 
-  describe "hashline_compute (bd-88)" do
+  describe "hashline_compute" do
     test "returns hash for valid input" do
       request = %{
         "jsonrpc" => "2.0",
@@ -694,7 +694,7 @@ defmodule CodePuppyControl.Transport.StdioServiceTest do
     end
   end
 
-  describe "hashline_format (bd-88)" do
+  describe "hashline_format" do
     test "formats text with hashline prefixes" do
       request = %{
         "jsonrpc" => "2.0",
@@ -715,7 +715,7 @@ defmodule CodePuppyControl.Transport.StdioServiceTest do
     end
   end
 
-  describe "hashline_strip (bd-88)" do
+  describe "hashline_strip" do
     test "strips hashline prefixes" do
       request = %{
         "jsonrpc" => "2.0",
@@ -734,7 +734,7 @@ defmodule CodePuppyControl.Transport.StdioServiceTest do
     end
   end
 
-  describe "hashline_validate (bd-88)" do
+  describe "hashline_validate" do
     test "validates matching anchor" do
       # First compute the hash
       compute_req = %{
@@ -788,7 +788,7 @@ defmodule CodePuppyControl.Transport.StdioServiceTest do
 
   # ============================================================================
   # ============================================================================
-  # Runtime State Tests (bd-75)
+  # Runtime State Tests
   # ============================================================================
 
   describe "runtime state operations" do
@@ -970,7 +970,7 @@ defmodule CodePuppyControl.Transport.StdioServiceTest do
   end
 
   # ============================================================================
-  # Message Processing Tests (bd-182)
+  # Message Processing Tests
   # ============================================================================
 
   describe "message.prune_and_filter" do

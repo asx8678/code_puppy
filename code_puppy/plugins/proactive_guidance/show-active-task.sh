@@ -239,33 +239,15 @@ build_agent_tree() {
 get_active_tasks() {
     # Detect task ID from env or git branch heuristic
     local task_id="${PUP_TASK_ID:-${PUPPY_TASK_ID:-}}"
-    if [[ -z "$task_id" ]]; then
-        local branch=""
-        branch=$(git branch --show-current 2>/dev/null || true)
-        if [[ -n "$branch" ]]; then
-            task_id=$(echo "$branch" | grep -oE 'bd-[0-9]+' | head -1 || true)
-        fi
-    fi
 
     local task_name="unknown"
     local task_status="unknown"
     if [[ -n "$task_id" ]]; then
-        # Try to get task info from bd tool
-        local bd_output=""
-        bd_output=$(bd show "$task_id" 2>/dev/null || true)
-        if [[ -n "$bd_output" ]]; then
-            task_name=$(echo "$bd_output" | grep '^Title:' | sed 's/Title: *//' || echo "Task $task_id")
-            task_status=$(echo "$bd_output" | grep '^Status:' | sed 's/Status: *//' || echo "unknown")
-        else
-            task_name="Task $task_id"
-            task_status="active"
-        fi
+        task_name="Task $task_id"
+        task_status="active"
     fi
 
-    local task_source="env/git"
-    if [[ -n "$task_id" ]] && [[ -n "$bd_output" ]]; then
-        task_source="bd"
-    fi
+    local task_source="env"
 
     cat <<EOF
 {
@@ -306,16 +288,11 @@ output_text() {
     
     # Current Task
     echo -e "${BOLD}${CYAN}📋 Current Task:${RESET}"
-    # Detect task ID from env or git branch
+    # Detect task ID from env
     _task_id="${PUP_TASK_ID:-${PUPPY_TASK_ID:-}}"
-    if [[ -z "$_task_id" ]]; then
-        _branch=$(git branch --show-current 2>/dev/null || true)
-        _task_id=$(echo "$_branch" | grep -oE 'bd-[0-9]+' | head -1 || true)
-    fi
     echo -e "   ID: ${_task_id:-none detected}"
     if [[ -n "$_task_id" ]]; then
-        _task_name=$(bd show "$_task_id" 2>/dev/null | grep '^Title:' | sed 's/Title: *//' || echo "Task $_task_id")
-        echo -e "   Name: $_task_name"
+        echo -e "   Name: Task $_task_id"
     fi
     echo -e "   Branch: ${GREEN}$(git branch --show-current 2>/dev/null || echo 'unknown')${RESET}"
     echo ""
@@ -358,7 +335,7 @@ output_text() {
     echo -e "${BOLD}${BLUE}🎯 Suggested Actions:${RESET}"
     echo -e "   • Continue with current implementation"
     echo -e "   • Run tests: ${GRAY}pytest code_puppy/plugins/proactive_guidance/${RESET}"
-    echo -e "   • Check progress: ${GRAY}bd list${RESET}"
+    echo -e "   • Check progress: ${GRAY}git log --oneline -5${RESET}"
     echo -e "   • View files: ${GRAY}ls -la code_puppy/plugins/proactive_guidance/${RESET}"
     echo ""
     

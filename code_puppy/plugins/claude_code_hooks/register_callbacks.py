@@ -15,7 +15,6 @@ from .config import load_hooks_config
 _SUBAGENT_NAMES = frozenset(
     {
         "pack_leader",
-        "bloodhound",
         "code-puppy",
         "code_puppy",
         "retriever",

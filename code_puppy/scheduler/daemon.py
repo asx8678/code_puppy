@@ -1,6 +1,6 @@
 """Scheduler daemon for Code Puppy.
 
-# DEPRECATED(bd-62): Use Elixir scheduler. This module is retained for backward compatibility only.
+# DEPRECATED: Use Elixir scheduler. This module is retained for backward compatibility only.
 # The Elixir scheduler at CodePuppyControl.Scheduler.CronScheduler is now the production implementation.
 
 Runs as a background process, checking for and executing scheduled tasks.
@@ -61,7 +61,7 @@ def should_run_task(task: ScheduledTask, now: datetime) -> bool:
             return False
 
         if not task.last_run:
-            return True  # Never run before
+            return True # Never run before
 
         last_run = datetime.fromisoformat(task.last_run)
         return (now - last_run) >= interval
@@ -121,7 +121,7 @@ def run_scheduler_loop(check_interval: int = 60):
 
         except Exception as e:
             print(f"[Scheduler] Error in loop: {e}")
-            time.sleep(10)  # Wait before retrying
+            time.sleep(10) # Wait before retrying
 
     print("[Scheduler] Daemon stopped")
 
@@ -255,13 +255,13 @@ def get_daemon_pid() -> int | None:
             kernel32 = ctypes.windll.kernel32
             handle = kernel32.OpenProcess(
                 0x1000, False, pid
-            )  # PROCESS_QUERY_LIMITED_INFORMATION
+            ) # PROCESS_QUERY_LIMITED_INFORMATION
             if handle:
                 kernel32.CloseHandle(handle)
                 return pid
             return None
         else:
-            os.kill(pid, 0)  # Doesn't kill, just checks if process exists
+            os.kill(pid, 0) # Doesn't kill, just checks if process exists
             return pid
     except (ValueError, ProcessLookupError, PermissionError, OSError):
         # PID file exists but process is not running - stale PID file
@@ -282,7 +282,7 @@ def start_daemon_background() -> bool:
     # locking (e.g., fcntl.flock). We mitigate by re-checking after start.
     pid = get_daemon_pid()
     if pid:
-        return True  # Already running
+        return True # Already running
 
     cmd = [sys.executable, "-m", "code_puppy.scheduler"]
 
@@ -318,7 +318,7 @@ def stop_daemon() -> bool:
             import ctypes
 
             kernel32 = ctypes.windll.kernel32
-            handle = kernel32.OpenProcess(1, False, pid)  # PROCESS_TERMINATE
+            handle = kernel32.OpenProcess(1, False, pid) # PROCESS_TERMINATE
             kernel32.TerminateProcess(handle, 0)
             kernel32.CloseHandle(handle)
         else:

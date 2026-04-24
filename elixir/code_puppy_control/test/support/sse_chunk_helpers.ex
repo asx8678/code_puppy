@@ -1,6 +1,6 @@
 defmodule CodePuppyControl.Test.SSEChunkHelpers do
   @moduledoc """
-  Shared helpers for SSE chunk-boundary streaming tests (bd-226).
+  Shared helpers for SSE chunk-boundary streaming tests.
 
   Provides:
   - `build_chunked_mock/1`: Returns a static mock HTTP client module that emits

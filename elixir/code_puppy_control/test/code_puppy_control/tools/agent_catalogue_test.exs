@@ -172,7 +172,6 @@ defmodule CodePuppyControl.Tools.AgentCatalogueTest do
       assert :python_programmer in names
 
       # Pack sub-agents
-      assert :bloodhound in names
       assert :retriever in names
       assert :shepherd in names
       assert :terrier in names

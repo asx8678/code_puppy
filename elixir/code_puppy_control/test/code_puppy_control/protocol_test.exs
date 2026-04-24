@@ -194,7 +194,7 @@ defmodule CodePuppyControl.ProtocolTest do
     end
   end
 
-  # bd-106: Batch support tests
+  # Batch support tests
   describe "frame_batch/1" do
     test "frames multiple messages as JSON array" do
       messages = [

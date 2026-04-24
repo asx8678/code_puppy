@@ -42,7 +42,7 @@ defmodule CodePuppyControl.Credentials do
     via HMAC-SHA256. Credentials are not portable across machines.
   - **File permissions**: The store file is created with 0o600 permissions.
   - **No OS keychain**: This is a simple encrypted file store. For OS-level
-    keychain integration, see future work (bd-166).
+    keychain integration, see future work.
 
   ## Isolation
 
@@ -359,7 +359,7 @@ defmodule CodePuppyControl.Credentials do
   end
 
   # Parse a simple INI-style value from the Python puppy.cfg.
-  # Format: KEY=value  (one per line, no section headers for API keys)
+  # Format: KEY=value (one per line, no section headers for API keys)
   defp parse_ini_value(contents, key_name) do
     case Regex.run(~r/^#{Regex.escape(key_name)}=(.*)$/m, contents) do
       [_, value] -> String.trim(value)

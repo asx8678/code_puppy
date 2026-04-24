@@ -1,5 +1,5 @@
 """
-Python wrappers for Elixir text processing RPC methods (bd-118).
+Python wrappers for Elixir text processing RPC methods.
 
 This module provides Python functions that call the Elixir text.*
 RPC methods via the JSON-RPC transport for text manipulation,
@@ -41,7 +41,7 @@ configuration options.
 from typing import Any
 
 
-def _get_transport() -> "ElixirTransport":  # type: ignore # noqa: F821
+def _get_transport() -> "ElixirTransport": # type: ignore # noqa: F821
     """Get the shared transport singleton from elixir_transport_helpers."""
     from code_puppy.elixir_transport_helpers import get_transport
 
@@ -79,8 +79,8 @@ def text_replace(
 
     Example:
         >>> result = text_replace(
-        ...     "Hello World",
-        ...     [{"old_str": "World", "new_str": "Python"}]
+        ... "Hello World",
+        ... [{"old_str": "World", "new_str": "Python"}]
         ... )
         >>> assert result["success"] is True
         >>> assert result["modified"] == "Hello Python"
@@ -122,7 +122,7 @@ def text_fuzzy_match(
         - "score": Jaro-Winkler similarity score (0.0-1.0)
 
     Example:
-        >>> lines = ["def foo():", "    pass", "def bar():"]
+        >>> lines = ["def foo():", " pass", "def bar():"]
         >>> result = text_fuzzy_match(lines, "def foo():")
         >>> assert result["start"] == 1
         >>> assert result["score"] >= 0.9
@@ -166,10 +166,10 @@ def text_unified_diff(
 
     Example:
         >>> diff = text_unified_diff(
-        ...     "Hello World",
-        ...     "Hello Python",
-        ...     from_file="a.txt",
-        ...     to_file="b.txt"
+        ... "Hello World",
+        ... "Hello Python",
+        ... from_file="a.txt",
+        ... to_file="b.txt"
         ... )
         >>> assert "-Hello World" in diff
         >>> assert "+Hello Python" in diff

@@ -32,7 +32,7 @@ class AgentInfo:
     name: str
     display_name: str
     description: str
-    factory: Callable  # callable () -> BaseAgent instance
+    factory: Callable # callable () -> BaseAgent instance
     # Present only for JSON-file agents; None for Python-class agents.
     json_path: str | None = None
 
@@ -112,7 +112,7 @@ def _is_process_alive(pid: int) -> bool:
             from ctypes import wintypes
 
             PROCESS_QUERY_LIMITED_INFORMATION = 0x1000
-            kernel32 = ctypes.windll.kernel32  # type: ignore[attr-defined]
+            kernel32 = ctypes.windll.kernel32 # type: ignore[attr-defined]
             kernel32.OpenProcess.argtypes = [
                 wintypes.DWORD,
                 wintypes.BOOL,
@@ -239,7 +239,7 @@ def _discover_agents(message_group_id: str | None = None):
     """Dynamically discover all agent classes and JSON agents."""
     # Double-checked locking pattern for thread-safe early return
     if _state.registry_populated:
-        return  # Already discovered, use cached registry
+        return # Already discovered, use cached registry
 
     with _REGISTRY_LOCK:
         # Check again inside lock (another thread may have populated while waiting)
@@ -526,7 +526,7 @@ def _discover_agents(message_group_id: str | None = None):
                 message_group=message_group_id,
             )
 
-        _state.registry_populated = True  # Mark registry as fully populated
+        _state.registry_populated = True # Mark registry as fully populated
 
 
 def _invalidate_agent_registry() -> None:
@@ -554,13 +554,13 @@ def reset_state_for_tests() -> None:
 def get_available_agents() -> dict[str, str]:
     """Get a dictionary of available agents with their display names.
 
-    bd-102: Bridge-aware - tries Elixir bridge first if connected,
+    Bridge-aware - tries Elixir bridge first if connected,
     falls back to local agent registry.
 
     Returns:
         Dict mapping agent names to display names.
     """
-    # bd-102: Try Elixir bridge first if connected
+    # Try Elixir bridge first if connected
     try:
         from code_puppy.plugins.elixir_bridge import (
             is_connected,
@@ -581,7 +581,7 @@ def get_available_agents() -> dict[str, str]:
                 if result.get("status") == "ok" and "agents" in result:
                     return dict(result["agents"])
             except Exception:
-                pass  # Fallback to local on any error
+                pass # Fallback to local on any error
     except ImportError:
         pass
 
@@ -620,14 +620,14 @@ def get_available_agents() -> dict[str, str]:
 def get_current_agent_name() -> str:
     """Get the name of the currently active agent for this terminal session.
 
-    bd-102: Bridge-aware - tries Elixir bridge first if connected,
+    Bridge-aware - tries Elixir bridge first if connected,
     falls back to local session/cache/config.
 
     Returns:
         The name of the current agent for this session.
         Priority: session agent > last selected agent > config default > 'code-puppy'.
     """
-    # bd-102: Try Elixir bridge first if connected
+    # Try Elixir bridge first if connected
     try:
         from code_puppy.plugins.elixir_bridge import (
             is_connected,
@@ -648,7 +648,7 @@ def get_current_agent_name() -> str:
                 if result.get("status") == "ok" and result.get("current_agent"):
                     return result["current_agent"]
             except Exception:
-                pass  # Fallback to local on any error
+                pass # Fallback to local on any error
     except ImportError:
         pass
 
@@ -669,7 +669,7 @@ def get_current_agent_name() -> str:
         if last_agent:
             return last_agent
     except ImportError:
-        pass  # Plugin not available
+        pass # Plugin not available
 
     # Fall back to config default
     from ..config import get_default_agent
@@ -680,7 +680,7 @@ def get_current_agent_name() -> str:
 def set_current_agent(agent_name: str) -> bool:
     """Set the current agent by name.
 
-    bd-102: Bridge-aware - notifies Elixir bridge if connected (fire-and-forget).
+    Bridge-aware - notifies Elixir bridge if connected (fire-and-forget).
 
     Args:
         agent_name: The name of the agent to set as current.
@@ -714,7 +714,7 @@ def set_current_agent(agent_name: str) -> bool:
         agent_obj.set_message_history(list(_state.agent_histories[agent_obj.name]))
     on_agent_reload(agent_obj.id, agent_name)
 
-    # bd-102: Notify Elixir bridge if connected (fire-and-forget)
+    # Notify Elixir bridge if connected (fire-and-forget)
     try:
         from code_puppy.plugins.elixir_bridge import (
             is_connected,
@@ -732,7 +732,7 @@ def set_current_agent(agent_name: str) -> bool:
                     )
                 )
             except Exception:
-                pass  # Ignore errors for fire-and-forget
+                pass # Ignore errors for fire-and-forget
     except ImportError:
         pass
 

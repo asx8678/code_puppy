@@ -54,7 +54,7 @@ _module_transport_lock = threading.Lock()
 
 
 # Backward compatibility alias
-def _get_transport() -> "ElixirTransport":  # type: ignore # noqa: F821
+def _get_transport() -> "ElixirTransport": # type: ignore # noqa: F821
     """Get or create the module-level transport singleton (backward compatibility alias)."""
     return get_transport()
 
@@ -63,7 +63,7 @@ def _transport_is_alive(transport) -> bool:
     """Check whether a cached transport's BEAM process is still running.
 
     Returns False if transport is None, its process was never started,
-    or the process has exited.  Safe to call from any thread without
+    or the process has exited. Safe to call from any thread without
     holding _module_transport_lock (Popen.poll() is thread-safe).
     """
     if transport is None:
@@ -75,12 +75,12 @@ def _transport_is_alive(transport) -> bool:
         return False
 
 
-def get_transport() -> "ElixirTransport":  # type: ignore # noqa: F821
+def get_transport() -> "ElixirTransport": # type: ignore # noqa: F821
     """Get or create the module-level transport singleton.
 
     If the previously cached transport's BEAM process has died, this function
     logs a warning, discards the dead singleton, and attempts to start a fresh
-    one (bd-206).
+    one.
 
     Thread-safe under free-threaded Python (3.13+ with GIL disabled):
     only a fully-started transport is ever published to the module-level
@@ -102,7 +102,7 @@ def get_transport() -> "ElixirTransport":  # type: ignore # noqa: F821
             # Transport died between the probe and now — discard and restart
             logger.warning(
                 "Elixir transport process died; discarding stale singleton "
-                "and attempting restart (bd-206)"
+                "and attempting restart"
             )
             try:
                 _module_transport.stop()
@@ -113,8 +113,8 @@ def get_transport() -> "ElixirTransport":  # type: ignore # noqa: F821
         from code_puppy.elixir_transport import ElixirTransport
 
         t = ElixirTransport()
-        t.start()  # may raise; if so, _module_transport stays None
-        _module_transport = t  # publish only after successful start
+        t.start() # may raise; if so, _module_transport stays None
+        _module_transport = t # publish only after successful start
         return _module_transport
 
 
@@ -186,7 +186,7 @@ def read_files(
     Example:
         >>> results = read_files(["a.py", "b.py"])
         >>> for r in results:
-        ...     print(r["path"], len(r["content"]))
+        ... print(r["path"], len(r["content"]))
     """
     return get_transport().read_files(paths, start_line, num_lines)
 
@@ -216,7 +216,7 @@ def grep(
     Example:
         >>> matches = grep(r"def ", "src/")
         >>> for m in matches[:5]:
-        ...     print(f"{m['file']}:{m['line_number']}: {m['line_content']}")
+        ... print(f"{m['file']}:{m['line_number']}: {m['line_content']}")
     """
     return get_transport().grep(
         pattern, directory, case_sensitive, max_matches, file_pattern, context_lines

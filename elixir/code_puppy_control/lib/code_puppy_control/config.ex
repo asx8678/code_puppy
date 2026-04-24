@@ -451,10 +451,10 @@ defmodule CodePuppyControl.Config do
   # In production, this always returns the platform-default user-data dir.
   # Tests can inject a temp dir via:
   #
-  #     Application.put_env(:code_puppy_control, :user_data_dir_override, tmp_dir)
+  # Application.put_env(:code_puppy_control, :user_data_dir_override, tmp_dir)
   #
   # This avoids writing real `secret_key_base` / `data.sqlite` files to the
-  # CI runner's home directory (bd-237).
+  # CI runner's home directory.
   @spec user_data_dir() :: String.t()
   defp user_data_dir do
     case Application.get_env(:code_puppy_control, :user_data_dir_override) do

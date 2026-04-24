@@ -1,7 +1,7 @@
 defmodule CodePuppyControl.Credentials.ImportFromPythonEdgeCasesTest do
   @moduledoc """
   Edge-case tests for `CodePuppyControl.Credentials.import_from_python/1`
-  that complement the existing coverage in `CredentialsTest` (bd-167).
+  that complement the existing coverage in `CredentialsTest`.
 
   New ground covered here:
     * Idempotency across repeated imports

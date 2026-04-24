@@ -1,6 +1,6 @@
 defmodule CodePuppyControl.LLM.StateMachinePropertyTest do
   @moduledoc """
-  State-machine property tests for LLM GenServers (bd-225).
+  State-machine property tests for LLM GenServers.
 
   Uses StreamData to generate random sequences of operations and compares
   the GenServer output against a pure reference model. Catches state

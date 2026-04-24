@@ -107,7 +107,7 @@ defmodule CodePuppyControl.ModelFactory.HandleTest do
       assert opts[:extra_headers] == [{"x-custom", "value"}]
     end
 
-    test "includes extra_headers when present (bd-223)" do
+    test "includes extra_headers when present" do
       handle = %Handle{
         model_name: "custom-model",
         provider_module: OpenAI,

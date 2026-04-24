@@ -120,7 +120,7 @@ def _get_git_head_short() -> str | None:
 
 
 def _detect_task_context() -> dict[str, Any]:
-    """Gather real context from env/session/git/bd — fail gracefully.
+    """Gather real context from env/session/git — fail gracefully.
 
     Returns a dict with whatever context was obtainable.
     """
@@ -138,30 +138,10 @@ def _detect_task_context() -> dict[str, Any]:
     ctx["cwd"] = os.getcwd()
     ctx["user"] = os.environ.get("USER", "unknown")
 
-    # Task ID from env (e.g. PUP_TASK_ID or from branch name heuristic)
+    # Task ID from env vars
     task_id = os.environ.get("PUP_TASK_ID") or os.environ.get("PUPPY_TASK_ID")
-    if not task_id and branch:
-        # Heuristic: extract bd-NNN from branch name
-        import re
-
-        match = re.search(r"(bd-\d+)", branch)
-        if match:
-            task_id = match.group(1)
     if task_id:
         ctx["task_id"] = task_id
-
-    # bd tool — best-effort, not critical
-    try:
-        result = subprocess.run(
-            ["bd", "list", "--format=json"],
-            capture_output=True,
-            text=True,
-            timeout=5,
-        )
-        if result.returncode == 0 and result.stdout.strip():
-            ctx["bd_available"] = True
-    except Exception:
-        pass  # bd not installed — that's fine
 
     return ctx
 

@@ -1,4 +1,4 @@
-"""Supervisor review plugin data models (bd code_puppy-79p).
+"""Supervisor review plugin data models.
 
 Dataclasses used by the iterative multi-agent review orchestrator. Ported from
 orion-multistep-analysis supervisor/orchestrator.py with improvements:

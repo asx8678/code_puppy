@@ -13,12 +13,12 @@ Design principles:
 - Fast path: Returns immediately for safe commands without LLM roundtrip
 - Defense in depth: Regex blocks obvious attacks; LLM handles edge cases
 
-SECURITY FIXES (issue code_puppy-70t, bd-61):
+SECURITY FIXES (issue code_puppy-70t):
 - Regex patterns use bounded repetition to prevent O(n²) catastrophic backtracking
 - Added 600-line and 10000-char limits to prevent DoS via regex matching
 - Added explicit find -delete/-exec patterns for mass deletion detection
-- CRITICAL FIX bd-61: Shared sensitive path patterns prevent shell bypasses
-- CRITICAL FIX bd-61: Path normalization in _normalize_command_for_checks()
+- CRITICAL FIX: Shared sensitive path patterns prevent shell bypasses
+- CRITICAL FIX: Path normalization in _normalize_command_for_checks()
   collapses multiple slashes (//+ -> /) and removes dot segments (/./ -> /)
   to prevent bypasses like //etc/passwd or /./etc/passwd
 """
@@ -27,7 +27,7 @@ import re
 from dataclasses import dataclass
 from typing import Literal
 
-# SECURITY FIX bd-61: Import shared sensitive path patterns from central module.
+# SECURITY FIX: Import shared sensitive path patterns from central module.
 # This ensures shell command filtering blocks ALL paths that file_operations
 # blocks, preventing bypass vectors where shell commands read sensitive files.
 from code_puppy.sensitive_paths import (
@@ -38,7 +38,7 @@ from code_puppy.sensitive_paths import (
 
 # SECURITY: Maximum command length to prevent regex DoS
 # Commands longer than this are rejected immediately
-MAX_COMMAND_LENGTH = 10000  # ~600 lines of average 16 chars each
+MAX_COMMAND_LENGTH = 10000 # ~600 lines of average 16 chars each
 MAX_COMMAND_LINES = 600
 
 
@@ -102,7 +102,7 @@ _HIGH_RISK_PATTERNS: list[tuple[re.Pattern, str]] = [
     (re.compile(
         r"\brm\b"
         r"(?:\s+(?:-[a-zA-Z]*[rf][a-zA-Z]*|--force|--recursive|--preserve-root))*"
-        r"(?:\s+--)?"  # Optional -- separator
+        r"(?:\s+--)?" # Optional -- separator
         r"\s+(?:--no-preserve-root|['\"]?(?:/|/\.?|/+/|/\*|/\*/?)(?:\s|$|['\"]))"
     ), "rm recursive force delete of root"),
     (re.compile(r"\brm\b(?:\s+(?:-[a-zA-Z]*[rf][a-zA-Z]*|(?:--force|--recursive)))+\s+--no-preserve-root"), "rm force delete with no-preserve-root"),
@@ -351,7 +351,7 @@ def _extract_unquoted_text(command: str) -> str:
         if in_single_quote:
             if c == "'":
                 in_single_quote = False
-                result.append(' ')  # Replace quote content with space
+                result.append(' ') # Replace quote content with space
             # Skip everything inside single quotes
             pass
             
@@ -362,7 +362,7 @@ def _extract_unquoted_text(command: str) -> str:
                 continue
             if c == '"':
                 in_double_quote = False
-                result.append(' ')  # Replace quote content with space
+                result.append(' ') # Replace quote content with space
             # Skip everything inside double quotes
             pass
             
@@ -382,12 +382,12 @@ def _extract_unquoted_text(command: str) -> str:
 
 
 # Pre-compiled patterns for checking sensitive paths in file operations
-# SECURITY FIX bd-61: Now using shared patterns from code_puppy.security.sensitive_paths
+# SECURITY FIX: Now using shared patterns from code_puppy.security.sensitive_paths
 # This ensures shell command filtering blocks ALL paths that file_operations blocks.
 # Added paths: /private/etc (macOS), /dev (device files), ~root (root home via tilde)
 # 
 # Old pattern (for reference):
-#   (?:^|\s|<<?<?)(?:/etc|/root|/proc|~/.ssh|~/.aws|/var/log|/home/root)(?:/|$|\s)
+# (?:^|\s|<<?<?)(?:/etc|/root|/proc|~/.ssh|~/.aws|/var/log|/home/root)(?:/|$|\s)
 #
 # Using shared pattern to prevent bypass vectors where shell commands read
 # sensitive files that file_operations correctly blocks.
@@ -465,7 +465,7 @@ def _normalize_command_for_checks(command: str) -> str:
     
     result = quoted_pattern.sub(unquote_match, result)
     
-    # SECURITY FIX bd-61: Normalize path separators to prevent bypass
+    # SECURITY FIX: Normalize path separators to prevent bypass
     # Collapse multiple slashes: //etc -> /etc, ///etc -> /etc
     result = re.sub(r'/{2,}', '/', result)
     
@@ -591,7 +591,7 @@ def _classify_single_command(command: str) -> RegexClassificationResult:
                 risk="medium",
                 reasoning=f"Medium-risk pattern detected: {description}",
                 blocked=False,
-                is_ambiguous=True,  # Needs LLM for final decision
+                is_ambiguous=True, # Needs LLM for final decision
             )
     
     # Check low-risk patterns
@@ -602,7 +602,7 @@ def _classify_single_command(command: str) -> RegexClassificationResult:
                 risk="low",
                 reasoning=f"Low-risk pattern detected: {description}",
                 blocked=False,
-                is_ambiguous=True,  # Needs LLM for final decision
+                is_ambiguous=True, # Needs LLM for final decision
             )
     
     # Check safe patterns (return quickly) - be more permissive for safe commands
@@ -752,7 +752,7 @@ def _classify_single_command(command: str) -> RegexClassificationResult:
         # If it has absolute system paths, don't mark as safe - let LLM decide
         if _SENSITIVE_PATH_PATTERN.search(normalized_cmd):
             # Has sensitive paths - fall through to ambiguous
-            pass  # Fall through to the ambiguous return below
+            pass # Fall through to the ambiguous return below
         elif _TRAVERSAL_PATTERN.search(normalized_cmd):
             # SECURITY FIX: Detect traversal patterns that could escape to sensitive paths
             if _path_with_traversal_hits_sensitive(normalized_cmd):
@@ -810,7 +810,7 @@ def classify_command(command: str) -> RegexClassificationResult:
         >>> result.risk
         'none'
         >>> result = classify_command("echo 'hello; rm foo'")
-        >>> result.risk  # Safe because ; is inside quotes
+        >>> result.risk # Safe because ; is inside quotes
         'none'
     """
     # SECURITY FIX: Check command length limits to prevent regex DoS

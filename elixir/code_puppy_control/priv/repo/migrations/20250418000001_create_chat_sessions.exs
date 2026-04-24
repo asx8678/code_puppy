@@ -2,7 +2,7 @@ defmodule CodePuppyControl.Repo.Migrations.CreateChatSessions do
   @moduledoc """
   Creates the chat_sessions table for persisting agent session history.
 
-  This migration implements bd-137: Migrate session_storage.py to Elixir/Ecto.
+  This migration implements : Migrate session_storage.py to Elixir/Ecto.
   Replaces JSON file-based session storage with SQLite via Ecto.
   """
 

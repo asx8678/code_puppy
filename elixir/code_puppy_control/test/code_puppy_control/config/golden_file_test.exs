@@ -2,7 +2,7 @@ defmodule CodePuppyControl.Config.GoldenFileTest do
   @moduledoc """
   Golden-file compatibility tests for config loading, normalization, and round-trips.
 
-  **Purpose:** Schema-drift safety net (bd-184). Ensures that committed fixture
+  **Purpose:** Schema-drift safety net. Ensures that committed fixture
   files parse, normalize, and round-trip correctly through the Elixir config
   stack. If a Loader or Writer change breaks parity with existing config files,
   these tests will catch it.
@@ -15,7 +15,7 @@ defmodule CodePuppyControl.Config.GoldenFileTest do
   2. Re-run this test suite
   3. Review the diff carefully — a fixture change implies a schema migration
 
-  **References:** bd-184 (this suite), bd-186 (isolation gates), bd-182 (schema contract)
+  **References:** (this suite), (isolation gates), (schema contract)
   """
 
   use ExUnit.Case, async: false

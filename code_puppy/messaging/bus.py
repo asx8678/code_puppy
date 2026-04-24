@@ -12,23 +12,23 @@ It also handles request/response correlation for user interactions:
 5. Agent's request_input() returns with the user's value
 
     ┌─────────────────────────────────────────────────────────────┐
-    │                       MessageBus                             │
-    │  ┌─────────────┐                      ┌─────────────┐       │
-    │  │  outgoing   │  Messages (Agent→UI) │  incoming   │       │
-    │  │   Queue     │ ───────────────────> │   Queue     │       │
-    │  │ [AnyMessage]│                      │ [AnyCommand]│       │
-    │  └─────────────┘                      └─────────────┘       │
-    │         ↑                                    │              │
-    │         │                                    ↓              │
-    │    emit()                           provide_response()      │
-    │    emit_text()                                              │
-    │    request_input() ─────────────────────────────────────────│
-    │         ↑              (waits for matching response)        │
-    │         │                                                   │
-    │  ┌──────┴──────┐                                            │
-    │  │  pending    │  prompt_id → Future                        │
-    │  │  requests   │                                            │
-    │  └─────────────┘                                            │
+    │ MessageBus │
+    │ ┌─────────────┐ ┌─────────────┐ │
+    │ │ outgoing │ Messages (Agent→UI) │ incoming │ │
+    │ │ Queue │ ───────────────────> │ Queue │ │
+    │ │ [AnyMessage]│ │ [AnyCommand]│ │
+    │ └─────────────┘ └─────────────┘ │
+    │ ↑ │ │
+    │ │ ↓ │
+    │ emit() provide_response() │
+    │ emit_text() │
+    │ request_input() ─────────────────────────────────────────│
+    │ ↑ (waits for matching response) │
+    │ │ │
+    │ ┌──────┴──────┐ │
+    │ │ pending │ prompt_id → Future │
+    │ │ requests │ │
+    │ └─────────────┘ │
     └─────────────────────────────────────────────────────────────┘
 """
 
@@ -175,7 +175,7 @@ class MessageBus:
             self._put_to_outgoing(message)
 
     def _notify_elixir_if_connected(self, message: AnyMessage) -> None:
-        """Notify Elixir EventBus if bridge is connected (bd-79).
+        """Notify Elixir EventBus if bridge is connected.
 
         This is called AFTER local delivery to also emit to Elixir EventBus.
         Fire-and-forget: never blocks, silently ignores all errors.
@@ -214,7 +214,7 @@ class MessageBus:
             notify_elixir_event(
                 event_type=event_type,
                 payload=payload,
-                run_id=None,  # Could be extended to extract from context
+                run_id=None, # Could be extended to extract from context
                 session_id=session_id,
             )
 
@@ -330,7 +330,7 @@ class MessageBus:
         """
         from .messages import ShellLineMessage
 
-        message = ShellLineMessage(line=line, stream=stream)  # type: ignore[arg-type]
+        message = ShellLineMessage(line=line, stream=stream) # type: ignore[arg-type]
 
         # Lock-free fast path: check if renderer is active without acquiring lock
         if not self._renderer_event.is_set():
@@ -441,7 +441,7 @@ class MessageBus:
             prompt_id=prompt_id,
             prompt_text=prompt_text,
             default_value=default,
-            input_type=input_type,  # type: ignore[arg-type]
+            input_type=input_type, # type: ignore[arg-type]
         )
         self.emit(request)
 
@@ -763,9 +763,9 @@ def get_message_bus() -> MessageBus:
     """
     global _global_bus
 
-    if _global_bus is None:  # First check (no lock)
+    if _global_bus is None: # First check (no lock)
         with _bus_lock:
-            if _global_bus is None:  # Second check (with lock)
+            if _global_bus is None: # Second check (with lock)
                 _global_bus = MessageBus()
     return _global_bus
 

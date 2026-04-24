@@ -1,6 +1,6 @@
 defmodule CodePuppyControl.LLM.SSEChunkEdgeCasesTest do
   @moduledoc """
-  SSE chunk-boundary specific edge case tests (bd-226).
+  SSE chunk-boundary specific edge case tests.
 
   Tests specific split scenarios that are likely to cause parsing errors:
   - Splits inside JSON keys and values

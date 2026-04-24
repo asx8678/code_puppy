@@ -62,17 +62,17 @@ _session_spans: dict[str, tuple[str, str, str]] = {}
 # Track model call spans within agent runs
 _agent_model_spans: dict[
     str, tuple[str, str]
-] = {}  # span_id -> (model_span_id, model_node_id)
+] = {} # span_id -> (model_span_id, model_node_id)
 
-# Track active tool call span per session (fixes bd-68: unique span matching by session)
+# Track active tool call span per session (fixes: unique span matching by session)
 # This replaces fragile name-based matching which fails when:
 # - Same tool runs twice quickly
 # - Nested agents call the same tool
 # - Retries or partial failures happen
-_active_tool_spans: dict[str, str] = {}  # session_id -> span_id for current tool call
+_active_tool_spans: dict[str, str] = {} # session_id -> span_id for current tool call
 
 # Estimated token counts for reconciliation
-_estimated_usage: dict[str, dict[str, int]] = {}  # span_id -> {input, output}
+_estimated_usage: dict[str, dict[str, int]] = {} # span_id -> {input, output}
 
 
 def _get_or_create_trace_id(session_id: str | None) -> str:
@@ -172,13 +172,13 @@ async def _on_stream_event(
 
     Expects normalized event data following the unified schema:
     {
-        "content_delta": str | None,      # Text/thinking content delta
-        "args_delta": str | None,         # Tool args delta
-        "tool_name": str | None,          # Current tool name
-        "tool_name_delta": str | None,    # Tool name delta (streaming)
-        "part_kind": str,                 # "text", "thinking", "tool_call", etc.
+        "content_delta": str | None, # Text/thinking content delta
+        "args_delta": str | None, # Tool args delta
+        "tool_name": str | None, # Current tool name
+        "tool_name_delta": str | None, # Tool name delta (streaming)
+        "part_kind": str, # "text", "thinking", "tool_call", etc.
         "index": int,
-        "raw": dict,                      # Original event for debugging
+        "raw": dict, # Original event for debugging
     }
     """
     try:
@@ -278,13 +278,13 @@ async def _on_pre_tool_call(
         )
 
         # Emit tool_args transfer
-        args_str = str(tool_args)[:500]  # Truncate for storage
+        args_str = str(tool_args)[:500] # Truncate for storage
         args_event = emit_transfer(
             trace_id=trace_id,
             kind=TransferKind.TOOL_ARGS,
             source_node_id=model_node_id or agent_node_id,
             target_node_id=tool_event.node.id if tool_event.node else None,
-            token_count=len(args_str) // 4,  # Rough estimate
+            token_count=len(args_str) // 4, # Rough estimate
             token_class=TokenClass.INPUT_TOKENS,
             accounting=AccountingState.ESTIMATED_LIVE,
             preview=args_str[:200],
@@ -299,7 +299,7 @@ async def _on_pre_tool_call(
         _store.append(args_event)
 
         # Store span_id for reliable lookup in _on_post_tool_call
-        # This fixes bd-68: unique span matching per session instead of fragile name-based search
+        # This fixes: unique span matching per session instead of fragile name-based search
         _active_tool_spans[session_id] = tool_event.span_id
 
     except Exception as e:
@@ -322,7 +322,7 @@ async def _on_post_tool_call(
 
         trace_id, agent_span_id, agent_node_id = _session_spans[session_id]
 
-        # Find the tool span using unique session-based lookup (bd-68 fix)
+        # Find the tool span using unique session-based lookup
         # This replaces fragile name-based matching that failed when:
         # - Same tool runs twice quickly
         # - Nested agents call the same tool
@@ -358,7 +358,7 @@ async def _on_post_tool_call(
             source_node_id=tool_span.node_id,
             target_node_id=agent_node_id,
             token_count=len(result_str) // 4,
-            token_class=TokenClass.INPUT_TOKENS,  # Tool results become model input
+            token_class=TokenClass.INPUT_TOKENS, # Tool results become model input
             accounting=AccountingState.ESTIMATED_LIVE,
             preview=result_str[:200],
             span_id=tool_span.span_id,
@@ -418,7 +418,7 @@ async def _on_agent_run_end(
 
         # End model span first
         if model_span_id and model_node_id:
-            # Emit usage_reported with exact provider numbers (bd-66)
+            # Emit usage_reported with exact provider numbers
             if exact_usage:
                 usage_event = emit_usage_reported(
                     trace_id=trace_id,

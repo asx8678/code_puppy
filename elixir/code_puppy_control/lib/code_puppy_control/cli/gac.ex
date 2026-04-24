@@ -11,10 +11,10 @@ defmodule CodePuppyControl.CLI.Gac do
 
   ## Options
 
-    * `-m`, `--message TEXT`  - Commit message (auto-generated if not provided)
-    * `--no-push`            - Commit only, don't push
-    * `--dry-run`            - Preview only, don't execute
-    * `--no-stage`           - Don't auto-stage changes
+    * `-m`, `--message TEXT` - Commit message (auto-generated if not provided)
+    * `--no-push` - Commit only, don't push
+    * `--dry-run` - Preview only, don't execute
+    * `--no-stage` - Don't auto-stage changes
   """
 
   alias CodePuppyControl.CLI.GacParser
@@ -47,7 +47,7 @@ defmodule CodePuppyControl.CLI.Gac do
   """
   @spec run(map()) :: 0 | 1
   def run(opts) do
-    # TODO(bd-172): Wire to CodePuppyControl git operations
+    # TODO: Wire to CodePuppyControl git operations
     # Currently a placeholder that delegates to System.cmd("git", ...)
 
     IO.puts("🔍 Checking git status...")
@@ -88,7 +88,7 @@ defmodule CodePuppyControl.CLI.Gac do
     # Dry-run guard BEFORE any git operations
     if opts[:dry_run] do
       IO.puts("🏃 Dry run mode: would stage all files and commit")
-      IO.puts("   (no changes made)")
+      IO.puts(" (no changes made)")
       0
     else
       # Stage if needed
@@ -97,7 +97,7 @@ defmodule CodePuppyControl.CLI.Gac do
 
         case System.cmd("git", ["add", "-A"], stderr_to_stdout: true) do
           {_, 0} -> :ok
-          {err, _} -> IO.puts("⚠️  git add: #{String.trim(err)}")
+          {err, _} -> IO.puts("⚠️ git add: #{String.trim(err)}")
         end
       end
 
@@ -198,11 +198,11 @@ defmodule CodePuppyControl.CLI.Gac do
     Git Auto Commit - stage, commit, and push in one command
 
     optional arguments:
-      -h, --help            show this help message and exit
-      -m, --message TEXT    Commit message (auto-generated if not provided)
-      --no-push             Commit only, don't push
-      --dry-run             Preview only, don't execute
-      --no-stage            Don't auto-stage changes
+      -h, --help show this help message and exit
+      -m, --message TEXT Commit message (auto-generated if not provided)
+      --no-push Commit only, don't push
+      --dry-run Preview only, don't execute
+      --no-stage Don't auto-stage changes
     """
   end
 end

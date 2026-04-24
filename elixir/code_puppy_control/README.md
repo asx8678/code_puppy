@@ -16,22 +16,22 @@ This application serves as the control plane for managing Python agent workers:
 
 ```
 lib/code_puppy_control/
-├── application.ex          # OTP supervision tree
-├── protocol.ex             # JSON-RPC encoding/decoding
-├── request_tracker.ex      # Prompt correlation
+├── application.ex # OTP supervision tree
+├── protocol.ex # JSON-RPC encoding/decoding
+├── request_tracker.ex # Prompt correlation
 ├── python_worker/
-│   ├── port.ex            # GenServer owning Python Port
-│   └── supervisor.ex      # DynamicSupervisor for workers
+│ ├── port.ex # GenServer owning Python Port
+│ └── supervisor.ex # DynamicSupervisor for workers
 ├── run/
-│   ├── registry.ex        # Run registry
-│   ├── state.ex           # Run state GenServer
-│   └── supervisor.ex      # DynamicSupervisor for runs
+│ ├── registry.ex # Run registry
+│ ├── state.ex # Run state GenServer
+│ └── supervisor.ex # DynamicSupervisor for runs
 └── web/
-    ├── endpoint.ex        # Phoenix endpoint
-    ├── router.ex          # API routes
+    ├── endpoint.ex # Phoenix endpoint
+    ├── router.ex # API routes
     └── controllers/
-        ├── run_controller.ex    # Run management
-        └── health_controller.ex  # Health checks
+        ├── run_controller.ex # Run management
+        └── health_controller.ex # Health checks
 ```
 
 ## Quick Start
@@ -131,11 +131,11 @@ If you're a user with an existing `~/.code_puppy/` from Python pup:
 
 ```bash
 # Copy non-sensitive settings over (dry-run by default)
-mix pup_ex.import              # shows what WOULD be copied
-mix pup_ex.import --confirm    # actually copies
+mix pup_ex.import # shows what WOULD be copied
+mix pup_ex.import --confirm # actually copies
 
 # Verify isolation health
-mix pup_ex.doctor              # reports ✅ ISOLATED on healthy setup
+mix pup_ex.doctor # reports ✅ ISOLATED on healthy setup
 ```
 
 The importer copies an **allowlist** of non-sensitive files only:
@@ -144,7 +144,7 @@ The importer copies an **allowlist** of non-sensitive files only:
 - `agents/` and `skills/` directories
 
 **Never copied:** OAuth tokens, sessions, API keys, `dbos_store.sqlite`, command history.
-Re-authenticate with `mix pup_ex.auth.login` (OAuth scaffolding; full flow in bd-166).
+Re-authenticate with `mix pup_ex.auth.login` (OAuth scaffolding; full flow pending).
 
 #### Relevant environment variables
 
@@ -187,7 +187,7 @@ See `lib/code_puppy_control/protocol.ex` for encoding/decoding functions.
 
 Eval tests (`:eval` tag) are excluded by default and run only when
 `RUN_EVALS=1` is set in the environment. This mirrors the Python
-`evals/conftest.py` gate (see [bd-175](./docs/decisions/bd-175-evals-port.md)).
+`evals/conftest.py` gate.
 
 ```bash
 # Default: skip all evals

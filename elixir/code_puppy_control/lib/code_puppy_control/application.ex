@@ -3,34 +3,34 @@ defmodule CodePuppyControl.Application do
   OTP Application for CodePuppy Control Plane.
 
   Supervision tree:
-  1. CodePuppyControl.HttpClient - Finch HTTP connection pool (bd-69)
+  1. CodePuppyControl.HttpClient - Finch HTTP connection pool
   2. CodePuppyControl.Parsing.ParserRegistry - Language parser registry (Agent-backed)
   3. CodePuppyControl.Repo - SQLite database for state persistence
   4. Phoenix.PubSub - Event distribution
   5. CodePuppyControl.EventStore - ETS-based event history for replay
-  5b. CodePuppyControl.SessionStorage.AutosaveTracker - Autosave debounce/dedup (bd-165)
+  5b. CodePuppyControl.SessionStorage.AutosaveTracker - Autosave debounce/dedup
   6. CodePuppyControl.RuntimeState - Global runtime state (autosave ID, session model)
   7. CodePuppyControl.PolicyEngine - Priority-based policy rule engine
   8. CodePuppyControl.AgentModelPinning - Agent-to-model pin configuration (ETS-backed)
-  9a. CodePuppyControl.ModelRegistry - Model configuration registry (ETS-backed) (bd-96)
+  9a. CodePuppyControl.ModelRegistry - Model configuration registry (ETS-backed)
   9b. CodePuppyControl.ModelAvailability - Model health circuit breaker (ETS-backed)
-  9c. CodePuppyControl.ModelPacks - Role-based model packs (bd-100)
+  9c. CodePuppyControl.ModelPacks - Role-based model packs
   9d. CodePuppyControl.Tools.AgentCatalogue - Agent catalogue with descriptions
-  9e. CodePuppyControl.Tools.UniversalConstructor.Registry - UC tool discovery (bd-269)
+  9e. CodePuppyControl.Tools.UniversalConstructor.Registry - UC tool discovery
   10. CodePuppyControl.RoundRobinModel - Round-robin model rotation (ETS-backed)
-  11a. CodePuppyControl.ModelsDevParser.Registry - Models.dev API registry (bd-74)
+  11a. CodePuppyControl.ModelsDevParser.Registry - Models.dev API registry
   12. CodePuppyControl.Run.Registry - Process registry for run tracking
-  13. CodePuppyControl.Tool.Registry - ETS-backed tool registry (bd-149)
+  13. CodePuppyControl.Tool.Registry - ETS-backed tool registry
   14. CodePuppyControl.Run.Supervisor - DynamicSupervisor for run processes
   15. CodePuppyControl.PythonWorker.Supervisor - DynamicSupervisor for Python workers
   16. CodePuppyControl.MCP.Registry - Process registry for MCP servers
   17. CodePuppyControl.MCP.Supervisor - DynamicSupervisor for MCP servers
   18. CodePuppyControl.Concurrency.Supervisor - Concurrency limiter (ETS-backed)
-  19. CodePuppyControl.TokenLedger - Token usage accounting (bd-152)
-  19b. CodePuppyControl.Config.Writer - Atomic puppy.cfg write-back (bd-260)
+  19. CodePuppyControl.TokenLedger - Token usage accounting
+  19b. CodePuppyControl.Config.Writer - Atomic puppy.cfg write-back
   20. CodePuppyControl.RequestTracker - Tracks JSON-RPC request/response correlation
-  21. CodePuppyControl.Tools.CommandRunner.ProcessManager - Shell process tracking (bd-64)
-  22. CodePuppyControl.PtyManager - PTY session manager for interactive terminals (bd-217)
+  21. CodePuppyControl.Tools.CommandRunner.ProcessManager - Shell process tracking
+  22. CodePuppyControl.PtyManager - PTY session manager for interactive terminals
   23. Oban - Job processing engine with SQLite Lite engine (queues: default, scheduled, workflows)
   23. CodePuppyControl.Scheduler.CronScheduler - Periodic scheduler for cron tasks
   24. CodePuppyControlWeb.Endpoint - HTTP API endpoint
@@ -42,7 +42,7 @@ defmodule CodePuppyControl.Application do
 
   @impl true
   def start(_type, _args) do
-    # bd-248: Fast-path for --help / --version under Burrito.
+    # Fast-path for --help / --version under Burrito.
     # config/runtime.exs skips loading prod config in this case, so we must
     # also skip starting the full supervision tree (Repo/Endpoint would crash
     # without their config). We start an empty supervisor to satisfy the OTP
@@ -67,10 +67,10 @@ defmodule CodePuppyControl.Application do
       CodePuppyControl.Repo,
       {Phoenix.PubSub, name: CodePuppyControl.PubSub},
       CodePuppyControl.EventStore,
-      # Autosave debounce/dedup tracker for session storage (bd-165)
+      # Autosave debounce/dedup tracker for session storage
       CodePuppyControl.SessionStorage.AutosaveTracker,
       CodePuppyControl.RuntimeState,
-      # Workflow state tracking for /flags command (bd-261)
+      # Workflow state tracking for /flags command
       {CodePuppyControl.WorkflowState, name: CodePuppyControl.WorkflowState},
       CodePuppyControl.PolicyEngine,
       CodePuppyControl.AgentModelPinning,
@@ -78,20 +78,20 @@ defmodule CodePuppyControl.Application do
       CodePuppyControl.ModelAvailability,
       CodePuppyControl.ModelPacks,
       CodePuppyControl.Tools.AgentCatalogue,
-      # UC tool registry (GenServer) for Universal Constructor tool discovery (bd-269)
+      # UC tool registry (GenServer) for Universal Constructor tool discovery
       CodePuppyControl.Tools.UniversalConstructor.Registry,
       CodePuppyControl.RoundRobinModel,
       CodePuppyControl.ModelsDevParser.Registry,
       CodePuppyControl.Run.Registry,
-      # bd-249: Per-{session,agent} message history state
+      # Per-{session,agent} message history state
       CodePuppyControl.Agent.State.Registry,
-      # Tool registry (ETS-backed) for agent tool dispatch (bd-149)
+      # Tool registry (ETS-backed) for agent tool dispatch
       CodePuppyControl.Tool.Registry,
-      # Slash command registry (ETS-backed) for REPL command dispatch (bd-163)
+      # Slash command registry (ETS-backed) for REPL command dispatch
       CodePuppyControl.CLI.SlashCommands.Registry,
-      # Serialises /add_model persistence to prevent lost-update races (bd-268)
+      # Serialises /add_model persistence to prevent lost-update races
       CodePuppyControl.CLI.SlashCommands.Commands.AddModelPersistence.LockKeeper,
-      # Staged changes sandbox for diff-preview system (bd-150)
+      # Staged changes sandbox for diff-preview system
       CodePuppyControl.Tools.StagedChanges,
       {CodePuppyControl.Run.Supervisor, []},
       CodePuppyControl.Agent.State.Supervisor,
@@ -99,30 +99,30 @@ defmodule CodePuppyControl.Application do
       # MCP Server supervision
       {Registry, keys: :unique, name: CodePuppyControl.MCP.Registry},
       CodePuppyControl.MCP.Supervisor,
-      # MCP Client supervision (bd-155)
+      # MCP Client supervision
       {Registry, keys: :unique, name: CodePuppyControl.MCP.ClientRegistry},
       CodePuppyControl.MCP.ToolIndex,
       CodePuppyControl.MCP.ClientSupervisor,
       # Concurrency limiter (ETS-backed semaphores for file_ops, api_calls, tool_calls)
       CodePuppyControl.Concurrency.Supervisor,
-      # Adaptive rate limiter with circuit breaker (bd-151)
+      # Adaptive rate limiter with circuit breaker
       CodePuppyControl.RateLimiter.Supervisor,
-      # Token ledger for per-run/session token accounting (bd-152)
+      # Token ledger for per-run/session token accounting
       CodePuppyControl.TokenLedger,
-      # Atomic write-back for puppy.cfg (bd-260)
+      # Atomic write-back for puppy.cfg
       # Must start before any /mode or preset command can be dispatched,
       # since Presets.apply_preset/1 calls Writer.set_values/1 which
       # requires the GenServer to be alive.
       CodePuppyControl.Config.Writer,
       CodePuppyControl.RequestTracker,
-      # Renderer registry — avoids String.to_atom for per-session renderers (bd-252)
+      # Renderer registry — avoids String.to_atom for per-session renderers
       {Registry, keys: :unique, name: CodePuppyControl.REPL.RendererRegistry},
 
-      # Shell command runner process tracking (bd-64)
+      # Shell command runner process tracking
       CodePuppyControl.Tools.CommandRunner.ProcessManager,
-      # PTY session manager for interactive terminals (bd-217)
+      # PTY session manager for interactive terminals
       CodePuppyControl.PtyManager,
-      # Auth rate limiter ETS table owner (bd-218)
+      # Auth rate limiter ETS table owner
       # Must be a long-lived GenServer, not a Task, so the ETS table survives.
       CodePuppyControlWeb.Plugs.RateLimiterServer,
       # Oban job processing with SQLite engine
@@ -192,7 +192,7 @@ defmodule CodePuppyControl.Application do
     :ok
   end
 
-  # ── Burrito CLI dispatch helpers (bd-171) ────────────────────────────────
+  # ── Burrito CLI dispatch helpers ────────────────────────────────
 
   # Detect Burrito runtime context. Burrito sets `__BURRITO` at launch.
   defp burrito_cli_mode? do
@@ -212,12 +212,12 @@ defmodule CodePuppyControl.Application do
   # `:init.get_plain_arguments/0`). Outside Burrito, `System.argv/0` is
   # the correct source, so we fall back to that.
   #
-  # Verified in bd-238 (macOS arm64, Burrito 1.3, Zig 0.15.2, Elixir 1.19.5
+  # Verified in (macOS arm64, Burrito 1.3, Zig 0.15.2, Elixir 1.19.5
   # / OTP 28): option flags, positional args, short/long forms, string
   # values with spaces, and error-exit codes all round-trip correctly
   # through the Burrito wrapper via :init.get_plain_arguments/0.
   # Cross-platform verification (linux_x86_64, linux_arm64, windows_x86_64)
-  # is deferred to the CI matrix build (bd-236).
+  # is deferred to the CI matrix build.
   defp burrito_argv do
     if burrito_cli_mode?() do
       :init.get_plain_arguments() |> Enum.map(&to_string/1)

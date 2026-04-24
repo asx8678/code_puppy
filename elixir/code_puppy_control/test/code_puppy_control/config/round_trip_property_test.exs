@@ -1,12 +1,12 @@
 defmodule CodePuppyControl.Config.RoundTripPropertyTest do
   @moduledoc """
-  Property-based round-trip tests for config serialization (bd-184).
+  Property-based round-trip tests for config serialization.
 
   Uses StreamData to verify that Loader and canonical_json are stable
   under re-serialization. These complement the golden-file tests by
   exploring a wider input space.
 
-  Generators deepened in bd-228 to cover nested structures, UTF-8
+  Generators deepened in to cover nested structures, UTF-8
   (incl. RTL), and numeric edge cases.
 
   **How to run:**
@@ -60,7 +60,7 @@ defmodule CodePuppyControl.Config.RoundTripPropertyTest do
   end
 
   ################################################################################
-  # Deepened generators (bd-228)
+  # Deepened generators
   ################################################################################
 
   # Binary-key generator: only string keys (canonical_json requirement).
@@ -183,7 +183,7 @@ defmodule CodePuppyControl.Config.RoundTripPropertyTest do
       end
     end
 
-    # Deterministic RTL/multi-byte coverage (bd-228 explicit gate).
+    # Deterministic RTL/multi-byte coverage (explicit gate).
     # Uses member_of for BOTH key and value, so every run exercises at least
     # one RTL or multi-byte codepoint in both positions.
     property "canonical_json is idempotent for explicit RTL/multi-byte keys and values" do

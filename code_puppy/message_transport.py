@@ -1,5 +1,5 @@
 """
-Python wrappers for Elixir message RPC methods (bd-113).
+Python wrappers for Elixir message RPC methods.
 
 This module provides Python functions that call the Elixir message.*
 RPC methods via the JSON-RPC transport.
@@ -30,7 +30,7 @@ import base64
 from typing import Any
 
 
-def _get_transport() -> "ElixirTransport":  # type: ignore # noqa: F821
+def _get_transport() -> "ElixirTransport": # type: ignore # noqa: F821
     """Get the shared transport singleton from elixir_transport_helpers."""
     from code_puppy.elixir_transport_helpers import get_transport
     return get_transport()
@@ -184,7 +184,7 @@ def deserialize_session(data: bytes) -> list[dict[str, Any]]:
         
     Example:
         >>> with open("session.msgpack", "rb") as f:
-        ...     messages = deserialize_session(f.read())
+        ... messages = deserialize_session(f.read())
     """
     transport = _get_transport()
     # Encode binary as base64 for JSON transport
@@ -249,7 +249,7 @@ def hash_message(message: dict[str, Any]) -> int:
     Example:
         >>> hash1 = hash_message(msg)
         >>> hash2 = hash_message(msg)
-        >>> assert hash1 == hash2  # Same content = same hash
+        >>> assert hash1 == hash2 # Same content = same hash
     """
     transport = _get_transport()
     result = transport._send_request("message.hash", {

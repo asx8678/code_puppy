@@ -51,7 +51,7 @@ class RunConcurrencyLimitError(Exception):
         super().__init__(message)
         self.active = active
         self.limit = limit
-        self.waited = waited  # Seconds waited before giving up (None if non-blocking)
+        self.waited = waited # Seconds waited before giving up (None if non-blocking)
 
 
 @dataclass(frozen=True)
@@ -65,7 +65,7 @@ class RunLimiterConfig:
 
     max_concurrent_runs: int = 2
     allow_parallel: bool = True
-    wait_timeout: float | None = 600.0  # CHANGED: was None, now 10 minutes default
+    wait_timeout: float | None = 600.0 # CHANGED: was None, now 10 minutes default
 
 
 class RunLimiter:
@@ -144,7 +144,7 @@ class RunLimiter:
         Reentrant: if the current task already holds a slot,
         this is a no-op bypass (just increments the depth counter).
 
-        bd-100: Bridge-aware - delegates counter operations to Elixir when connected,
+        Bridge-aware - delegates counter operations to Elixir when connected,
         falls back to local semaphore. Reentrancy handling stays in Python.
 
         Args:
@@ -154,7 +154,7 @@ class RunLimiter:
             RunConcurrencyLimitError: On timeout
         """
         # Reentrancy check — bypass if current task already holds a slot
-        # bd-100: Keep reentrancy handling in Python regardless of bridge state
+        # Keep reentrancy handling in Python regardless of bridge state
         depth = _get_reentrancy_depth()
         if depth > 0:
             _set_reentrancy_depth(depth + 1)
@@ -163,7 +163,7 @@ class RunLimiter:
             )
             return
 
-        # bd-100: Try Elixir bridge first for global counter coordination
+        # Try Elixir bridge first for global counter coordination
         try:
             from code_puppy.plugins.elixir_bridge import (
                 is_connected,
@@ -366,7 +366,7 @@ class RunLimiter:
         Reentrancy-aware: if called from a context where depth > 1,
         only decrements the depth counter without releasing the actual slot.
 
-        bd-100: Bridge-aware - notifies Elixir bridge if connected (fire-and-forget).
+        Bridge-aware - notifies Elixir bridge if connected (fire-and-forget).
         Reentrancy handling stays in Python; Elixir handles global counter state.
 
         CRITICAL FIX: The depth reset to 0 when depth == 1 is hoisted into a
@@ -374,14 +374,14 @@ class RunLimiter:
         where no active slot was found on either side (prevents depth leak).
         """
         # Check async reentrancy first
-        # bd-100: Keep reentrancy handling in Python regardless of bridge state
+        # Keep reentrancy handling in Python regardless of bridge state
         depth = _get_reentrancy_depth()
         if depth > 1:
             _set_reentrancy_depth(depth - 1)
             logger.debug("RunLimiter: reentrant release (depth now %d)", depth - 1)
             return
 
-        # bd-100: Notify Elixir bridge if connected (fire-and-forget)
+        # Notify Elixir bridge if connected (fire-and-forget)
         try:
             from code_puppy.plugins.elixir_bridge import (
                 is_connected,
@@ -398,7 +398,7 @@ class RunLimiter:
                         "RunLimiter: release notification sent to Elixir bridge"
                     )
                 except Exception:
-                    pass  # Ignore errors for fire-and-forget
+                    pass # Ignore errors for fire-and-forget
         except ImportError:
             pass
 
@@ -672,14 +672,14 @@ def _build_from_config() -> RunLimiter:
 
     max_runs = 2
     allow_parallel = True
-    wait_timeout: float | None = 600.0  # New default: 10 minutes
+    wait_timeout: float | None = 600.0 # New default: 10 minutes
 
     if config_path.exists():
         try:
             try:
                 import tomllib
             except ImportError:
-                import tomli as tomllib  # type: ignore[no-redef]
+                import tomli as tomllib # type: ignore[no-redef]
 
             with open(config_path, "rb") as fh:
                 data = tomllib.load(fh)
@@ -691,7 +691,7 @@ def _build_from_config() -> RunLimiter:
             if timeout_val is not None:
                 wait_timeout = float(timeout_val)
             elif "run_wait_timeout" in pack_leader:
-                wait_timeout = None  # Explicitly set to None = forever (advanced users)
+                wait_timeout = None # Explicitly set to None = forever (advanced users)
 
         except Exception as e:
             logger.warning("Failed to parse pack_parallelism.toml: %s", e)
@@ -728,7 +728,7 @@ def get_run_limiter() -> RunLimiter:
                         "Failed to initialize RunLimiter from config, using defaults: %s",
                         e,
                     )
-                    _limiter_instance = RunLimiter()  # Fallback to defaults
+                    _limiter_instance = RunLimiter() # Fallback to defaults
 
     return _limiter_instance
 

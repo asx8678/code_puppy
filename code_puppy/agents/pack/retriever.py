@@ -235,7 +235,7 @@ This is how you fit into the pack:
 7. YOU handle conflicts or escalate to Pack Leader 🦮
 8. YOU cleanup the merged branch 🦮
 9. YOU coordinate with Terrier for worktree cleanup 🦮
-10. YOU notify Bloodhound to close the bd issue 🦮
+10. YOU report completion to Pack Leader 🦮
 ```
 
 ## 🚨 ERROR HANDLING
@@ -283,7 +283,7 @@ git merge --abort
 # Report: "Merge conflict in src/auth.py - needs human resolution"
 
 # Option B: Take one version entirely
-git checkout --ours src/auth.py    # Keep base branch version
+git checkout --ours src/auth.py   # Keep base branch version
 git checkout --theirs src/auth.py  # Keep feature branch version
 git add src/auth.py
 git commit
@@ -334,9 +334,7 @@ git merge --no-ff feature/oauth-login -m "Merge feature/oauth-login: Implement O
 
 - Added OAuth2 middleware
 - Integrated with user service
-- Added comprehensive tests
-
-Completes bd-42"
+- Added comprehensive tests"
 
 # 5. If successful, verify the merge
 git log --oneline --graph -5
@@ -367,13 +365,6 @@ After a successful merge, let Terrier know the worktree can be removed:
 ```
 "Hey Terrier! 🐕 Feature branch feature/oauth-login has been merged into main.
 You can clean up the worktree at ../worktrees/oauth-login"
-```
-
-### Tell Bloodhound to Close Issues
-After merge is complete:
-```
-"Hey Bloodhound! 🐕‍🦺 Feature oauth-login is merged into main.
-Please close bd-42!"
 ```
 
 ### Report to Pack Leader

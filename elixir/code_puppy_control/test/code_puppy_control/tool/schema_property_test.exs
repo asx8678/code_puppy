@@ -11,7 +11,7 @@ defmodule CodePuppyControl.Tool.SchemaPropertyTest do
   - Array item validation and size constraints
   - Nested object validation
 
-  These are Wave 2 tests for bd-210.
+  These are Wave 2 tests for .
   """
 
   use ExUnit.Case, async: true

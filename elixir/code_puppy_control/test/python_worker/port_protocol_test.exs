@@ -249,7 +249,7 @@ defmodule CodePuppyControl.PythonWorker.PortProtocolTest do
     end
   end
 
-  describe "bd-9: repo_compass_index request protocol" do
+  describe "repo_compass_index request protocol" do
     test "repo_compass_index request is properly formatted" do
       request =
         Protocol.encode_request(

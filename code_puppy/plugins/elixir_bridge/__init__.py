@@ -11,8 +11,8 @@ the bridge activates and:
 This prepares Python to be controlled by Elixir for the migration.
 
 Environment:
-    CODE_PUPPY_BRIDGE=1    Enable bridge mode
-    CODE_PUPPY_BRIDGE_LOG  Optional log file path for debugging
+    CODE_PUPPY_BRIDGE=1 Enable bridge mode
+    CODE_PUPPY_BRIDGE_LOG Optional log file path for debugging
 
 Example Elixir Port usage:
     # Elixir side
@@ -26,33 +26,33 @@ Example Elixir Port usage:
     end
 
 Architecture:
-    ┌─────────────┐       stdio (JSON-RPC)       ┌─────────────┐
-    │   Elixir    │  ───────────────────────────▶│   Python    │
-    │  (Port)     │◀───────────────────────────────│  (Bridge)   │
-    └─────────────┘                                  └─────────────┘
+    ┌─────────────┐ stdio (JSON-RPC) ┌─────────────┐
+    │ Elixir │ ───────────────────────────▶│ Python │
+    │ (Port) │◀───────────────────────────────│ (Bridge) │
+    └─────────────┘ └─────────────┘
                                                           │
                             ┌──────────────────────────────┘
                             ▼
                     ┌─────────────────┐
-                    │  Agent Tools    │
-                    │  File Ops       │
-                    │  Shell Commands │
+                    │ Agent Tools │
+                    │ File Ops │
+                    │ Shell Commands │
                     └─────────────────┘
 
 See: docs/architecture/python-singleton-audit.md for migration context.
 
-bd-62: Client mode for calling Elixir control plane from Python
+Client mode for calling Elixir control plane from Python
 - Added is_connected() to check if Elixir control plane is available
 - Added call_method() to send JSON-RPC requests to Elixir
 - Used by NativeBackend to route file operations through Elixir
 
-bd-77: Concurrency control bridge support
+Concurrency control bridge support
 - Added call_elixir_concurrency() for semaphore coordination
 
-bd-81: MCP bridge support
+MCP bridge support
 - Added call_elixir_mcp() for MCP server management via bridge
 
-bd-103: Protocol bridge optimization
+Protocol bridge optimization
 - Replace polling with threading.Event for response matching
 - Add orjson support for faster serialization (5-10x improvement)
 - Add batch request support (N requests in single frame)
@@ -78,7 +78,7 @@ BRIDGE_LOG_FILE = os.environ.get("CODE_PUPPY_BRIDGE_LOG")
 _elixir_control_plane_url: str | None = None
 
 
-# bd-103: Response slot with threading.Event for zero-latency notification
+# Response slot with threading.Event for zero-latency notification
 class _ResponseSlot:
     """Response slot with threading.Event for instant notification.
 
@@ -98,7 +98,7 @@ class _ResponseSlot:
         """Wait for response with timeout. Returns (result, error)."""
         if self.event.wait(timeout):
             return self.result, self.error
-        return None, None  # Timeout
+        return None, None # Timeout
 
     def complete(self, result: Any, error: Any) -> None:
         """Mark response as complete."""
@@ -159,7 +159,7 @@ def call_method(
     Sends a JSON-RPC 2.0 request to the Elixir control plane and waits
     for the response. Used by NativeBackend to route file operations.
 
-    bd-103: Uses threading.Event for zero-latency response notification
+    Uses threading.Event for zero-latency response notification
     instead of polling with time.sleep().
 
     Args:
@@ -191,7 +191,7 @@ def call_method(
         "params": params,
     }
 
-    # Create response slot with threading.Event (bd-103 optimization)
+    # Create response slot with threading.Event (optimization)
     slot = _ResponseSlot()
     with _response_lock:
         _pending_responses[request_id] = slot
@@ -200,7 +200,7 @@ def call_method(
         # Send the request
         _send_request_to_elixir(request)
 
-        # bd-103: Wait using threading.Event instead of polling
+        # Wait using threading.Event instead of polling
         result, error = slot.wait(timeout)
 
         if result is None and error is None and not slot.event.is_set():
@@ -221,7 +221,7 @@ def call_method(
 async def call_elixir_concurrency(
     method: str, params: dict[str, Any], timeout: float = 30.0
 ) -> dict[str, Any]:
-    """Call a concurrency method on the Elixir control plane (bd-77).
+    """Call a concurrency method on the Elixir control plane.
 
     Specialized wrapper around call_method for concurrency operations.
     Falls back to local execution on timeout/connection errors.
@@ -250,7 +250,7 @@ async def call_elixir_concurrency(
 async def call_elixir_run_limiter(
     method: str, params: dict[str, Any], timeout: float = 30.0
 ) -> dict[str, Any]:
-    """Call a run limiter method on the Elixir control plane (bd-100).
+    """Call a run limiter method on the Elixir control plane.
 
     Specialized wrapper around call_method for run limiting operations.
     Used by RunLimiter to delegate counter operations to Elixir when connected.
@@ -280,7 +280,7 @@ async def call_elixir_run_limiter(
 async def call_elixir_mcp(
     method: str, params: dict[str, Any], timeout: float = 30.0
 ) -> dict[str, Any]:
-    """Call an MCP method on the Elixir control plane (bd-81).
+    """Call an MCP method on the Elixir control plane.
 
     Specialized wrapper around call_method for MCP server management operations.
     Used to delegate MCP server management to the Elixir control plane when available.
@@ -308,7 +308,7 @@ async def call_elixir_mcp(
 async def call_elixir_rate_limiter(
     method: str, params: dict[str, Any], timeout: float = 10.0
 ) -> dict[str, Any]:
-    """Call a rate limiter method on the Elixir control plane (bd-101).
+    """Call a rate limiter method on the Elixir control plane.
 
     Specialized wrapper around call_method for adaptive rate limiting operations.
     Used to delegate rate limit coordination to the Elixir control plane when available.
@@ -340,7 +340,7 @@ async def call_elixir_rate_limiter(
 async def call_elixir_agent_manager(
     method: str, params: dict[str, Any], timeout: float = 10.0
 ) -> dict[str, Any]:
-    """Call an agent manager method on the Elixir control plane (bd-102).
+    """Call an agent manager method on the Elixir control plane.
 
     Specialized wrapper around call_method for agent management operations.
     Used to delegate agent management to the Elixir control plane when available.
@@ -372,7 +372,7 @@ async def call_elixir_agent_manager(
 async def call_elixir_round_robin(
     method: str, params: dict[str, Any], timeout: float = 10.0
 ) -> dict[str, Any]:
-    """Call a round-robin method on the Elixir control plane (bd-134).
+    """Call a round-robin method on the Elixir control plane.
 
     Specialized wrapper around call_method for round-robin model rotation operations.
     Used to delegate model rotation state management to the Elixir control plane
@@ -404,7 +404,7 @@ async def call_elixir_round_robin(
 async def call_elixir_model_packs(
     method: str, params: dict[str, Any], timeout: float = 10.0
 ) -> dict[str, Any]:
-    """Call a model packs method on the Elixir control plane (bd-132).
+    """Call a model packs method on the Elixir control plane.
 
     Specialized wrapper around call_method for model pack operations.
     Used to delegate model pack management to the Elixir control plane when available.
@@ -438,7 +438,7 @@ async def call_elixir_model_packs(
 async def call_elixir_workflow(
     method: str, params: dict[str, Any], timeout: float = 30.0
 ) -> dict[str, Any]:
-    """Call a workflow method on the Elixir control plane (bd-170).
+    """Call a workflow method on the Elixir control plane.
 
     Replaces DBOS workflow invocations with Oban-backed durable execution.
     Routes through the Elixir bridge when available, falls back to
@@ -475,11 +475,11 @@ async def call_elixir_workflow(
 def send_request_to_elixir(request: dict[str, Any]) -> None:
     """Send a JSON-RPC request to the Elixir control plane.
 
-    bd-82: In bridge mode (CODE_PUPPY_BRIDGE=1), writes Content-Length
+    In bridge mode (CODE_PUPPY_BRIDGE=1), writes Content-Length
     framed JSON-RPC to stdout. Elixir port.ex already handles requests
     from Python and sends responses back via stdin.
 
-    bd-103: Uses orjson for faster serialization when available.
+    Uses orjson for faster serialization when available.
 
     When not in bridge mode, raises NotImplementedError.
     """
@@ -502,7 +502,7 @@ def send_request_to_elixir(request: dict[str, Any]) -> None:
 
 
 def send_batch_to_elixir(requests: list[dict[str, Any]]) -> None:
-    """Send multiple JSON-RPC requests in a single frame (bd-103).
+    """Send multiple JSON-RPC requests in a single frame.
 
     Batching reduces IPC overhead by combining N requests into one write.
     Uses JSON-RPC 2.0 batch format (array of request objects).
@@ -532,7 +532,7 @@ def send_batch_to_elixir(requests: list[dict[str, Any]]) -> None:
 def call_batch(
     calls: list[tuple[str, dict[str, Any]]], timeout: float = 30.0
 ) -> list[dict[str, Any]]:
-    """Send multiple JSON-RPC calls as a batch (bd-103).
+    """Send multiple JSON-RPC calls as a batch.
 
     Batching reduces IPC overhead by combining N requests into a single
     write operation. Responses are matched by request ID.
@@ -607,7 +607,7 @@ def handle_response(response: dict[str, Any]) -> None:
 
     Called by the transport layer when a response is received from Elixir.
 
-    bd-103: Uses threading.Event for instant notification.
+    Uses threading.Event for instant notification.
 
     Args:
         response: JSON-RPC response dict with "id", "result", and/or "error"
@@ -616,7 +616,7 @@ def handle_response(response: dict[str, Any]) -> None:
 
     request_id = response.get("id")
     if request_id is None:
-        return  # Notification, no response needed
+        return # Notification, no response needed
 
     with _response_lock:
         slot = _pending_responses.get(request_id)
@@ -630,7 +630,7 @@ def notify_elixir_event(
     run_id: str | None = None,
     session_id: str | None = None,
 ) -> None:
-    """Notify Elixir EventBus of an event (bd-79).
+    """Notify Elixir EventBus of an event.
 
     Fire-and-forget notification to Elixir EventBus. This function:
     - Returns immediately without blocking
@@ -677,7 +677,7 @@ def notify_elixir_event(
             try:
                 loop = asyncio.get_running_loop()
                 # We're in async context, use call_soon_threadsafe if on different thread
-                if threading.current_thread().ident != loop._thread_id:  # type: ignore[attr-defined]
+                if threading.current_thread().ident != loop._thread_id: # type: ignore[attr-defined]
                     loop.call_soon_threadsafe(_send_request_to_elixir, message)
                 else:
                     _send_request_to_elixir(message)
@@ -701,25 +701,25 @@ __all__ = [
     "get_connection_url",
     "call_method",
     "handle_response",
-    # Batch support (bd-103)
+    # Batch support
     "call_batch",
     "send_batch_to_elixir",
-    # Concurrency bridge support (bd-77)
+    # Concurrency bridge support
     "call_elixir_concurrency",
-    # Run limiter bridge support (bd-100)
+    # Run limiter bridge support
     "call_elixir_run_limiter",
-    # MCP bridge support (bd-81)
+    # MCP bridge support
     "call_elixir_mcp",
-    # EventBus bridge support (bd-79)
+    # EventBus bridge support
     "notify_elixir_event",
-    # Adaptive rate limiter bridge support (bd-101)
+    # Adaptive rate limiter bridge support
     "call_elixir_rate_limiter",
-    # Agent manager bridge support (bd-102)
+    # Agent manager bridge support
     "call_elixir_agent_manager",
-    # Round-robin bridge support (bd-134)
+    # Round-robin bridge support
     "call_elixir_round_robin",
-    # Model packs bridge support (bd-132)
+    # Model packs bridge support
     "call_elixir_model_packs",
-    # Workflow bridge support (bd-170: DBOS replacement)
+    # Workflow bridge support (DBOS replacement)
     "call_elixir_workflow",
 ]

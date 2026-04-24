@@ -8,9 +8,9 @@ defmodule CodePuppyControl.FileOps.Security do
   ## Security guarantees
 
   - **Case-insensitive matching**: All path comparisons are case-insensitive
-    to handle case-insensitive filesystems (macOS HFS+/APFS). (bd-15)
+    to handle case-insensitive filesystems (macOS HFS+/APFS).
   - **Symlink resolution**: When a path exists on disk and is a symlink,
-    the resolved target is also checked for sensitivity. (bd-16)
+    the resolved target is also checked for sensitivity.
   - **Extension checking**: Private key file extensions are blocked regardless
     of directory location.
   """
@@ -67,7 +67,7 @@ defmodule CodePuppyControl.FileOps.Security do
                           ".keystore"
                         ])
 
-  # Pre-compute lowercased versions for case-insensitive comparison (bd-15)
+  # Pre-compute lowercased versions for case-insensitive comparison
   @sensitive_dir_prefixes_lower Enum.map(@sensitive_dir_prefixes, &String.downcase/1)
   @sensitive_exact_files_lower @sensitive_exact_files
                                |> Enum.map(&String.downcase/1)
@@ -101,10 +101,8 @@ defmodule CodePuppyControl.FileOps.Security do
     else
       expanded = Path.expand(file_path)
 
-      # Check the user-supplied path (case-insensitive) — fixes bd-15
-      # Also check the symlink target if it resolves differently — fixes bd-16
-      path_is_sensitive?(expanded) or
-        symlink_target_is_sensitive?(expanded)
+      # Check the user-supplied path (case-insensitive) — fixes # Also check the symlink target if it resolves differently — fixes path_is_sensitive?(expanded) or
+      symlink_target_is_sensitive?(expanded)
     end
   end
 
@@ -177,7 +175,7 @@ defmodule CodePuppyControl.FileOps.Security do
   end
 
   # ============================================================================
-  # INTERNAL: Symlink resolution (bd-16)
+  # INTERNAL: Symlink resolution
   # ============================================================================
 
   defp symlink_target_is_sensitive?(expanded) do

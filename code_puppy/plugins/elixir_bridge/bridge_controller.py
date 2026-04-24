@@ -10,16 +10,16 @@ Implements BRIDGE_PROTOCOL_V1 with canonical method names:
 - mcp.register, mcp.unregister, mcp.list, mcp.status, mcp.call_tool, mcp.health_check
 
 Architecture:
-    ┌─────────────┐     JSON-RPC      ┌──────────────────┐
-    │   stdin     │ ────────────────▶ │  BridgeController │
-    └─────────────┘                   │  .dispatch()      │
+    ┌─────────────┐ JSON-RPC ┌──────────────────┐
+    │ stdin │ ────────────────▶ │ BridgeController │
+    └─────────────┘ │ .dispatch() │
                                       └────────┬─────────┘
                                                │
                           ┌────────────────────┼────────────────────┐
-                          ▼                    ▼                    ▼
-                  ┌──────────────┐    ┌─────────────┐    ┌────────────┐
-                  │  Agent Tools │    │  Shell Cmds │    │  File Ops  │
-                  └──────────────┘    └─────────────┘    └────────────┘
+                          ▼ ▼ ▼
+                  ┌──────────────┐ ┌─────────────┐ ┌────────────┐
+                  │ Agent Tools │ │ Shell Cmds │ │ File Ops │
+                  └──────────────┘ └─────────────┘ └────────────┘
 
 See: docs/protocol/BRIDGE_PROTOCOL_V1.md for full specification.
 """
@@ -31,10 +31,10 @@ from typing import Any
 
 from .wire_protocol import from_wire_params, WireMethodError
 
-# MessageBus import for EventBus routing (bd-79)
+# MessageBus import for EventBus routing
 from code_puppy.messaging import get_message_bus
 
-# MCP imports (bd-81)
+# MCP imports
 from code_puppy.mcp_ import get_mcp_manager
 
 # Concurrency limit imports
@@ -48,13 +48,13 @@ from code_puppy.concurrency_limits import (
     get_concurrency_status,
 )
 
-# Run limiter imports (bd-100)
+# Run limiter imports
 from code_puppy.plugins.pack_parallelism.run_limiter import (
     get_run_limiter,
     RunLimiterConfig,
 )
 
-# Model packs import (bd-132)
+# Model packs import
 from code_puppy import model_packs
 
 
@@ -80,7 +80,7 @@ class BridgeController:
         """Initialize the bridge controller."""
         self._running = True
         self._command_count = 0
-        self._active_runs: dict[str, Any] = {}  # Track active runs for cancel support
+        self._active_runs: dict[str, Any] = {} # Track active runs for cancel support
 
     async def shutdown(self) -> None:
         """Shutdown the controller and cleanup resources."""
@@ -140,35 +140,35 @@ class BridgeController:
             "grep_search": self._handle_grep_search,
             "get_status": self._handle_get_status,
             "ping": self._handle_ping,
-            # Concurrency control methods (bd-77)
+            # Concurrency control methods
             "concurrency.acquire": self._handle_concurrency_acquire,
             "concurrency.release": self._handle_concurrency_release,
             "concurrency.status": self._handle_concurrency_status,
-            # Run limiter methods (bd-100)
+            # Run limiter methods
             "run_limiter.acquire": self._handle_run_limiter_acquire,
             "run_limiter.release": self._handle_run_limiter_release,
             "run_limiter.status": self._handle_run_limiter_status,
             "run_limiter.set_limit": self._handle_run_limiter_set_limit,
-            # MCP bridge methods (bd-81)
+            # MCP bridge methods
             "mcp.register": self._handle_mcp_register,
             "mcp.unregister": self._handle_mcp_unregister,
             "mcp.list": self._handle_mcp_list,
             "mcp.status": self._handle_mcp_status,
             "mcp.call_tool": self._handle_mcp_call_tool,
             "mcp.health_check": self._handle_mcp_health_check,
-            # EventBus bridge methods (bd-79)
+            # EventBus bridge methods
             "eventbus.event": self._handle_eventbus_event,
-            # Rate limiter methods (bd-101)
+            # Rate limiter methods
             "rate_limiter.record_limit": self._handle_rate_limiter_record_limit,
             "rate_limiter.record_success": self._handle_rate_limiter_record_success,
             "rate_limiter.get_limit": self._handle_rate_limiter_get_limit,
             "rate_limiter.circuit_status": self._handle_rate_limiter_circuit_status,
-            # Agent manager methods (bd-102)
+            # Agent manager methods
             "agent_manager.register": self._handle_agent_manager_register,
             "agent_manager.list": self._handle_agent_manager_list,
             "agent_manager.get_current": self._handle_agent_manager_get_current,
             "agent_manager.set_current": self._handle_agent_manager_set_current,
-            # Model packs methods (bd-132)
+            # Model packs methods
             "model_packs.get_pack": self._handle_model_packs_get_pack,
             "model_packs.list_packs": self._handle_model_packs_list_packs,
             "model_packs.set_current_pack": self._handle_model_packs_set_current_pack,
@@ -212,7 +212,7 @@ class BridgeController:
         if run_id in self._active_runs:
             raise WireMethodError(
                 f"Run already active: {run_id}",
-                code=-32002,  # Run already active
+                code=-32002, # Run already active
             )
 
         try:
@@ -520,7 +520,7 @@ class BridgeController:
                 total_lines = len(lines)
 
                 if start_line is not None:
-                    start_idx = start_line - 1  # Convert to 0-indexed
+                    start_idx = start_line - 1 # Convert to 0-indexed
                     end_idx = start_idx + (num_lines or len(lines))
                     selected = lines[start_idx:end_idx]
                     content = "".join(selected)
@@ -660,7 +660,7 @@ class BridgeController:
     async def _handle_concurrency_acquire(
         self, params: dict[str, Any]
     ) -> dict[str, Any]:
-        """Handle concurrency.acquire method (bd-77).
+        """Handle concurrency.acquire method.
 
         Acquires a slot from the local semaphore when Elixir requests it.
 
@@ -671,7 +671,7 @@ class BridgeController:
             {"status": "ok"} on success, raises error on failure
         """
         limiter_type = params.get("type", "file_ops")
-        _timeout = params.get("timeout")  # Reserved for future use (timeout support)
+        _timeout = params.get("timeout") # Reserved for future use (timeout support)
 
         # Map limiter type to appropriate semaphore
         if limiter_type == "file_ops":
@@ -683,7 +683,7 @@ class BridgeController:
         else:
             raise WireMethodError(
                 f"Unknown limiter type: {limiter_type}",
-                code=-32602,  # Invalid params
+                code=-32602, # Invalid params
             )
 
         return {"status": "ok", "type": limiter_type}
@@ -691,7 +691,7 @@ class BridgeController:
     async def _handle_concurrency_release(
         self, params: dict[str, Any]
     ) -> dict[str, Any]:
-        """Handle concurrency.release method (bd-77).
+        """Handle concurrency.release method.
 
         Releases a slot back to the local semaphore.
 
@@ -713,7 +713,7 @@ class BridgeController:
         else:
             raise WireMethodError(
                 f"Unknown limiter type: {limiter_type}",
-                code=-32602,  # Invalid params
+                code=-32602, # Invalid params
             )
 
         return {"status": "ok", "type": limiter_type}
@@ -721,7 +721,7 @@ class BridgeController:
     async def _handle_concurrency_status(
         self, params: dict[str, Any]
     ) -> dict[str, Any]:
-        """Handle concurrency.status method (bd-77).
+        """Handle concurrency.status method.
 
         Returns current concurrency status from local semaphores.
 
@@ -731,12 +731,12 @@ class BridgeController:
         status = get_concurrency_status()
         return {"status": "ok", "concurrency": status}
 
-    # Run Limiter Handlers (bd-100)
+    # Run Limiter Handlers
 
     async def _handle_run_limiter_acquire(
         self, params: dict[str, Any]
     ) -> dict[str, Any]:
-        """Handle run_limiter.acquire method (bd-100).
+        """Handle run_limiter.acquire method.
 
         Acquires a run slot from the local RunLimiter when Elixir requests it.
         Elixir handles the global counter state; Python handles reentrancy locally.
@@ -761,13 +761,13 @@ class BridgeController:
         except Exception as e:
             raise WireMethodError(
                 f"Failed to acquire run slot: {e}",
-                code=-32603,  # Internal error
+                code=-32603, # Internal error
             )
 
     async def _handle_run_limiter_release(
         self, params: dict[str, Any]
     ) -> dict[str, Any]:
-        """Handle run_limiter.release method (bd-100).
+        """Handle run_limiter.release method.
 
         Releases a run slot back to the local RunLimiter.
 
@@ -785,13 +785,13 @@ class BridgeController:
         except Exception as e:
             raise WireMethodError(
                 f"Failed to release run slot: {e}",
-                code=-32603,  # Internal error
+                code=-32603, # Internal error
             )
 
     async def _handle_run_limiter_status(
         self, params: dict[str, Any]
     ) -> dict[str, Any]:
-        """Handle run_limiter.status method (bd-100).
+        """Handle run_limiter.status method.
 
         Returns current run limiter status from local RunLimiter.
 
@@ -810,7 +810,7 @@ class BridgeController:
     async def _handle_run_limiter_set_limit(
         self, params: dict[str, Any]
     ) -> dict[str, Any]:
-        """Handle run_limiter.set_limit method (bd-100).
+        """Handle run_limiter.set_limit method.
 
         Updates the run limiter configuration with a new limit.
 
@@ -838,13 +838,13 @@ class BridgeController:
         except Exception as e:
             raise WireMethodError(
                 f"Failed to set run limit: {e}",
-                code=-32603,  # Internal error
+                code=-32603, # Internal error
             )
 
-    # MCP Bridge Handlers (bd-81)
+    # MCP Bridge Handlers
 
     async def _handle_mcp_register(self, params: dict[str, Any]) -> dict[str, Any]:
-        """Handle mcp.register method (bd-81).
+        """Handle mcp.register method.
 
         Args:
             params: {"name": str, "command": str, "args": list, "env": dict | None, "opts": dict | None}
@@ -865,15 +865,15 @@ class BridgeController:
 
             # Build server config from params
             config = ServerConfig(
-                id="",  # Auto-generated
+                id="", # Auto-generated
                 name=name,
                 type="stdio",
                 enabled=True,
                 config={
                     "command": command,
                     "args": args,
-                    **env,  # Merge env vars into config
-                    **opts,  # Merge additional opts
+                    **env, # Merge env vars into config
+                    **opts, # Merge additional opts
                 },
             )
 
@@ -888,7 +888,7 @@ class BridgeController:
             raise WireMethodError(f"Failed to register MCP server: {e}", code=-32000)
 
     async def _handle_mcp_unregister(self, params: dict[str, Any]) -> dict[str, Any]:
-        """Handle mcp.unregister method (bd-81).
+        """Handle mcp.unregister method.
 
         Args:
             params: {"server_id": str}
@@ -905,7 +905,7 @@ class BridgeController:
             if not removed:
                 raise WireMethodError(
                     f"Server not found: {server_id}",
-                    code=-32001,  # Server not found
+                    code=-32001, # Server not found
                 )
 
             return {
@@ -918,7 +918,7 @@ class BridgeController:
             raise WireMethodError(f"Failed to unregister MCP server: {e}", code=-32000)
 
     async def _handle_mcp_list(self, params: dict[str, Any]) -> dict[str, Any]:
-        """Handle mcp.list method (bd-81).
+        """Handle mcp.list method.
 
         Returns:
             {"servers": [...], "count": int}
@@ -956,7 +956,7 @@ class BridgeController:
             raise WireMethodError(f"Failed to list MCP servers: {e}", code=-32000)
 
     async def _handle_mcp_status(self, params: dict[str, Any]) -> dict[str, Any]:
-        """Handle mcp.status method (bd-81).
+        """Handle mcp.status method.
 
         Args:
             params: {"server_id": str}
@@ -973,7 +973,7 @@ class BridgeController:
             if not status.get("exists", False):
                 raise WireMethodError(
                     f"Server not found: {server_id}",
-                    code=-32001,  # Server not found
+                    code=-32001, # Server not found
                 )
 
             return {
@@ -986,7 +986,7 @@ class BridgeController:
             raise WireMethodError(f"Failed to get MCP server status: {e}", code=-32000)
 
     async def _handle_mcp_call_tool(self, params: dict[str, Any]) -> dict[str, Any]:
-        """Handle mcp.call_tool method (bd-81).
+        """Handle mcp.call_tool method.
 
         Args:
             params: {"server_id": str, "method": str, "params": dict, "timeout": float}
@@ -1004,7 +1004,7 @@ class BridgeController:
         }
 
     async def _handle_mcp_health_check(self, params: dict[str, Any]) -> dict[str, Any]:
-        """Handle mcp.health_check method (bd-81).
+        """Handle mcp.health_check method.
 
         Returns:
             Health status for all MCP servers with health data
@@ -1047,7 +1047,7 @@ class BridgeController:
             raise WireMethodError(f"Failed to get MCP health check: {e}", code=-32000)
 
     async def _handle_eventbus_event(self, params: dict[str, Any]) -> dict[str, Any]:
-        """Handle eventbus.event method (bd-79).
+        """Handle eventbus.event method.
 
         Routes incoming events from Elixir EventBus to the local MessageBus.
         This is for reverse-channel events FROM Elixir TO Python.
@@ -1101,12 +1101,12 @@ class BridgeController:
                 "event_type": event_type,
             }
 
-    # Rate Limiter Handlers (bd-101)
+    # Rate Limiter Handlers
 
     async def _handle_rate_limiter_record_limit(
         self, params: dict[str, Any]
     ) -> dict[str, Any]:
-        """Handle rate_limiter.record_limit method (bd-101).
+        """Handle rate_limiter.record_limit method.
 
         Records a rate limit event (429) for a model in the local adaptive rate limiter.
 
@@ -1137,13 +1137,13 @@ class BridgeController:
         except Exception as e:
             raise WireMethodError(
                 f"Failed to record rate limit: {e}",
-                code=-32603,  # Internal error
+                code=-32603, # Internal error
             )
 
     async def _handle_rate_limiter_record_success(
         self, params: dict[str, Any]
     ) -> dict[str, Any]:
-        """Handle rate_limiter.record_success method (bd-101).
+        """Handle rate_limiter.record_success method.
 
         Records a successful request for a model in the local adaptive rate limiter.
 
@@ -1168,13 +1168,13 @@ class BridgeController:
         except Exception as e:
             raise WireMethodError(
                 f"Failed to record success: {e}",
-                code=-32603,  # Internal error
+                code=-32603, # Internal error
             )
 
     async def _handle_rate_limiter_get_limit(
         self, params: dict[str, Any]
     ) -> dict[str, Any]:
-        """Handle rate_limiter.get_limit method (bd-101).
+        """Handle rate_limiter.get_limit method.
 
         Gets the current concurrency limit for a model from the local adaptive rate limiter.
 
@@ -1201,13 +1201,13 @@ class BridgeController:
         except Exception as e:
             raise WireMethodError(
                 f"Failed to get limit: {e}",
-                code=-32603,  # Internal error
+                code=-32603, # Internal error
             )
 
     async def _handle_rate_limiter_circuit_status(
         self, params: dict[str, Any]
     ) -> dict[str, Any]:
-        """Handle rate_limiter.circuit_status method (bd-101).
+        """Handle rate_limiter.circuit_status method.
 
         Gets the circuit breaker status for a model from the local adaptive rate limiter.
 
@@ -1238,15 +1238,15 @@ class BridgeController:
         except Exception as e:
             raise WireMethodError(
                 f"Failed to get circuit status: {e}",
-                code=-32603,  # Internal error
+                code=-32603, # Internal error
             )
 
-    # Agent Manager Handlers (bd-102)
+    # Agent Manager Handlers
 
     async def _handle_agent_manager_register(
         self, params: dict[str, Any]
     ) -> dict[str, Any]:
-        """Handle agent_manager.register method (bd-102).
+        """Handle agent_manager.register method.
 
         Registers agent metadata in the local agent manager.
 
@@ -1274,13 +1274,13 @@ class BridgeController:
         except Exception as e:
             raise WireMethodError(
                 f"Failed to register agent: {e}",
-                code=-32603,  # Internal error
+                code=-32603, # Internal error
             )
 
     async def _handle_agent_manager_list(
         self, params: dict[str, Any]
     ) -> dict[str, Any]:
-        """Handle agent_manager.list method (bd-102).
+        """Handle agent_manager.list method.
 
         Lists all available agents from the local agent manager.
 
@@ -1300,13 +1300,13 @@ class BridgeController:
         except Exception as e:
             raise WireMethodError(
                 f"Failed to list agents: {e}",
-                code=-32603,  # Internal error
+                code=-32603, # Internal error
             )
 
     async def _handle_agent_manager_get_current(
         self, params: dict[str, Any]
     ) -> dict[str, Any]:
-        """Handle agent_manager.get_current method (bd-102).
+        """Handle agent_manager.get_current method.
 
         Gets the current agent name from the local agent manager.
 
@@ -1325,13 +1325,13 @@ class BridgeController:
         except Exception as e:
             raise WireMethodError(
                 f"Failed to get current agent: {e}",
-                code=-32603,  # Internal error
+                code=-32603, # Internal error
             )
 
     async def _handle_agent_manager_set_current(
         self, params: dict[str, Any]
     ) -> dict[str, Any]:
-        """Handle agent_manager.set_current method (bd-102).
+        """Handle agent_manager.set_current method.
 
         Sets the current agent in the local agent manager.
 
@@ -1362,15 +1362,15 @@ class BridgeController:
         except Exception as e:
             raise WireMethodError(
                 f"Failed to set current agent: {e}",
-                code=-32603,  # Internal error
+                code=-32603, # Internal error
             )
 
-    # Model packs handlers (bd-132)
+    # Model packs handlers
 
     async def _handle_model_packs_get_pack(
         self, params: dict[str, Any]
     ) -> dict[str, Any]:
-        """Handle model_packs.get_pack method (bd-132).
+        """Handle model_packs.get_pack method.
 
         Args:
             params: {"name": str | None}
@@ -1404,7 +1404,7 @@ class BridgeController:
     async def _handle_model_packs_list_packs(
         self, params: dict[str, Any]
     ) -> dict[str, Any]:
-        """Handle model_packs.list_packs method (bd-132).
+        """Handle model_packs.list_packs method.
 
         Returns:
             {"status": "ok", "packs": list[dict], "count": int}
@@ -1435,7 +1435,7 @@ class BridgeController:
     async def _handle_model_packs_set_current_pack(
         self, params: dict[str, Any]
     ) -> dict[str, Any]:
-        """Handle model_packs.set_current_pack method (bd-132).
+        """Handle model_packs.set_current_pack method.
 
         Args:
             params: {"name": str}
@@ -1462,7 +1462,7 @@ class BridgeController:
     async def _handle_model_packs_get_current_pack(
         self, params: dict[str, Any]
     ) -> dict[str, Any]:
-        """Handle model_packs.get_current_pack method (bd-132).
+        """Handle model_packs.get_current_pack method.
 
         Returns:
             {"status": "ok", "pack": dict}
@@ -1491,7 +1491,7 @@ class BridgeController:
     async def _handle_model_packs_get_model_for_role(
         self, params: dict[str, Any]
     ) -> dict[str, Any]:
-        """Handle model_packs.get_model_for_role method (bd-132).
+        """Handle model_packs.get_model_for_role method.
 
         Args:
             params: {"role": str | None}
@@ -1510,7 +1510,7 @@ class BridgeController:
     async def _handle_model_packs_get_fallback_chain(
         self, params: dict[str, Any]
     ) -> dict[str, Any]:
-        """Handle model_packs.get_fallback_chain method (bd-132).
+        """Handle model_packs.get_fallback_chain method.
 
         Args:
             params: {"role": str | None}
@@ -1530,7 +1530,7 @@ class BridgeController:
     async def _handle_model_packs_create_pack(
         self, params: dict[str, Any]
     ) -> dict[str, Any]:
-        """Handle model_packs.create_pack method (bd-132).
+        """Handle model_packs.create_pack method.
 
         Args:
             params: {"name": str, "description": str, "roles": dict, "default_role": str}
@@ -1574,7 +1574,7 @@ class BridgeController:
     async def _handle_model_packs_delete_pack(
         self, params: dict[str, Any]
     ) -> dict[str, Any]:
-        """Handle model_packs.delete_pack method (bd-132).
+        """Handle model_packs.delete_pack method.
 
         Args:
             params: {"name": str}
@@ -1593,7 +1593,7 @@ class BridgeController:
     async def _handle_model_packs_reload(
         self, params: dict[str, Any]
     ) -> dict[str, Any]:
-        """Handle model_packs.reload method (bd-132).
+        """Handle model_packs.reload method.
 
         Returns:
             {"status": "ok"}

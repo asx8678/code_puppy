@@ -271,7 +271,7 @@ defmodule CodePuppyControl.CLI.SlashCommands.Commands.SessionTest do
     end
   end
 
-  # ── Regression: agent key resolution (bd-247 fix #1) ──────────────────
+  # ── Regression: agent key resolution (fix #1) ──────────────────
 
   describe "agent key resolution" do
     test "kebab-case display name resolves to snake_case catalogue key" do
@@ -310,7 +310,7 @@ defmodule CodePuppyControl.CLI.SlashCommands.Commands.SessionTest do
     end
   end
 
-  # ── Regression: /truncate with non-system first message (bd-247 fix #2) ─
+  # ── Regression: /truncate with non-system first message (fix #2) ─
 
   describe "/truncate with non-system first message" do
     test "user-first history: keeps last N messages without preserving first" do

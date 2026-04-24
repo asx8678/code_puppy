@@ -121,7 +121,7 @@ defmodule CodePuppyControl.Text.FuzzyMatchTest do
 
   describe "fuzzy_match_window/3 fuzzy matches" do
     test "fuzzy match finds best window" do
-      haystack = ["def foo():", "    pass", "def bar():", "    return 1"]
+      haystack = ["def foo():", " pass", "def bar():", " return 1"]
       # "def baz():" is close to "def bar():" (typo)
       result = FuzzyMatch.fuzzy_match_window(haystack, "def baz():")
 
@@ -208,15 +208,15 @@ defmodule CodePuppyControl.Text.FuzzyMatchTest do
     test "finds correct window among many similar" do
       haystack = [
         "function foo() {",
-        "  return 1;",
+        " return 1;",
         "}",
         "function bar() {",
-        "  return 2;",
+        " return 2;",
         "}"
       ]
 
       # Looking for the second function
-      result = FuzzyMatch.fuzzy_match_window(haystack, "function bar() {\n  return 2;")
+      result = FuzzyMatch.fuzzy_match_window(haystack, "function bar() {\n return 2;")
 
       assert {:ok, match} = result
       assert match.start_line == 3
@@ -261,16 +261,16 @@ defmodule CodePuppyControl.Text.FuzzyMatchTest do
 
   describe "edge cases" do
     test "whitespace lines" do
-      haystack = ["", "  ", "   ", "content"]
-      result = FuzzyMatch.fuzzy_match_window(haystack, "  ")
+      haystack = ["", " ", " ", "content"]
+      result = FuzzyMatch.fuzzy_match_window(haystack, " ")
 
       assert {:ok, match} = result
       assert match.start_line == 1
-      assert match.matched_text == "  "
+      assert match.matched_text == " "
     end
 
     test "only whitespace content" do
-      haystack = ["", "  ", "\t", "   "]
+      haystack = ["", " ", "\t", " "]
       result = FuzzyMatch.fuzzy_match_window(haystack, "\t")
 
       assert {:ok, match} = result
@@ -385,10 +385,10 @@ defmodule CodePuppyControl.Text.FuzzyMatchTest do
   end
 
   # ============================================================================
-  # Regression tests for critical bugs (bd-38)
+  # Regression tests for critical bugs
   # ============================================================================
 
-  describe "regression tests (bd-38)" do
+  describe "regression tests" do
     test "multi-codepoint graphemes are not identical in Jaro-Winkler" do
       # BUG: JaroWinkler.similarity("🇺🇸a", "🇺🇸b") returned 1.0 (WRONG)
       # String.length/1 counted graphemes but String.to_charlist/1 produced codepoints.
@@ -403,7 +403,7 @@ defmodule CodePuppyControl.Text.FuzzyMatchTest do
       # Use a search where at least one candidate passes the pre-filters
       # but scores below the specified threshold.
       # First character 'd' matches 'd' in "def abc():", and similar lengths.
-      haystack = ["def abc():", "    pass", "other content"]
+      haystack = ["def abc():", " pass", "other content"]
       # "def xyz():" has similar prefix and length to "def abc():"
       # but scores below high threshold
       {span, score} = FuzzyMatch.find_best_window(haystack, "def xyz():", threshold: 0.95)

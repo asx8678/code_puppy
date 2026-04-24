@@ -1,6 +1,6 @@
 defmodule CodePuppyControl.PtyManager do
   @moduledoc """
-  PTY session manager for interactive terminal emulation (bd-217).
+  PTY session manager for interactive terminal emulation.
 
   Spawns and manages pseudo-terminal (PTY) sessions on Unix systems (macOS + Linux).
   Each session runs an interactive shell inside a true PTY allocated by `erlexec`,

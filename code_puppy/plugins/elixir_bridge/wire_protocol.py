@@ -20,7 +20,7 @@ Canonical Wire Protocol Format (V1):
 
 See: docs/protocol/BRIDGE_PROTOCOL_V1.md for full specification.
 
-bd-103: Protocol bridge optimization
+Protocol bridge optimization
 - orjson support for faster serialization (5-10x improvement)
 - Batch message framing support
 """
@@ -31,7 +31,7 @@ import json
 from datetime import datetime, timezone
 from typing import Any
 
-# bd-103: Optional orjson support for faster serialization
+# Optional orjson support for faster serialization
 try:
     import orjson
 
@@ -75,11 +75,11 @@ def _get_timestamp() -> str:
     return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
-# bd-103: Serialization helpers for orjson optimization
+# Serialization helpers for orjson optimization
 def _serialize_json(data: Any) -> bytes:
     """Serialize data to JSON bytes, using orjson if available.
 
-    bd-103: orjson is 5-10x faster than stdlib json for serialization.
+    orjson is 5-10x faster than stdlib json for serialization.
     Falls back to stdlib json if orjson is not installed.
     """
     if _HAS_ORJSON:
@@ -90,7 +90,7 @@ def _serialize_json(data: Any) -> bytes:
 def _deserialize_json(data: bytes) -> Any:
     """Deserialize JSON bytes, using orjson if available.
 
-    bd-103: orjson is 5-10x faster than stdlib json for deserialization.
+    orjson is 5-10x faster than stdlib json for deserialization.
     Falls back to stdlib json if orjson is not installed.
     """
     if _HAS_ORJSON:
@@ -480,7 +480,7 @@ def emit_run_limiter_acquire(
     timeout: float | None = None,
     timestamp: str | None = None,
 ) -> dict[str, Any]:
-    """Emit run_limiter.acquire request (bd-100).
+    """Emit run_limiter.acquire request.
 
     Args:
         timeout: Optional timeout in seconds
@@ -505,7 +505,7 @@ def emit_run_limiter_acquire(
 def emit_run_limiter_release(
     timestamp: str | None = None,
 ) -> dict[str, Any]:
-    """Emit run_limiter.release notification (bd-100).
+    """Emit run_limiter.release notification.
 
     Args:
         timestamp: Optional timestamp (auto-generated if None)
@@ -525,7 +525,7 @@ def emit_run_limiter_release(
 def emit_run_limiter_status(
     timestamp: str | None = None,
 ) -> dict[str, Any]:
-    """Emit run_limiter.status request (bd-100).
+    """Emit run_limiter.status request.
 
     Args:
         timestamp: Optional timestamp (auto-generated if None)
@@ -546,7 +546,7 @@ def emit_run_limiter_set_limit(
     limit: int,
     timestamp: str | None = None,
 ) -> dict[str, Any]:
-    """Emit run_limiter.set_limit request (bd-100).
+    """Emit run_limiter.set_limit request.
 
     Args:
         limit: New concurrency limit value
@@ -728,7 +728,7 @@ def emit_eventbus_broadcast(
     payload: dict[str, Any],
     timestamp: str | None = None,
 ) -> dict[str, Any]:
-    """Emit eventbus.broadcast notification (bd-79).
+    """Emit eventbus.broadcast notification.
 
     Args:
         topic: EventBus topic (e.g., "session:<id>", "run:<id>", "global:events")
@@ -755,7 +755,7 @@ def emit_eventbus_subscribe(
     topic: str,
     timestamp: str | None = None,
 ) -> dict[str, Any]:
-    """Emit eventbus.subscribe request (bd-79).
+    """Emit eventbus.subscribe request.
 
     Args:
         topic: EventBus topic to subscribe to
@@ -778,7 +778,7 @@ def emit_eventbus_unsubscribe(
     topic: str,
     timestamp: str | None = None,
 ) -> dict[str, Any]:
-    """Emit eventbus.unsubscribe request (bd-79).
+    """Emit eventbus.unsubscribe request.
 
     Args:
         topic: EventBus topic to unsubscribe from
@@ -797,14 +797,14 @@ def emit_eventbus_unsubscribe(
     }
 
 
-# ── Rate Limiter Wire Protocol (bd-101) ─────────────────────────────────────
+# ── Rate Limiter Wire Protocol ─────────────────────────────────────
 
 
 def emit_rate_limiter_record_limit(
     model_name: str,
     timestamp: str | None = None,
 ) -> dict[str, Any]:
-    """Emit rate_limiter.record_limit request (bd-101).
+    """Emit rate_limiter.record_limit request.
 
     Args:
         model_name: The model name that received a 429 response
@@ -827,7 +827,7 @@ def emit_rate_limiter_record_success(
     model_name: str,
     timestamp: str | None = None,
 ) -> dict[str, Any]:
-    """Emit rate_limiter.record_success request (bd-101).
+    """Emit rate_limiter.record_success request.
 
     Args:
         model_name: The model name that had a successful request
@@ -850,7 +850,7 @@ def emit_rate_limiter_get_limit(
     model_name: str,
     timestamp: str | None = None,
 ) -> dict[str, Any]:
-    """Emit rate_limiter.get_limit request (bd-101).
+    """Emit rate_limiter.get_limit request.
 
     Args:
         model_name: The model name to get limit for
@@ -873,7 +873,7 @@ def emit_rate_limiter_circuit_status(
     model_name: str,
     timestamp: str | None = None,
 ) -> dict[str, Any]:
-    """Emit rate_limiter.circuit_status request (bd-101).
+    """Emit rate_limiter.circuit_status request.
 
     Args:
         model_name: The model name to get circuit status for
@@ -892,7 +892,7 @@ def emit_rate_limiter_circuit_status(
     }
 
 
-# ── Agent Manager Wire Protocol (bd-102) ────────────────────────────────────
+# ── Agent Manager Wire Protocol ────────────────────────────────────
 
 
 def emit_agent_manager_register(
@@ -900,7 +900,7 @@ def emit_agent_manager_register(
     agent_info: dict[str, Any],
     timestamp: str | None = None,
 ) -> dict[str, Any]:
-    """Emit agent_manager.register request (bd-102).
+    """Emit agent_manager.register request.
 
     Args:
         agent_name: The name of the agent to register
@@ -924,7 +924,7 @@ def emit_agent_manager_register(
 def emit_agent_manager_list(
     timestamp: str | None = None,
 ) -> dict[str, Any]:
-    """Emit agent_manager.list request (bd-102).
+    """Emit agent_manager.list request.
 
     Args:
         timestamp: Optional timestamp (auto-generated if None)
@@ -944,7 +944,7 @@ def emit_agent_manager_list(
 def emit_agent_manager_get_current(
     timestamp: str | None = None,
 ) -> dict[str, Any]:
-    """Emit agent_manager.get_current request (bd-102).
+    """Emit agent_manager.get_current request.
 
     Args:
         timestamp: Optional timestamp (auto-generated if None)
@@ -965,7 +965,7 @@ def emit_agent_manager_set_current(
     agent_name: str,
     timestamp: str | None = None,
 ) -> dict[str, Any]:
-    """Emit agent_manager.set_current request (bd-102).
+    """Emit agent_manager.set_current request.
 
     Args:
         agent_name: The name of the agent to set as current
@@ -1012,12 +1012,12 @@ def to_canonical_notification(
 
     Example:
         >>> notification = to_canonical_notification(
-        ...     event_type="tool_output",
-        ...     run_id="run-123",
-        ...     session_id="sess-456",
-        ...     payload={"tool_name": "file_read", "result": {...}}
+        ... event_type="tool_output",
+        ... run_id="run-123",
+        ... session_id="sess-456",
+        ... payload={"tool_name": "file_read", "result": {...}}
         ... )
-        >>> print(notification["method"])  # "run.tool_result"
+        >>> print(notification["method"]) # "run.tool_result"
     """
     payload = payload or {}
 
@@ -1201,7 +1201,7 @@ def from_wire_params(method: str, params: dict[str, Any]) -> dict[str, Any]:
             "directory": str(params.get("directory", ".")),
         }
 
-    # bd-103: Batch file read support
+    # Batch file read support
     elif normalized_method == "file_read_batch":
         if "paths" not in params:
             raise WireMethodError(
@@ -1213,7 +1213,7 @@ def from_wire_params(method: str, params: dict[str, Any]) -> dict[str, Any]:
             "num_lines": params.get("num_lines"),
         }
 
-    # Concurrency control methods (bd-77)
+    # Concurrency control methods
     elif normalized_method == "concurrency.acquire":
         limiter_type = params.get("type", "file_ops")
         if limiter_type not in ("file_ops", "api_calls", "tool_calls"):
@@ -1236,9 +1236,9 @@ def from_wire_params(method: str, params: dict[str, Any]) -> dict[str, Any]:
         return {"type": limiter_type}
 
     elif normalized_method == "concurrency.status":
-        return {}  # No params needed for status
+        return {} # No params needed for status
 
-    # Run limiter methods (bd-100)
+    # Run limiter methods
     elif normalized_method == "run_limiter.acquire":
         result: dict[str, Any] = {}
         if "timeout" in params:
@@ -1246,10 +1246,10 @@ def from_wire_params(method: str, params: dict[str, Any]) -> dict[str, Any]:
         return result
 
     elif normalized_method == "run_limiter.release":
-        return {}  # No params needed for release
+        return {} # No params needed for release
 
     elif normalized_method == "run_limiter.status":
-        return {}  # No params needed for status
+        return {} # No params needed for status
 
     elif normalized_method == "run_limiter.set_limit":
         if "limit" not in params:
@@ -1261,7 +1261,7 @@ def from_wire_params(method: str, params: dict[str, Any]) -> dict[str, Any]:
             raise WireMethodError("limit must be >= 1", INVALID_PARAMS)
         return {"limit": limit}
 
-    # MCP bridge methods (bd-81)
+    # MCP bridge methods
     elif normalized_method == "mcp.register":
         if "name" not in params:
             raise WireMethodError("mcp.register requires 'name' param", INVALID_PARAMS)
@@ -1290,7 +1290,7 @@ def from_wire_params(method: str, params: dict[str, Any]) -> dict[str, Any]:
         return {"server_id": str(params["server_id"])}
 
     elif normalized_method == "mcp.list":
-        return {}  # No params needed for list
+        return {} # No params needed for list
 
     elif normalized_method == "mcp.status":
         if "server_id" not in params:
@@ -1318,9 +1318,9 @@ def from_wire_params(method: str, params: dict[str, Any]) -> dict[str, Any]:
         return result
 
     elif normalized_method == "mcp.health_check":
-        return {}  # No params needed for health_check
+        return {} # No params needed for health_check
 
-    # EventBus bridge methods (bd-79)
+    # EventBus bridge methods
     elif normalized_method == "eventbus.event":
         if "topic" not in params:
             raise WireMethodError(
@@ -1338,7 +1338,7 @@ def from_wire_params(method: str, params: dict[str, Any]) -> dict[str, Any]:
     elif normalized_method in ("get_status", "ping"):
         return params
 
-    # Rate limiter methods (bd-101)
+    # Rate limiter methods
     elif normalized_method == "rate_limiter.record_limit":
         if "model_name" not in params:
             raise WireMethodError(
@@ -1369,7 +1369,7 @@ def from_wire_params(method: str, params: dict[str, Any]) -> dict[str, Any]:
             )
         return {"model_name": str(params["model_name"])}
 
-    # Agent manager methods (bd-102)
+    # Agent manager methods
     elif normalized_method == "agent_manager.register":
         if "agent_name" not in params:
             raise WireMethodError(
@@ -1382,10 +1382,10 @@ def from_wire_params(method: str, params: dict[str, Any]) -> dict[str, Any]:
         return result
 
     elif normalized_method == "agent_manager.list":
-        return {}  # No params needed for list
+        return {} # No params needed for list
 
     elif normalized_method == "agent_manager.get_current":
-        return {}  # No params needed for get_current
+        return {} # No params needed for get_current
 
     elif normalized_method == "agent_manager.set_current":
         if "agent_name" not in params:
@@ -1394,12 +1394,12 @@ def from_wire_params(method: str, params: dict[str, Any]) -> dict[str, Any]:
             )
         return {"agent_name": str(params["agent_name"])}
 
-    # Model packs methods (bd-132)
+    # Model packs methods
     elif normalized_method == "model_packs.get_pack":
         return {"name": str(params.get("name", ""))} if params else {}
 
     elif normalized_method == "model_packs.list_packs":
-        return {}  # No params needed
+        return {} # No params needed
 
     elif normalized_method == "model_packs.set_current_pack":
         if "name" not in params:
@@ -1409,7 +1409,7 @@ def from_wire_params(method: str, params: dict[str, Any]) -> dict[str, Any]:
         return {"name": str(params["name"])}
 
     elif normalized_method == "model_packs.get_current_pack":
-        return {}  # No params needed
+        return {} # No params needed
 
     elif normalized_method == "model_packs.get_model_for_role":
         return {"role": str(params.get("role", ""))} if params else {}
@@ -1442,7 +1442,7 @@ def from_wire_params(method: str, params: dict[str, Any]) -> dict[str, Any]:
         return {"name": str(params["name"])}
 
     elif normalized_method == "model_packs.reload":
-        return {}  # No params needed
+        return {} # No params needed
 
     else:
         raise WireMethodError(f"Unknown method: {method}", METHOD_NOT_FOUND)
@@ -1458,7 +1458,7 @@ def frame_message(message: dict[str, Any]) -> bytes:
 
     <json-body>
 
-    bd-103: Uses orjson for faster serialization when available.
+    Uses orjson for faster serialization when available.
 
     Args:
         message: Message dict to frame
@@ -1487,7 +1487,7 @@ def parse_framed_message(framed: bytes) -> dict[str, Any]:
 
     <json-body>
 
-    bd-103: Uses orjson for faster deserialization when available.
+    Uses orjson for faster deserialization when available.
 
     Args:
         framed: Framed message bytes
@@ -1553,7 +1553,7 @@ def serialize_for_wire(data: Any) -> str:
     """Serialize data to JSON string for wire protocol.
 
     Uses compact formatting (no whitespace) for efficiency.
-    bd-103: Uses orjson for faster serialization when available.
+    Uses orjson for faster serialization when available.
 
     Args:
         data: Data to serialize

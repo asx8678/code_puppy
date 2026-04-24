@@ -5,7 +5,7 @@ defmodule CodePuppyControl.ModelFactory.Credentials do
   Resolution order:
   1. Model config `api_key_env` field -> look up that env var
   2. Provider-specific default env var (e.g. `OPENAI_API_KEY`)
-  3. OS keychain (stubbed — TODO(bd-166))
+  3. OS keychain (stubbed — TODO)
 
   Also handles custom endpoint header value substitution with
   `${VAR_NAME}` and `$VAR_NAME` patterns.
@@ -120,20 +120,20 @@ defmodule CodePuppyControl.ModelFactory.Credentials do
   ## Examples
 
       iex> Credentials.validate("openai", %{})
-      :ok  # if OPENAI_API_KEY is set
+      :ok # if OPENAI_API_KEY is set
 
       iex> Credentials.validate("openai", %{})
-      {:missing, ["OPENAI_API_KEY"]}  # if not set
+      {:missing, ["OPENAI_API_KEY"]} # if not set
   """
   @spec validate(String.t(), map()) :: :ok | {:missing, [String.t()]}
   def validate(provider_type, model_config \\ %{}) do
     case provider_type do
       "claude_code" ->
-        # TODO(bd-166): Phase 4 — OAuth validation
+        # TODO: Phase 4 — OAuth validation
         :ok
 
       "chatgpt_oauth" ->
-        # TODO(bd-166): Phase 4 — OAuth validation
+        # TODO: Phase 4 — OAuth validation
         :ok
 
       _ ->

@@ -730,7 +730,7 @@ defmodule CodePuppyControl.CLI.SlashCommands.Commands.AddModelTest do
     end
   end
 
-  # ── add_model_to_config/2 GenServer safety (bd-268 Blocker 2) ────────────
+  # ── add_model_to_config/2 GenServer safety (Blocker 2) ────────────
 
   describe "add_model_to_config/2 when LockKeeper is down" do
     test "returns error tuple instead of crashing when LockKeeper is unavailable" do

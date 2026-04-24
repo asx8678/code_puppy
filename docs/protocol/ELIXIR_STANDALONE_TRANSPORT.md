@@ -1,4 +1,4 @@
-# Elixir Standalone Transport (bd-10)
+# Elixir Standalone Transport
 
 This document describes the standalone stdio JSON-RPC transport for Elixir file operations, which provides an alternative to the bridge mode (PythonWorker.Port) for simple use cases.
 

@@ -10,7 +10,7 @@ with no Python-side caching.
 - **Session model name**: Session-local model name cached after first read from config
 - **Session start time**: When the current session began
 
-## Migration Note (bd-133)
+## Migration Note
 
 This module has been migrated from a dual-path implementation (Elixir-first
 with Python fallback) to a pure thin wrapper that routes exclusively to
@@ -23,16 +23,16 @@ from typing import Any
 
 from code_puppy.elixir_transport import ElixirTransportError
 
-# bd-192: opt-in degraded mode lock for thread-safe degraded-mode state access
+# opt-in degraded mode lock for thread-safe degraded-mode state access
 _DEGRADED_STATE_LOCK = threading.Lock()
 
 
 def _degraded() -> bool:
-    # bd-192: Check env var directly instead of using a cached constant
+    # Check env var directly instead of using a cached constant
     return os.environ.get("PUP_ALLOW_ELIXIR_DEGRADED") == "1"
 
 # =============================================================================
-# Backward Compatibility Stubs (bd-133)
+# Backward Compatibility Stubs
 # =============================================================================
 # These module variables are retained for backward compatibility with tests
 # that reference them. With pure Elixir routing, state is stored exclusively

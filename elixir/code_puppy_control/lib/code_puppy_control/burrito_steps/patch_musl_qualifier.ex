@@ -15,7 +15,7 @@ defmodule CodePuppyControl.BurritoSteps.PatchMuslQualifier do
       linux_musl_x86_64: [os: :linux, cpu: :x86_64, musl: true]
       linux_musl_arm64: [os: :linux, cpu: :aarch64, musl: true]
 
-  See bd-239 for background.
+  See for background.
   """
 
   alias Burrito.Builder.Context

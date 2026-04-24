@@ -5,7 +5,7 @@ both the CLI command handler and the auto-save feature. Keeping it here helps
 us avoid duplication while staying inside the Zen-of-Python sweet spot: simple
 is better than complex, nested side effects are worse than deliberate helpers.
 
-bd-137: Migrated to Elixir/Ecto with SQLite backend. File-based storage is
+Migrated to Elixir/Ecto with SQLite backend. File-based storage is
 retained as fallback when Elixir transport is unavailable.
 """
 
@@ -20,7 +20,7 @@ import os
 import logging
 from concurrent.futures import ThreadPoolExecutor
 
-# bd-137: Import Elixir bridge (lazy-loaded)
+# Import Elixir bridge (lazy-loaded)
 _use_elixir_storage: bool = os.environ.get("PUP_SESSION_USE_SQLITE", "1") == "1"
 
 # SECURITY FIX #zvx9: Pickle has been completely removed to prevent RCE attacks.
@@ -36,7 +36,7 @@ from typing import Any
 # The executor's internal work queue provides sufficient backpressure with max_workers=1.
 _autosave_executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="autosave")
 
-# Autosave deduplication state (bd-6 fix)
+# Autosave deduplication state (deduplication fix)
 _last_autosave_len: int = 0
 _last_autosave_hash: str = ""
 _last_autosave_time: float = 0.0
@@ -171,7 +171,7 @@ def _deserialize_messages(raw_messages: list) -> list:
 
 # Legacy signed header for backward compatibility reading
 _LEGACY_SIGNED_HEADER = b"CPSESSION\x01"
-_LEGACY_SIGNATURE_SIZE = 32  # legacy signature bytes, retained only for backward-compat
+_LEGACY_SIGNATURE_SIZE = 32 # legacy signature bytes, retained only for backward-compat
 
 
 def _compute_hmac(key: bytes, data: bytes) -> bytes:
@@ -186,12 +186,12 @@ def _get_or_create_hmac_key() -> bytes:
     TOCTOU races when multiple processes start simultaneously. The key is
     stored at DATA_DIR/.session_hmac_key with chmod 0o600.
     """
-    from code_puppy import config  # local import to avoid circular deps
+    from code_puppy import config # local import to avoid circular deps
 
     key_path = Path(config.DATA_DIR) / ".session_hmac_key"
     key_path.parent.mkdir(parents=True, exist_ok=True)
     try:
-        with key_path.open("xb") as f:  # O_CREAT|O_EXCL — atomic, prevents TOCTOU
+        with key_path.open("xb") as f: # O_CREAT|O_EXCL — atomic, prevents TOCTOU
             key = os.urandom(32)
             f.write(key)
         key_path.chmod(0o600)
@@ -213,7 +213,7 @@ def _get_or_create_hmac_key() -> bytes:
 
 
 # NOTE: HMAC key is per-install; all sessions share one key. See code_puppy-aqc.
-_HMAC_KEY: bytes | None = None  # lazily populated on first call
+_HMAC_KEY: bytes | None = None # lazily populated on first call
 
 
 def _get_hmac_key() -> bytes:
@@ -313,7 +313,7 @@ TokenEstimator = Callable[[Any], int]
 
 @dataclass(slots=True)
 class SessionPaths:
-    pickle_path: Path  # Historical name; now stores JSON data (*.pkl extension kept for compat)
+    pickle_path: Path # Historical name; now stores JSON data (*.pkl extension kept for compat)
     metadata_path: Path
 
 
@@ -360,7 +360,7 @@ def save_session(
     compacted_hashes: list | None = None,
     precomputed_total: int | None = None,
 ) -> SessionMetadata:
-    # bd-137: Try Elixir SQLite storage first
+    # Try Elixir SQLite storage first
     if _use_elixir_for_session():
         try:
             from code_puppy import session_storage_bridge
@@ -393,8 +393,8 @@ def save_session(
                 timestamp=timestamp,
                 message_count=result.get("message_count", len(history)),
                 total_tokens=result.get("total_tokens", total_tokens),
-                pickle_path=Path(),  # Not applicable in SQLite mode
-                metadata_path=Path(),  # Not applicable in SQLite mode
+                pickle_path=Path(), # Not applicable in SQLite mode
+                metadata_path=Path(), # Not applicable in SQLite mode
                 auto_saved=auto_saved,
             )
         except Exception as exc:
@@ -503,15 +503,15 @@ def load_session(
 ) -> SessionHistory:
     """Load message history from a session file.
 
-    Returns only the message list.  Use :func:`load_session_with_hashes` when
+    Returns only the message list. Use :func:`load_session_with_hashes` when
     you also need the persisted compacted-message hashes.
 
-    bd-137: Prefers Elixir SQLite storage when available, falls back to file-based.
+    Prefers Elixir SQLite storage when available, falls back to file-based.
     """
     # Kept for API compatibility; legacy loading is always supported now.
     _ = allow_legacy
 
-    # Try Elixir bridge first (bd-137)
+    # Try Elixir bridge first
     if _use_elixir_for_session():
         try:
             from code_puppy import session_storage_bridge
@@ -542,16 +542,16 @@ def load_session_with_hashes(
     """Load message history *and* compacted-message hashes from a session file.
 
     Returns:
-        ``(messages, compacted_hashes)`` tuple.  For legacy session files that
+        ``(messages, compacted_hashes)`` tuple. For legacy session files that
         contain only the message list, ``compacted_hashes`` will be ``[]``.
 
     On corruption or deserialisation errors a user-visible warning is emitted
     (via ``code_puppy.messaging.emit_warning``) and ``([], [])`` is returned
     so callers get an empty session rather than an unhandled exception.
 
-    bd-137: Prefers Elixir SQLite storage when available, falls back to file-based.
+    Prefers Elixir SQLite storage when available, falls back to file-based.
     """
-    # Try Elixir bridge first (bd-137)
+    # Try Elixir bridge first
     if _use_elixir_for_session():
         try:
             from code_puppy import session_storage_bridge
@@ -583,7 +583,7 @@ def load_session_with_hashes(
         )
         from code_puppy.messaging import (
             emit_warning,
-        )  # lazy import – avoids circular deps
+        ) # lazy import – avoids circular deps
 
         emit_warning(
             f"Session '{session_name}' could not be loaded: {type(exc).__name__}: {exc}"
@@ -593,7 +593,7 @@ def load_session_with_hashes(
     # --- 2. Deserialize bytes ---
     try:
         data = _load_raw_bytes(raw)
-    except (ValueError, Exception) as exc:  # Exception covers pickle.UnpicklingError
+    except (ValueError, Exception) as exc: # Exception covers pickle.UnpicklingError
         logger.warning(
             "Session '%s' deserialization failed: %s: %s",
             session_name,
@@ -626,7 +626,7 @@ def load_session_with_hashes(
 
 
 def _use_elixir_for_session() -> bool:
-    """Check if we should use Elixir storage (bd-137)."""
+    """Check if we should use Elixir storage."""
     global _use_elixir_storage
     if not _use_elixir_storage:
         return False
@@ -640,9 +640,9 @@ def _use_elixir_for_session() -> bool:
 def list_sessions(base_dir: Path | None = None) -> list[str]:
     """List all session names.
 
-    bd-137: Prefers Elixir SQLite storage when available, falls back to file-based.
+    Prefers Elixir SQLite storage when available, falls back to file-based.
     """
-    # Try Elixir bridge first (bd-137)
+    # Try Elixir bridge first
     if _use_elixir_for_session():
         try:
             from code_puppy import session_storage_bridge
@@ -663,12 +663,12 @@ def list_sessions(base_dir: Path | None = None) -> list[str]:
 def cleanup_sessions(base_dir: Path | None = None, max_sessions: int = 10) -> list[str]:
     """Clean up old sessions, keeping only the most recent N.
 
-    bd-137: Prefers Elixir SQLite storage when available, falls back to file-based.
+    Prefers Elixir SQLite storage when available, falls back to file-based.
     """
     if max_sessions <= 0:
         return []
 
-    # Try Elixir bridge first (bd-137)
+    # Try Elixir bridge first
     if _use_elixir_for_session():
         try:
             from code_puppy import session_storage_bridge
@@ -774,7 +774,7 @@ async def restore_autosave_interactively(base_dir: Path) -> None:
                 else "unknown size"
             )
             emit_system_message(
-                f"  [{idx}] {name} ({message_display}, saved at {timestamp_display})"
+                f" [{idx}] {name} ({message_display}, saved at {timestamp_display})"
             )
         # If there are more pages, offer next-page; show 'Return to first page' on last page
         if total > PAGE_SIZE:
@@ -785,8 +785,8 @@ async def restore_autosave_interactively(base_dir: Path) -> None:
                 f" and {remaining} more" if (remaining > 0 and not is_last_page) else ""
             )
             label = "Return to first page" if is_last_page else f"Next page{summary}"
-            emit_system_message(f"  [6] {label}")
-        emit_system_message("  [Enter] Skip loading autosave")
+            emit_system_message(f" [6] {label}")
+        emit_system_message(" [Enter] Skip loading autosave")
 
     chosen_name: str | None = None
 
@@ -873,4 +873,4 @@ async def restore_autosave_interactively(base_dir: Path) -> None:
 
         display_resumed_history(history)
     except Exception:
-        pass  # Don't fail if display doesn't work in non-TTY environment
+        pass # Don't fail if display doesn't work in non-TTY environment

@@ -37,7 +37,7 @@ def _user_plugins_dir() -> Path:
 
 
 def __getattr__(name: str):
-    """Lazy resolution of env-sensitive module-level names (bd-193).
+    """Lazy resolution of env-sensitive module-level names.
 
     ``USER_PLUGINS_DIR`` is now computed on every access so that env-var
     changes (e.g. ``PUP_EX_HOME`` set after import) are always respected.
@@ -185,7 +185,7 @@ def _create_loader_user(
     # Validate the path - use the validated path for all future operations
     validated_path = _validate_plugin_path(plugin_name, callbacks_file, expected_base)
     if validated_path is None:
-        return lambda: None  # Return no-op loader
+        return lambda: None # Return no-op loader
 
     def _load():
         try:
@@ -369,17 +369,17 @@ def _extract_phases_from_callbacks_file(
 
         for phase in matches:
             if phase in supported_phases:
-                phases.append(phase)  # type: ignore
+                phases.append(phase) # type: ignore
 
         # If no explicit register_callback calls found but file exists,
         # the plugin might register callbacks at import time via side effects
         # In that case, default to startup phase
         if not phases:
-            phases = ["startup"]  # type: ignore
+            phases = ["startup"] # type: ignore
 
     except Exception as e:
         logger.warning(f"Could not parse callbacks file for {plugin_name}: {e}")
-        phases = ["startup"]  # type: ignore
+        phases = ["startup"] # type: ignore
 
     return phases
 
@@ -480,7 +480,7 @@ def _discover_user_plugins(user_plugins_dir: Path) -> list[tuple[str, list[str]]
                 init_file = item / "__init__.py"
                 if init_file.exists():
                     # Simple plugins typically run at startup
-                    discovered.append((plugin_name, ["startup"]))  # type: ignore
+                    discovered.append((plugin_name, ["startup"])) # type: ignore
 
     return discovered
 

@@ -1,4 +1,4 @@
-# scripts/sign-windows.ps1 - Authenticode-sign a Windows Burrito binary (bd-240)
+# scripts/sign-windows.ps1 - Authenticode-sign a Windows Burrito binary
 #
 # Prerequisites:
 #   - Windows SDK (provides signtool.exe)

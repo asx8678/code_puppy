@@ -1,6 +1,6 @@
 """Regression tests for turbo executor summarizer.
 
-Covers bd-208: _summarize_list_files must safely handle all content shapes
+Covers: _summarize_list_files must safely handle all content shapes
 returned by the runtime (string, list, wrapped dict, empty, malformed).
 Also covers per-operation exception safety and register_callbacks fallback.
 """
@@ -257,7 +257,7 @@ class TestRegisterCallbacksFallback:
         )
 
         fake_orch = MagicMock()
-        fake_orch.validate_plan.return_value = []  # no validation errors
+        fake_orch.validate_plan.return_value = [] # no validation errors
         fake_orch.execute = AsyncMock(return_value=fake_plan_result)
 
         # --- Capture the turbo_execute function via a fake agent ---

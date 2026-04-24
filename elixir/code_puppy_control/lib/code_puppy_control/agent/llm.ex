@@ -2,10 +2,10 @@ defmodule CodePuppyControl.Agent.LLM do
   @moduledoc """
   Behaviour definition for the LLM client used by Agent.Loop.
 
-  ## TODO(bd-145)
+  ## TODO
 
-  This module defines the interface that `CodePuppyControl.LLM` (being built
-  in bd-145) should implement. Once bd-145 is complete, this behaviour can
+  This module defines the interface that `CodePuppyControl.LLM` (being built)
+  should implement. Once complete, this behaviour can
   be moved into the LLM module directly, or `Agent.Loop` can reference
   `CodePuppyControl.LLM` directly.
 

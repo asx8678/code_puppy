@@ -1,6 +1,6 @@
 defmodule CodePuppyControl.Routing.RegressionTest do
   @moduledoc """
-  Regression tests for critical routing bugs (bd-60 fixes).
+  Regression tests for critical routing bugs (fixes).
 
   These tests verify:
   1. availability_service is actually called from context (not hardcoded)
@@ -19,7 +19,7 @@ defmodule CodePuppyControl.Routing.RegressionTest do
   # Regression Test 1: Injected availability_service is actually called
   # ============================================================================
 
-  describe "availability_service injection (bd-60 fix)" do
+  describe "availability_service injection (fix)" do
     defmodule MockAvailability do
       @moduledoc "Mock availability service for testing injection"
 
@@ -73,7 +73,7 @@ defmodule CodePuppyControl.Routing.RegressionTest do
   # Regression Test 2: LastResort bare struct doesn't crash
   # ============================================================================
 
-  describe "LastResort nil/empty handling (bd-60 fix)" do
+  describe "LastResort nil/empty handling (fix)" do
     test "bare %LastResort{} struct with nil models returns error" do
       # The struct now defaults to empty list, but nil should still be handled
       strategy = %LastResort{models: nil}
@@ -112,7 +112,7 @@ defmodule CodePuppyControl.Routing.RegressionTest do
   # Regression Test 3: RoundRobin actually rotates with use_global: true
   # ============================================================================
 
-  describe "RoundRobin rotation (bd-60 fix)" do
+  describe "RoundRobin rotation (fix)" do
     # Use async: false for these tests since they share the global RoundRobinModel
     alias CodePuppyControl.RoundRobinModel
 
@@ -196,7 +196,7 @@ defmodule CodePuppyControl.Routing.RegressionTest do
   # Integration: All fixes work together
   # ============================================================================
 
-  describe "integration: all bd-60 fixes work together" do
+  describe "integration: all fixes work together" do
     defmodule IntegrationMockAvailability do
       @moduledoc "Mock that marks some models as unavailable"
 

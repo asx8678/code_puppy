@@ -127,7 +127,7 @@ PACK_PRESET = ConfigPreset(
         "The pack preset enables pack agents for complex multi-agent workflows.\n\n"
         "Configuration:\n"
         "- yolo_mode: false (manual confirmation - safety first)\n"
-        "- enable_pack_agents: true (pack-leader, bloodhound, husky, shepherd, terrier)\n"
+        "- enable_pack_agents: true (pack-leader, husky, shepherd, terrier)\n"
         "- enable_universal_constructor: true (UC enabled)\n"
         "- safety_permission_level: medium\n"
         "- compaction_strategy: summarization\n"

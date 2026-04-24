@@ -9,7 +9,7 @@ defmodule CodePuppyControl.Config.EnvResolutionPropertyTest do
   - legacy var names are checked after primary names
   - type coercion (bool, int, float, path) behaves correctly
 
-  These are Wave 2 tests for bd-210.
+  These are Wave 2 tests for .
   """
 
   use ExUnit.Case, async: false
@@ -161,7 +161,7 @@ defmodule CodePuppyControl.Config.EnvResolutionPropertyTest do
       end
     end
 
-    # TODO(bd-210): PUP_ should win over PUPPY_, but the current merge
+    # TODO: PUP_ should win over PUPPY_, but the current merge
     # order applies PUPPY_ second, overwriting PUP_. This test documents
     # actual behavior until the bug is fixed.
     property "PUPPY_DEFAULT_MODEL overwrites PUP_MODEL due to merge order" do

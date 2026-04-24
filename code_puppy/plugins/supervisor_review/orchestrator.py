@@ -1,4 +1,4 @@
-"""Core supervisor-review iteration loop (bd code_puppy-79p).
+"""Core supervisor-review iteration loop.
 
 Ports Orion's multi-agent supervisor-review pattern from
 orion-multistep-analysis/src/research_agent/supervisor/orchestrator.py:582-742

@@ -46,8 +46,8 @@ transport.stop()
 - `PUP_ELIXIR_SERVICE_CMD` - Override the command to start the service
 - `PUP_LOG_LEVEL` - Set Elixir service log level (debug, info, warn, error)
 
-TODO(bd-10): Add connection pooling for multiple concurrent transports
-TODO(bd-10): Add Unix socket transport option for better performance
+TODO: Add connection pooling for multiple concurrent transports
+TODO: Add Unix socket transport option for better performance
 """
 
 import json
@@ -111,7 +111,7 @@ class ElixirTransport:
         # Check common locations
         common_paths = [
             "/usr/local/bin",
-            "/opt/homebrew/bin",  # macOS Homebrew on Apple Silicon
+            "/opt/homebrew/bin", # macOS Homebrew on Apple Silicon
             "/usr/bin",
             os.path.expanduser("~/.mix/escripts"),
         ]
@@ -171,16 +171,16 @@ class ElixirTransport:
             # Disable Erlang BREAK handler and isolate from terminal signals
             # so Ctrl+C in the Python terminal doesn't corrupt the JSON-RPC stream
             env = os.environ.copy()
-            env["ERL_AFLAGS"] = "+B"  # Disable interactive BREAK handler
+            env["ERL_AFLAGS"] = "+B" # Disable interactive BREAK handler
             self._process = subprocess.Popen(
                 cmd,
                 stdin=subprocess.PIPE,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
                 text=True,
-                bufsize=1,  # Line buffered
+                bufsize=1, # Line buffered
                 cwd=self.project_path,
-                start_new_session=True,  # Isolate from terminal SIGINT
+                start_new_session=True, # Isolate from terminal SIGINT
                 env=env,
             )
         except OSError as e:
@@ -202,7 +202,7 @@ class ElixirTransport:
         # Use mix task
         mix_exe = os.path.join(self.elixir_path, "mix")
         if not os.path.exists(mix_exe):
-            mix_exe = "mix"  # Assume it's in PATH
+            mix_exe = "mix" # Assume it's in PATH
 
         return [mix_exe, "code_puppy.stdio_service"]
 
@@ -385,7 +385,7 @@ class ElixirTransport:
                 "Call start() before sending requests."
             )
         if self._process.poll() is not None:
-            # bd-204: auto-restart with backoff on subprocess death
+            # auto-restart with backoff on subprocess death
             exit_code = self._process.returncode
             logger.warning(
                 "Elixir process died (exit code %s). "
@@ -453,7 +453,7 @@ class ElixirTransport:
                     )
                 line = line.strip()
                 if not line:
-                    continue  # Skip empty lines
+                    continue # Skip empty lines
 
                 try:
                     response = json.loads(line)
@@ -644,7 +644,7 @@ class ElixirTransport:
         return result.get("matches", [])
 
     # ============================================================================
-    # Session Storage API (bd-137: Ecto/SQLite backed)
+    # Session Storage API (Ecto/SQLite backed)
     # ============================================================================
 
     def session_save(
@@ -816,8 +816,8 @@ class ElixirTransport:
 # =============================================================================
 #
 # For simple use cases, import from elixir_transport_helpers instead:
-#   from code_puppy import elixir_transport_helpers as elixir
-#   files = elixir.list_files(".")
+# from code_puppy import elixir_transport_helpers as elixir
+# files = elixir.list_files(".")
 #
 # For explicit control, use the ElixirTransport class directly.
 # =============================================================================

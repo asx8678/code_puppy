@@ -8,7 +8,7 @@ Pure regex-based skeleton generator. Tree-sitter / symbol-aware skeletons
 are available via the Elixir code_context.explore_file bridge (see
 code_puppy/code_context/explorer.py) when the Elixir runtime is connected.
 
-bd-208: Removed dead tree-sitter branches (deleted in bd-86).
+Removed dead tree-sitter branches (deleted).
 """
 
 import logging
@@ -47,7 +47,7 @@ def _skeleton_via_regex(content: str) -> str:
         return len(line) - len(line.lstrip())
 
     # Pass 1: Identify all block-start lines and their indents
-    block_lines: list[tuple[int, str, str]] = []  # (indent, keyword, full_line)
+    block_lines: list[tuple[int, str, str]] = [] # (indent, keyword, full_line)
     for line in lines:
         match = _BLOCK_START.match(line)
         if match:
@@ -107,7 +107,7 @@ def _skeleton_via_regex(content: str) -> str:
                     nested_match = _BLOCK_START.match(next_line)
                     if nested_match:
                         found_children = True
-                        break  # We'll handle this in the next iteration
+                        break # We'll handle this in the next iteration
 
                 j += 1
 
@@ -116,9 +116,9 @@ def _skeleton_via_regex(content: str) -> str:
                 output.append("")
             else:
                 # No children - add ... placeholder and skip body
-                output.append(indent_str + "    ...")
+                output.append(indent_str + " ...")
                 output.append("")
-                i = j - 1  # Skip to the dedent position (will be processed next iter)
+                i = j - 1 # Skip to the dedent position (will be processed next iter)
 
             i += 1
             continue
@@ -166,11 +166,11 @@ def get_skeleton(
     Examples:
         >>> code = '''
         ... class Calculator:
-        ...     def add(self, a, b):
-        ...         return a + b
-        ...     def multiply(self, a, b):
-        ...         result = a * b
-        ...         return result
+        ... def add(self, a, b):
+        ... return a + b
+        ... def multiply(self, a, b):
+        ... result = a * b
+        ... return result
         ... '''
         >>> skeleton = get_skeleton(code.strip(), path="calc.py")
         >>> "def add" in skeleton
@@ -181,7 +181,7 @@ def get_skeleton(
     if not content.strip():
         return ""
 
-    # bd-208: Tree-sitter path removed; use regex directly.
+    # Tree-sitter path removed; use regex directly.
     result = _skeleton_via_regex(content)
 
     # Apply max_lines cap

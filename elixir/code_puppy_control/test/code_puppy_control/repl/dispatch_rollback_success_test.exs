@@ -1,6 +1,6 @@
-defmodule CodePuppyControl.REPL.DispatchRollbackBD254SuccessTest do
+defmodule CodePuppyControl.REPL.DispatchRollbackSuccessTest do
   @moduledoc """
-  Regression tests for bd-254: broadened rollback — success-path faults.
+  Regression tests for: broadened rollback — success-path faults.
 
   These tests verify that raises / throws / exits that occur AFTER
   run_until_done returns :ok (i.e. in the "success path" of
@@ -10,16 +10,16 @@ defmodule CodePuppyControl.REPL.DispatchRollbackBD254SuccessTest do
   The broadened fix moves catch clauses to the outer try, so faults
   from the success path (not just the inner try) trigger rollback.
 
-  Split from dispatch_rollback_bd254_test.exs to stay under the
+  Split from dispatch_rollback_test.exs to stay under the
   600-line cap.
   """
   use ExUnit.Case, async: false
 
   alias CodePuppyControl.Agent.State
-  alias CodePuppyControl.REPL.BD254TestHelper
+  alias CodePuppyControl.REPL.DispatchRollbackTestHelper
   alias CodePuppyControl.REPL.Loop
 
-  import BD254TestHelper
+  import DispatchRollbackTestHelper
 
   setup :setup_mock_llm_and_session
 
@@ -27,7 +27,7 @@ defmodule CodePuppyControl.REPL.DispatchRollbackBD254SuccessTest do
   # Success-path fault injection: raise / throw / exit
   # ===========================================================================
 
-  describe "dispatch_after_append — rollback on success-path faults (bd-254)" do
+  describe "dispatch_after_append — rollback on success-path faults (dispatch rollback)" do
     test "raise after run_until_done ok rolls back user message", %{
       state: state,
       session_id: session_id
@@ -39,12 +39,12 @@ defmodule CodePuppyControl.REPL.DispatchRollbackBD254SuccessTest do
 
       assert [%{"role" => "user"}] = State.get_messages(session_id, "code_puppy")
 
-      BD254TestHelper.BD254MockLLM.set_response(%{text: "mock reply", tool_calls: []})
+      DispatchRollbackTestHelper.DispatchRollbackMockLLM.set_response(%{text: "mock reply", tool_calls: []})
 
       Application.put_env(
         :code_puppy_control,
         :test_dispatch_success_fault,
-        "injected failure for bd-254 test"
+        "injected failure for dispatch rollback test"
       )
 
       output =
@@ -63,12 +63,12 @@ defmodule CodePuppyControl.REPL.DispatchRollbackBD254SuccessTest do
       state: state,
       session_id: session_id
     } do
-      BD254TestHelper.BD254MockLLM.set_response(%{text: "mock reply", tool_calls: []})
+      DispatchRollbackTestHelper.DispatchRollbackMockLLM.set_response(%{text: "mock reply", tool_calls: []})
 
       Application.put_env(
         :code_puppy_control,
         :test_dispatch_success_fault,
-        RuntimeError.exception("boom from bd-254 test")
+        RuntimeError.exception("boom from dispatch rollback test")
       )
 
       output =
@@ -86,7 +86,7 @@ defmodule CodePuppyControl.REPL.DispatchRollbackBD254SuccessTest do
       state: state,
       session_id: session_id
     } do
-      BD254TestHelper.BD254MockLLM.set_response(%{text: "mock reply", tool_calls: []})
+      DispatchRollbackTestHelper.DispatchRollbackMockLLM.set_response(%{text: "mock reply", tool_calls: []})
 
       Application.put_env(
         :code_puppy_control,
@@ -100,7 +100,7 @@ defmodule CodePuppyControl.REPL.DispatchRollbackBD254SuccessTest do
 
       Application.delete_env(:code_puppy_control, :test_dispatch_success_fault)
 
-      BD254TestHelper.BD254MockLLM.set_response(%{text: "recovered reply", tool_calls: []})
+      DispatchRollbackTestHelper.DispatchRollbackMockLLM.set_response(%{text: "recovered reply", tool_calls: []})
 
       ExUnit.CaptureIO.capture_io(fn ->
         assert {:continue, ^state} = Loop.handle_input("try again", state)
@@ -134,7 +134,7 @@ defmodule CodePuppyControl.REPL.DispatchRollbackBD254SuccessTest do
 
       assert length(State.get_messages(session_id, "code_puppy")) == 2
 
-      BD254TestHelper.BD254MockLLM.set_response(%{text: "mock reply", tool_calls: []})
+      DispatchRollbackTestHelper.DispatchRollbackMockLLM.set_response(%{text: "mock reply", tool_calls: []})
 
       Application.put_env(
         :code_puppy_control,
@@ -163,12 +163,12 @@ defmodule CodePuppyControl.REPL.DispatchRollbackBD254SuccessTest do
 
       assert [%{"role" => "user"}] = State.get_messages(session_id, "code_puppy")
 
-      BD254TestHelper.BD254MockLLM.set_response(%{text: "mock reply", tool_calls: []})
+      DispatchRollbackTestHelper.DispatchRollbackMockLLM.set_response(%{text: "mock reply", tool_calls: []})
 
       Application.put_env(
         :code_puppy_control,
         :test_dispatch_success_fault,
-        {:throw, :bd254_throw_test}
+        {:throw, :dispatch_throw_test}
       )
 
       output =
@@ -199,12 +199,12 @@ defmodule CodePuppyControl.REPL.DispatchRollbackBD254SuccessTest do
 
       assert length(State.get_messages(session_id, "code_puppy")) == 2
 
-      BD254TestHelper.BD254MockLLM.set_response(%{text: "mock reply", tool_calls: []})
+      DispatchRollbackTestHelper.DispatchRollbackMockLLM.set_response(%{text: "mock reply", tool_calls: []})
 
       Application.put_env(
         :code_puppy_control,
         :test_dispatch_success_fault,
-        {:throw, :bd254_surgical_throw}
+        {:throw, :dispatch_surgical_throw}
       )
 
       ExUnit.CaptureIO.capture_io(fn ->
@@ -228,12 +228,12 @@ defmodule CodePuppyControl.REPL.DispatchRollbackBD254SuccessTest do
 
       assert [%{"role" => "user"}] = State.get_messages(session_id, "code_puppy")
 
-      BD254TestHelper.BD254MockLLM.set_response(%{text: "mock reply", tool_calls: []})
+      DispatchRollbackTestHelper.DispatchRollbackMockLLM.set_response(%{text: "mock reply", tool_calls: []})
 
       Application.put_env(
         :code_puppy_control,
         :test_dispatch_success_fault,
-        {:exit, :bd254_exit_test}
+        {:exit, :dispatch_exit_test}
       )
 
       output =
@@ -264,12 +264,12 @@ defmodule CodePuppyControl.REPL.DispatchRollbackBD254SuccessTest do
 
       assert length(State.get_messages(session_id, "code_puppy")) == 2
 
-      BD254TestHelper.BD254MockLLM.set_response(%{text: "mock reply", tool_calls: []})
+      DispatchRollbackTestHelper.DispatchRollbackMockLLM.set_response(%{text: "mock reply", tool_calls: []})
 
       Application.put_env(
         :code_puppy_control,
         :test_dispatch_success_fault,
-        {:exit, :bd254_surgical_exit}
+        {:exit, :dispatch_surgical_exit}
       )
 
       ExUnit.CaptureIO.capture_io(fn ->
@@ -286,7 +286,7 @@ defmodule CodePuppyControl.REPL.DispatchRollbackBD254SuccessTest do
       state: state,
       session_id: session_id
     } do
-      BD254TestHelper.BD254MockLLM.set_response(%{text: "mock reply", tool_calls: []})
+      DispatchRollbackTestHelper.DispatchRollbackMockLLM.set_response(%{text: "mock reply", tool_calls: []})
 
       Application.put_env(
         :code_puppy_control,
@@ -300,7 +300,7 @@ defmodule CodePuppyControl.REPL.DispatchRollbackBD254SuccessTest do
 
       Application.delete_env(:code_puppy_control, :test_dispatch_success_fault)
 
-      BD254TestHelper.BD254MockLLM.set_response(%{text: "recovered reply", tool_calls: []})
+      DispatchRollbackTestHelper.DispatchRollbackMockLLM.set_response(%{text: "recovered reply", tool_calls: []})
 
       ExUnit.CaptureIO.capture_io(fn ->
         assert {:continue, ^state} = Loop.handle_input("try again", state)

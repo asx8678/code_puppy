@@ -1,6 +1,6 @@
 # Event Schema Analysis for Elixir Wire Protocol
 
-> **Issue**: bd-27  
+> **Status**: Draft  
 > **Purpose**: Document gaps between current message schema and Elixir wire protocol requirements  
 > **Date**: 2026-04-14
 
@@ -105,11 +105,11 @@ end
 
 | Priority | Task | Issue |
 |----------|------|-------|
-| P0 | Add `run_id` field to BaseMessage | bd-27 |
-| P1 | Add `timestamp_unix_ms` field | bd-27 |
-| P1 | Create wire protocol serializer | bd-39 |
-| P2 | Implement event_type alias | bd-39 |
-| P2 | Test Elixir interop | bd-28 |
+| P0 | Add `run_id` field to BaseMessage | — |
+| P1 | Add `timestamp_unix_ms` field | — |
+| P1 | Create wire protocol serializer | — |
+| P2 | Implement event_type alias | — |
+| P2 | Test Elixir interop | — |
 
 ## Schema Compatibility Notes
 

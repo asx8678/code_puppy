@@ -6,10 +6,10 @@ defmodule CodePuppyControl.REPL.RendererRollbackTest do
   when a registered renderer process dies between Registry.lookup and
   the subsequent GenServer call (reset/stop).
 
-  Also covers the bd-252 rollback fix: ensure_renderer failure and
+  Also covers the rollback fix: ensure_renderer failure and
   run_until_done error both roll back the appended user message.
 
-  Extracted from loop_test.exs (bd-252 Watchdog QA).
+  Extracted from loop_test.exs (Watchdog QA).
   """
   use ExUnit.Case, async: false
 
@@ -157,7 +157,7 @@ defmodule CodePuppyControl.REPL.RendererRollbackTest do
   end
 
   # ===========================================================================
-  # Renderer crash recovery regression tests (bd-252 Watchdog QA)
+  # Renderer crash recovery regression tests (Watchdog QA)
   # ===========================================================================
 
   describe "send_to_agent/2 via handle_input/2 — renderer crash recovery" do
@@ -260,7 +260,7 @@ defmodule CodePuppyControl.REPL.RendererRollbackTest do
       refute pid2 == pid1
     end
 
-    test "ensure_renderer failure rolls back user message (bd-252 regression)", %{
+    test "ensure_renderer failure rolls back user message (regression)", %{
       state: state,
       session_id: session_id
     } do
@@ -274,7 +274,7 @@ defmodule CodePuppyControl.REPL.RendererRollbackTest do
 
       # Inject a synthetic ensure_renderer failure via app env.
       # This exercises the rollback path in dispatch_after_append's
-      # else clause — the exact path the bd-252 fix addresses.
+      # else clause — the exact path the fix addresses.
       Application.put_env(:code_puppy_control, :test_ensure_renderer_error, :renderer_down)
 
       on_exit(fn ->
@@ -298,7 +298,7 @@ defmodule CodePuppyControl.REPL.RendererRollbackTest do
       Application.delete_env(:code_puppy_control, :test_ensure_renderer_error)
     end
 
-    test "run_until_done error still rolls back user message after refactor (bd-252 regression)",
+    test "run_until_done error still rolls back user message after refactor (regression)",
          %{
            state: state,
            session_id: session_id
@@ -385,12 +385,12 @@ defmodule CodePuppyControl.REPL.RendererRollbackTest do
                messages
     end
 
-    test "REPL survives renderer death between prompts without Process.unlink masking (bd-252 regression)",
+    test "REPL survives renderer death between prompts without Process.unlink masking (regression)",
          %{
            state: state,
            session_id: session_id
          } do
-      # First call: starts a renderer via handle_input. With the bd-252 fix,
+      # First call: starts a renderer via handle_input. With the fix,
       # start_renderer_idempotent unlinks the renderer from the caller
       # (REPL process), so renderer death does NOT propagate.
       RollbackTestMockLLM.set_response(%{text: "first reply", tool_calls: []})
@@ -405,7 +405,7 @@ defmodule CodePuppyControl.REPL.RendererRollbackTest do
 
       # Kill the renderer WITHOUT calling Process.unlink first.
       #
-      # Before the bd-252 fix, the renderer was linked to the REPL
+      # Before the fix, the renderer was linked to the REPL
       # process (the test process here), so Process.exit would propagate
       # the exit signal and kill the REPL. After the fix, the renderer
       # is unlinked by start_renderer_idempotent, so the REPL survives.

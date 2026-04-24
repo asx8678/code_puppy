@@ -235,4 +235,4 @@ Code Puppy does enforce context budgets *before* sending requests (in `base_agen
 
 - OpenAI Responses API documentation
 - OpenAI Reasoning models guide
-- Issue: bd-117
+- Issue: token-control-limitations

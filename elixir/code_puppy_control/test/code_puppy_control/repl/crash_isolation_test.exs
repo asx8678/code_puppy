@@ -1,6 +1,6 @@
 defmodule CodePuppyControl.REPL.CrashIsolationTest do
   @moduledoc """
-  Regression tests for bd-253: REPL.Loop crash isolation when
+  Regression tests for : REPL.Loop crash isolation when
   Agent.Loop GenServer dies mid-call.
 
   The core vulnerability: `Loop.start_link` creates a bi-directional
@@ -30,7 +30,7 @@ defmodule CodePuppyControl.REPL.CrashIsolationTest do
   #
   # When stream_chat runs inside Agent.Loop, calling exit/1 terminates
   # that process. GenServer.call in the REPL process then throws an
-  # :exit exception — exactly the path bd-253 hardens.
+  # :exit exception — exactly the path hardens.
   # ---------------------------------------------------------------------------
 
   defmodule CrashMidCallMockLLM do
@@ -159,7 +159,7 @@ defmodule CodePuppyControl.REPL.CrashIsolationTest do
   end
 
   # ===========================================================================
-  # bd-253 regression: Agent.Loop crash mid-call
+  # regression: Agent.Loop crash mid-call
   # ===========================================================================
 
   describe "send_to_agent/2 — Agent.Loop crashes during run_until_done" do

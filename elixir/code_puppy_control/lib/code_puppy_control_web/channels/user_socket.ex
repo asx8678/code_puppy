@@ -93,7 +93,7 @@ defmodule CodePuppyControlWeb.UserSocket do
   def connect(params, socket, connect_info) do
     Logger.debug("UserSocket: client connecting with params #{inspect(params)}")
 
-    # Verify Origin header for CORS protection (bd-218)
+    # Verify Origin header for CORS protection
     # Phoenix provides headers in connect_info[:x_headers] as [{key, value}, ...]
     origin =
       case connect_info[:x_headers] do

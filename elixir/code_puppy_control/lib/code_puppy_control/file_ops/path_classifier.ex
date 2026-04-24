@@ -22,7 +22,7 @@ defmodule CodePuppyControl.FileOps.PathClassifier do
 
   # ============================================================================
   # PATTERN DEFINITIONS
-  
+
   # ============================================================================
 
   # Directory-only patterns
@@ -571,7 +571,7 @@ defmodule CodePuppyControl.FileOps.PathClassifier do
     end
   end
 
-  # bd-28: Check for hidden files/directories (dotfiles/dotdirs)
+  # Check for hidden files/directories (dotfiles/dotdirs)
   # This implements the "**/.*" pattern requested for Python parity.
   # Note: The bare "." (current dir) is treated as hidden here too,
   # which matches Python's **/.* behavior.
@@ -685,7 +685,7 @@ defmodule CodePuppyControl.FileOps.PathClassifier do
     # Expand to absolute path
     expanded = Path.expand(expanded)
 
-    # Resolve symlinks (security fix: bd-35)
+    # Resolve symlinks (security fix: )
     resolve_symlinks(expanded)
   end
 

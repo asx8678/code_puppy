@@ -2,7 +2,7 @@ defmodule CodePuppyControl.SessionStorage do
   @moduledoc """
   File-based session CRUD, search, and export for Code Puppy.
 
-  All sessions stored as JSON under `~/.code_puppy_ex/sessions/` (bd-165).
+  All sessions stored as JSON under `~/.code_puppy_ex/sessions/`.
   Never touches `~/.code_puppy/` — migration is via `SessionStorage.Migrator`.
   """
 
@@ -407,7 +407,7 @@ defmodule CodePuppyControl.SessionStorage do
   end
 
   # ---------------------------------------------------------------------------
-  # Async Autosave (bd-165)
+  # Async Autosave
   # ---------------------------------------------------------------------------
 
   @doc """

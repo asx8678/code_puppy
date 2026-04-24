@@ -202,7 +202,7 @@ defmodule CodePuppyControl.CLI.SlashCommands.Commands.MCPConfigTest do
     end
   end
 
-  # ── Malformed env/args in server config (bd-263 regression) ─────────────
+  # ── Malformed env/args in server config (regression) ─────────────
 
   describe "/mcp status <name> with malformed env/args" do
     test "does not crash when env is a string instead of a map" do

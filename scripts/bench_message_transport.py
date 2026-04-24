@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Benchmark Python vs Elixir message processing (bd-114).
+"""Benchmark Python vs Elixir message processing.
 
 This script benchmarks the performance of message operations using:
 1. Pure Python implementations (baseline)
@@ -78,7 +78,7 @@ def time_function(func: Callable, iterations: int = 100) -> float:
     for _ in range(iterations):
         start = time.perf_counter()
         func()
-        elapsed = (time.perf_counter() - start) * 1000  # ms
+        elapsed = (time.perf_counter() - start) * 1000 # ms
         times.append(elapsed)
     return statistics.median(times)
 
@@ -161,7 +161,7 @@ def run_benchmarks() -> list[BenchmarkResult]:
         from code_puppy import message_transport
         elixir_available = True
     except ImportError:
-        print("⚠️  Elixir transport not available, skipping Elixir benchmarks")
+        print("⚠️ Elixir transport not available, skipping Elixir benchmarks")
         elixir_available = False
         return results
     
@@ -170,7 +170,7 @@ def run_benchmarks() -> list[BenchmarkResult]:
     medium_messages = generate_test_messages(50, parts_per_msg=3)
     large_messages = generate_test_messages(200, parts_per_msg=4)
     
-    print("🐶 Message Transport Benchmark (bd-114)")
+    print("🐶 Message Transport Benchmark")
     print("=" * 60)
     print()
     

@@ -1,6 +1,6 @@
 defmodule CodePuppyControl.Transport.ModelServicesRpcTest do
   @moduledoc """
-  Tests for model services RPC handlers (bd-96).
+  Tests for model services RPC handlers.
 
   These tests verify the JSON-RPC handlers for model_registry, model_availability,
   model_packs, and model_utils services work correctly via the stdio transport.
@@ -78,7 +78,7 @@ defmodule CodePuppyControl.Transport.ModelServicesRpcTest do
       assert response["error"]["message"] == "Invalid params: expected object"
     end
 
-    test "returns enabled:false for disabled models (bd-96 regression test)" do
+    test "returns enabled:false for disabled models (regression test)" do
       request = %{
         "jsonrpc" => "2.0",
         "id" => 1,
@@ -400,10 +400,10 @@ defmodule CodePuppyControl.Transport.ModelServicesRpcTest do
   end
 
   # ============================================================================
-  # JSON-RPC ID Threading Regression Tests (bd-273)
+  # JSON-RPC ID Threading Regression Tests
   # ============================================================================
 
-  describe "JSON-RPC id threading (bd-273 regression)" do
+  describe "JSON-RPC id threading (regression)" do
     test "workflow.get_status error response echoes request id" do
       request = %{
         "jsonrpc" => "2.0",
@@ -424,9 +424,9 @@ defmodule CodePuppyControl.Transport.ModelServicesRpcTest do
 
       assert response["error"]["code"] == -32_001
       assert response["error"]["message"] =~ "Workflow not found"
-      # The id must NOT appear in error data (was the pre-bd-273 bug)
+      # The id must NOT appear in error data (was the pre-bug)
       refute Map.has_key?(response["error"], "data"),
-             "error.data should not contain the request id (was the bd-273 bug)"
+             "error.data should not contain the request id (was the bug)"
     end
 
     test "workflow.cancel error response echoes request id" do

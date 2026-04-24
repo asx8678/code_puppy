@@ -1,6 +1,6 @@
 """Windows platform support for scheduler daemon.
 
-# DEPRECATED(bd-62): Use Elixir scheduler. This module is retained for backward compatibility only.
+# DEPRECATED: Use Elixir scheduler. This module is retained for backward compatibility only.
 # The Elixir scheduler handles all process management via OTP.
 
 DEPRECATED: Process management is now handled by Elixir/OTP supervision.
@@ -15,7 +15,7 @@ def is_process_running(pid: int) -> bool:
         kernel32 = ctypes.windll.kernel32
         handle = kernel32.OpenProcess(
             0x1000, False, pid
-        )  # PROCESS_QUERY_LIMITED_INFORMATION
+        ) # PROCESS_QUERY_LIMITED_INFORMATION
         if handle:
             kernel32.CloseHandle(handle)
             return True
@@ -28,7 +28,7 @@ def terminate_process(pid: int) -> bool:
     """Terminate a process by PID."""
     try:
         kernel32 = ctypes.windll.kernel32
-        handle = kernel32.OpenProcess(1, False, pid)  # PROCESS_TERMINATE
+        handle = kernel32.OpenProcess(1, False, pid) # PROCESS_TERMINATE
         if handle:
             kernel32.TerminateProcess(handle, 0)
             kernel32.CloseHandle(handle)

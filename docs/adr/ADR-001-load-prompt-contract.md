@@ -25,7 +25,7 @@ As documented in AGENTS.md:
 | `PackLeaderAgent` | `code_puppy/agents/agent_pack_leader.py:413` | Called in `get_system_prompt()` |
 | `AgentPlanning` | `code_puppy/agents/agent_planning.py:161` | Called in `get_system_prompt()` |
 | `PromptReviewer` | `code_puppy/agents/prompt_reviewer.py:140` | Called in `get_system_prompt()` |
-| Pack agents | `bloodhound.py`, `retriever.py`, `shepherd.py`, `watchdog.py`, `terrier.py` | Called in `get_system_prompt()` |
+| Pack agents | `retriever.py`, `shepherd.py`, `watchdog.py`, `terrier.py` | Called in `get_system_prompt()` |
 
 
 **Agents that do NOT call `on_load_prompt()` (missing additions):**

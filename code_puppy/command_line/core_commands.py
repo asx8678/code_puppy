@@ -735,7 +735,7 @@ def handle_wiggum_command(command: str) -> str | bool:
 
     When active, the agent will automatically re-run the same prompt
     after completing, resetting context each time. Use Ctrl+C to stop.
-    Automatically stops when `bd ready` reports no remaining work.
+    Loops indefinitely until stopped with Ctrl+C.
 
     Example:
         /wiggum say hello world
@@ -759,7 +759,7 @@ def handle_wiggum_command(command: str) -> str | bool:
     emit_success("🍩 WIGGUM MODE ACTIVATED!")
     emit_info(f"Prompt: {prompt}")
     emit_info("The agent will re-loop this prompt after each completion.")
-    emit_info("Wiggum will auto-stop when `bd ready` shows no remaining work.")
+    emit_info("Wiggum will repeat this prompt indefinitely until you stop it with Ctrl+C.")
     emit_info("Press Ctrl+C to stop the wiggum loop.")
 
     # Return the prompt to execute immediately

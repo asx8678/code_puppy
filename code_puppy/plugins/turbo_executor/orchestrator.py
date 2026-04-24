@@ -62,7 +62,7 @@ class TurboOrchestrator:
             enable_parallel: Whether to enable parallel execution (future feature)
         """
         self.enable_parallel = enable_parallel
-        # bd-86: Native acceleration removed, always use Python
+        # Native acceleration removed, always use Python
         self._backend_source = "python"
 
         self._operation_handlers: dict[OperationType, Callable] = {
@@ -75,7 +75,7 @@ class TurboOrchestrator:
     def using_native_ops(self) -> bool:
         """Check if using Python file operations.
 
-        bd-86: Always returns True since Python is always used.
+        Always returns True since Python is always used.
         """
         return True
 
@@ -117,7 +117,7 @@ class TurboOrchestrator:
             results.append(
                 OperationResult(
                     operation_id="orchestrator",
-                    type=OperationType.LIST_FILES,  # Generic fallback
+                    type=OperationType.LIST_FILES, # Generic fallback
                     status="error",
                     error=f"Orchestration failed: {str(e)}",
                 )

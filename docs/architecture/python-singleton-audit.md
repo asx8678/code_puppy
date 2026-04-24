@@ -2,7 +2,7 @@
 
 > **Purpose**: Document all global/singleton state in Python codebase to inform Elixir migration.
 > **Date**: 2026-04-14
-> **Issue**: bd-41
+> **Issue**: python-singleton-audit
 
 ## Executive Summary
 
@@ -430,7 +430,7 @@ Each singleton exposes operations that become protocol messages:
 
 ## Next Steps
 
-1. **bd-39**: Finalize protocol spec based on these operations
-2. **bd-28**: Bootstrap Elixir with Registry + PubSub
-3. **bd-30**: Implement Agent Registry GenServer
-4. **bd-31**: Implement PubSub event distribution
+1. Finalize protocol spec based on these operations
+2. Bootstrap Elixir with Registry + PubSub
+3. Implement Agent Registry GenServer
+4. Implement PubSub event distribution

@@ -61,7 +61,7 @@ defmodule CodePuppyControl.Compaction do
   Determine if message history needs compaction.
 
   Uses message count as primary heuristic. Model-aware token thresholds
-  are deferred to bd-154.
+  are deferred to .
 
   ## Options
 

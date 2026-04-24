@@ -122,8 +122,8 @@ def _build_anthropic_beta_header(
     """Build the anthropic-beta header value for an Anthropic model.
 
     Combines beta flags based on model capabilities:
-    - interleaved-thinking-2025-05-14  (when interleaved_thinking is enabled)
-    - context-1m-2025-08-07            (when context_length >= 1_000_000)
+    - interleaved-thinking-2025-05-14 (when interleaved_thinking is enabled)
+    - context-1m-2025-08-07 (when context_length >= 1_000_000)
 
     Returns None if no beta flags are needed.
     """
@@ -432,7 +432,7 @@ def get_custom_config(model_config):
 # ---------------------------------------------------------------------------
 # Built-in model builder functions
 # Each function has the signature:
-#   builder(model_name: str, model_config: dict, config: dict) -> Any
+# builder(model_name: str, model_config: dict, config: dict) -> Any
 # ---------------------------------------------------------------------------
 
 
@@ -859,7 +859,7 @@ def invalidate_model_config_cache() -> None:
 
 
 def _call_elixir_model_registry(method: str, params: dict | None = None) -> dict | None:
-    """Call a model_registry method on the Elixir control plane (bd-96).
+    """Call a model_registry method on the Elixir control plane.
 
     Tries to use the Elixir bridge if available. Returns the result dict
     on success, or None if bridge is unavailable or call fails.
@@ -908,7 +908,7 @@ class ModelFactory:
             try:
                 current_mtimes[str(p)] = p.stat().st_mtime
             except OSError:
-                pass  # File doesn't exist
+                pass # File doesn't exist
 
         # Check cache with lock - fast path for cache hits
         with _model_config_lock:
@@ -923,7 +923,7 @@ class ModelFactory:
                 )
             config = callbacks.on_load_model_config()[0]
         else:
-            # bd-96: Try Elixir bridge first for model configuration
+            # Try Elixir bridge first for model configuration
             bridge_result = _call_elixir_model_registry("get_all_configs")
             if bridge_result and "configs" in bridge_result:
                 config = bridge_result["configs"]
@@ -933,7 +933,7 @@ class ModelFactory:
                 )
             else:
                 # Always load from the bundled models.json so upstream
-                # updates propagate automatically.  User additions belong
+                # updates propagate automatically. User additions belong
                 # in extra_models.json (overlay loaded below).
                 bundled_models = pathlib.Path(__file__).parent / "models.json"
                 with open(bundled_models, "r") as f:
@@ -993,7 +993,7 @@ class ModelFactory:
             results = on_load_models_config()
             for result in results:
                 if isinstance(result, dict):
-                    config.update(result)  # Plugin models override built-in
+                    config.update(result) # Plugin models override built-in
         except Exception as exc:
             logging.getLogger(__name__).debug(
                 f"Failed to load plugin models config: {exc}"
@@ -1009,7 +1009,7 @@ class ModelFactory:
 
     @staticmethod
     def get_config_from_bridge(model_name: str) -> dict[str, Any] | None:
-        """Get model config from Elixir bridge (bd-96).
+        """Get model config from Elixir bridge.
 
         Tries to resolve model configuration via the Elixir bridge.
         Returns None if bridge is unavailable or model not found.
@@ -1030,13 +1030,13 @@ class ModelFactory:
         """Returns a configured model instance based on the provided name and config.
 
         Raises ValueError if the model cannot be initialized (e.g. missing API
-        keys, bad configuration, or unsupported model type).  Callers such as
+        keys, bad configuration, or unsupported model type). Callers such as
         ``_load_model_with_fallback`` already catch ``ValueError`` and attempt
         a fallback, so raising here enables automatic recovery.
         """
         model_config = config.get(model_name)
 
-        # bd-96: Try Elixir bridge if config not found locally
+        # Try Elixir bridge if config not found locally
         if not model_config:
             model_config = ModelFactory.get_config_from_bridge(model_name)
 
@@ -1068,7 +1068,7 @@ class ModelFactory:
                 )
                 return _check_result(result, f"custom provider '{model_type}'")
             except ValueError:
-                raise  # Re-raise ValueError from _check_result
+                raise # Re-raise ValueError from _check_result
             except Exception as e:
                 raise ValueError(
                     f"Model '{model_name}': custom provider '{model_type}' failed: {e}"
@@ -1102,7 +1102,7 @@ class ModelFactory:
                                 result, f"plugin handler '{model_type}'"
                             )
                         except ValueError:
-                            raise  # Re-raise ValueError from _check_result
+                            raise # Re-raise ValueError from _check_result
                         except Exception as e:
                             raise ValueError(
                                 f"Model '{model_name}': plugin handler "

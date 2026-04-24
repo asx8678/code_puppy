@@ -4,29 +4,29 @@ import Config
 # See CodePuppyControl.Config for centralized configuration management.
 #
 # Environment Variables:
-#   PUP_SECRET_KEY_BASE       - Phoenix endpoint secret (required in prod, auto-generated for Burrito)
-#   PUP_DATABASE_PATH         - SQLite database path (required in prod, auto-defaulted for Burrito)
-#   PUP_PYTHON_WORKER_SCRIPT  - Python worker entry point (required in prod)
-#   PUP_HISTORY_LIMIT         - Event history size limit (default: 1000)
-#   PUP_WEBSOCKET_SECRET      - WebSocket auth secret (optional)
+# PUP_SECRET_KEY_BASE - Phoenix endpoint secret (required in prod, auto-generated for Burrito)
+# PUP_DATABASE_PATH - SQLite database path (required in prod, auto-defaulted for Burrito)
+# PUP_PYTHON_WORKER_SCRIPT - Python worker entry point (required in prod)
+# PUP_HISTORY_LIMIT - Event history size limit (default: 1000)
+# PUP_WEBSOCKET_SECRET - WebSocket auth secret (optional)
 #
 # Legacy names (deprecated but supported):
-#   SECRET_KEY_BASE -> PUP_SECRET_KEY_BASE
-#   DATABASE_PATH -> PUP_DATABASE_PATH
-#   PYTHON_WORKER_SCRIPT -> PUP_PYTHON_WORKER_SCRIPT
+# SECRET_KEY_BASE -> PUP_SECRET_KEY_BASE
+# DATABASE_PATH -> PUP_DATABASE_PATH
+# PYTHON_WORKER_SCRIPT -> PUP_PYTHON_WORKER_SCRIPT
 #
-# Burrito single-binary fallback (bd-171):
-#   When running as a Burrito binary (__BURRITO env var is set), PUP_SECRET_KEY_BASE
-#   and PUP_DATABASE_PATH are auto-generated/persisted under the system user-data
-#   directory (:filename.basedir(:user_data, "code_puppy")). This avoids requiring
-#   env vars for self-contained distribution while respecting ADR-003 isolation
-#   (NOT writing to ~/.code_puppy/).
+# Burrito single-binary fallback:
+# When running as a Burrito binary (__BURRITO env var is set), PUP_SECRET_KEY_BASE
+# and PUP_DATABASE_PATH are auto-generated/persisted under the system user-data
+# directory (:filename.basedir(:user_data, "code_puppy")). This avoids requiring
+# env vars for self-contained distribution while respecting ADR-003 isolation
+# (NOT writing to ~/.code_puppy/).
 
 # Store the config environment atom for runtime detection
 config :code_puppy_control, :env, config_env()
 
 if config_env() == :prod do
-  # bd-248: Fast-path --help / --version past validation and config loading.
+  # Fast-path --help / --version past validation and config loading.
   # Required for Burrito-packaged binaries to display help without requiring
   # PUP_PYTHON_WORKER_SCRIPT, PUP_SECRET_KEY_BASE, etc.
   help_mode =

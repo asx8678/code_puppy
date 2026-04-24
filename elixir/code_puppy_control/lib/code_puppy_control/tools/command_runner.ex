@@ -32,7 +32,7 @@ defmodule CodePuppyControl.Tools.CommandRunner do
 
   - `CommandRunner` - Main API module (this module)
   - `CommandRunner.Validator` - Security validation (command length, forbidden chars, patterns)
-  - `CommandRunner.ProcessManager` - Process tracking and lifecycle management (bd-64)
+  - `CommandRunner.ProcessManager` - Process tracking and lifecycle management
   """
 
   require Logger

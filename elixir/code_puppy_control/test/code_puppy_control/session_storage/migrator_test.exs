@@ -89,15 +89,15 @@ defmodule CodePuppyControl.SessionStorage.MigratorTest do
         %{"kind" => "response", "parts" => [%{"content" => "Hi there"}]}
       ]
 
-      create_py_subagent_session(ctx.source_dir, "bd-165-work", messages)
+      create_py_subagent_session(ctx.source_dir, "-work", messages)
 
       assert {:ok, result} = migrate(ctx.source_dir, ctx.dest_dir, ctx.autosave_dir)
 
-      assert "bd-165-work" in result.migrated
+      assert "-work" in result.migrated
       assert result.failed == []
       assert result.total_source == 1
 
-      assert {:ok, loaded} = SessionStorage.load_session("bd-165-work", base_dir: ctx.dest_dir)
+      assert {:ok, loaded} = SessionStorage.load_session("-work", base_dir: ctx.dest_dir)
       assert length(loaded.messages) == 2
     end
 

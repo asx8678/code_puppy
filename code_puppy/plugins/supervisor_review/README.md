@@ -1,6 +1,6 @@
 # supervisor_review plugin
 
-**Status**: Stable (bd code_puppy-79p)
+**Status**: Stable
 **Adopted from**: [orion-multistep-analysis](../../../../) — `supervisor/orchestrator.py:582-742`
 
 Registers a single tool, `supervisor_review_loop`, that any code_puppy agent can call to run a quality-gated multi-agent review iteration.
@@ -127,7 +127,7 @@ result = await supervisor_review_loop(
 
 ## References
 
-- bd issue: `code_puppy-79p`
+- Feature: supervisor review loop
 - Orion source: `orion-multistep-analysis/src/research_agent/supervisor/orchestrator.py:582-742`
 - Orion constant: `MAX_SUPERVISOR_REVIEW_LOOPS = 3` at `orchestrator.py:32`
 - Keyword mode inspiration: Orion's `_supervisor_satisfied()` at `orchestrator.py:179-187`

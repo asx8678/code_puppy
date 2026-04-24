@@ -6,7 +6,7 @@
 
 ## Context
 
-The Elixir migration (bd-26) requires defining how Elixir control plane communicates with Python agent workers.
+The Elixir migration requires defining how Elixir control plane communicates with Python agent workers.
 
 
 - Bidirectional asyncio.Queue (Agent→UI, UI→Agent)

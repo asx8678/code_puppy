@@ -1,8 +1,8 @@
 defmodule CodePuppyControl.TUI.Prototype do
   @moduledoc """
-  TUI prototype for Go/No-Go gate (bd-296).
+  TUI prototype for Go/No-Go gate.
 
-  Run:  mix run -e "CodePuppyControl.TUI.Prototype.demo()"
+  Run: mix run -e "CodePuppyControl.TUI.Prototype.demo()"
 
   Proves four capabilities with zero dependencies beyond stdlib:
     1. Streaming text (character-by-character, simulating LLM tokens)
@@ -31,28 +31,28 @@ defmodule CodePuppyControl.TUI.Prototype do
     clear_screen()
 
     # Banner
-    IO.write("\n  #{bg_cyan()}#{bold()}#{white()} Code Puppy TUI Prototype #{reset()}\n")
-    IO.write("  #{dim()}bd-296 - Go/No-Go Gate#{reset()}\n\n")
+    IO.write("\n #{bg_cyan()}#{bold()}#{white()} Code Puppy TUI Prototype #{reset()}\n")
+    IO.write(" #{dim()}Go/No-Go Gate#{reset()}\n\n")
 
     # 1 - Streaming text
-    IO.write("  #{bold()}#{cyan()}1. STREAMING#{reset()}\n\n")
+    IO.write(" #{bold()}#{cyan()}1. STREAMING#{reset()}\n\n")
 
     stream(
       "Hello, Code Puppy! This text arrives token by token, just like a real LLM response. Watch it flow in progressively.\n\n"
     )
 
     # 2 - Syntax highlighting
-    IO.write("  #{bold()}#{magenta()}2. SYNTAX HIGHLIGHTING#{reset()}\n\n")
+    IO.write(" #{bold()}#{magenta()}2. SYNTAX HIGHLIGHTING#{reset()}\n\n")
     highlight_elixir()
     IO.write("\n")
 
     # 3 - Modal + 4 - Input
-    IO.write("  #{bold()}#{yellow()}3. MODAL + INPUT#{reset()}\n\n")
+    IO.write(" #{bold()}#{yellow()}3. MODAL + INPUT#{reset()}\n\n")
     modal()
-    answer = IO.gets("  #{cyan()}>> #{reset()}") |> maybe_trim()
-    IO.write("\n  #{green()}You said: #{bold()}#{answer}#{reset()}\n")
+    answer = IO.gets(" #{cyan()}>> #{reset()}") |> maybe_trim()
+    IO.write("\n #{green()}You said: #{bold()}#{answer}#{reset()}\n")
 
-    IO.write("\n  #{dim()}Prototype complete.#{reset()}\n")
+    IO.write("\n #{dim()}Prototype complete.#{reset()}\n")
     :ok
   end
 
@@ -77,20 +77,20 @@ defmodule CodePuppyControl.TUI.Prototype do
   defp highlight_elixir do
     lines = [
       "defmodule Puppy do",
-      "  def fetch(url) do",
-      "    case IO.read(url) do",
-      "      {:ok, data} -> {:ok, data}",
-      "      {:error, _} -> {:error, :not_found}",
-      "    end",
-      "  end",
+      " def fetch(url) do",
+      " case IO.read(url) do",
+      " {:ok, data} -> {:ok, data}",
+      " {:error, _} -> {:error, :not_found}",
+      " end",
+      " end",
       "end"
     ]
 
-    IO.write("  #{dim()}+ elixir#{reset()}\n")
+    IO.write(" #{dim()}+ elixir#{reset()}\n")
 
     Enum.each(lines, fn line ->
       colored = colorize_line(line)
-      IO.write("  #{dim()}|#{reset()} #{colored}\n")
+      IO.write(" #{dim()}|#{reset()} #{colored}\n")
     end)
   end
 
@@ -112,13 +112,13 @@ defmodule CodePuppyControl.TUI.Prototype do
   # -- 3. Modal -----------------------------------------------------------
 
   defp modal do
-    IO.write("  +--------------------------------------+\n")
-    IO.write("  |  #{bold()}What should the puppy do?#{reset()}              |\n")
-    IO.write("  |                                      |\n")
-    IO.write("  |  #{cyan()}1#{reset()} Fetch a file                       |\n")
-    IO.write("  |  #{cyan()}2#{reset()} Run a command                     |\n")
-    IO.write("  |  #{cyan()}q#{reset()} Quit                              |\n")
-    IO.write("  +--------------------------------------+\n")
+    IO.write(" +--------------------------------------+\n")
+    IO.write(" | #{bold()}What should the puppy do?#{reset()} |\n")
+    IO.write(" | |\n")
+    IO.write(" | #{cyan()}1#{reset()} Fetch a file |\n")
+    IO.write(" | #{cyan()}2#{reset()} Run a command |\n")
+    IO.write(" | #{cyan()}q#{reset()} Quit |\n")
+    IO.write(" +--------------------------------------+\n")
   end
 
   defp maybe_trim(:eof), do: "(eof)"

@@ -35,11 +35,11 @@ defmodule CodePuppyControl.Indexer.SymbolExtractor do
 
   ## Examples
 
-      iex> content = "class Foo:\\n    def bar():\\n        pass"
+      iex> content = "class Foo:\\n def bar():\\n pass"
       iex> SymbolExtractor.extract(content, "python", 10)
       ["class Foo", "def bar"]
   """
-  # bd-208: Updated docstring to reference Parsing.Parser instead of deprecated TurboParseNIF
+  # Updated docstring to reference Parsing.Parser instead of deprecated TurboParseNIF
   @spec extract(String.t(), String.t(), pos_integer()) :: [String.t()]
   def extract(content, kind, max_symbols) do
     case Parser.extract_symbols(content, kind) do

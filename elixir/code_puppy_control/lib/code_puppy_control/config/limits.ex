@@ -229,7 +229,8 @@ defmodule CodePuppyControl.Config.Limits do
   end
 
   @doc "Maximum input tokens for summarization. Default: 100_000"
-  def summarization_max_input_tokens, do: parse_int("summarization_max_input_tokens", 100_000, 1000)
+  def summarization_max_input_tokens,
+    do: parse_int("summarization_max_input_tokens", 100_000, 1000)
 
   @doc "Enable automatic summarization. Default: true"
   def auto_summarize_enabled?, do: truthy?("auto_summarize", true)

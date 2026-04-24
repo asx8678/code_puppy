@@ -1,6 +1,6 @@
 defmodule CodePuppyControl.LLM.SSEChunkBoundaryTest do
   @moduledoc """
-  SSE chunk-boundary property tests and exhaustive boundary tests (bd-226).
+  SSE chunk-boundary property tests and exhaustive boundary tests.
 
   Verifies that SSE parsing produces identical results regardless of where
   network chunks split the byte stream. Uses StreamData to generate random

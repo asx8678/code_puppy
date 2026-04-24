@@ -138,8 +138,8 @@ def _get_xdg_dir_cached(env_var: str, fallback: str) -> str:
     """
     Get directory for code_puppy files (lru_cached - computed once per unique args).
 
-    .. deprecated:: bd-193
-        Use :func:`_get_xdg_dir` instead.  The cached variant is retained for
+    .. deprecated::
+        Use :func:`_get_xdg_dir` instead. The cached variant is retained for
         backward compatibility but new code should call the uncached version
         so that env-var changes are always respected.
 
@@ -164,14 +164,14 @@ def _get_xdg_dir(env_var: str, fallback: str) -> str:
     XDG_* env vars at runtime (notably tests using ``patch.dict(os.environ)``)
     always get fresh results.
 
-    ADR-003 (bd-193): In pup-ex mode, XDG-derived paths MUST remain under
-    the active home tree.  If the XDG env var points outside, we ignore
+    ADR-003: In pup-ex mode, XDG-derived paths MUST remain under
+    the active home tree. If the XDG env var points outside, we ignore
     it and fall back to the active home.
     """
     xdg_base = os.getenv(env_var)
     if xdg_base:
         candidate = os.path.join(xdg_base, "code_puppy")
-        # ADR-003 (bd-193): In pup-ex mode, XDG paths must be under active home
+        # ADR-003: In pup-ex mode, XDG paths must be under active home
         from code_puppy.config_paths import is_pup_ex, _is_path_within_home
         if is_pup_ex() and not _is_path_within_home(candidate):
             from code_puppy.config_paths import home_dir
@@ -222,7 +222,7 @@ def _invalidate_config() -> None:
     Also resets the TTL-debounce state (_state.last_mtime_check, _state.cached_mtime) so
     the next _get_config() call performs a fresh mtime check rather than
     trusting stale values from before invalidation. This is essential for
-    test isolation when CONFIG_FILE is swapped between tests.  (Internal
+    test isolation when CONFIG_FILE is swapped between tests. (Internal
     reference: uses ``_path_config_file()`` not the bare name.)
     """
     with _state.config_lock:
@@ -269,7 +269,7 @@ def _registered_cache(func: Callable) -> Callable:
 
     wrapper.__name__ = func.__name__
     wrapper.__doc__ = func.__doc__
-    wrapper.cache_clear = _cached.cache_clear  # type: ignore[attr-defined]
+    wrapper.cache_clear = _cached.cache_clear # type: ignore[attr-defined]
     _CACHED_GETTERS.append(wrapper.cache_clear)
     return wrapper
 
@@ -411,9 +411,9 @@ def _override_path(name: str) -> pathlib.Path | None:
     return pathlib.Path(override)
 
 
-# --- Lazy path accessors (bd-193: removed stale import-time capture) ---
+# --- Lazy path accessors (removed stale import-time capture) ---
 # Previously these were eager module-level constants computed once at import
-# time.  That captured env-sensitive paths (home_dir, XDG vars) before they
+# time. That captured env-sensitive paths (home_dir, XDG vars) before they
 # could be overridden by tests or by pup-ex mode activation.
 #
 # PEP 562 ``__getattr__`` only works for *external* ``module.ATTR`` access —
@@ -481,7 +481,7 @@ def _path_default_sqlite_file() -> pathlib.Path:
     return _override_path("_DEFAULT_SQLITE_FILE") or pathlib.Path(_xdg_data_dir()) / "dbos_store.sqlite"
 
 
-# Lazy name → factory for ``__getattr__``.  External code doing
+# Lazy name → factory for ``__getattr__``. External code doing
 # ``from code_puppy.config import CONFIG_FILE`` or ``config.CONFIG_FILE``
 # will hit ``__getattr__`` and get a freshly-computed value.
 _LAZY_PATH_FACTORIES: dict[str, Callable[[], object]] = {
@@ -512,7 +512,7 @@ def __getattr__(name: str):
     """Lazy path resolution for external attribute access.
 
     Per PEP 562, this is called when *name* is not found in the module's
-    ``__dict__``.  It provides backward-compatible access to the path
+    ``__dict__``. It provides backward-compatible access to the path
     constants that were previously computed eagerly at import time.
 
     IMPORTANT: This is NOT called for bare-name access *within* this module.
@@ -541,7 +541,7 @@ def get_use_dbos() -> bool:
     if not _is_truthy(get_value("enable_dbos"), default=True):
         return False
     try:
-        import dbos as _dbos  # noqa: F401
+        import dbos as _dbos # noqa: F401
 
         return True
     except ImportError:
@@ -564,7 +564,6 @@ get_subagent_verbose = _make_bool_getter(
 PACK_AGENT_NAMES = frozenset(
     [
         "pack-leader",
-        "bloodhound",
         "shepherd",
         "terrier",
         "watchdog",
@@ -581,7 +580,7 @@ get_pack_agents_enabled = _make_bool_getter(
     default=False,
     doc="""Return True if pack agents are enabled (default False).
 
-    When False (default), pack agents (pack-leader, bloodhound, shepherd,
+    When False (default), pack agents (pack-leader, shepherd,
     terrier, watchdog, retriever) are hidden from `list_agents` tool and `/agents`
     command. They cannot be invoked by other agents or selected by users.
 
@@ -612,7 +611,7 @@ def set_universal_constructor_enabled(enabled: bool) -> None:
     set_value("enable_universal_constructor", "true" if enabled else "false")
 
 
-# bd code_puppy-6ig: Adaptive rendering support
+# Adaptive rendering support
 @_registered_cache
 def get_adaptive_rendering_enabled() -> bool:
     """Return True if adaptive payload rendering is enabled (default: True).
@@ -646,7 +645,7 @@ get_enable_streaming = _make_bool_getter(
     """,
 )
 
-# bd-112: Elixir message shadow mode
+# Elixir message shadow mode
 get_elixir_message_shadow_mode_enabled = _make_bool_getter(
     "enable_elixir_message_shadow_mode",
     default=False,
@@ -661,7 +660,7 @@ get_elixir_message_shadow_mode_enabled = _make_bool_getter(
 )
 
 
-# bd code_puppy-31a.10: Post-edit syntax validation
+# Post-edit syntax validation
 def get_post_edit_validation_enabled() -> bool:
     """Return True if post-edit syntax validation is enabled (default: True).
 
@@ -804,19 +803,19 @@ get_allow_recursion = _make_bool_getter(
     """,
 )
 
-# HIGHER-RISK CONFIG FLAG (bd code_puppy-31a.9):
+# HIGHER-RISK CONFIG FLAG
 # Gitignore-aware filtering for list_files. This changes what files the agent sees,
 # which could break existing agent flows that depend on seeing gitignored files.
 # MANDATORY: Must default to False for at least one release cycle.
 # Opt in via puppy.cfg:
-#     [default]
-#     enable_gitignore_filtering = true
+# [default]
+# enable_gitignore_filtering = true
 get_enable_gitignore_filtering = _make_bool_getter(
     "enable_gitignore_filtering",
     default=False,
     doc="""Get the enable_gitignore_filtering configuration value.
 
-    WARNING: HIGHER-RISK FLAG (bd code_puppy-31a.9). When True, list_files will
+    WARNING:. When True, list_files will
     filter out files that match .gitignore patterns. This changes what files the
     agent can see and could break existing workflows. Defaults to False for safety.
     Opt in via puppy.cfg: enable_gitignore_filtering = true
@@ -953,7 +952,7 @@ def set_config_value(key: str, value: str):
     from pathlib import Path
     from code_puppy.persistence import atomic_write_text
 
-    config = _get_config()  # Use cached version for reading
+    config = _get_config() # Use cached version for reading
     if DEFAULT_SECTION not in config:
         config[DEFAULT_SECTION] = {}
     config[DEFAULT_SECTION][key] = value
@@ -967,7 +966,7 @@ def set_config_value(key: str, value: str):
     # ADR-003: Guard against writing to wrong home when running as pup-ex
     _assert_write_allowed(_path_config_file(), "set_config_value")
     atomic_write_text(Path(_path_config_file()), content)
-    _invalidate_config()  # Invalidate cache after write - no re-read needed
+    _invalidate_config() # Invalidate cache after write - no re-read needed
     # Also invalidate the typed config singleton (config_package.loader)
     # Lazy import to avoid circular imports at module load time
     try:
@@ -975,7 +974,7 @@ def set_config_value(key: str, value: str):
 
         reset_puppy_config_for_tests()
     except Exception:
-        pass  # Typed config layer not loaded yet - safe to skip
+        pass # Typed config layer not loaded yet - safe to skip
 
 
 # Alias for API compatibility
@@ -990,7 +989,7 @@ def reset_value(key: str) -> None:
     from pathlib import Path
     from code_puppy.persistence import atomic_write_text
 
-    config = _get_config()  # Use cached version
+    config = _get_config() # Use cached version
     if DEFAULT_SECTION in config and key in config[DEFAULT_SECTION]:
         del config[DEFAULT_SECTION][key]
         # Serialize and write atomically
@@ -1000,14 +999,14 @@ def reset_value(key: str) -> None:
         # ADR-003: Guard against writing to wrong home when running as pup-ex
         _assert_write_allowed(_path_config_file(), "reset_value")
         atomic_write_text(Path(_path_config_file()), content)
-    _invalidate_config()  # Invalidate cache after write
+    _invalidate_config() # Invalidate cache after write
     # Also invalidate the typed config singleton (config_package.loader)
     try:
         from code_puppy.config_package.loader import reset_puppy_config_for_tests
 
         reset_puppy_config_for_tests()
     except Exception:
-        pass  # Typed config layer not loaded yet - safe to skip
+        pass # Typed config layer not loaded yet - safe to skip
 
 
 # --- MODEL STICKY EXTENSION STARTS HERE ---
@@ -1618,9 +1617,9 @@ def initialize_command_history_file():
     """Create the command history file if it doesn't exist.
     Handles migration from the old history file location for backward compatibility.
 
-    ADR-003 (bd-193): In pup-ex mode, the legacy copy+delete of
+    ADR-003: In pup-ex mode, the legacy copy+delete of
     ``~/.code_puppy_history.txt`` is skipped because the legacy home is
-    read-only.  Only standard-pup mode performs the migration.
+    read-only. Only standard-pup mode performs the migration.
     """
     from pathlib import Path
     from code_puppy.config_paths import is_pup_ex as _is_pup_ex
@@ -1639,7 +1638,7 @@ def initialize_command_history_file():
             Path(command_history_file).touch()
 
             # For backwards compatibility, copy the old history file, then remove it.
-            # ADR-003 (bd-193): In pup-ex mode, skip this — the legacy home is
+            # ADR-003: In pup-ex mode, skip this — the legacy home is
             # read-only and we must NOT delete files from it.
             if not _is_pup_ex():
                 old_history_file = os.path.join(
@@ -1681,7 +1680,7 @@ def get_safety_permission_level():
         normalized = str(cfg_val).strip().lower()
         if normalized in valid_levels:
             return normalized
-    return "medium"  # Default to medium risk threshold
+    return "medium" # Default to medium risk threshold
 
 
 get_mcp_disabled = _make_bool_getter(
@@ -2113,7 +2112,7 @@ def get_diff_addition_color() -> str:
     val = get_value("highlight_addition_color")
     if val:
         return val
-    return "#0b1f0b"  # Default to darker green
+    return "#0b1f0b" # Default to darker green
 
 
 def set_diff_addition_color(color: str):
@@ -2134,7 +2133,7 @@ def get_diff_deletion_color() -> str:
     val = get_value("highlight_deletion_color")
     if val:
         return val
-    return "#390e1a"  # Default to wine
+    return "#390e1a" # Default to wine
 
 
 def set_diff_deletion_color(color: str):
@@ -2152,33 +2151,33 @@ def set_diff_deletion_color(color: str):
 
 # Default banner colors (Rich color names)
 # A beautiful jewel-tone palette with semantic meaning:
-#   - Blues/Teals: Reading & navigation (calm, informational)
-#   - Warm tones: Actions & changes (edits, shell commands)
-#   - Purples: AI thinking & reasoning (the "brain" colors)
-#   - Greens: Completions & success
-#   - Neutrals: Search & listings
+# - Blues/Teals: Reading & navigation (calm, informational)
+# - Warm tones: Actions & changes (edits, shell commands)
+# - Purples: AI thinking & reasoning (the "brain" colors)
+# - Greens: Completions & success
+# - Neutrals: Search & listings
 DEFAULT_BANNER_COLORS = {
-    "thinking": "deep_sky_blue4",  # Sapphire - contemplation
-    "agent_response": "medium_purple4",  # Amethyst - main AI output
-    "shell_command": "dark_orange3",  # Amber - system commands
-    "read_file": "steel_blue",  # Steel - reading files
-    "edit_file": "dark_goldenrod",  # Gold - modifications (legacy)
-    "create_file": "dark_goldenrod",  # Gold - file creation
-    "replace_in_file": "dark_goldenrod",  # Gold - file modifications
-    "delete_snippet": "dark_goldenrod",  # Gold - snippet removal
-    "grep": "grey37",  # Silver - search results
-    "directory_listing": "dodger_blue2",  # Sky - navigation
-    "agent_reasoning": "dark_violet",  # Violet - deep thought
-    "invoke_agent": "deep_pink4",  # Ruby - agent invocation
-    "subagent_response": "sea_green3",  # Emerald - sub-agent success
-    "list_agents": "dark_slate_gray3",  # Slate - neutral listing
-    "universal_constructor": "dark_cyan",  # Teal - constructing tools
+    "thinking": "deep_sky_blue4", # Sapphire - contemplation
+    "agent_response": "medium_purple4", # Amethyst - main AI output
+    "shell_command": "dark_orange3", # Amber - system commands
+    "read_file": "steel_blue", # Steel - reading files
+    "edit_file": "dark_goldenrod", # Gold - modifications (legacy)
+    "create_file": "dark_goldenrod", # Gold - file creation
+    "replace_in_file": "dark_goldenrod", # Gold - file modifications
+    "delete_snippet": "dark_goldenrod", # Gold - snippet removal
+    "grep": "grey37", # Silver - search results
+    "directory_listing": "dodger_blue2", # Sky - navigation
+    "agent_reasoning": "dark_violet", # Violet - deep thought
+    "invoke_agent": "deep_pink4", # Ruby - agent invocation
+    "subagent_response": "sea_green3", # Emerald - sub-agent success
+    "list_agents": "dark_slate_gray3", # Slate - neutral listing
+    "universal_constructor": "dark_cyan", # Teal - constructing tools
     # Browser/Terminal tools - same color as edit_file (gold)
-    "terminal_tool": "dark_goldenrod",  # Gold - browser terminal operations
+    "terminal_tool": "dark_goldenrod", # Gold - browser terminal operations
     # MCP tools - distinct from builtin tools
-    "mcp_tool_call": "dark_cyan",  # Teal - external MCP tool calls
+    "mcp_tool_call": "dark_cyan", # Teal - external MCP tool calls
     # User-initiated shell pass-through (! prefix) - distinct from agent's shell_command
-    "shell_passthrough": "medium_sea_green",  # Green - user's own shell commands
+    "shell_passthrough": "medium_sea_green", # Green - user's own shell commands
 }
 
 
@@ -2277,7 +2276,7 @@ def auto_save_session_if_enabled() -> bool:
     background thread to avoid blocking the main execution flow during file I/O.
     Token counting is deferred to the background thread (fixes CFG-H2).
     """
-    import datetime  # Local import since this is only used here
+    import datetime # Local import since this is only used here
 
     if not get_auto_save_session():
         return False
@@ -2293,7 +2292,7 @@ def auto_save_session_if_enabled() -> bool:
         if not history:
             return False
 
-        # Check if save is needed (deduplication + debounce) - bd-6 fix
+        # Check if save is needed (deduplication + debounce)
         from code_puppy.session_storage import should_skip_autosave
         if should_skip_autosave(history):
             return False
@@ -2322,7 +2321,7 @@ def auto_save_session_if_enabled() -> bool:
 
         return True
 
-    except Exception as exc:  # pragma: no cover - defensive logging
+    except Exception as exc: # pragma: no cover - defensive logging
         from code_puppy.messaging import emit_error
 
         emit_error(f"Failed to auto-save session: {exc}")
@@ -2679,7 +2678,7 @@ def get_memory_extraction_model() -> str | None:
     return get_value("memory_extraction_model")
 
 
-# bd-176: Rust acceleration backend config removed (was bd-50 dead code).
+# Rust acceleration backend config removed (dead code).
 get_max_session_tokens = _make_int_getter(
     "max_session_tokens",
     0,

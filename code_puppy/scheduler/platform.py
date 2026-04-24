@@ -1,6 +1,6 @@
 """Platform abstraction for daemon management.
 
-# DEPRECATED(bd-62): Use Elixir scheduler. This module is retained for backward compatibility only.
+# DEPRECATED: Use Elixir scheduler. This module is retained for backward compatibility only.
 # The Elixir scheduler handles all process management.
 
 Provides a unified interface for daemon operations across Windows, Linux, and macOS.

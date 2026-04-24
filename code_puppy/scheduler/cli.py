@@ -1,6 +1,6 @@
 """CLI subcommands for the scheduler.
 
-# DEPRECATED(bd-62): Use Elixir scheduler. This module is retained for backward compatibility only.
+# DEPRECATED: Use Elixir scheduler. This module is retained for backward compatibility only.
 # The Elixir scheduler API provides these functions via HTTP endpoints.
 
 Handles command-line operations like starting/stopping the daemon,
@@ -73,10 +73,10 @@ def handle_scheduler_status() -> bool:
             status_icon = "🟢" if task.enabled else "🔴"
             last_run = task.last_run[:19] if task.last_run else "never"
             emit_info(
-                f"  {status_icon} {task.name} ({task.schedule_type}: {task.schedule_value})"
+                f" {status_icon} {task.name} ({task.schedule_type}: {task.schedule_value})"
             )
             emit_info(
-                f"      Last run: {last_run}, Status: {task.last_status or 'pending'}"
+                f" Last run: {last_run}, Status: {task.last_status or 'pending'}"
             )
 
     return True
@@ -97,12 +97,12 @@ def handle_scheduler_list() -> bool:
 
     for task in tasks:
         status = "🟢 enabled" if task.enabled else "🔴 disabled"
-        emit_info(f"  [{task.id}] {task.name}")
-        emit_info(f"      Status: {status}")
-        emit_info(f"      Schedule: {task.schedule_type} ({task.schedule_value})")
-        emit_info(f"      Agent: {task.agent}, Model: {task.model or 'default'}")
+        emit_info(f" [{task.id}] {task.name}")
+        emit_info(f" Status: {status}")
+        emit_info(f" Schedule: {task.schedule_type} ({task.schedule_value})")
+        emit_info(f" Agent: {task.agent}, Model: {task.model or 'default'}")
         if task.last_run:
-            emit_info(f"      Last run: {task.last_run[:19]} ({task.last_status})")
+            emit_info(f" Last run: {task.last_run[:19]} ({task.last_status})")
         emit_info("")
 
     return True

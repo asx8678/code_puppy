@@ -5,7 +5,7 @@ defmodule CodePuppyControl.Sessions do
   Provides the public API for saving, loading, and managing agent sessions
   stored in SQLite via Ecto. Replaces Python session_storage.py functionality.
 
-  This module implements bd-137: Migrate session_storage.py to Elixir/Ecto.
+  This module implements : Migrate session_storage.py to Elixir/Ecto.
   """
 
   require Logger

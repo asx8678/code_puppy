@@ -34,11 +34,11 @@ def _default_archive_dir() -> Path:
 
 
 def __getattr__(name: str):
-    """Lazy resolution of env-sensitive module-level names (bd-193)."""
+    """Lazy resolution of env-sensitive module-level names."""
     if name == "DEFAULT_ARCHIVE_DIR":
         return _default_archive_dir()
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
-DEFAULT_MAX_ARCHIVE_SIZE_MB = 100  # Default max archive size before rotation
+DEFAULT_MAX_ARCHIVE_SIZE_MB = 100 # Default max archive size before rotation
 
 
 def _sanitize_session_id(session_id: str | None) -> str:

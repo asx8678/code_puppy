@@ -2,7 +2,7 @@ defmodule CodePuppyControl.REPL.Dispatch do
   @moduledoc """
   Renderer management and agent dispatch helpers for the REPL loop.
 
-  Extracted from `REPL.Loop` (bd-252) to keep the main loop module under
+  Extracted from `REPL.Loop` to keep the main loop module under
   the 600-line cap.
 
   ## Responsibilities
@@ -35,7 +35,7 @@ defmodule CodePuppyControl.REPL.Dispatch do
   # `messages_before` is the snapshot taken *before* the append; on any
   # failure we roll back to it so no orphaned user message remains.
   #
-  # bd-254: the catch clauses wrap the ENTIRE critical section (not just
+  # the catch clauses wrap the ENTIRE critical section (not just
   # the inner loop block), so raises/throws/exits from ensure_renderer/1,
   # Loop.generate_run_id/0, start_agent_loop/4, and the success path all
   # restore messages_before.
@@ -58,10 +58,10 @@ defmodule CodePuppyControl.REPL.Dispatch do
           case Loop.run_until_done(loop_pid, :infinity) do
             :ok ->
               # Test injection: fault in the success path to exercise
-              # rollback on raises/throws/exits (bd-254).
+              # rollback on raises/throws/exits.
               inject_success_fault()
 
-              # bd-257: Use set_messages instead of Enum.drop + append_message.
+              # Use set_messages instead of Enum.drop + append_message.
               # The old code assumed final_messages was prefix-aligned with the
               # pre-run history, but Agent.Loop compaction can rewrite or drop
               # messages before returning. Enum.drop(final_messages, pre_count)
@@ -124,7 +124,7 @@ defmodule CodePuppyControl.REPL.Dispatch do
         print_agent_error("Agent loop crashed: #{inspect(reason)}")
         :error
 
-      # bd-254: broaden rollback to cover raises and throws across the
+      # broaden rollback to cover raises and throws across the
       # ENTIRE post-append critical section — not just the inner loop block.
       # Previously only :exit was caught, and only inside the inner try, so
       # any raise from ensure_renderer, generate_run_id, start_agent_loop,
@@ -152,10 +152,10 @@ defmodule CodePuppyControl.REPL.Dispatch do
 
   # Test injection helper: reads :test_dispatch_success_fault from app env
   # and raises/throws/exits accordingly. Supports:
-  #   - binary → raise(message)
-  #   - exception struct → raise(exception)
-  #   - {:throw, value} → throw(value)
-  #   - {:exit, reason} → exit(reason)
+  # - binary → raise(message)
+  # - exception struct → raise(exception)
+  # - {:throw, value} → throw(value)
+  # - {:exit, reason} → exit(reason)
   # Returns :ok when no fault is configured (production path).
   defp inject_success_fault do
     case Application.get_env(:code_puppy_control, :test_dispatch_success_fault) do
@@ -173,7 +173,7 @@ defmodule CodePuppyControl.REPL.Dispatch do
   def ensure_renderer(state) do
     cond do
       # Test injection: raise instead of returning {:error, ...} to exercise
-      # the outer catch :error clause in dispatch_after_append (bd-254).
+      # the outer catch :error clause in dispatch_after_append.
       msg = Application.get_env(:code_puppy_control, :test_ensure_renderer_raise) ->
         raise msg
 
@@ -214,8 +214,8 @@ defmodule CodePuppyControl.REPL.Dispatch do
 
   # Starts a renderer, handling the race where another process already
   # started one for the same session. This can happen when:
-  #   - A concurrent REPL call won the start race
-  #   - The Registry hasn't cleaned up a dead process's entry yet
+  # - A concurrent REPL call won the start race
+  # - The Registry hasn't cleaned up a dead process's entry yet
   #
   # INVARIANT: never returns {:ok, dead_pid}. If the existing renderer
   # died during reset or the Registry entry is stale, we retry; after
@@ -278,7 +278,7 @@ defmodule CodePuppyControl.REPL.Dispatch do
   @doc false
   def renderer_name(session_id) do
     # Uses {:via, Registry, ...} so renderer processes are registered
-    # without creating atoms from unbounded session IDs (bd-252).
+    # without creating atoms from unbounded session IDs.
     {:via, Registry, {@renderer_registry, session_id}}
   end
 
@@ -287,12 +287,12 @@ defmodule CodePuppyControl.REPL.Dispatch do
   @doc false
   def start_agent_loop(agent_module, messages, state, run_id) do
     # Test injection: raise instead of returning {:error, ...} to exercise
-    # the outer catch :error clause in dispatch_after_append (bd-254).
+    # the outer catch :error clause in dispatch_after_append.
     if msg = Application.get_env(:code_puppy_control, :test_start_agent_loop_raise) do
       raise msg
     end
 
-    # bd-257: test injection for compaction options so regression tests
+    # test injection for compaction options so regression tests
     # can trigger compaction with a low message threshold.
     compaction_opts =
       Application.get_env(:code_puppy_control, :test_compaction_opts, [])

@@ -14,7 +14,7 @@ Examples:
 
     >>> # Use singleton cache
     >>> from code_puppy.config_package import get_puppy_config
-    >>> cfg = get_puppy_config()  # Same instance on subsequent calls
+    >>> cfg = get_puppy_config() # Same instance on subsequent calls
 
     >>> # Reload after config changes
     >>> cfg = reload_puppy_config()
@@ -254,7 +254,7 @@ def load_puppy_config() -> PuppyConfig:
             "ws_history_ttl_seconds",
             3600,
             min_val=0,
-            max_val=86400 * 7,  # Max 1 week
+            max_val=86400 * 7, # Max 1 week
             **resolver_ctx,
         ),
         # Feature flags
@@ -299,7 +299,7 @@ def load_puppy_config() -> PuppyConfig:
         ),
         # UNIFIED: Use constants.SUMMARIZATION_ABSOLUTE_PROTECTED_DEFAULT (50_000)
         # This aligns with config.py get_protected_token_count() default.
-        # See bd-11 for unification rationale.
+        # See documentation for unification rationale.
         protected_token_count=resolve_int(
             ("PUPPY_PROTECTED_TOKEN_COUNT",),
             "protected_token_count",
@@ -401,8 +401,8 @@ def get_puppy_config() -> PuppyConfig:
         The cached PuppyConfig instance.
 
     Example:
-        >>> cfg = get_puppy_config()  # Loads on first call
-        >>> cfg2 = get_puppy_config()  # Same instance
+        >>> cfg = get_puppy_config() # Loads on first call
+        >>> cfg2 = get_puppy_config() # Same instance
         >>> assert cfg is cfg2
     """
     global _cached_config
@@ -441,9 +441,9 @@ def reset_puppy_config_for_tests() -> None:
     Example:
         >>> # In a pytest fixture
         >>> def setup_teardown():
-        ...     reset_puppy_config_for_tests()
-        ...     yield
-        ...     reset_puppy_config_for_tests()
+        ... reset_puppy_config_for_tests()
+        ... yield
+        ... reset_puppy_config_for_tests()
     """
     global _cached_config
     with _cache_lock:

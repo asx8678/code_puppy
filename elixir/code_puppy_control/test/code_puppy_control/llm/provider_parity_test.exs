@@ -1,6 +1,6 @@
 defmodule CodePuppyControl.LLM.ProviderParityTest do
   @moduledoc """
-  bd-221: Ensures LLM @provider_map and ModelFactory @provider_map
+  : Ensures LLM @provider_map and ModelFactory @provider_map
   stay in sync. If a provider type is added to one, it must appear in the other
   (or be explicitly documented as an intentional difference).
 
@@ -37,7 +37,7 @@ defmodule CodePuppyControl.LLM.ProviderParityTest do
   # not in its @provider_map. It's NOT an MF-only difference — both maps omit it.
   # No intentional differences currently exist between the two @provider_maps.
 
-  describe "provider_map parity (bd-221)" do
+  describe "provider_map parity" do
     test "ModelFactory supports all canonical provider types" do
       for type <- @canonical_types do
         assert match?({:ok, _}, ModelFactory.provider_module_for_type(type)),

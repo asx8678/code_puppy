@@ -38,7 +38,7 @@ defmodule CodePuppyControl.Config.Doctor do
       checks
       |> Enum.map(fn %{name: name, status: status, detail: detail} ->
         icon = status_icon(status)
-        detail_suffix = if detail == "", do: "", else: "  —  " <> detail
+        detail_suffix = if detail == "", do: "", else: " — " <> detail
         "#{icon} #{name}#{detail_suffix}"
       end)
 
@@ -202,7 +202,7 @@ defmodule CodePuppyControl.Config.Doctor do
 
   defp check_oauth_isolation do
     # Smoke test: verify auth paths under Elixir and legacy homes are disjoint.
-    # Full coverage is bd-166's job.
+    # Full coverage is 's job.
     elixir_auth = Path.join(Paths.home_dir(), "auth")
     legacy_auth = Path.join(Paths.legacy_home_dir(), "auth")
 
@@ -228,8 +228,7 @@ defmodule CodePuppyControl.Config.Doctor do
         %{
           name: "OAuth isolation",
           status: :warn,
-          detail:
-            "both homes have auth files — verify they are independent (full check in bd-166)"
+          detail: "both homes have auth files — verify they are independent (full check pending)"
         }
     end
   end

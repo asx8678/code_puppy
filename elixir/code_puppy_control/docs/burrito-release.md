@@ -106,7 +106,7 @@ These paths are intentionally **outside** `~/.code_puppy/` (Python pup's home) t
 
 ## CI/CD Release Automation
 
-Tag-push builds and GitHub Release publishing are automated via `.github/workflows/burrito-release.yml` (bd-236).
+Tag-push builds and GitHub Release publishing are automated via `.github/workflows/burrito-release.yml`.
 
 ### How it works
 
@@ -125,10 +125,10 @@ On a tag push, each platform builds a Burrito binary, uploads it as a workflow a
 
 | Platform | Status | Issue |
 |----------|--------|-------|
-| Windows (Authenticode) | ✅ Signed when secrets configured | bd-240 |
-| macOS (codesign + notarize) | ❌ Unsigned | bd-241 |
+| Windows (Authenticode) | ✅ Signed when secrets configured | |
+| macOS (codesign + notarize) | ❌ Unsigned | |
 
-#### Windows Authenticode Signing (bd-240)
+#### Windows Authenticode Signing
 
 The Windows binary is automatically signed with `signtool.exe` during CI when the following **repository secrets** are configured:
 
@@ -145,8 +145,8 @@ The Windows binary is automatically signed with `signtool.exe` during CI when th
 2. Export the certificate as a **PFX** (.pfx / .p12) file with a strong password.
 3. Base64-encode the PFX:
    ```bash
-   base64 -i codesign.pfx | pbcopy   # macOS
-   # or:  certutil -encode codesign.pfx codesign.b64  # Windows
+   base64 -i codesign.pfx | pbcopy # macOS
+   # or: certutil -encode codesign.pfx codesign.b64 # Windows
    ```
 4. In GitHub → **Settings → Secrets and variables → Actions**, add:
    - `WINDOWS_CODESIGN_CERT_BASE64` = the base64 content
@@ -214,10 +214,10 @@ xattr -c ./code_puppy_control_macos_arm64
 
 Windows SmartScreen flags unsigned executables with an "unrecognized app" warning.
 
-- **With Authenticode signing** (bd-240): If the CI secrets `WINDOWS_CODESIGN_CERT_BASE64` and `WINDOWS_CODESIGN_PASSWORD` are configured, the Windows binary is signed and SmartScreen will not warn. An **EV certificate** provides immediate SmartScreen trust; an **OV certificate** requires the binary to build reputation over time.
+- **With Authenticode signing**: If the CI secrets `WINDOWS_CODESIGN_CERT_BASE64` and `WINDOWS_CODESIGN_PASSWORD` are configured, the Windows binary is signed and SmartScreen will not warn. An **EV certificate** provides immediate SmartScreen trust; an **OV certificate** requires the binary to build reputation over time.
 - **Without signing**: Users can click "More info" → "Run anyway".
 
-See [Windows Authenticode Signing](#windows-authenticode-signing-bd-240) above for setup instructions.
+See [Windows Authenticode Signing](#windows-authenticode-signing) above for setup instructions.
 
 ### Linux (musl/Alpine)
 
@@ -232,7 +232,7 @@ See [Musl-based Linux (Alpine)](#musl-based-linux-alpine) above for details.
 Install Zig (see [Prerequisites](#prerequisites)) and ensure it's on your PATH:
 
 ```bash
-zig version  # should print e.g. 0.13.0
+zig version # should print e.g. 0.13.0
 ```
 
 ### Build fails with linker errors

@@ -29,7 +29,7 @@ def _default_store_path() -> Path:
 
 
 def __getattr__(name: str):
-    """Lazy resolution of env-sensitive module-level names (bd-193)."""
+    """Lazy resolution of env-sensitive module-level names."""
     if name == "DEFAULT_STORE_PATH":
         return _default_store_path()
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
@@ -54,7 +54,7 @@ class PromptTemplate:
     name: str
     agent_name: str
     content: str
-    source: str  # "default" or "user"
+    source: str # "default" or "user"
     locked: bool
     created_at: str
     updated_at: str
@@ -94,7 +94,7 @@ class PromptStore:
         self.store_path = store_path or _default_store_path()
         self._lock = threading.Lock()
         self._templates: dict[str, PromptTemplate] = {}
-        self._active: dict[str, str] = {}  # agent_name -> template_id
+        self._active: dict[str, str] = {} # agent_name -> template_id
         self._load()
 
     def _load(self) -> None:
@@ -378,7 +378,7 @@ class PromptStore:
                 name=new_name,
                 agent_name=source.agent_name,
                 content=source.content,
-                source="user",  # Duplicates are always user-editable
+                source="user", # Duplicates are always user-editable
                 locked=False,
                 created_at=now,
                 updated_at=now,

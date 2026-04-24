@@ -68,7 +68,7 @@ defmodule CodePuppyControl.FileOps.PathClassifierTest do
     end
 
     test "ignores hidden files", %{classifier: c} do
-      # bd-28: "**/.*" pattern added for parity with Python
+      # "**/.*" pattern added for parity with Python
       # This catches generic dotfiles/dotdirs
       assert PathClassifier.should_ignore(c, ".hidden_file")
       assert PathClassifier.should_ignore(c, "./.hidden_file")
@@ -81,7 +81,7 @@ defmodule CodePuppyControl.FileOps.PathClassifierTest do
     end
 
     test "ignores hidden directories", %{classifier: c} do
-      # bd-28: Hidden directories should be ignored via "**/.*" pattern
+      # Hidden directories should be ignored via "**/.*" pattern
       assert PathClassifier.should_ignore(c, ".hidden_dir")
       assert PathClassifier.should_ignore(c, "./.hidden_dir")
       assert PathClassifier.should_ignore(c, "project/.hidden_dir")

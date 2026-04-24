@@ -3,7 +3,6 @@
 # Code Puppy Dev Launcher
 #
 # Starts the Code Puppy API server with graceful shutdown via trap cleanup.
-# Adopted under bd issue code_puppy-ac5.
 #
 # Usage:
 #   ./scripts/run_dev.sh

@@ -5,8 +5,8 @@ defmodule CodePuppyControl.Protocol do
   This module handles:
   - JSON-RPC 2.0 request/response/notification encoding
   - Content-Length HTTP-style framing for Port communication
-  - Batch message support (bd-103)
-  - Newline-delimited JSON framing for MCP stdio transport (bd-114)
+  - Batch message support
+  - Newline-delimited JSON framing for MCP stdio transport
 
   ## Framing Format (Content-Length)
 
@@ -24,7 +24,7 @@ defmodule CodePuppyControl.Protocol do
   MCP servers built with the Node.js SDK default to newline-delimited JSON
   rather than Content-Length framing.
 
-  ## Batch Format (bd-103)
+  ## Batch Format
 
   JSON-RPC 2.0 batch format sends an array of messages:
 
@@ -158,7 +158,7 @@ defmodule CodePuppyControl.Protocol do
         validate_jsonrpc(parsed)
 
       {:ok, parsed} when is_list(parsed) ->
-        # bd-103: Batch message support - validate all messages in array
+        # Batch message support - validate all messages in array
         validate_batch_jsonrpc(parsed)
 
       {:error, reason} ->
@@ -189,7 +189,7 @@ defmodule CodePuppyControl.Protocol do
   end
 
   @doc """
-  Frames a batch of JSON-RPC messages (bd-103).
+  Frames a batch of JSON-RPC messages.
 
   Batching reduces IPC overhead by combining N messages into one write.
   Uses JSON-RPC 2.0 batch format (array of messages).
@@ -210,7 +210,7 @@ defmodule CodePuppyControl.Protocol do
 
   Returns `{messages, rest_buffer}` where messages is a list of decoded JSON-RPC messages.
 
-  bd-103: Supports batch messages (JSON array format).
+  : Supports batch messages (JSON array format).
 
   ## Examples
 
@@ -296,7 +296,7 @@ defmodule CodePuppyControl.Protocol do
     {:error, {:invalid_jsonrpc, "missing or invalid jsonrpc version"}}
   end
 
-  # bd-103: Validate batch of JSON-RPC messages
+  # Validate batch of JSON-RPC messages
   defp validate_batch_jsonrpc(messages) when is_list(messages) do
     case Enum.all?(messages, &match?(%{"jsonrpc" => "2.0"}, &1)) do
       true -> {:ok, messages}

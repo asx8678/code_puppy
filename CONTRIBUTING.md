@@ -4,7 +4,7 @@
 
 ## 🧊 Python Freeze Policy (during Elixir migration)
 
-> **TL;DR**: The Python codebase is **FROZEN** during the Python→Elixir migration (bd-132 epic). 
+> **TL;DR**: The Python codebase is **FROZEN** during the Python→Elixir migration. 
 > Only critical bug fixes, deprecation warnings, and docs updates are allowed.
 
 ### Rationale
@@ -35,40 +35,39 @@ Code Puppy is actively migrating from Python to Elixir (the `pup-ex` rewrite). D
 ### What Reviewers Should Enforce
 
 1. **Check the file path** - If it touches `code_puppy/**/*.py`, scrutinize heavily
-2. **Require justification** - Every Python change needs a bd issue reference
+2. **Require justification** - Every Python change needs an issue reference
 3. **Label appropriately** - Use `bug-fix`, `docs`, or `deprecation` labels
 4. **Ask: "Could this go in Elixir?"** - If yes, redirect the contributor
 
 ### Emergency Override Process
 
 If a critical production fix is needed:
-1. File a bd issue with label `critical-freeze-override`
+1. File an issue with label `critical-freeze-override`
 2. Get approval from a maintainer
-3. Merge with the appropriate conventional commit type (`fix` for bug fixes, `docs` for documentation) with `bd-187` referenced in the body
+3. Merge with the appropriate conventional commit type (`fix` for bug fixes, `docs` for documentation)
 4. Create a follow-up issue to port the fix to Elixir
 
 ### Timeline
 
-This freeze remains in effect until the Elixir migration reaches parity (tracked in bd-132). The freeze will be lifted incrementally as components are fully migrated.
+This freeze remains in effect until the Elixir migration reaches parity. The freeze will be lifted incrementally as components are fully migrated.
 
 ---
 
 ## General Development Guidelines
 
 ### Branch Naming
-- `feature/bd-XXX-description` for new features
-- `fix/bd-XXX-description` for bug fixes
-- `docs/bd-XXX-description` for documentation
+- `feature/description` for new features
+- `fix/description` for bug fixes
+- `docs/description` for documentation
 
 ### Commit Format
 
-We use conventional commits with bd issue references:
+We use conventional commits:
 
 ```
-type(bd-XXX): Brief description
+type: Brief description
 
 Longer explanation if needed.
-
 ```
 
 Types: `feat`, `fix`, `docs`, `refactor`, `test`, `chore`
@@ -131,7 +130,7 @@ To make reviews blocking in CI, set `REVIEW_BLOCKING=1` in the environment or ad
 ### Questions?
 
 > Reach out via:
-> - bd issues for feature requests and bugs
+> - Issues for feature requests and bugs
 - Pack Leader agents for architectural questions
 
 ## Testing Tiers
@@ -144,7 +143,7 @@ During development, use tiered testing to minimize feedback time while maintaini
 |---------|---------|-------|
 | Active development | `mix test.changed` | Changed files + their tests |
 | Before commit | `mix test.changed --depth 2` | + dependent modules |
-| Closing a bd issue | `mix test` | Full unit suite |
+| Closing an issue | `mix test` | Full unit suite |
 | Closing an epic | `mix test && mix test --only integration` | Everything |
 | CI pipeline | Full suite | Always runs everything |
 

@@ -1,6 +1,6 @@
 defmodule CodePuppyControl.SessionStorageAsyncTest do
   @moduledoc """
-  Tests for async autosave and debounce/dedup logic (bd-165).
+  Tests for async autosave and debounce/dedup logic.
 
   Covers:
   - `save_session_async/3` — fire-and-forget background save

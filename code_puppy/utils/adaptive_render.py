@@ -15,7 +15,7 @@ unknown payload (LLM tool result, raw log line, etc.), they can:
 
 This module is PURE — it has NO dependency on Rich, Textual, or any renderer.
 The rich_renderer integration lives in a separate file and is tracked under
-bd issue code_puppy-6ig.
+See the adaptive rendering feature for context.
 """
 
 import enum

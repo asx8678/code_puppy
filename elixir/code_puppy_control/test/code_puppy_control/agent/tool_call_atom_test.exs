@@ -1,6 +1,6 @@
 defmodule CodePuppyControl.Agent.ToolCallAtomTest do
   @moduledoc """
-  Regression tests for bd-256: provider-emitted tool call names must be
+  Regression tests for : provider-emitted tool call names must be
   safely converted from strings to atoms without introducing atom-leak risk.
 
   The bug: providers return tool call names as strings (e.g. "command_runner"),
@@ -176,7 +176,7 @@ defmodule CodePuppyControl.Agent.ToolCallAtomTest do
   # 1. LLMAdapter: safe_atomize converts known string names to atoms
   # ===========================================================================
 
-  describe "LLMAdapter: string tool names → atoms (bd-256)" do
+  describe "LLMAdapter: string tool names → atoms" do
     setup do
       prev = Application.get_env(:code_puppy_control, :llm_adapter_provider)
       Application.put_env(:code_puppy_control, :llm_adapter_provider, ProviderMock)
@@ -330,7 +330,7 @@ defmodule CodePuppyControl.Agent.ToolCallAtomTest do
   # 2. Agent.Loop: resolve_tool_name matches strings against allowed atoms
   # ===========================================================================
 
-  describe "Agent.Loop: string tool names resolved against allowed (bd-256)" do
+  describe "Agent.Loop: string tool names resolved against allowed" do
     setup do
       {:ok, _pid} = LoopMockLLM.start_link()
       :ok = Registry.register(AtomFixTool)
@@ -422,7 +422,7 @@ defmodule CodePuppyControl.Agent.ToolCallAtomTest do
   # 3. Tool.Runner: string tool names resolved via String.to_existing_atom/1
   # ===========================================================================
 
-  describe "Tool.Runner: string tool names (bd-256)" do
+  describe "Tool.Runner: string tool names" do
     setup do
       Registry.clear()
       Registry.register(AtomFixTool)

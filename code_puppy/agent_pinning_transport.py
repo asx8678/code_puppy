@@ -1,5 +1,5 @@
 """
-Python wrappers for Elixir agent_pinning RPC methods (bd-120).
+Python wrappers for Elixir agent_pinning RPC methods.
 
 This module provides Python functions that call the Elixir agent_pinning.*
 RPC methods via the JSON-RPC transport. These methods manage server-side
@@ -40,7 +40,7 @@ configuration options.
 from typing import Any
 
 
-def _get_transport() -> "ElixirTransport":  # type: ignore # noqa: F821
+def _get_transport() -> "ElixirTransport": # type: ignore # noqa: F821
     """Get the shared transport singleton from elixir_transport_helpers."""
     from code_puppy.elixir_transport_helpers import get_transport
 
@@ -71,7 +71,7 @@ def get_pinned_model(agent_name: str) -> dict[str, Any]:
 
     Example:
         >>> result = get_pinned_model("turbo-executor")
-        >>> print(result["model"])  # "claude-sonnet-4" or None
+        >>> print(result["model"]) # "claude-sonnet-4" or None
     """
     transport = _get_transport()
     return transport._send_request(
@@ -161,7 +161,7 @@ def list_pinned_models() -> dict[str, Any]:
     Example:
         >>> result = list_pinned_models()
         >>> for pin in result["pins"]:
-        ...     print(f"{pin['agent_name']} -> {pin['model']}")
+        ... print(f"{pin['agent_name']} -> {pin['model']}")
     """
     transport = _get_transport()
     return transport._send_request("agent_pinning.list", {})

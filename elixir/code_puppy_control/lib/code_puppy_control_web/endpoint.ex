@@ -34,10 +34,10 @@ defmodule CodePuppyControlWeb.Endpoint do
   # You should set gzip to true if you are running phx.digest
   # when deploying your static files in production.
   # plug Plug.Static,
-  #   at: "/",
-  #   from: :code_puppy_control,
-  #   gzip: false,
-  #   only: ~w(assets fonts images favicon.ico robots.txt)
+  # at: "/",
+  # from: :code_puppy_control,
+  # gzip: false,
+  # only: ~w(assets fonts images favicon.ico robots.txt)
 
   # Code reloading can be explicitly enabled under the
   # :code_reloader configuration of your endpoint.
@@ -58,7 +58,7 @@ defmodule CodePuppyControlWeb.Endpoint do
   plug Plug.Head
   plug Plug.Session, @session_options
 
-  # Security middleware (bd-218)
+  # Security middleware
   # Order: CORS → RateLimiter → Router → Auth (per-pipeline in router)
   plug CodePuppyControlWeb.Plugs.CORS
   plug CodePuppyControlWeb.Plugs.RateLimiter

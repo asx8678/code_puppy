@@ -1,6 +1,6 @@
 defmodule CodePuppyControl.PtyManagerTest do
   @moduledoc """
-  Tests for PtyManager GenServer (bd-217).
+  Tests for PtyManager GenServer.
 
   PTY tests spawn real OS processes via erlexec, so they require:
   - A Unix OS (macOS or Linux)

@@ -4,7 +4,7 @@ defmodule CodePuppyControlWeb.CommandsController do
 
   Replaces `code_puppy/api/routers/commands.py` from the Python FastAPI server.
 
-  ## Current status (bd-214 Wave 2)
+  ## Current status (Wave 2)
 
   The `list` and `show` endpoints are functional stubs that return empty
   lists or 404s. The `execute` and `autocomplete` endpoints return 501
@@ -34,7 +34,7 @@ defmodule CodePuppyControlWeb.CommandsController do
   Returns a sorted list of command info objects including name,
   description, usage, aliases, category, and detailed help.
 
-  ## Stub note (bd-214)
+  ## Stub note
 
   The Python `command_registry` and plugin callback system
   (`on_custom_command_help`) have not yet been ported to Elixir.
@@ -44,7 +44,7 @@ defmodule CodePuppyControlWeb.CommandsController do
   be replaced with a proper command lookup.
   """
   def index(conn, _params) do
-    # TODO(bd-214): Replace with CodePuppyControl.CommandRegistry when available.
+    # TODO: Replace with CodePuppyControl.CommandRegistry when available.
     # The Python version reads from command_registry.get_unique_commands()
     # and plugin callbacks (on_custom_command_help).
     commands =
@@ -76,7 +76,7 @@ defmodule CodePuppyControlWeb.CommandsController do
   ported to Elixir yet.
   """
   def show(conn, %{"name" => name}) do
-    # TODO(bd-214): Integrate with CodePuppyControl.CommandRegistry when available.
+    # TODO: Integrate with CodePuppyControl.CommandRegistry when available.
     conn
     |> put_status(:not_found)
     |> json(%{error: "Command '/#{name}' not found"})
@@ -96,7 +96,7 @@ defmodule CodePuppyControlWeb.CommandsController do
   has not been ported to Elixir yet.
   """
   def execute(conn, _params) do
-    # TODO(bd-214): Implement command execution via Task.Supervisor + Port
+    # TODO: Implement command execution via Task.Supervisor + Port
     # The Python version runs commands in a subprocess with timeout.
     conn
     |> put_status(:not_implemented)
@@ -120,7 +120,7 @@ defmodule CodePuppyControlWeb.CommandsController do
   not been ported to Elixir yet.
   """
   def autocomplete(conn, _params) do
-    # TODO(bd-214): Integrate with CodePuppyControl.CommandRegistry when available.
+    # TODO: Integrate with CodePuppyControl.CommandRegistry when available.
     json(conn, %{suggestions: []})
   end
 

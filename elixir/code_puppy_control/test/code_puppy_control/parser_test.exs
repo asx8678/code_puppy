@@ -4,7 +4,7 @@ defmodule CodePuppyControl.ParserTest do
   alias CodePuppyControl.Parser
 
   setup do
-    # Ensure parsers are registered before each test (bd-114)
+    # Ensure parsers are registered before each test
     CodePuppyControl.Parsing.Parsers.register_all()
     :ok
   end
@@ -165,7 +165,7 @@ defmodule CodePuppyControl.ParserTest do
     end
 
     test "returns error details for invalid code" do
-      source = "def hello(  # incomplete"
+      source = "def hello( # incomplete"
 
       {:ok, result} = Parser.parse_source(source, "python")
       # Even "invalid" code parses (tree-sitter is error-resilient)
@@ -206,7 +206,7 @@ defmodule CodePuppyControl.ParserTest do
 
   describe "extract_syntax_diagnostics/2" do
     test "finds errors in invalid code" do
-      source = "def hello(  # missing closing paren and colon"
+      source = "def hello( # missing closing paren and colon"
 
       {:ok, result} = Parser.extract_syntax_diagnostics(source, "python")
       assert is_map(result)
@@ -247,7 +247,7 @@ defmodule CodePuppyControl.ParserTest do
   describe "parse_file/2" do
     test "parses a temporary Python file with auto-detected language" do
       path = Path.join(System.tmp_dir!(), "test_parse_#{:rand.uniform(10000)}.py")
-      File.write!(path, "def hello():\n    pass\n")
+      File.write!(path, "def hello():\n pass\n")
 
       try do
         {:ok, result} = Parser.parse_file(path)
@@ -261,7 +261,7 @@ defmodule CodePuppyControl.ParserTest do
 
     test "parses a temporary Elixir file with explicit language" do
       path = Path.join(System.tmp_dir!(), "test_parse_#{:rand.uniform(10000)}.ex")
-      File.write!(path, "defmodule Foo do\n  def bar, do: :ok\nend\n")
+      File.write!(path, "defmodule Foo do\n def bar, do: :ok\nend\n")
 
       try do
         {:ok, result} = Parser.parse_file(path, "elixir")
@@ -277,7 +277,7 @@ defmodule CodePuppyControl.ParserTest do
   describe "get_folds_from_file/2" do
     test "extracts fold ranges from a Python file with auto-detected language" do
       path = Path.join(System.tmp_dir!(), "test_folds_#{:rand.uniform(10000)}.py")
-      File.write!(path, "def outer():\n    def inner():\n        pass\n    return inner\n")
+      File.write!(path, "def outer():\n def inner():\n pass\n return inner\n")
 
       try do
         {:ok, result} = Parser.get_folds_from_file(path)
@@ -291,7 +291,7 @@ defmodule CodePuppyControl.ParserTest do
 
     test "extracts fold ranges from a Python file with explicit language" do
       path = Path.join(System.tmp_dir!(), "test_folds_#{:rand.uniform(10000)}.py")
-      File.write!(path, "def outer():\n    def inner():\n        pass\n    return inner\n")
+      File.write!(path, "def outer():\n def inner():\n pass\n return inner\n")
 
       try do
         {:ok, result} = Parser.get_folds_from_file(path, "python")
@@ -307,7 +307,7 @@ defmodule CodePuppyControl.ParserTest do
   describe "get_highlights_from_file/2" do
     test "extracts highlight captures from a Python file with auto-detected language" do
       path = Path.join(System.tmp_dir!(), "test_highlights_#{:rand.uniform(10000)}.py")
-      File.write!(path, "def hello():\n    return \"world\"\n")
+      File.write!(path, "def hello():\n return \"world\"\n")
 
       try do
         {:ok, result} = Parser.get_highlights_from_file(path)
@@ -321,7 +321,7 @@ defmodule CodePuppyControl.ParserTest do
 
     test "extracts highlight captures from a Python file with explicit language" do
       path = Path.join(System.tmp_dir!(), "test_highlights_#{:rand.uniform(10000)}.py")
-      File.write!(path, "def hello():\n    return \"world\"\n")
+      File.write!(path, "def hello():\n return \"world\"\n")
 
       try do
         {:ok, result} = Parser.get_highlights_from_file(path, "python")

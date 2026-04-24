@@ -36,7 +36,7 @@ def _global_hooks_file() -> str:
 
 
 def __getattr__(name: str):
-    """Lazy resolution of env-sensitive module-level names (bd-193)."""
+    """Lazy resolution of env-sensitive module-level names."""
     if name == "GLOBAL_HOOKS_FILE":
         return _global_hooks_file()
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")

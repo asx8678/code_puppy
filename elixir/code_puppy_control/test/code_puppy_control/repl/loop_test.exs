@@ -226,7 +226,7 @@ defmodule CodePuppyControl.REPL.LoopTest do
     end
 
     test "blank input continues without recording", %{state: state} do
-      assert {:continue, ^state} = Loop.handle_input("   ", state)
+      assert {:continue, ^state} = Loop.handle_input(" ", state)
     end
 
     test "non-blank input is recorded in history", %{state: state} do
@@ -365,7 +365,7 @@ defmodule CodePuppyControl.REPL.LoopTest do
   end
 
   # ===========================================================================
-  # Agent.LLMAdapter provider contract tests (bd-250 Phase 4)
+  # Agent.LLMAdapter provider contract tests (Phase 4)
   # ===========================================================================
 
   defmodule REPLTestProviderMock do

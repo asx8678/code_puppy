@@ -25,12 +25,12 @@ Elixir pup-ex gets its own isolated home directory at `~/.code_puppy_ex/`. It mu
 write to `~/.code_puppy/` under any circumstances. Isolation is enforced at the code level via
 guard wrappers — not just policy or convention.
 
-Key design choices (user-approved in bd-186):
+Key design choices (user-approved):
 
 - **Home path**: `~/.code_puppy_ex/` — separate directory tree, no overlap
 - **Env var**: `PUP_EX_HOME` — new variable, NOT reusing `PUP_HOME` (which controls Python)
 - **OAuth**: re-authenticate separately; no token sharing between runtimes
-- **Python is frozen** per bd-187 — no changes to Python's config resolution
+- **Python is frozen** — no changes to Python's config resolution
 
 ## Path Resolution Precedence
 
@@ -174,7 +174,7 @@ Mix tasks use underscores (hyphens are invalid in Elixir module names):
 | `pup-ex auth login` | `mix pup_ex.auth.login` | Separate OAuth flow for Elixir runtime |
 
 > **Note:** The binary wrapper (`pup-ex`) handles the UX translation from `pup-ex import`
-> to `mix pup_ex.import`. This is tracked in bd-171 (Phase 6 of the overall plan).
+> to `mix pup_ex.import`. This is tracked in Phase 6 of the overall plan.
 
 ## CI Gates
 
@@ -194,7 +194,7 @@ acceptance — no partial credit.
 ### Positive
 
 - **Cannot accidentally damage Python pup.** The guard is code-level, not policy-level.
-- **5 downstream issues unblocked:** bd-164, bd-165, bd-166, bd-167, bd-184 all depend on Elixir
+- **5 downstream issues unblocked:** all depend on Elixir
   having its own config home.
 - **Enforcement is structural.** New developers cannot accidentally bypass isolation — the
   safe wrappers are the only path to file mutation.
@@ -237,15 +237,9 @@ this ADR serves as the authoritative list.
 
 ## References
 
-| Reference | Description |
-|-----------|-------------|
-| [bd-186](.) | Dual-home config isolation (this issue) |
-| [bd-187](.) | Python policy freeze — Python config is frozen, no changes allowed |
-| [bd-164](.) | Downstream: unblocked by dual-home isolation |
-| [bd-165](.) | Downstream: unblocked by dual-home isolation |
-| [bd-166](.) | Downstream: unblocked by dual-home isolation |
-| [bd-167](.) | Downstream: unblocked by dual-home isolation |
-| [bd-184](.) | Downstream: unblocked by dual-home isolation |
-| [bd-171](.) | Binary wrapper UX (`pup-ex` CLI command) |
-| [ADR-001](ADR-001-elixir-python-worker-protocol.md) | Elixir ↔ Python worker protocol |
-| [ADR-002](ADR-002-python-elixir-event-protocol.md) | Python ↔ Elixir event protocol |
+- Dual-home config isolation (this issue)
+- Python policy freeze — Python config is frozen, no changes allowed
+- Downstream: unblocked by dual-home isolation
+- Binary wrapper UX (`pup-ex` CLI command)
+- [ADR-001](ADR-001-elixir-python-worker-protocol.md) — Elixir ↔ Python worker protocol
+- [ADR-002](ADR-002-python-elixir-event-protocol.md) — Python ↔ Elixir event protocol

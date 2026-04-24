@@ -1,13 +1,13 @@
 """Post-edit syntax validation helpers.
 
 This module previously routed to a native tree-sitter backend (turbo_parse).
-After bd-86 removed the native acceleration layer, validation is a no-op stub.
+After removing the native acceleration layer, validation is a no-op stub.
 The real syntax validation now lives on the Elixir side via
 CodePuppyControl.Parsing.Parser, but no Python bridge endpoint exists yet
 (filed as future work). Until that endpoint exists, validate_file_sync
 returns PARSER_UNAVAILABLE which is fail-open.
 
-bd-208: Cleaned up dead native-backend branches.
+Cleaned up dead native-backend branches.
 
 Usage:
 
@@ -23,7 +23,7 @@ from enum import Enum
 
 logger = logging.getLogger(__name__)
 
-PARSER_TIMEOUT_S = 0.5  # matches plandex's 500ms
+PARSER_TIMEOUT_S = 0.5 # matches plandex's 500ms
 
 
 class ValidationStatus(str, Enum):
@@ -57,10 +57,10 @@ def validate_file_sync(
 ) -> ValidationResult:
     """Synchronously validate file content, failing open on any error.
 
-    This is the main entrypoint. bd-86: Native acceleration removed,
+    This is the main entrypoint. Native acceleration removed,
     always returns PARSER_UNAVAILABLE (fail-open).
     """
-    # bd-208: No Python-side parser available; see module docstring.
+    # No Python-side parser available; see module docstring.
     return ValidationResult(status=ValidationStatus.PARSER_UNAVAILABLE)
 
 
@@ -90,9 +90,9 @@ def format_validation_errors_for_agent(result: ValidationResult) -> str | None:
     if not result.errors:
         return "⚠️ Syntax validation detected an issue but provided no details."
     lines = ["⚠️ Syntax validation found issues after your edit:"]
-    for err in result.errors[:5]:  # cap at 5
-        lines.append(f"  - {err}")
+    for err in result.errors[:5]: # cap at 5
+        lines.append(f" - {err}")
     if len(result.errors) > 5:
-        lines.append(f"  ... and {len(result.errors) - 5} more")
+        lines.append(f" ... and {len(result.errors) - 5} more")
     lines.append("Consider checking the file and fixing any syntax errors.")
     return "\n".join(lines)

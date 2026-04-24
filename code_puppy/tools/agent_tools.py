@@ -14,30 +14,30 @@ _SANITIZE_DASH_RUNS_RE = re.compile(r"-+")
 try:
     from pydantic_ai.messages import ModelMessagesTypeAdapter
 except ImportError:
-    ModelMessagesTypeAdapter = None  # type: ignore[misc,assignment]
+    ModelMessagesTypeAdapter = None # type: ignore[misc,assignment]
 
 # Imports for streaming retry logic (transient HTTP error handling)
-import httpcore  # noqa: E402
-import httpx  # noqa: E402
-from functools import partial  # noqa: E402
-from pathlib import Path  # noqa: E402
+import httpcore # noqa: E402
+import httpx # noqa: E402
+from functools import partial # noqa: E402
+from pathlib import Path # noqa: E402
 
 try:
-    from dbos import DBOS, SetWorkflowID  # noqa: E402
+    from dbos import DBOS, SetWorkflowID # noqa: E402
 except ImportError:
-    DBOS = None  # type: ignore[assignment,misc]
-    SetWorkflowID = None  # type: ignore[assignment,misc]
-from pydantic import BaseModel  # noqa: E402
+    DBOS = None # type: ignore[assignment,misc]
+    SetWorkflowID = None # type: ignore[assignment,misc]
+from pydantic import BaseModel # noqa: E402
 
 # Import Agent from pydantic_ai to create temporary agents for invocation
-from pydantic_ai import Agent, RunContext, UsageLimits  # noqa: E402
-from pydantic_ai.messages import ModelMessage  # noqa: E402
-from pydantic_ai.exceptions import ModelHTTPError  # noqa: E402
+from pydantic_ai import Agent, RunContext, UsageLimits # noqa: E402
+from pydantic_ai.messages import ModelMessage # noqa: E402
+from pydantic_ai.exceptions import ModelHTTPError # noqa: E402
 
-from code_puppy.config import DATA_DIR, get_use_dbos, get_value  # noqa: E402
-from code_puppy.config_package import get_puppy_config  # noqa: E402
-from code_puppy.dbos_utils import initialize_dbos_if_needed  # noqa: E402
-from code_puppy.messaging import (  # noqa: E402
+from code_puppy.config import DATA_DIR, get_use_dbos, get_value # noqa: E402
+from code_puppy.config_package import get_puppy_config # noqa: E402
+from code_puppy.dbos_utils import initialize_dbos_if_needed # noqa: E402
+from code_puppy.messaging import ( # noqa: E402
     SubAgentInvocationMessage,
     SubAgentResponseMessage,
     emit_error,
@@ -47,9 +47,9 @@ from code_puppy.messaging import (  # noqa: E402
     get_session_context,
     set_session_context,
 )
-from code_puppy.persistence import atomic_write_msgpack, read_msgpack  # noqa: E402
-from code_puppy.tools.common import generate_group_id  # noqa: E402
-from code_puppy.tools.subagent_context import subagent_context  # noqa: E402
+from code_puppy.persistence import atomic_write_msgpack, read_msgpack # noqa: E402
+from code_puppy.tools.common import generate_group_id # noqa: E402
+from code_puppy.tools.subagent_context import subagent_context # noqa: E402
 
 # RunLimiter import with graceful degradation
 try:
@@ -63,10 +63,10 @@ except ImportError:
     _RUN_LIMITER_AVAILABLE = False
     # Fallback stubs for graceful degradation
 
-    class RunConcurrencyLimitError(Exception):  # type: ignore[no-redef]
+    class RunConcurrencyLimitError(Exception): # type: ignore[no-redef]
         pass
 
-    def get_run_limiter() -> None:  # type: ignore[misc]
+    def get_run_limiter() -> None: # type: ignore[misc]
         return None
 
 
@@ -218,7 +218,7 @@ async def _run_with_streaming_retry(run_coro_factory, *, model_name: str | None 
         except _RETRYABLE_STREAMING_EXCEPTIONS as e:
             last_error = e
             if attempt < MAX_STREAMING_RETRIES - 1:
-                # Check circuit breaker before retrying (issue bd-3)
+                # Check circuit breaker before retrying
                 if model_name and is_circuit_open(model_name):
                     logger.warning(
                         f"Circuit open for {model_name}, aborting retry after "
@@ -231,7 +231,7 @@ async def _run_with_streaming_retry(run_coro_factory, *, model_name: str | None 
             if _is_transient_model_error(e):
                 last_error = e
                 if attempt < MAX_STREAMING_RETRIES - 1:
-                    # Check circuit breaker before retrying (issue bd-3)
+                    # Check circuit breaker before retrying
                     if model_name and is_circuit_open(model_name):
                         logger.warning(
                             f"Circuit open for {model_name}, aborting retry after "
@@ -395,13 +395,13 @@ def _save_session_history_sync(
                 existing_meta = existing_data.get("metadata", {})
                 saved_initial_prompt = existing_meta.get("initial_prompt")
         except Exception:
-            pass  # If read fails, proceed without preserving
+            pass # If read fails, proceed without preserving
 
     payload = {
         "format": "pydantic-ai-json-v2",
         "payload": ModelMessagesTypeAdapter.dump_python(message_history, mode="json")
         if ModelMessagesTypeAdapter
-        else [],  # type: ignore[attr]
+        else [], # type: ignore[attr]
         "metadata": {
             "session_id": session_id,
             "agent_name": agent_name,
@@ -463,7 +463,7 @@ def _load_session_history_sync(session_id: str) -> list[ModelMessage]:
                 else []
             )
         except Exception:
-            pass  # Fall through to other formats or return empty
+            pass # Fall through to other formats or return empty
 
     # SECURITY FIX j0ha/l1en: Pickle completely removed - RCE vulnerability
     if pkl_path.exists():
@@ -473,7 +473,7 @@ def _load_session_history_sync(session_id: str) -> list[ModelMessage]:
 
     # Legacy .txt files are ignored (metadata now folded into msgpack)
     # We keep the txt_path reference for cleanup purposes if needed
-    _ = txt_path  # Avoid unused variable warning; file may be cleaned up later
+    _ = txt_path # Avoid unused variable warning; file may be cleaned up later
 
     return []
 
@@ -731,7 +731,7 @@ def register_invoke_agent(agent):
                 model_name,
                 instructions,
                 prompt,
-                prepend_system_to_user=is_new_session,  # Only prepend on first message
+                prepend_system_to_user=is_new_session, # Only prepend on first message
             )
             instructions = prepared.instructions
             prompt = prepared.user_prompt
@@ -770,7 +770,7 @@ def register_invoke_agent(agent):
                     instructions=instructions,
                     output_type=str,
                     retries=3,
-                    toolsets=[],  # MCP servers added separately for DBOS
+                    toolsets=[], # MCP servers added separately for DBOS
                     history_processors=[agent_config.message_history_accumulator],
                     model_settings=model_settings,
                 )
@@ -809,7 +809,7 @@ def register_invoke_agent(agent):
 
             # Run the temporary agent with the provided prompt as an asyncio task
             # Pass the message_history from the session to continue the conversation
-            workflow_id = None  # Track for potential cancellation
+            workflow_id = None # Track for potential cancellation
 
             # Always use subagent_stream_handler to silence output and update console manager
             # This ensures all sub-agent output goes through the aggregated dashboard
@@ -936,7 +936,7 @@ def register_invoke_agent(agent):
             else:
                 return (
                     await _run_with_limiter()
-                )  # Limiter is None inside, works as no-op
+                ) # Limiter is None inside, works as no-op
 
         except Exception as e:
             # Emit clean failure summary

@@ -45,19 +45,19 @@ defmodule CodePuppyControl.Transport.StdioService do
   - `file_read_batch` - Read multiple files
   - `grep_search` - Search for patterns in files
 
-  ### Agent Model Pinning (bd-72)
+  ### Agent Model Pinning
   - `agent_pinning.get` - Get pinned model for an agent
   - `agent_pinning.set` - Set pinned model for an agent
   - `agent_pinning.clear` - Clear pin for an agent
   - `agent_pinning.list` - List all agent-to-model pins
 
-  ### Agent Session Operations (bd-65)
+  ### Agent Session Operations
   - `agent.session.save` - Save session history with metadata (filesystem)
   - `agent.session.load` - Load session history from storage (filesystem)
   - `agent.session.validate_id` - Validate session ID format (kebab-case)
   - `agent.session.sanitize_id` - Sanitize arbitrary string to valid session ID
 
-  ### Session Storage (bd-137) - SQLite/Ecto Backend
+  ### Session Storage - SQLite/Ecto Backend
   - `session_save` - Save session to SQLite database
   - `session_load` - Load session from database (history + hashes)
   - `session_load_full` - Load session with full metadata
@@ -88,7 +88,7 @@ defmodule CodePuppyControl.Transport.StdioService do
   - `round_robin.configure` - Configure models and rotation settings
   - `round_robin.list_models` - List configured models
 
-  ### Scheduler Tools (bd-67)
+  ### Scheduler Tools
   - `scheduler.list_tasks` - List all scheduled tasks with status
   - `scheduler.create_task` - Create a new scheduled task
   - `scheduler.delete_task` - Delete a task by ID or name
@@ -98,7 +98,7 @@ defmodule CodePuppyControl.Transport.StdioService do
   - `scheduler.view_log` - View task execution history
   - `scheduler.force_check` - Force immediate schedule evaluation
 
-  ### Models Dev Parser (bd-74)
+  ### Models Dev Parser
   - `models_dev.get_providers` - Get all model providers
   - `models_dev.get_provider` - Get specific provider by ID
   - `models_dev.get_models` - Get models (optionally filtered by provider)
@@ -109,7 +109,7 @@ defmodule CodePuppyControl.Transport.StdioService do
   - `models_dev.to_config` - Convert model to Code Puppy config format
   - `models_dev.data_source` - Get data source info
 
-  ### Model Services (bd-96)
+  ### Model Services
   - `model_registry.get_config` - Get model configuration by name
   - `model_registry.list_models` - List all available models with configs
   - `model_registry.get_all_configs` - Get all model configs as map
@@ -121,7 +121,7 @@ defmodule CodePuppyControl.Transport.StdioService do
   - `model_packs.get_model_for_role` - Get primary model for role
   - `model_utils.resolve_model` - Resolve model name to config
 
-  ### Universal Constructor (bd-68)
+  ### Universal Constructor
   - `uc.list` - List all UC tools with metadata
   - `uc.call` - Execute a UC tool with arguments
   - `uc.create` - Create a new UC tool from Elixir code
@@ -133,13 +133,13 @@ defmodule CodePuppyControl.Transport.StdioService do
   - `http.get` - Simple GET request
   - `http.post` - POST request with body
 
-  ### Shell Command Runner (bd-64)
+  ### Shell Command Runner
   - `shell.run` - Execute a shell command with streaming output
   - `shell.run_batch` - Execute multiple shell commands
   - `shell.kill_all` - Kill all running shell processes
   - `shell.running_count` - Get count of running processes
 
-  ### Message Processing (bd-182)
+  ### Message Processing
   - `message.prune_and_filter` - Prune orphaned tool calls and oversized messages
   - `message.truncation_indices` - Calculate which messages to keep within token budget
   - `message.split_for_summarization` - Split messages into summarize vs protected groups
@@ -487,7 +487,7 @@ defmodule CodePuppyControl.Transport.StdioService do
     end
   end
 
-  # text_replace - Apply replacements with exact/fuzzy matching (bd-39)
+  # text_replace - Apply replacements with exact/fuzzy matching
   defp handle_request("text_replace", params, id) do
     content = params["content"]
     replacements_raw = params["replacements"]
@@ -535,7 +535,7 @@ defmodule CodePuppyControl.Transport.StdioService do
     end
   end
 
-  # text_fuzzy_match - Find best matching window using fuzzy matching (bd-41)
+  # text_fuzzy_match - Find best matching window using fuzzy matching
   defp handle_request("text_fuzzy_match", params, id) do
     haystack_lines = params["haystack_lines"]
     needle = params["needle"]
@@ -577,7 +577,7 @@ defmodule CodePuppyControl.Transport.StdioService do
     end
   end
 
-  # text_unified_diff - Generate unified diff between two strings (bd-41)
+  # text_unified_diff - Generate unified diff between two strings
   defp handle_request("text_unified_diff", params, id) do
     old = params["old"]
     new = params["new"]
@@ -607,7 +607,7 @@ defmodule CodePuppyControl.Transport.StdioService do
     end
   end
 
-  # hashline_compute - Compute 2-char hash anchor for a line (bd-88)
+  # hashline_compute - Compute 2-char hash anchor for a line
   defp handle_request("hashline_compute", params, id) do
     idx = params["idx"]
     line = params["line"]
@@ -625,7 +625,7 @@ defmodule CodePuppyControl.Transport.StdioService do
     end
   end
 
-  # hashline_format - Format text with hashline prefixes (bd-88)
+  # hashline_format - Format text with hashline prefixes
   defp handle_request("hashline_format", params, id) do
     text = params["text"]
     start_line = params["start_line"] || 1
@@ -640,7 +640,7 @@ defmodule CodePuppyControl.Transport.StdioService do
     end
   end
 
-  # hashline_strip - Strip hashline prefixes from text (bd-88)
+  # hashline_strip - Strip hashline prefixes from text
   defp handle_request("hashline_strip", params, id) do
     text = params["text"]
 
@@ -654,7 +654,7 @@ defmodule CodePuppyControl.Transport.StdioService do
     end
   end
 
-  # hashline_validate - Validate hashline anchor (bd-88)
+  # hashline_validate - Validate hashline anchor
   defp handle_request("hashline_validate", params, id) do
     idx = params["idx"]
     line = params["line"]
@@ -677,7 +677,7 @@ defmodule CodePuppyControl.Transport.StdioService do
   end
 
   # ============================================================================
-  # Runtime State Operations (bd-75)
+  # Runtime State Operations
   # ============================================================================
 
   # runtime_get_autosave_id - Get current autosave session ID
@@ -754,10 +754,10 @@ defmodule CodePuppyControl.Transport.StdioService do
   end
 
   # ============================================================================
-  # Agent Model Pinning Operations (bd-72)
+  # Agent Model Pinning Operations
   # ============================================================================
 
-  # agent_pinning.get - Get pinned model for an agent (bd-72)
+  # agent_pinning.get - Get pinned model for an agent
   defp handle_request("agent_pinning.get", params, id) do
     agent_name = params["agent_name"]
 
@@ -769,7 +769,7 @@ defmodule CodePuppyControl.Transport.StdioService do
     end
   end
 
-  # agent_pinning.set - Set pinned model for an agent (bd-72)
+  # agent_pinning.set - Set pinned model for an agent
   defp handle_request("agent_pinning.set", params, id) do
     agent_name = params["agent_name"]
     model = params["model"]
@@ -787,7 +787,7 @@ defmodule CodePuppyControl.Transport.StdioService do
     end
   end
 
-  # agent_pinning.clear - Clear pin for an agent (bd-72)
+  # agent_pinning.clear - Clear pin for an agent
   defp handle_request("agent_pinning.clear", params, id) do
     agent_name = params["agent_name"]
 
@@ -799,7 +799,7 @@ defmodule CodePuppyControl.Transport.StdioService do
     end
   end
 
-  # agent_pinning.list - List all agent-to-model pins (bd-72)
+  # agent_pinning.list - List all agent-to-model pins
   defp handle_request("agent_pinning.list", _params, id) do
     pins = AgentModelPinning.list_pins()
     pin_list = Enum.map(pins, fn {agent, model} -> %{"agent_name" => agent, "model" => model} end)
@@ -807,7 +807,7 @@ defmodule CodePuppyControl.Transport.StdioService do
   end
 
   # ============================================================================
-  # Agent Session Operations (bd-65)
+  # Agent Session Operations
   # ============================================================================
 
   alias CodePuppyControl.Tools.AgentSession
@@ -940,7 +940,7 @@ defmodule CodePuppyControl.Transport.StdioService do
   end
 
   # ============================================================================
-  # Scheduler Tools (bd-67)
+  # Scheduler Tools
   # ============================================================================
 
   # scheduler.list_tasks - List all scheduled tasks with status
@@ -950,7 +950,7 @@ defmodule CodePuppyControl.Transport.StdioService do
   end
 
   # ============================================================================
-  # HTTP Client Operations (bd-69)
+  # HTTP Client Operations
   # ============================================================================
 
   # http.get - Simple GET request
@@ -1112,7 +1112,7 @@ defmodule CodePuppyControl.Transport.StdioService do
   end
 
   # ============================================================================
-  # Universal Constructor Operations (bd-68)
+  # Universal Constructor Operations
   # ============================================================================
 
   alias CodePuppyControl.Tools.UniversalConstructor
@@ -1299,28 +1299,28 @@ defmodule CodePuppyControl.Transport.StdioService do
   end
 
   # ============================================================================
-  # Round-Robin Model Operations (bd-71)
+  # Round-Robin Model Operations
   # ============================================================================
 
-  # round_robin.get_next - Get next model, advancing rotation (bd-71)
+  # round_robin.get_next - Get next model, advancing rotation
   defp handle_request("round_robin.get_next", _params, id) do
     model = RoundRobinModel.advance_and_get()
     Protocol.encode_response(%{"model" => model}, id)
   end
 
-  # round_robin.get_current - Get current model without advancing (bd-71)
+  # round_robin.get_current - Get current model without advancing
   defp handle_request("round_robin.get_current", _params, id) do
     model = RoundRobinModel.get_current_model()
     Protocol.encode_response(%{"model" => model}, id)
   end
 
-  # round_robin.reset - Reset rotation to initial position (bd-71)
+  # round_robin.reset - Reset rotation to initial position
   defp handle_request("round_robin.reset", _params, id) do
     :ok = RoundRobinModel.reset()
     Protocol.encode_response(%{"reset" => true}, id)
   end
 
-  # round_robin.get_state - Get full rotation state (bd-71)
+  # round_robin.get_state - Get full rotation state
   defp handle_request("round_robin.get_state", _params, id) do
     state = RoundRobinModel.get_state()
 
@@ -1346,7 +1346,7 @@ defmodule CodePuppyControl.Transport.StdioService do
     Protocol.encode_response(result, id)
   end
 
-  # round_robin.configure - Configure models and rotation settings (bd-71)
+  # round_robin.configure - Configure models and rotation settings
   defp handle_request("round_robin.configure", params, id) do
     models = params["models"]
     rotate_every = params["rotate_every"] || 1
@@ -1387,7 +1387,7 @@ defmodule CodePuppyControl.Transport.StdioService do
   end
 
   # ============================================================================
-  # Code Context Operations (bd-87)
+  # Code Context Operations
   # ============================================================================
 
   # code_context.explore_file - Explore a single file with symbols
@@ -1506,10 +1506,10 @@ defmodule CodePuppyControl.Transport.StdioService do
   end
 
   # ============================================================================
-  # Models Dev Parser Operations (bd-74)
+  # Models Dev Parser Operations
   # ============================================================================
 
-  # models_dev.get_providers - Get all providers (bd-74)
+  # models_dev.get_providers - Get all providers
   defp handle_request("models_dev.get_providers", _params, id) do
     providers =
       CodePuppyControl.ModelsDevParser.Registry.get_providers()
@@ -1528,7 +1528,7 @@ defmodule CodePuppyControl.Transport.StdioService do
     Protocol.encode_response(%{"providers" => providers, "count" => length(providers)}, id)
   end
 
-  # models_dev.get_provider - Get a specific provider (bd-74)
+  # models_dev.get_provider - Get a specific provider
   defp handle_request("models_dev.get_provider", params, id) do
     provider_id = params["provider_id"]
 
@@ -1555,7 +1555,7 @@ defmodule CodePuppyControl.Transport.StdioService do
     end
   end
 
-  # models_dev.get_models - Get models, optionally filtered by provider (bd-74)
+  # models_dev.get_models - Get models, optionally filtered by provider
   defp handle_request("models_dev.get_models", params, id) do
     provider_id = params["provider_id"]
 
@@ -1566,7 +1566,7 @@ defmodule CodePuppyControl.Transport.StdioService do
     Protocol.encode_response(%{"models" => models, "count" => length(models)}, id)
   end
 
-  # models_dev.get_model - Get a specific model (bd-74)
+  # models_dev.get_model - Get a specific model
   defp handle_request("models_dev.get_model", params, id) do
     provider_id = params["provider_id"]
     model_id = params["model_id"]
@@ -1589,7 +1589,7 @@ defmodule CodePuppyControl.Transport.StdioService do
     end
   end
 
-  # models_dev.search - Search models by query and capabilities (bd-74)
+  # models_dev.search - Search models by query and capabilities
   defp handle_request("models_dev.search", params, id) do
     query = params["query"]
     capability_filters = params["capability_filters"] || %{}
@@ -1605,7 +1605,7 @@ defmodule CodePuppyControl.Transport.StdioService do
     Protocol.encode_response(%{"models" => models, "count" => length(models)}, id)
   end
 
-  # models_dev.filter_by_cost - Filter models by cost (bd-74)
+  # models_dev.filter_by_cost - Filter models by cost
   defp handle_request("models_dev.filter_by_cost", params, id) do
     # Get all models first, then filter
     models = CodePuppyControl.ModelsDevParser.Registry.get_models()
@@ -1623,7 +1623,7 @@ defmodule CodePuppyControl.Transport.StdioService do
     Protocol.encode_response(%{"models" => filtered, "count" => length(filtered)}, id)
   end
 
-  # models_dev.filter_by_context - Filter by minimum context (bd-74)
+  # models_dev.filter_by_context - Filter by minimum context
   defp handle_request("models_dev.filter_by_context", params, id) do
     models = CodePuppyControl.ModelsDevParser.Registry.get_models()
     min_context = params["min_context_length"] || 0
@@ -1635,7 +1635,7 @@ defmodule CodePuppyControl.Transport.StdioService do
     Protocol.encode_response(%{"models" => filtered, "count" => length(filtered)}, id)
   end
 
-  # models_dev.to_config - Convert model to config format (bd-74)
+  # models_dev.to_config - Convert model to config format
   defp handle_request("models_dev.to_config", params, id) do
     provider_id = params["provider_id"]
     model_id = params["model_id"]
@@ -1659,14 +1659,14 @@ defmodule CodePuppyControl.Transport.StdioService do
     end
   end
 
-  # models_dev.data_source - Get data source info (bd-74)
+  # models_dev.data_source - Get data source info
   defp handle_request("models_dev.data_source", _params, id) do
     source = CodePuppyControl.ModelsDevParser.Registry.data_source()
     Protocol.encode_response(%{"data_source" => source}, id)
   end
 
   # ============================================================================
-  # Model Services (bd-96)
+  # Model Services
   # ============================================================================
 
   # model_registry.get_config - Get model configuration by name
@@ -1915,7 +1915,7 @@ defmodule CodePuppyControl.Transport.StdioService do
   end
 
   # ============================================================================
-  # Shell Command Runner (bd-64)
+  # Shell Command Runner
   # ============================================================================
 
   # shell.run - Execute a shell command with streaming output
@@ -1989,10 +1989,10 @@ defmodule CodePuppyControl.Transport.StdioService do
   end
 
   # ============================================================================
-  # Message Processing (bd-182, bd-183, bd-184, bd-190)
+  # Message Processing
   # ============================================================================
 
-  # message.prune_and_filter - Prune orphaned tool calls and oversized messages (bd-183)
+  # message.prune_and_filter - Prune orphaned tool calls and oversized messages
   defp handle_request("message.prune_and_filter", params, id) do
     messages = params["messages"]
 
@@ -2005,7 +2005,7 @@ defmodule CodePuppyControl.Transport.StdioService do
     end
   end
 
-  # message.truncation_indices - Calculate which messages to keep within token budget (bd-183)
+  # message.truncation_indices - Calculate which messages to keep within token budget
   defp handle_request("message.truncation_indices", params, id) do
     per_message_tokens = params["per_message_tokens"]
     protected_tokens = params["protected_tokens"]
@@ -2031,7 +2031,7 @@ defmodule CodePuppyControl.Transport.StdioService do
     end
   end
 
-  # message.split_for_summarization - Split messages into summarize vs protected groups (bd-183)
+  # message.split_for_summarization - Split messages into summarize vs protected groups
   defp handle_request("message.split_for_summarization", params, id) do
     per_message_tokens = params["per_message_tokens"]
     messages = params["messages"]
@@ -2059,7 +2059,7 @@ defmodule CodePuppyControl.Transport.StdioService do
     end
   end
 
-  # message.serialize_session - Serialize messages to MessagePack (bd-184)
+  # message.serialize_session - Serialize messages to MessagePack
   defp handle_request("message.serialize_session", params, id) do
     messages = params["messages"]
 
@@ -2077,7 +2077,7 @@ defmodule CodePuppyControl.Transport.StdioService do
     end
   end
 
-  # message.deserialize_session - Deserialize MessagePack to messages (bd-184)
+  # message.deserialize_session - Deserialize MessagePack to messages
   defp handle_request("message.deserialize_session", params, id) do
     data = params["data"]
 
@@ -2100,7 +2100,7 @@ defmodule CodePuppyControl.Transport.StdioService do
     end
   end
 
-  # message.serialize_incremental - Append messages to existing serialized data (bd-184)
+  # message.serialize_incremental - Append messages to existing serialized data
   defp handle_request("message.serialize_incremental", params, id) do
     new_messages = params["new_messages"]
     existing_data = params["existing_data"]
@@ -2148,7 +2148,7 @@ defmodule CodePuppyControl.Transport.StdioService do
     end
   end
 
-  # message.hash - Compute content hash for a message (bd-190)
+  # message.hash - Compute content hash for a message
   defp handle_request("message.hash", params, id) do
     message = params["message"]
 
@@ -2160,7 +2160,7 @@ defmodule CodePuppyControl.Transport.StdioService do
     end
   end
 
-  # message.hash_batch - Compute hashes for multiple messages (bd-190)
+  # message.hash_batch - Compute hashes for multiple messages
   defp handle_request("message.hash_batch", params, id) do
     messages = params["messages"]
 
@@ -2180,7 +2180,7 @@ defmodule CodePuppyControl.Transport.StdioService do
     end
   end
 
-  # message.stringify_part - Get canonical string for a message part (bd-190)
+  # message.stringify_part - Get canonical string for a message part
   defp handle_request("message.stringify_part", params, id) do
     part = params["part"]
 
@@ -2192,7 +2192,7 @@ defmodule CodePuppyControl.Transport.StdioService do
     end
   end
 
-  # bd-137: Session Storage API (SQLite/Ecto backed)
+  # Session Storage API (SQLite/Ecto backed)
 
   defp handle_request("session_save", params, id) do
     name = params["name"]
@@ -2315,7 +2315,7 @@ defmodule CodePuppyControl.Transport.StdioService do
     Protocol.encode_response(%{"count" => count}, id)
   end
 
-  # --- Workflow methods (bd-170: DBOS replacement) ---
+  # --- Workflow methods (: DBOS replacement) ---
 
   defp handle_request("workflow.invoke_agent", params, id) do
     # params is string-keyed (JSON-RPC); Workflow.invoke_agent normalizes
@@ -2425,7 +2425,7 @@ defmodule CodePuppyControl.Transport.StdioService do
   # HTTP Helpers
   # ============================================================================
 
-  # Map of known HTTP methods - prevents atom exhaustion from user input (bd-69)
+  # Map of known HTTP methods - prevents atom exhaustion from user input
   @http_methods %{
     "get" => :get,
     "post" => :post,
@@ -2479,7 +2479,7 @@ defmodule CodePuppyControl.Transport.StdioService do
   end
 
   # ============================================================================
-  # Shell Helpers (bd-64)
+  # Shell Helpers
   # ============================================================================
 
   defp params_to_shell_opts(params) do
@@ -2564,7 +2564,7 @@ defmodule CodePuppyControl.Transport.StdioService do
     end)
   end
 
-  # Models Dev Parser serialization (bd-74)
+  # Models Dev Parser serialization
   defp serialize_model(%CodePuppyControl.ModelsDevParser.ModelInfo{} = m) do
     %{
       "provider_id" => m.provider_id,
@@ -2621,7 +2621,7 @@ defmodule CodePuppyControl.Transport.StdioService do
     ]
   end
 
-  # Code Context parameter conversion (bd-87)
+  # Code Context parameter conversion
   defp params_to_code_context_opts(params) do
     opts = []
 

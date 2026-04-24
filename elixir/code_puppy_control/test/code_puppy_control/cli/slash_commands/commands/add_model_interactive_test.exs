@@ -233,7 +233,7 @@ defmodule CodePuppyControl.CLI.SlashCommands.Commands.AddModelInteractiveTest do
 
     test "add_model_to_config/2 does NOT call ModelRegistry.reload (that's Interactive's job)" do
       # add_model_to_config/2 is the pure persistence function — it should
-      # NOT call ModelRegistry.reload.  We verify by calling it without
+      # NOT call ModelRegistry.reload. We verify by calling it without
       # ModelRegistry started (would crash if it tried).
       provider = %ProviderInfo{id: "openai", name: "OpenAI", env: ["OPENAI_API_KEY"]}
 
@@ -456,7 +456,7 @@ defmodule CodePuppyControl.CLI.SlashCommands.Commands.AddModelInteractiveTest do
     end
   end
 
-  # ── GenServer safety (bd-268 Blocker 2) ─────────────────────────────────
+  # ── GenServer safety (Blocker 2) ─────────────────────────────────
 
   describe "GenServer safety — do_add_model/2 when services are down" do
     test "safe_persist pattern catches :noproc exit" do
@@ -591,7 +591,7 @@ defmodule CodePuppyControl.CLI.SlashCommands.Commands.AddModelInteractiveTest do
     end
   end
 
-  # ── Unsupported provider in interactive flow (bd-268 Blocker 5) ────────────
+  # ── Unsupported provider in interactive flow (Blocker 5) ────────────
 
   describe "unsupported provider rejection in Interactive" do
     test "select_model_interactive prints error for unsupported provider" do

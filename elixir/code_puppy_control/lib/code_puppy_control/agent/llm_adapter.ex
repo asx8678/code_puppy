@@ -130,9 +130,9 @@ defmodule CodePuppyControl.Agent.LLMAdapter do
 
   # Prompt Toolkit "parts" format (string-keyed) — flatten to text.
   # Supports part schemas:
-  #   Legacy:           %{"type" => "text", "text" => "..."}
-  #   Canonical text:   %{"part_kind" => "text", "content" => "..."}
-  #   Canonical tool-return (bd-258): %{"part_kind" => "tool-return", "tool_call_id" => "...", "content" => "..."}
+  # Legacy: %{"type" => "text", "text" => "..."}
+  # Canonical text: %{"part_kind" => "text", "content" => "..."}
+  # Canonical tool-return: %{"part_kind" => "tool-return", "tool_call_id" => "...", "content" => "..."}
   # Both string-keyed and atom-keyed variants are handled.
   #
   # Returns a list of provider messages. Text parts are joined into a single

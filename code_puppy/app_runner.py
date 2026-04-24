@@ -58,9 +58,9 @@ def _log_gil_status() -> None:
     from code_puppy.messaging import emit_info
 
     try:
-        gil_enabled = sys._is_gil_enabled()  # Python 3.13+
+        gil_enabled = sys._is_gil_enabled() # Python 3.13+
     except AttributeError:
-        return  # Python < 3.13, GIL is always enabled
+        return # Python < 3.13, GIL is always enabled
 
     if not gil_enabled:
         emit_info("🧵 Free-threaded Python active (GIL disabled)")
@@ -165,7 +165,7 @@ class AppRunner:
     def show_logo(self, args: argparse.Namespace, display_console: Console) -> None:
         """Display the Code Puppy ASCII logo when entering interactive mode."""
         if args.prompt:
-            return  # Skip logo in prompt-only mode
+            return # Skip logo in prompt-only mode
 
         try:
             import pyfiglet
@@ -223,7 +223,7 @@ class AppRunner:
 
                 signal.signal(signal.SIGINT, _uvx_protective_sigint_handler)
         except ImportError:
-            pass  # uvx_detection module not available, ignore
+            pass # uvx_detection module not available, ignore
 
     # ------------------------------------------------------------------
     # Plugin loading (config / environment)
@@ -388,7 +388,7 @@ class AppRunner:
 
                 asyncio.create_task(check_version_background(current_version))
 
-        # bd-192: eagerly probe Elixir transport so failures surface with a clear
+        # eagerly probe Elixir transport so failures surface with a clear
         # banner instead of a cryptic traceback deep inside prompt rendering.
         try:
             from code_puppy.elixir_transport_helpers import get_transport
@@ -399,11 +399,11 @@ class AppRunner:
 
             emit_error(
                 "Elixir control-plane failed to start:\n"
-                f"  {type(_transport_err).__name__}: {_transport_err}\n"
+                f" {type(_transport_err).__name__}: {_transport_err}\n"
                 "Remediation:\n"
-                "  * Run manually: cd elixir/code_puppy_control && mix code_puppy.stdio_service\n"
-                "  * Check elixir is installed: which elixir\n"
-                "  * To boot anyway in degraded mode: export PUP_ALLOW_ELIXIR_DEGRADED=1"
+                " * Run manually: cd elixir/code_puppy_control && mix code_puppy.stdio_service\n"
+                " * Check elixir is installed: which elixir\n"
+                " * To boot anyway in degraded mode: export PUP_ALLOW_ELIXIR_DEGRADED=1"
             )
             if os.environ.get("PUP_ALLOW_ELIXIR_DEGRADED") != "1":
                 raise
@@ -427,7 +427,7 @@ class AppRunner:
 
             dbos_config = self._get_dbos_config(current_version)
             try:
-                DBOS(config=dbos_config)  # type: ignore[arg-type]
+                DBOS(config=dbos_config) # type: ignore[arg-type]
                 DBOS.launch()
             except Exception as e:
                 emit_error(f"Error initializing DBOS: {e}")

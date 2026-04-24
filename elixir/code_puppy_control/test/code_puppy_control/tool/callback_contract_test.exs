@@ -9,7 +9,7 @@ defmodule CodePuppyControl.Tool.CallbackContractTest do
   - permission_check/2 default returns :ok; custom override works
   - to_llm_format/1 produces correct structure for LLM consumption
 
-  These are Wave 2 tests for bd-210.
+  These are Wave 2 tests for .
   """
 
   use ExUnit.Case, async: true

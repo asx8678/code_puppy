@@ -634,7 +634,7 @@ defmodule CodePuppyControl.ModelsDevParserTest do
   end
 
   # ============================================================================
-  # Async API Regression Tests (bd-74)
+  # Async API Regression Tests
   # ============================================================================
 
   describe "ApiClient async API path" do

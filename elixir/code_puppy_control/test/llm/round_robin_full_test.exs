@@ -1,6 +1,6 @@
 defmodule CodePuppyControl.LLM.RoundRobinFullTest do
   @moduledoc """
-  Full-coverage round-robin tests ported from Python (bd-212).
+  Full-coverage round-robin tests ported from Python.
 
   Covers gap analysis items G21–G29:
   - G21: Initialization + field assertions
@@ -14,7 +14,7 @@ defmodule CodePuppyControl.LLM.RoundRobinFullTest do
   - G29: Strategy.select with context (equivalent of request_stream + run_context)
 
   Deferred (G30–G35): OpenTelemetry span attribute tests.
-  Now ported to test/llm/otel_span_test.exs (bd-227).
+  Now ported to test/llm/otel_span_test.exs.
   Tests are tagged @moduletag :otel and @moduletag skip: until OTel
   is integrated into the Elixir stack.
   """
@@ -358,7 +358,7 @@ defmodule CodePuppyControl.LLM.RoundRobinFullTest do
 
   # ── G30–G35: OpenTelemetry Span Attributes ─────────────────────────────────
   #
-  # Ported to test/llm/otel_span_test.exs (bd-227).
+  # Ported to test/llm/otel_span_test.exs.
   # Tests are tagged :otel and :skip until OTel is integrated.
 
   describe "validation edge cases" do
