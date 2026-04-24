@@ -48,7 +48,7 @@ def _log_bridge(message: str, level: str = "info") -> None:
             with open(BRIDGE_LOG_FILE, "a") as f:
                 f.write(f"[{level}] {message}\n")
         except Exception:
-            pass  # Best effort logging
+            pass # Best effort logging
 
 
 def _write_framed_message(msg: dict) -> None:
@@ -84,7 +84,7 @@ def _read_framed_message(reader: asyncio.StreamReader) -> dict | None:
         while True:
             byte = reader.read(1)
             if not byte:
-                return None  # EOF
+                return None # EOF
             header += byte
             if header.endswith(b"\r\n"):
                 break
@@ -289,7 +289,7 @@ async def _stdin_reader_loop() -> None:
                 )
                 continue
 
-            # bd-82: Detect responses to OUR requests (reverse channel)
+            # Detect responses to OUR requests (reverse channel)
             # Responses have "result" or "error" but no "method"
             if ("result" in request or "error" in request) and "method" not in request:
                 from code_puppy.plugins.elixir_bridge import handle_response

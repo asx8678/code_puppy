@@ -35,7 +35,7 @@ defmodule CodePuppyControl.TUI.Renderer do
   - `Owl.Spinner` for tool-call progress indicators
   - `Owl.IO.puts/2` for terminal output above live blocks
 
-  ## Phase 1 (bd-161)
+  ## Phase 1
 
   Basic streaming, banners, spinners, and completion stats.
   Phase 2 will add syntax highlighting and advanced markdown rendering.
@@ -376,7 +376,7 @@ defmodule CodePuppyControl.TUI.Renderer do
     state = stop_tool_spinner(state, idx)
 
     # Print tool completion indicator
-    owl_puts(Owl.Data.tag("  ✔ #{name}", :green))
+    owl_puts(Owl.Data.tag(" ✔ #{name}", :green))
 
     cleanup_part(state, idx)
   end
@@ -406,7 +406,7 @@ defmodule CodePuppyControl.TUI.Renderer do
   end
 
   defp handle_eventbus_event(%{type: "status", status: status}, state) do
-    owl_puts(Owl.Data.tag("  #{status}", :faint))
+    owl_puts(Owl.Data.tag(" #{status}", :faint))
     state
   end
 
@@ -572,7 +572,7 @@ defmodule CodePuppyControl.TUI.Renderer do
 
       if elapsed > 0 do
         _rate = state.token_count / (elapsed / 1000)
-        # TODO(bd-161): Phase 2 — wire rate to a status bar / Owl.LiveScreen block
+        # TODO: Phase 2 — wire rate to a status bar / Owl.LiveScreen block
       end
 
       %{state | last_rate_update: now}

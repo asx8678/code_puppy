@@ -4,9 +4,9 @@ defmodule CodePuppyControl.Agent.LLMAdapterMessageConversionTest do
 
   Covers:
   - parts-format → content-format flattening (legacy)
-  - bd-258: canonical part_kind/content flattening
-  - bd-258: canonical tool-return part flattening
-  - bd-258: next-turn replay with compacted history
+  - : canonical part_kind/content flattening
+  - : canonical tool-return part flattening
+  - : next-turn replay with compacted history
   - atom-keyed → string-keyed role conversion
   """
   use ExUnit.Case, async: false
@@ -109,10 +109,10 @@ defmodule CodePuppyControl.Agent.LLMAdapterMessageConversionTest do
   end
 
   # ===========================================================================
-  # 1b. bd-258 regression: canonical part_kind/content flattening
+  # 1b. regression: canonical part_kind/content flattening
   # ===========================================================================
 
-  describe "bd-258: canonical part_kind/content flattening" do
+  describe "canonical part_kind/content flattening" do
     test "flattens single canonical text part (string keys)" do
       msgs = [
         %{
@@ -228,10 +228,10 @@ defmodule CodePuppyControl.Agent.LLMAdapterMessageConversionTest do
   end
 
   # ===========================================================================
-  # 1b-ii. bd-258 regression: canonical tool-return part flattening
+  # 1b-ii. regression: canonical tool-return part flattening
   # ===========================================================================
 
-  describe "bd-258: canonical tool-return part flattening" do
+  describe "canonical tool-return part flattening" do
     test "single tool-return part produces provider message with content and tool_call_id" do
       msgs = [
         %{
@@ -378,12 +378,12 @@ defmodule CodePuppyControl.Agent.LLMAdapterMessageConversionTest do
   end
 
   # ===========================================================================
-  # 1c. bd-258 regression: next-turn with compacted history
+  # 1c. regression: next-turn with compacted history
   # ===========================================================================
 
-  describe "bd-258: next-turn replay with compacted history" do
+  describe "next-turn replay with compacted history" do
     test "compacted history messages are replayed with non-empty content" do
-      # Simulates the scenario from bd-257: after compaction, persisted
+      # Simulates the scenario from : after compaction, persisted
       # messages use canonical part_kind/content format. On the next turn,
       # these must flatten to provider messages with non-empty content.
       compacted_history = [
@@ -416,7 +416,7 @@ defmodule CodePuppyControl.Agent.LLMAdapterMessageConversionTest do
       captured = ProviderMock.captured_messages()
       assert length(captured) == 4
 
-      # Every message must have non-empty content — the core bd-258 regression
+      # Every message must have non-empty content — the core regression
       for msg <- captured do
         assert msg.content != "",
                "Expected non-empty content for role=#{msg.role}, got empty string"

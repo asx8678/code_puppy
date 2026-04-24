@@ -192,7 +192,7 @@ defmodule CodePuppyControl.Routing.RouterTest do
     end
   end
 
-  describe "regression tests for bd-60" do
+  describe "regression tests for " do
     test "route_default uses LastResort.new() with actual default models" do
       # Test that LastResort.new() returns proper default fallback models
       # instead of empty struct (which was the bug: using %LastResort{})

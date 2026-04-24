@@ -1,6 +1,6 @@
 # TUI → CLI Parity Audit
 
-**Issue:** bd-122
+**Issue:** TUI CLI Parity Audit
 **Date:** 2026-04-18
 **Status:** ✅ COMPLETE
 
@@ -90,10 +90,10 @@ These are style differences, not feature gaps.
 
 ## Recommended Actions
 
-1. ✅ **bd-122 COMPLETE** - Audit done, no gaps
-2. ⏭️ **bd-123 SKIP** - No missing CLI commands found
-3. ⏭️ **bd-125, bd-126, bd-131 SKIP** - Already have full parity
-4. 🎯 **Jump to bd-127** - Add deprecation flag directly
+1. ✅ **COMPLETE** - Audit done, no gaps
+2. ⏭️ **SKIP** - No missing CLI commands found
+3. ⏭️ **SKIP** - Already have full parity
+4. 🎯 **Jump to deprecation flag** - Add deprecation flag directly
 
 ### Accelerated Timeline
 
@@ -101,10 +101,10 @@ Original: 8 weeks → **Revised: 2-3 weeks**
 
 | Week | Action |
 |------|--------|
-| 1 | bd-127: Add `PUP_TUI_DEPRECATED=1` warning |
-| 2 | bd-128: Remove `textual>=8.2.1` from deps |
-| 2 | bd-129: Delete `tui/` directory (227 KB) |
-| 3 | bd-130: Update docs |
+| 1 | Add `PUP_TUI_DEPRECATED=1` warning |
+| 2 | Remove `textual>=8.2.1` from deps |
+| 2 | Delete `tui/` directory (227 KB) |
+| 3 | Update docs |
 
 ---
 

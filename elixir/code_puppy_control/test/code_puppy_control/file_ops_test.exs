@@ -19,10 +19,10 @@ defmodule CodePuppyControl.FileOpsTest do
 
     File.write!(
       Path.join(@test_dir, "file2.ex"),
-      "defmodule Test do\n  def hello do\n    :world\n  end\nend"
+      "defmodule Test do\n def hello do\n :world\n end\nend"
     )
 
-    File.write!(Path.join(@test_dir, "file3.py"), "# TODO: implement this\ndef main():\n    pass")
+    File.write!(Path.join(@test_dir, "file3.py"), "# TODO: implement this\ndef main():\n pass")
 
     # Create subdirectory with more files
     subdir = Path.join(@test_dir, "subdir")
@@ -30,7 +30,7 @@ defmodule CodePuppyControl.FileOpsTest do
 
     File.write!(
       Path.join(subdir, "nested.ex"),
-      "defmodule Nested do\n  # FIXME: fix this\n  def run do\n    :ok\n  end\nend"
+      "defmodule Nested do\n # FIXME: fix this\n def run do\n :ok\n end\nend"
     )
 
     # Create hidden file (should be excluded by default)
@@ -356,10 +356,10 @@ defmodule CodePuppyControl.FileOpsTest do
   end
 
   # ============================================================================
-  # Case-insensitive path matching tests (bd-15)
+  # Case-insensitive path matching tests
   # ============================================================================
 
-  describe "case-insensitive path matching (bd-15)" do
+  describe "case-insensitive path matching" do
     test "blocks case-variant sensitive directory paths" do
       # /etc should be blocked regardless of case on case-insensitive FS
       assert FileOps.sensitive_path?("/ETC/shadow")
@@ -409,10 +409,10 @@ defmodule CodePuppyControl.FileOpsTest do
   end
 
   # ============================================================================
-  # Symlink bypass tests (bd-16)
+  # Symlink bypass tests
   # ============================================================================
 
-  describe "symlink bypass protection (bd-16)" do
+  describe "symlink bypass protection" do
     test "blocks symlink pointing to sensitive file by extension", %{test_dir: dir} do
       secret = Path.join(dir, "secret.pem")
       link = Path.join(dir, "innocent.txt")
@@ -481,7 +481,7 @@ defmodule CodePuppyControl.FileOpsTest do
   end
 
   # ============================================================================
-  # EOL normalization tests (bd-7)
+  # EOL normalization tests
   # ============================================================================
 
   describe "EOL normalization" do

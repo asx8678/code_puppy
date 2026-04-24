@@ -292,7 +292,7 @@ async def interactive_mode(message_renderer, initial_command: str = None) -> Non
                 try:
                     await current_agent_task
                 except asyncio.CancelledError:
-                    pass  # Expected when cancelling
+                    pass # Expected when cancelling
 
             break
 
@@ -326,7 +326,7 @@ async def interactive_mode(message_renderer, initial_command: str = None) -> Non
                 try:
                     await current_agent_task
                 except asyncio.CancelledError:
-                    pass  # Expected when cancelling
+                    pass # Expected when cancelling
 
             # The renderer is stopped in the finally block of main().
             break
@@ -554,22 +554,14 @@ async def interactive_mode(message_renderer, initial_command: str = None) -> Non
             # ================================================================
             from code_puppy.command_line.wiggum_state import (
                 get_wiggum_prompt,
-                has_ready_bd_work,
                 increment_wiggum_count,
                 is_wiggum_active,
                 stop_wiggum,
             )
 
             while is_wiggum_active():
-                if not has_ready_bd_work():
-                    from code_puppy.messaging import emit_warning
-                    emit_warning(
-                        "🍩 Wiggum stopping: `bd ready` queue is empty. Nothing left to chase!"
-                    )
-                    stop_wiggum()
-                    break
 
-                # bd-201: Don't re-loop into a dead Elixir control-plane.
+                # Don't re-loop into a dead Elixir control-plane.
                 # is_using_elixir() pings the transport; if it's down and we're not in
                 # degraded mode, the next finalize_autosave_session would crash the REPL.
                 import os

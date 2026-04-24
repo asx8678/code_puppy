@@ -279,7 +279,7 @@ defmodule CodePuppyControl.LLM.Providers.AnthropicTest do
     result
   end
 
-  # ── Extra Headers Tests (bd-223) ─────────────────────────────────────────
+  # ── Extra Headers Tests ─────────────────────────────────────────
 
   describe "extra_headers forwarding" do
     test "custom endpoint headers are included in request" do

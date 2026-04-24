@@ -17,7 +17,7 @@ def _user_uc_dir() -> "Path":
 
 
 def __getattr__(name: str):
-    """Lazy resolution of env-sensitive module-level names (bd-193)."""
+    """Lazy resolution of env-sensitive module-level names."""
     if name == "USER_UC_DIR":
         return _user_uc_dir()
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")

@@ -86,10 +86,10 @@ defmodule CodePuppyControl.CLI.GacParserTest do
     test "unknown flag returns error" do
       assert {:error, msg} = GacParser.parse(["--bogus"])
       assert msg =~ "bogus"
-      refute msg =~ "----", "error message should not have duplicated '--' prefix (bd-243)"
+      refute msg =~ "----", "error message should not have duplicated '--' prefix"
     end
 
-    test "unknown flag error message preserves single '--' prefix (bd-243)" do
+    test "unknown flag error message preserves single '--' prefix" do
       assert {:error, msg} = GacParser.parse(["--nonsense"])
       assert msg =~ "--nonsense"
       refute msg =~ "----nonsense"

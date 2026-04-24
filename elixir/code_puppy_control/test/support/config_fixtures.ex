@@ -1,6 +1,6 @@
 defmodule CodePuppyControl.Support.ConfigFixtures do
   @moduledoc """
-  Golden-fixture helpers for bd-184 config compatibility tests.
+  Golden-fixture helpers for config compatibility tests.
 
   Provides path resolution, loading, normalization, and sandbox utilities
   for the committed fixture files under `test/fixtures/config/`.
@@ -8,9 +8,9 @@ defmodule CodePuppyControl.Support.ConfigFixtures do
   ## Fixture layout
 
       test/fixtures/config/
-      ├── minimal/       # Smallest valid configs
-      ├── realistic/     # Production-like configs
-      └── invalid/       # Malformed files for error-path tests
+      ├── minimal/ # Smallest valid configs
+      ├── realistic/ # Production-like configs
+      └── invalid/ # Malformed files for error-path tests
 
   ## Fixture sort order
 

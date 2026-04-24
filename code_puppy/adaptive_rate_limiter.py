@@ -1,14 +1,14 @@
 """Adaptive rate limiter that dynamically adjusts concurrency per model.
 
 When an HTTP 429 (Too Many Requests) is detected for a specific model,
-the concurrency limit for that model is reduced.  A background recovery
+the concurrency limit for that model is reduced. A background recovery
 task gradually restores the limit once the cooldown period has elapsed.
 
 **Circuit Breaker Integration:**
 
 On 429, a circuit breaker enters the **OPEN** state, queuing all new
-requests instead of sending them.  After a cooldown period it enters
-**HALF_OPEN** and allows one test request.  If the test succeeds the
+requests instead of sending them. After a cooldown period it enters
+**HALF_OPEN** and allows one test request. If the test succeeds the
 circuit **CLOSES** and queued requests are gradually released; if the
 test triggers another 429 the cooldown is doubled and the circuit
 stays OPEN.
@@ -35,16 +35,16 @@ logger = logging.getLogger(__name__)
 DEFAULT_MIN_LIMIT: int = 1
 DEFAULT_MAX_LIMIT: int = 10
 DEFAULT_COOLDOWN_SECONDS: float = 60.0
-DEFAULT_RECOVERY_RATE: float = 0.5  # fraction of current limit to add per tick
-DEFAULT_INITIAL_LIMIT: int = 10  # starting concurrency for any new model
-LIMIT_EPSILON: float = 0.01  # epsilon for float comparison of limits
+DEFAULT_RECOVERY_RATE: float = 0.5 # fraction of current limit to add per tick
+DEFAULT_INITIAL_LIMIT: int = 10 # starting concurrency for any new model
+LIMIT_EPSILON: float = 0.01 # epsilon for float comparison of limits
 
 # Circuit breaker defaults
 DEFAULT_CIRCUIT_BREAKER_ENABLED: bool = False
 DEFAULT_CIRCUIT_COOLDOWN_SECONDS: float = 10.0
 DEFAULT_CIRCUIT_HALF_OPEN_REQUESTS: int = 1
 DEFAULT_QUEUE_MAX_SIZE: int = 100
-DEFAULT_RELEASE_RATE: float = 1.0  # requests per second
+DEFAULT_RELEASE_RATE: float = 1.0 # requests per second
 
 
 # ── Per-model state ─────────────────────────────────────────────────────────
@@ -57,7 +57,7 @@ class ModelRateLimitState:
     Uses an ``asyncio.Condition`` + counter instead of ``Semaphore``
     because Python 3.14 removed ``Semaphore.acquire_nowait()`` and
     ``Semaphore.locked()``, making it impossible to shrink a semaphore
-    without risking deadlock.  The condition-based approach lets us
+    without risking deadlock. The condition-based approach lets us
     dynamically lower ``current_limit`` and have waiters observe the
     change immediately.
     """
@@ -89,7 +89,7 @@ class ModelRateLimitState:
 class _RateLimiterState:
     """Encapsulates all module-level mutable state for the rate limiter.
 
-    A single ``_state`` instance is created at module load time.  All
+    A single ``_state`` instance is created at module load time. All
     internal functions read from and write to this object, eliminating
     the need for ``global`` declarations.
     """
@@ -239,7 +239,7 @@ def _cleanup_old_states(max_age_seconds: float = 3600) -> int:
 async def _recovery_loop() -> None:
     """Background coroutine that gradually restores rate limits.
 
-    Runs once per ``_state.cfg_cooldown_seconds``.  For every model that has
+    Runs once per ``_state.cfg_cooldown_seconds``. For every model that has
     been throttled, it increases the limit by ``_state.cfg_recovery_rate`` of
     the current value (or +1, whichever is larger), capped at
     ``_state.cfg_max_limit``.
@@ -268,7 +268,7 @@ async def _recovery_loop() -> None:
                         continue
                     elapsed = now - st.last_429_time
                     if elapsed < _state.cfg_cooldown_seconds:
-                        continue  # still in cooldown
+                        continue # still in cooldown
 
                     old_limit = st.current_limit
                     increment = max(1.0, st.current_limit * _state.cfg_recovery_rate)
@@ -277,7 +277,7 @@ async def _recovery_loop() -> None:
                         float(_state.cfg_max_limit),
                     )
                     if abs(new_limit - old_limit) < LIMIT_EPSILON:
-                        continue  # already at max
+                        continue # already at max
 
                     # Capture recovery item to process outside the lock
                     recovery_items.append(
@@ -340,7 +340,7 @@ def _ensure_recovery_task() -> None:
 async def _circuit_cooldown_loop(model_name: str, state: ModelRateLimitState) -> None:
     """Background task: wait for cooldown then transition to HALF_OPEN.
 
-    Runs per-model when the circuit opens.  After the cooldown period
+    Runs per-model when the circuit opens. After the cooldown period
     elapses, the circuit transitions to HALF_OPEN which allows test
     requests through.
     """
@@ -528,13 +528,13 @@ async def record_success(model_name: str) -> None:
 
     In CLOSED state this is a no-op.
 
-    bd-101: Bridge-aware - notifies Elixir bridge if connected (fire-and-forget).
+    Bridge-aware - notifies Elixir bridge if connected (fire-and-forget).
     """
     key = _normalize_model_name(model_name)
     if key is None:
         return
 
-    # bd-101: Notify Elixir bridge if connected (fire-and-forget)
+    # Notify Elixir bridge if connected (fire-and-forget)
     try:
         from code_puppy.plugins.elixir_bridge import (
             is_connected,
@@ -553,7 +553,7 @@ async def record_success(model_name: str) -> None:
                     )
                 )
             except Exception:
-                pass  # Ignore errors for fire-and-forget
+                pass # Ignore errors for fire-and-forget
     except ImportError:
         pass
 
@@ -619,16 +619,16 @@ async def record_rate_limit(model_name: str) -> None:
     """Signal that *model_name* just received an HTTP 429 response.
 
     The concurrency limit for this model is immediately reduced by 50 %
-    (but never below ``min_limit``).  The circuit breaker also opens,
+    (but never below ``min_limit``). The circuit breaker also opens,
     queuing all new requests until the cooldown elapses.
 
-    bd-101: Bridge-aware - notifies Elixir bridge if connected (fire-and-forget).
+    Bridge-aware - notifies Elixir bridge if connected (fire-and-forget).
     """
     key = _normalize_model_name(model_name)
     if key is None:
         return
 
-    # bd-101: Notify Elixir bridge if connected (fire-and-forget)
+    # Notify Elixir bridge if connected (fire-and-forget)
     try:
         from code_puppy.plugins.elixir_bridge import (
             is_connected,
@@ -647,7 +647,7 @@ async def record_rate_limit(model_name: str) -> None:
                     )
                 )
             except Exception:
-                pass  # Ignore errors for fire-and-forget
+                pass # Ignore errors for fire-and-forget
     except ImportError:
         pass
 
@@ -693,7 +693,7 @@ async def acquire_model_slot(
     ordering is not possible. condition.wait() releases only the condition's
     internal lock (the only lock held at that point).
 
-    Blocks until a slot is available.  The first call for any model
+    Blocks until a slot is available. The first call for any model
     auto-starts the background recovery task.
 
     **Circuit breaker behaviour:**
@@ -706,8 +706,8 @@ async def acquire_model_slot(
 
     Args:
         model_name: The model to acquire a slot for.
-        timeout: Maximum seconds to wait for a slot.  Pass ``None`` to
-            wait indefinitely (not recommended).  Defaults to 300 s.
+        timeout: Maximum seconds to wait for a slot. Pass ``None`` to
+            wait indefinitely (not recommended). Defaults to 300 s.
 
     Raises:
         asyncio.TimeoutError: If a slot cannot be acquired within
@@ -752,7 +752,7 @@ async def acquire_model_slot(
 
         # Wait using the condition lock — this avoids the TOCTOU race
         # that occurred when state was checked under _lock but waited
-        # under a different lock (state.condition).  The condition lock
+        # under a different lock (state.condition). The condition lock
         # serialises both the check and the wait so no state change can
         # be missed.
         if need_wait_open:
@@ -802,7 +802,7 @@ async def release_model_slot_async(model_name: str) -> None:
     if state is not None:
         async with state.condition:
             state.active_count = max(0, state.active_count - 1)
-            state.last_used_time = time.monotonic()  # Track for cleanup
+            state.last_used_time = time.monotonic() # Track for cleanup
             state.condition.notify_all()
 
 
@@ -837,7 +837,7 @@ def is_circuit_open(model_name: str) -> bool:
     If the circuit is open, requests are queued until the cooldown elapses
     and the circuit transitions to HALF_OPEN.
 
-    bd-101: Bridge-aware - tries Elixir bridge first if connected,
+    Bridge-aware - tries Elixir bridge first if connected,
     falls back to local state.
 
     Args:
@@ -849,9 +849,9 @@ def is_circuit_open(model_name: str) -> bool:
     """
     key = _normalize_model_name(model_name)
     if key is None:
-        return False  # Unknown model = no throttling
+        return False # Unknown model = no throttling
 
-    # bd-101: Try Elixir bridge first if connected
+    # Try Elixir bridge first if connected
     try:
         from code_puppy.plugins.elixir_bridge import (
             is_connected,
@@ -872,14 +872,14 @@ def is_circuit_open(model_name: str) -> bool:
                 if result.get("status") == "ok" and "circuit_open" in result:
                     return bool(result["circuit_open"])
             except Exception:
-                pass  # Fallback to local on any error
+                pass # Fallback to local on any error
     except ImportError:
         pass
 
     # Fallback to local state
     state = _state.model_states.get(key)
     if state is None:
-        return False  # No state = no circuit yet
+        return False # No state = no circuit yet
 
     return (
         _state.cfg_circuit_breaker_enabled and state.circuit_state == CircuitState.OPEN
@@ -906,15 +906,15 @@ def check_model_slot(model_name: str) -> bool:
 
     Note:
         This is inherently racy — the result may be stale by the time
-        the caller acts on it.  Use for advisory/display purposes only.
+        the caller acts on it. Use for advisory/display purposes only.
     """
     key = _normalize_model_name(model_name)
     if key is None:
-        return True  # Unknown model = no throttling
+        return True # Unknown model = no throttling
 
     state = _state.model_states.get(key)
     if state is None:
-        return True  # No state = no throttling yet
+        return True # No state = no throttling yet
 
     # Check circuit breaker first
     if _state.cfg_circuit_breaker_enabled and state.circuit_state == CircuitState.OPEN:
@@ -930,7 +930,7 @@ def get_current_limit(model_name: str) -> float:
     Returns the current adaptive limit for the model. If the model has
     not been rate-limited, returns the initial limit.
 
-    bd-101: Bridge-aware - tries Elixir bridge first if connected,
+    Bridge-aware - tries Elixir bridge first if connected,
     falls back to local state.
 
     Args:
@@ -943,7 +943,7 @@ def get_current_limit(model_name: str) -> float:
     if key is None:
         return 0.0
 
-    # bd-101: Try Elixir bridge first if connected
+    # Try Elixir bridge first if connected
     try:
         from code_puppy.plugins.elixir_bridge import (
             is_connected,
@@ -965,7 +965,7 @@ def get_current_limit(model_name: str) -> float:
                 if result.get("status") == "ok" and "limit" in result:
                     return float(result["limit"])
             except Exception:
-                pass  # Fallback to local on any error
+                pass # Fallback to local on any error
     except ImportError:
         pass
 
@@ -1084,7 +1084,7 @@ class ModelAwareLimiter:
         if self._state is not None:
             async with self._state.condition:
                 self._state.active_count = max(0, self._state.active_count - 1)
-                self._state.last_used_time = time.monotonic()  # Track for cleanup
+                self._state.last_used_time = time.monotonic() # Track for cleanup
                 self._state.condition.notify_all()
         return False
 
@@ -1093,7 +1093,7 @@ class ModelAwareLimiter:
 #
 # Tests and external code reference legacy module-level names like
 # ``arl._cfg_min_limit``, ``arl._model_states``, and
-# ``arl._recovery_started = True``.  We replace the module object in
+# ``arl._recovery_started = True``. We replace the module object in
 # ``sys.modules`` with a thin wrapper that delegates those names to the
 # ``_state`` singleton, preserving full backward compatibility without
 # keeping any actual global variables.
@@ -1116,8 +1116,8 @@ _STATE_ALIASES: dict[str, str] = {
     "_cfg_release_rate": "cfg_release_rate",
 }
 
-import sys as _sys  # noqa: E402
-from types import ModuleType as _ModuleType  # noqa: E402
+import sys as _sys # noqa: E402
+from types import ModuleType as _ModuleType # noqa: E402
 
 
 class _BackCompatModule(_ModuleType):

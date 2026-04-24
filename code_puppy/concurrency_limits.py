@@ -23,9 +23,9 @@ Configuration is read from <active-home>/concurrency.toml with sensible defaults
 """
 
 # Default concurrency limits
-DEFAULT_FILE_OPS_LIMIT = 4  # Max concurrent file read/write operations
-DEFAULT_API_CALLS_LIMIT = 2  # Max concurrent outbound API requests
-DEFAULT_TOOL_CALLS_LIMIT = 8  # Max concurrent tool executions
+DEFAULT_FILE_OPS_LIMIT = 4 # Max concurrent file read/write operations
+DEFAULT_API_CALLS_LIMIT = 2 # Max concurrent outbound API requests
+DEFAULT_TOOL_CALLS_LIMIT = 8 # Max concurrent tool executions
 
 # Respects pup-ex isolation (ADR-003) — resolves under active home
 def _config_path() -> Path:
@@ -128,7 +128,7 @@ def _read_config() -> ConcurrencyConfig:
             return _cached_config
 
         try:
-            import tomllib  # Python 3.11+
+            import tomllib # Python 3.11+
 
             with open(_config_path(), "rb") as fh:
                 data = tomllib.load(fh)
@@ -147,7 +147,7 @@ def _get_file_ops_semaphore() -> TrackedSemaphore:
     global _file_ops_semaphore
     if _file_ops_semaphore is None:
         with _semaphore_init_lock:
-            if _file_ops_semaphore is None:  # Double-checked locking
+            if _file_ops_semaphore is None: # Double-checked locking
                 config = _read_config()
                 _file_ops_semaphore = TrackedSemaphore(config.file_ops_limit)
                 logger.debug(
@@ -162,7 +162,7 @@ def _get_api_calls_semaphore() -> TrackedSemaphore:
     global _api_calls_semaphore
     if _api_calls_semaphore is None:
         with _semaphore_init_lock:
-            if _api_calls_semaphore is None:  # Double-checked locking
+            if _api_calls_semaphore is None: # Double-checked locking
                 config = _read_config()
                 _api_calls_semaphore = TrackedSemaphore(config.api_calls_limit)
                 logger.debug(
@@ -177,7 +177,7 @@ def _get_tool_calls_semaphore() -> TrackedSemaphore:
     global _tool_calls_semaphore
     if _tool_calls_semaphore is None:
         with _semaphore_init_lock:
-            if _tool_calls_semaphore is None:  # Double-checked locking
+            if _tool_calls_semaphore is None: # Double-checked locking
                 config = _read_config()
                 _tool_calls_semaphore = TrackedSemaphore(config.tool_calls_limit)
                 logger.debug(
@@ -190,7 +190,7 @@ def _get_tool_calls_semaphore() -> TrackedSemaphore:
 async def acquire_file_ops_slot() -> None:
     """Acquire a slot for file operations.
 
-    bd-77: Bridge-aware - tries Elixir bridge first if connected,
+    Bridge-aware - tries Elixir bridge first if connected,
     falls back to local semaphore.
     """
     # Try Elixir bridge first if connected
@@ -214,7 +214,7 @@ async def acquire_file_ops_slot() -> None:
 def release_file_ops_slot() -> None:
     """Release a file operations slot.
 
-    bd-77: Bridge-aware - notifies Elixir bridge if connected (fire-and-forget).
+    Bridge-aware - notifies Elixir bridge if connected (fire-and-forget).
     """
     # Notify Elixir bridge if connected (fire-and-forget)
     try:
@@ -227,7 +227,7 @@ def release_file_ops_slot() -> None:
                     call_elixir_concurrency("concurrency.release", {"type": "file_ops"}, timeout=1.0)
                 )
             except Exception:
-                pass  # Ignore errors for fire-and-forget
+                pass # Ignore errors for fire-and-forget
     except ImportError:
         pass
 
@@ -238,7 +238,7 @@ def release_file_ops_slot() -> None:
 async def acquire_api_call_slot() -> None:
     """Acquire a slot for API calls.
 
-    bd-77: Bridge-aware - tries Elixir bridge first if connected,
+    Bridge-aware - tries Elixir bridge first if connected,
     falls back to local semaphore.
     """
     # Try Elixir bridge first if connected
@@ -262,7 +262,7 @@ async def acquire_api_call_slot() -> None:
 def release_api_call_slot() -> None:
     """Release an API call slot.
 
-    bd-77: Bridge-aware - notifies Elixir bridge if connected (fire-and-forget).
+    Bridge-aware - notifies Elixir bridge if connected (fire-and-forget).
     """
     # Notify Elixir bridge if connected (fire-and-forget)
     try:
@@ -285,7 +285,7 @@ def release_api_call_slot() -> None:
 async def acquire_tool_call_slot() -> None:
     """Acquire a slot for tool calls.
 
-    bd-77: Bridge-aware - tries Elixir bridge first if connected,
+    Bridge-aware - tries Elixir bridge first if connected,
     falls back to local semaphore.
     """
     # Try Elixir bridge first if connected
@@ -309,7 +309,7 @@ async def acquire_tool_call_slot() -> None:
 def release_tool_call_slot() -> None:
     """Release a tool call slot.
 
-    bd-77: Bridge-aware - notifies Elixir bridge if connected (fire-and-forget).
+    Bridge-aware - notifies Elixir bridge if connected (fire-and-forget).
     """
     # Notify Elixir bridge if connected (fire-and-forget)
     try:

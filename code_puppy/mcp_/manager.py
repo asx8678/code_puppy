@@ -6,7 +6,7 @@ operations while maintaining pydantic-ai compatibility. It serves as the central
 point for managing servers, registering configurations, and providing servers
 to agents.
 
-bd-81: MCP bridge support for Elixir integration
+MCP bridge support for Elixir integration
 - list_servers() tries Elixir first, falls back to local
 - get_server_status() tries Elixir first, falls back to local
 """
@@ -25,7 +25,7 @@ from .managed_server import ManagedMCPServer, ServerConfig, ServerState
 from .registry import ServerRegistry
 from .status_tracker import ServerStatusTracker
 
-# MCP bridge support (bd-81) - lazy import to avoid circular dependencies
+# MCP bridge support - lazy import to avoid circular dependencies
 _elixir_bridge_imported = False
 _elixir_bridge = None
 
@@ -80,7 +80,7 @@ class MCPManager:
 
         # Register a server
         config = ServerConfig(
-            id="",  # Auto-generated
+            id="", # Auto-generated
             name="filesystem",
             type="stdio",
             config={"command": "npx", "args": ["-y", "@modelcontextprotocol/server-filesystem"]}
@@ -88,7 +88,7 @@ class MCPManager:
         server_id = manager.register_server(config)
 
         # Get servers for agent use
-        servers = manager.get_servers_for_agent()  # Returns actual pydantic-ai instances
+        servers = manager.get_servers_for_agent() # Returns actual pydantic-ai instances
     """
 
     def __init__(self):
@@ -138,7 +138,7 @@ class MCPManager:
                 try:
                     # Create ServerConfig from the loaded configuration
                     server_config = ServerConfig(
-                        id=conf.get("id", ""),  # Empty ID will be auto-generated
+                        id=conf.get("id", ""), # Empty ID will be auto-generated
                         name=name,
                         type=conf.get("type", "sse"),
                         enabled=conf.get("enabled", True),
@@ -156,7 +156,7 @@ class MCPManager:
                     else:
                         # Update existing server if config has changed
                         if existing.config != server_config.config:
-                            server_config.id = existing.id  # Keep existing ID
+                            server_config.id = existing.id # Keep existing ID
                             self.registry.update(existing.id, server_config)
                             updated_count += 1
                             logger.debug(f"Updated server from config: {name}")
@@ -358,7 +358,7 @@ class MCPManager:
         """
         Get information about all registered servers.
 
-        bd-81: Bridge-aware implementation. When use_bridge=True and Elixir
+        Bridge-aware implementation. When use_bridge=True and Elixir
         control plane is connected, delegates to Elixir via mcp.list method.
         Falls back to local implementation on timeout or connection errors.
 
@@ -368,7 +368,7 @@ class MCPManager:
         Returns:
             List of ServerInfo objects with current status
         """
-        # Try bridge first if enabled and connected (bd-81)
+        # Try bridge first if enabled and connected
         if use_bridge:
             bridge = _get_elixir_bridge()
             if bridge and bridge.is_connected():
@@ -441,7 +441,7 @@ class MCPManager:
         return server_infos
 
     def _list_servers_via_bridge(self, bridge) -> list[ServerInfo]:
-        """Internal: Call mcp.list via Elixir bridge and deserialize response (bd-81).
+        """Internal: Call mcp.list via Elixir bridge and deserialize response.
 
         Args:
             bridge: Elixir bridge module
@@ -618,7 +618,7 @@ class MCPManager:
             task.add_done_callback(cleanup_task)
 
             logger.info(f"Scheduled background start for server: {server_id}")
-            return True  # Return immediately - server will start in background
+            return True # Return immediately - server will start in background
 
         except RuntimeError:
             # No async loop, just enable the server
@@ -739,7 +739,7 @@ class MCPManager:
             task.add_done_callback(cleanup_task)
 
             logger.info(f"Scheduled background stop for server: {server_id}")
-            return True  # Return immediately - server will stop in background
+            return True # Return immediately - server will stop in background
 
         except RuntimeError:
             # No async loop, just disable the server
@@ -838,7 +838,7 @@ class MCPManager:
         """
         Get comprehensive status for a server.
 
-        bd-81: Bridge-aware implementation. When use_bridge=True and Elixir
+        Bridge-aware implementation. When use_bridge=True and Elixir
         control plane is connected, delegates to Elixir via mcp.status method.
         Falls back to local implementation on timeout or connection errors.
 
@@ -849,7 +849,7 @@ class MCPManager:
         Returns:
             Dictionary containing comprehensive status information
         """
-        # Try bridge first if enabled and connected (bd-81)
+        # Try bridge first if enabled and connected
         if use_bridge:
             bridge = _get_elixir_bridge()
             if bridge and bridge.is_connected():
@@ -881,7 +881,7 @@ class MCPManager:
 
             # Combine all information
             comprehensive_status = {
-                **status,  # Include all managed server status
+                **status, # Include all managed server status
                 "tracker_state": tracker_summary["state"],
                 "tracker_metadata": tracker_summary["metadata"],
                 "recent_events_count": tracker_summary["recent_events_count"],
@@ -904,7 +904,7 @@ class MCPManager:
             return {"server_id": server_id, "exists": True, "error": str(e)}
 
     def _get_server_status_via_bridge(self, bridge, server_id: str) -> dict[str, Any]:
-        """Internal: Call mcp.status via Elixir bridge and deserialize response (bd-81).
+        """Internal: Call mcp.status via Elixir bridge and deserialize response.
 
         Args:
             bridge: Elixir bridge module
@@ -927,7 +927,7 @@ class MCPManager:
 
             # Remove the wrapper status field, return the actual status data
             status_result = {k: v for k, v in result.items() if k != "status"}
-            status_result["via_bridge"] = True  # Flag to indicate bridge origin
+            status_result["via_bridge"] = True # Flag to indicate bridge origin
 
             logger.debug(f"get_server_status via bridge for {server_id}")
             return status_result

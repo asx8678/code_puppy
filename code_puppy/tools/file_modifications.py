@@ -23,7 +23,7 @@ from pydantic import BaseModel, WithJsonSchema
 from pydantic_ai import RunContext
 
 from code_puppy.callbacks import on_delete_file, on_edit_file
-from code_puppy.messaging import (  # Structured messaging types
+from code_puppy.messaging import ( # Structured messaging types
     DiffLine,
     DiffMessage,
     emit_error,
@@ -41,7 +41,7 @@ from code_puppy.tools.common import _find_best_window
 # Threshold for fuzzy matching
 _FUZZY_THRESHOLD = 0.95
 
-# Syntax validation imports (bd code_puppy-31a.10)
+# Syntax validation imports
 # Deferred to function level to fail-open if imports break
 try:
     from code_puppy.utils.syntax_validate import (
@@ -185,18 +185,18 @@ def _parse_diff_lines(diff_text: str) -> list[DiffLine]:
         if line.startswith("+") and not line.startswith("+++"):
             line_type = "add"
             line_number += 1
-            content = line[1:]  # Remove the + prefix
+            content = line[1:] # Remove the + prefix
         elif line.startswith("-") and not line.startswith("---"):
             line_type = "remove"
             line_number += 1
-            content = line[1:]  # Remove the - prefix
+            content = line[1:] # Remove the - prefix
         elif line.startswith("@@"):
             # Parse hunk header to get line number
             match = _HUNK_HEADER_RE.search(line)
             if match:
                 line_number = (
                     int(match.group(1)) - 1
-                )  # Will be incremented on next line
+                ) # Will be incremented on next line
             line_type = "context"
             content = line
         elif line.startswith("---") or line.startswith("+++"):
@@ -243,7 +243,7 @@ def _emit_diff_message(
             clear_diff_shown_flag()
             return
     except ImportError:
-        pass  # Permission handler not available, emit anyway
+        pass # Permission handler not available, emit anyway
 
     if not diff_text or not diff_text.strip():
         return
@@ -361,7 +361,7 @@ def _replace_in_file(
         # Strip BOM for matching (LLM output never has BOM)
         original, bom = strip_bom(original)
 
-        # bd-86: Pure Python implementation (acceleration layer removed)
+        # Pure Python implementation (acceleration layer removed)
         modified = original
         modified_lines: list[str] | None = None
 
@@ -547,7 +547,7 @@ async def delete_snippet_from_file(
     diff = res.get("diff", "")
     if diff:
         _emit_diff_message(file_path, "modify", diff)
-    # Post-edit syntax validation (bd code_puppy-31a.10)
+    # Post-edit syntax validation
     _maybe_attach_syntax_warning(res, file_path)
     return res
 
@@ -587,7 +587,7 @@ async def write_to_file(
         # Determine operation type based on whether file existed
         operation = "modify" if overwrite else "create"
         _emit_diff_message(path, operation, diff, new_content=content)
-    # Post-edit syntax validation (bd code_puppy-31a.10)
+    # Post-edit syntax validation
     _maybe_attach_syntax_warning(res, path)
     return res
 
@@ -619,7 +619,7 @@ async def replace_in_file(
     diff = res.get("diff", "")
     if diff:
         _emit_diff_message(path, "modify", diff)
-    # Post-edit syntax validation (bd code_puppy-31a.10)
+    # Post-edit syntax validation
     _maybe_attach_syntax_warning(res, path)
     return res
 
@@ -721,7 +721,7 @@ async def _delete_file(
     # Use the plugin system for permission handling with operation data
     from code_puppy.callbacks import on_file_permission_async
 
-    operation_data = {}  # No additional data needed for delete operations
+    operation_data = {} # No additional data needed for delete operations
     permission_results = await on_file_permission_async(
         context, file_path, "delete", None, message_group, operation_data
     )
@@ -871,7 +871,7 @@ def register_delete_file(agent):
 # Module-level aliases captured before registration functions are defined.
 # Inside register_replace_in_file, the @agent.tool decorator creates a local
 # function named 'replace_in_file' which shadows the module-level helper of the
-# same name for the entire enclosing scope (Python scoping rules).  We capture
+# same name for the entire enclosing scope (Python scoping rules). We capture
 # a reference here so the registration function can call the helper.
 _replace_in_file_helper = replace_in_file
 
@@ -913,7 +913,7 @@ def register_create_file(agent):
 
 # Inline JSON schema for Replacement objects — avoids $defs/$ref that many
 # LLM providers misinterpret, causing frequent validation errors and
-# fallback to full-file rewrites.  See _sanitize_schema_for_gemini and
+# fallback to full-file rewrites. See _sanitize_schema_for_gemini and
 # _inline_refs in the antigravity plugin for prior art.
 _REPLACEMENT_ITEM_SCHEMA = {
     "type": "object",
@@ -924,7 +924,7 @@ _REPLACEMENT_ITEM_SCHEMA = {
     "required": ["old_str", "new_str"],
 }
 
-# Type alias used by the tool signature.  The Annotated + WithJsonSchema
+# Type alias used by the tool signature. The Annotated + WithJsonSchema
 # tells Pydantic to emit _REPLACEMENT_ITEM_SCHEMA inline instead of a $ref.
 InlineReplacement = Annotated[dict[str, str], WithJsonSchema(_REPLACEMENT_ITEM_SCHEMA)]
 

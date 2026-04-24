@@ -1,13 +1,13 @@
-defmodule CodePuppyControl.REPL.BD254TestHelper do
+defmodule CodePuppyControl.REPL.DispatchRollbackTestHelper do
   @moduledoc """
-  Shared helper for bd-254 dispatch rollback regression tests.
+  Shared helper for dispatch rollback regression tests.
 
   Provides the mock LLM module and common setup callback used by the
   split test files:
-    - dispatch_rollback_bd254_success_test.exs
-    - dispatch_rollback_bd254_with_test.exs
+    - dispatch_rollback_success_test.exs
+    - dispatch_rollback_with_clause_test.exs
 
-  Extracted from dispatch_rollback_bd254_test.exs to keep each file
+  Extracted from dispatch_rollback_test.exs to keep each file
   under the 600-line cap.
   """
 
@@ -20,9 +20,9 @@ defmodule CodePuppyControl.REPL.BD254TestHelper do
   # RollbackTestMockLLM and CrashMidCallMockLLM in sibling test files.)
   # ---------------------------------------------------------------------------
 
-  defmodule BD254MockLLM do
+  defmodule DispatchRollbackMockLLM do
     @moduledoc """
-    Mock LLM module for bd-254 dispatch rollback regression tests.
+    Mock LLM module for dispatch rollback regression tests.
 
     Implements `CodePuppyControl.Agent.LLM` behaviour with controllable
     responses and error injection via an Elixir Agent process.
@@ -100,9 +100,9 @@ defmodule CodePuppyControl.REPL.BD254TestHelper do
   # ---------------------------------------------------------------------------
 
   @doc """
-  Setup callback for bd-254 dispatch rollback tests.
+  Setup callback for dispatch rollback tests.
 
-  Creates a fresh session, configures BD254MockLLM as the REPL LLM, and
+  Creates a fresh session, configures DispatchRollbackMockLLM as the REPL LLM, and
   registers an `on_exit` callback that restores all mutated application
   environment and cleans up the renderer process.
   """
@@ -110,8 +110,8 @@ defmodule CodePuppyControl.REPL.BD254TestHelper do
     session_id = :crypto.strong_rand_bytes(4) |> Base.encode16(case: :lower)
 
     prev_llm = Application.get_env(:code_puppy_control, :repl_llm_module)
-    Application.put_env(:code_puppy_control, :repl_llm_module, BD254MockLLM)
-    BD254MockLLM.reset()
+    Application.put_env(:code_puppy_control, :repl_llm_module, DispatchRollbackMockLLM)
+    DispatchRollbackMockLLM.reset()
 
     try do
       AgentCatalogue.discover_agent_modules()
@@ -132,7 +132,7 @@ defmodule CodePuppyControl.REPL.BD254TestHelper do
       Application.delete_env(:code_puppy_control, :test_ensure_renderer_error)
       Application.delete_env(:code_puppy_control, :test_compaction_opts)
 
-      BD254MockLLM.stop()
+      DispatchRollbackMockLLM.stop()
 
       try do
         State.clear_messages(session_id, "code_puppy")

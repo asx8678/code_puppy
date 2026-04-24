@@ -4,10 +4,10 @@ defmodule CodePuppyControl.Config.MergeSemanticsTest do
   and the porting plan's stated contract: "string returns concatenated, dict
   returns updated (later wins on conflict)".
 
-  These are Wave 2 tests for bd-210, porting the spirit of:
+  These are Wave 2 tests for porting the spirit of:
   - Python test_resolvers.py (resolve_str/bool/int/float/path merge chain)
   - Python test_typed_settings.py (config layering: env > legacy > default)
-  - bd-174 porting plan: "Property-test the config loader's merge semantics"
+  - porting plan: "Property-test the config loader's merge semantics"
   """
 
   use ExUnit.Case, async: false
@@ -71,7 +71,7 @@ defmodule CodePuppyControl.Config.MergeSemanticsTest do
       end
     end
 
-    # TODO(bd-210): PUP_ should win over PUPPY_, but the current
+    # TODO: PUP_ should win over PUPPY_, but the current
     # merge order applies PUPPY_ second, overwriting PUP_. This test
     # documents the actual behavior until the bug is fixed.
     test "PUPPY_DEFAULT_MODEL overwrites PUP_MODEL due to merge order" do
@@ -196,7 +196,7 @@ defmodule CodePuppyControl.Config.MergeSemanticsTest do
   describe "config key casing and trimming" do
     test "keys are trimmed of whitespace" do
       path = tmp_cfg_path()
-      File.write!(path, "  model  = test-value\n")
+      File.write!(path, " model = test-value\n")
 
       try do
         config = Loader.load(path)
@@ -208,7 +208,7 @@ defmodule CodePuppyControl.Config.MergeSemanticsTest do
 
     test "values are trimmed of whitespace" do
       path = tmp_cfg_path()
-      File.write!(path, "model =   test-value  \n")
+      File.write!(path, "model = test-value \n")
 
       try do
         config = Loader.load(path)

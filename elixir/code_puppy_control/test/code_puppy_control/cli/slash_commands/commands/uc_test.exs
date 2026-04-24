@@ -452,7 +452,7 @@ defmodule CodePuppyControl.CLI.SlashCommands.Commands.UCTest do
     end
   end
 
-  describe "/uc toggle — safe replacement (bd-269 regression test)" do
+  describe "/uc toggle — safe replacement (regression test)" do
     setup do
       # Create a tool file where @uc_tool has 'enabled:' in a description string.
       # The toggle should only replace the top-level enabled field, not touch the string.
@@ -525,7 +525,7 @@ defmodule CodePuppyControl.CLI.SlashCommands.Commands.UCTest do
     end
   end
 
-  describe "structural toggle — nested map inside @uc_tool (bd-269)" do
+  describe "structural toggle — nested map inside @uc_tool" do
     setup do
       # File with a nested map INSIDE @uc_tool containing its own enabled: key.
       # The registry cannot parse this, so we test toggle_enabled_in_source directly.
@@ -586,7 +586,7 @@ defmodule CodePuppyControl.CLI.SlashCommands.Commands.UCTest do
     end
   end
 
-  describe "structural toggle — string with enabled: inside @uc_tool (bd-269)" do
+  describe "structural toggle — string with enabled: inside @uc_tool" do
     setup do
       dir = Path.join(System.tmp_dir!(), "uc_struct_#{:erlang.unique_integer([:positive])}")
       File.mkdir_p!(dir)
@@ -643,7 +643,7 @@ defmodule CodePuppyControl.CLI.SlashCommands.Commands.UCTest do
     end
   end
 
-  describe "structural toggle — top-level enabled IS changed (bd-269)" do
+  describe "structural toggle — top-level enabled IS changed" do
     setup do
       dir = Path.join(System.tmp_dir!(), "uc_struct_#{:erlang.unique_integer([:positive])}")
       File.mkdir_p!(dir)

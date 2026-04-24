@@ -1,4 +1,4 @@
-"""Round-robin model rotation - thin wrapper routing to Elixir (bd-134).
+"""Round-robin model rotation - thin wrapper routing to Elixir.
 
 Routes rotation state to Elixir when connected, uses local fallback when not.
 This maintains interface compatibility (~40 lines core logic).
@@ -57,7 +57,7 @@ class RoundRobinModel(Model):
             raise ValueError("rotate_every must be at least 1")
         self.models = list(models)
         self._rotate_every = rotate_every
-        self._current_index = 0  # For backward compatibility when Elixir unavailable
+        self._current_index = 0 # For backward compatibility when Elixir unavailable
         self._request_count = 0
         self._lock = asyncio.Lock()
         if is_connected():

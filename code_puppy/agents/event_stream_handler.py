@@ -67,7 +67,7 @@ _active_flush_tasks: set[asyncio.Task] = set()
 # Flush text-part delta buffer when it exceeds this many characters.
 # Larger than the TUI's 20-char threshold because terminal ANSI writes
 # benefit from batching; TUI updates a widget which has different perf
-# characteristics. See bd code_puppy-wmq3 for context.
+# characteristics.
 _TEXT_FLUSH_CHAR_THRESHOLD = 80
 
 
@@ -171,7 +171,7 @@ def set_streaming_console(console: Console | None) -> None:
     Sharing a console with the spinner keeps spinner pause/resume
     coordination working during thinking-part and tool-call output.
     Text parts stream as escaped plain chunks (no Rich Live wrapper)
-    to avoid the cascading re-render bug fixed in bd code_puppy-wmq3.
+    to avoid the cascading re-render bug.
 
     Args:
         console: The Rich console to use, or None to use a fallback.
@@ -207,7 +207,7 @@ async def event_stream_handler(ctx: RunContext, events: AsyncIterable[Any]) -> N
 
     Text parts are streamed as escaped plain text (not live markdown) to avoid
     Rich Live re-render duplication that occurs with long content. The cascading
-    duplication bug (bd issue code_puppy-wmq3) happened because Rich Live with
+    duplication bug happened because Rich Live with
     vertical_overflow="visible" re-emits the entire buffer on every refresh when
     content exceeds terminal height. Now we use list-buffered delta streaming with
     flush-on-newline/80-chars, similar to the TUI approach in stream_renderer.py.

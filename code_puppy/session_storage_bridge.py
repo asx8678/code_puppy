@@ -1,4 +1,4 @@
-"""Bridge to Elixir session storage (bd-137).
+"""Bridge to Elixir session storage.
 
 This module provides the bridge between Python session_storage.py and
 Elixir Ecto-backed session storage. It uses ElixirTransport when available

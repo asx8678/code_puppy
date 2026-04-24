@@ -1,6 +1,6 @@
 defmodule CodePuppyControl.Evals.LoggerTest do
   @moduledoc """
-  Parity gate for bd-175: Elixir `log_eval` output must decode identically
+  Parity gate for : Elixir `log_eval` output must decode identically
   to the Python reference JSON (modulo the timestamp field, which varies).
 
   Also covers sanitization, truncation, and directory resolution.
@@ -100,7 +100,7 @@ defmodule CodePuppyControl.Evals.LoggerTest do
     end
   end
 
-  describe "JSON parity with Python reference (bd-175 acceptance gate)" do
+  describe "JSON parity with Python reference (acceptance gate)" do
     test "Elixir output decodes identically to python_reference.json modulo timestamp",
          %{tmp: tmp} do
       # Build the Elixir input that mirrors the Python fixture
@@ -138,7 +138,7 @@ defmodule CodePuppyControl.Evals.LoggerTest do
 
     test "key-order in raw JSON matches Python reference", %{tmp: tmp} do
       # Python json.dumps emits keys in insertion order:
-      #   name, timestamp, model, duration_seconds, response_text, tool_calls
+      # name, timestamp, model, duration_seconds, response_text, tool_calls
       # Our encoder must match because downstream tooling may do string diffs.
       result = %Result{
         response_text: "x",

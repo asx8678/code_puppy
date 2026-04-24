@@ -1,6 +1,6 @@
 defmodule CodePuppyControl.LLM.OtpLifecycleTest do
   @moduledoc """
-  OTP lifecycle and restart behavior tests for LLM GenServers (bd-224).
+  OTP lifecycle and restart behavior tests for LLM GenServers.
 
   Verifies supervisor restart, state recovery/reset, ETS recreation,
   concurrent access during restart, and unexpected message resilience.

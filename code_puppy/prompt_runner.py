@@ -70,7 +70,7 @@ async def run_prompt_with_attachments(
     # coordination working for thinking-part and tool-call output. Text parts
     # are now streamed as plain escaped chunks (no Rich Live wrapper) to avoid
     # the cascading re-render bug that happened with long markdown content —
-    # see bd issue code_puppy-wmq3 for history.
+    #
     from code_puppy.agents.event_stream_handler import set_streaming_console
 
     set_streaming_console(spinner_console)

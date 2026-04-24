@@ -9,7 +9,7 @@ defmodule CodePuppyControl.Agent do
   - **Agent.Turn** — Pure state machine for one LLM call + tool dispatch cycle
   - **Agent.Loop** — GenServer that drives turns until done
   - **Agent.Events** — Structured event types for UI/monitoring
-  - **Agent.LLM** — Behaviour for LLM client (placeholder until bd-145)
+  - **Agent.LLM** — Behaviour for LLM client (placeholder until )
 
   ## Quick Start
 

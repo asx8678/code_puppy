@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# scripts/codesign_macos.sh — Codesign + notarize macOS Burrito binaries (bd-241)
+# scripts/codesign_macos.sh — Codesign + notarize macOS Burrito binaries
 #
 # Signs a Burrito binary with an Apple Developer ID certificate, submits it for
 # notarization via notarytool, and staples the notarization ticket.  After this

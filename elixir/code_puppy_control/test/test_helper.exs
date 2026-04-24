@@ -1,16 +1,16 @@
 # CodePuppy Control Test Helper
 #
 # Integration tests:
-#   mix test --exclude integration    # Skip integration tests (default)
-#   mix test --only integration       # Run only integration tests
-#   mix test --exclude e2e            # Skip E2E tests (default)
-#   mix test --only e2e               # Run only E2E tests
-#   mix test                          # Run all tests
+# mix test --exclude integration # Skip integration tests (default)
+# mix test --only integration # Run only integration tests
+# mix test --exclude e2e # Skip E2E tests (default)
+# mix test --only e2e # Run only E2E tests
+# mix test # Run all tests
 #
 # E2E tests:
-#   mix test.e2e                      # Run E2E tests via custom task
-#   SKIP_E2E=1 mix test              # Skip E2E tests
-#   E2E_TIMEOUT=60000 mix test.e2e  # Override timeout (60s)
+# mix test.e2e # Run E2E tests via custom task
+# SKIP_E2E=1 mix test # Skip E2E tests
+# E2E_TIMEOUT=60000 mix test.e2e # Override timeout (60s)
 
 # Ensure support files are loaded (non-.ex support files)
 Code.require_file("support/mock_python_worker.ex", __DIR__)
@@ -19,7 +19,7 @@ Code.require_file("support/e2e_case.ex", __DIR__)
 # Support .ex files in test/support are automatically loaded via compilation
 # This includes: test_reset.ex, stateful_case.ex, stdio_test_helper.ex
 
-# Start parser registry for tests (bd-114: pure Elixir parsers)
+# Start parser registry for tests (: pure Elixir parsers)
 # Registry may already be started by the application supervision tree
 case CodePuppyControl.Parsing.ParserRegistry.start_link(
        name: CodePuppyControl.Parsing.ParserRegistry
@@ -28,7 +28,7 @@ case CodePuppyControl.Parsing.ParserRegistry.start_link(
   {:error, {:already_started, _pid}} -> :ok
 end
 
-# Start callback registry for tests (bd-156)
+# Start callback registry for tests
 case CodePuppyControl.Callbacks.Registry.start_link(name: CodePuppyControl.Callbacks.Registry) do
   {:ok, _pid} -> :ok
   {:error, {:already_started, _pid}} -> :ok
@@ -38,7 +38,7 @@ CodePuppyControl.Parsing.Parsers.register_all()
 
 # Configure ExUnit with integration and E2E tests excluded by default.
 # `:eval` tests are ALSO excluded unless RUN_EVALS=1 is set, mirroring the
-# Python `evals/conftest.py` gate (bd-175).
+# Python `evals/conftest.py` gate.
 exclude_tags =
   if System.get_env("RUN_EVALS") == "1" do
     [:integration, :e2e, :skip]
@@ -53,12 +53,12 @@ exclude_tags =
 # On a fanless M4 Air (10 schedulers), running all 10 cases simultaneously
 # causes thermal throttling. These profiles let you pick a comfort level:
 #
-#   PUP_TEST_PROFILE=gentle   => ~3 cases  (cool / quiet)
-#   PUP_TEST_PROFILE=balanced => ~6 cases  (default, good trade-off)
-#   PUP_TEST_PROFILE=burst    => ~9-10 cases (fast / CI-style)
+# PUP_TEST_PROFILE=gentle => ~3 cases (cool / quiet)
+# PUP_TEST_PROFILE=balanced => ~6 cases (default, good trade-off)
+# PUP_TEST_PROFILE=burst => ~9-10 cases (fast / CI-style)
 #
 # Override with an exact number:
-#   PUP_TEST_MAX_CASES=2 mix test
+# PUP_TEST_MAX_CASES=2 mix test
 #
 # Explicit CLI flags always win: --trace, --max-cases, --max-cases=N
 # ---------------------------------------------------------------------------

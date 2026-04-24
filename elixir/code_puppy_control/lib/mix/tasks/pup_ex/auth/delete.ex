@@ -1,5 +1,5 @@
 defmodule Mix.Tasks.PupEx.Auth.Delete do
-  @shortdoc "Delete a credential from the encrypted store (bd-167)"
+  @shortdoc "Delete a credential from the encrypted store"
   @moduledoc """
   Delete a named credential from the encrypted credential store.
 

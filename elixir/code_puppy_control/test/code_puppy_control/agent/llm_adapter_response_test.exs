@@ -43,7 +43,7 @@ defmodule CodePuppyControl.Agent.LLMAdapterResponseTest do
 
       [tc] = resp.tool_calls
       assert tc.id == "tc1"
-      # bd-256: safe_atomize converts known string tool names to atoms
+      # safe_atomize converts known string tool names to atoms
       assert tc.name == :command_runner
       assert tc.arguments == %{"command" => "ls"}
     end
@@ -60,7 +60,7 @@ defmodule CodePuppyControl.Agent.LLMAdapterResponseTest do
 
       assert {:ok, resp} = LLMAdapter.stream_chat(msgs, [], [model: "test"], fn _ -> :ok end)
       assert length(resp.tool_calls) == 2
-      # bd-256: safe_atomize converts known string tool names to atoms
+      # safe_atomize converts known string tool names to atoms
       assert Enum.map(resp.tool_calls, & &1.name) == [:read_file, :command_runner]
     end
 
@@ -75,7 +75,7 @@ defmodule CodePuppyControl.Agent.LLMAdapterResponseTest do
 
       [tc] = resp.tool_calls
       # Adapter normalizes to atom-keyed map
-      # bd-256: safe_atomize converts known string tool names to atoms
+      # safe_atomize converts known string tool names to atoms
       assert tc.id == "tc1"
       assert tc.name == :read_file
       assert tc.arguments == %{"path" => "a.ex"}

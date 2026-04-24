@@ -1,6 +1,6 @@
 defmodule CodePuppyControl.Tools.CommandRunner.ProcessManager do
   @moduledoc """
-  Process tracking for shell commands (bd-64).
+  Process tracking for shell commands.
 
   This GenServer tracks running shell commands and provides:
 

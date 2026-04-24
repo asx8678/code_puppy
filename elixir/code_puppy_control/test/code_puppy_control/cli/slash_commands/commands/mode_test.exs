@@ -244,7 +244,7 @@ defmodule CodePuppyControl.CLI.SlashCommands.Commands.ModeTest do
     test "whitespace-only args behave like bare /mode" do
       output =
         ExUnit.CaptureIO.capture_io(fn ->
-          assert {:continue, _} = Mode.handle_mode("/mode   ", %{})
+          assert {:continue, _} = Mode.handle_mode("/mode ", %{})
         end)
 
       assert output =~ "Configuration Mode"
@@ -254,14 +254,14 @@ defmodule CodePuppyControl.CLI.SlashCommands.Commands.ModeTest do
     test "does not show unknown-preset error for whitespace-only args" do
       output =
         ExUnit.CaptureIO.capture_io(fn ->
-          assert {:continue, _} = Mode.handle_mode("/mode   ", %{})
+          assert {:continue, _} = Mode.handle_mode("/mode ", %{})
         end)
 
       refute output =~ "Unknown preset"
     end
   end
 
-  describe "/mode basic via supervised Writer (bd-260 app-path)" do
+  describe "/mode basic via supervised Writer (app-path)" do
     setup do
       # Start Writer under supervision — mimics the real app path where
       # CodePuppyControl.Application supervises Config.Writer.

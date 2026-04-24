@@ -265,7 +265,7 @@ defmodule CodePuppyControl.MCP.Server do
 
   @impl true
   def handle_info({port, {:data, data}}, %{port: port, receive_buffer: buffer} = state) do
-    # bd-114: newline-delimited JSON — just accumulate and split on newlines
+    # newline-delimited JSON — just accumulate and split on newlines
     new_buffer = buffer <> data
 
     case Protocol.parse_newline(new_buffer) do
@@ -337,7 +337,7 @@ defmodule CodePuppyControl.MCP.Server do
   Resolves a bare command name to an absolute executable path.
 
   For bare names (npx, docker, uvx, etc.), uses `System.find_executable/1`
-  to locate the binary on `$PATH`.  Absolute or relative paths are
+  to locate the binary on `$PATH`. Absolute or relative paths are
   returned unchanged so users can explicitly point at a binary.
 
   Returns `{:ok, path}` on success, `{:error, {:not_found, command}}`
@@ -367,7 +367,7 @@ defmodule CodePuppyControl.MCP.Server do
 
   defp start_mcp_server(state) do
     # Resolve bare executable names (npx, docker, etc.) via PATH
-    # before spawning a Port.  This prevents silent failures when
+    # before spawning a Port. This prevents silent failures when
     # the executable is missing and provides a clear error message.
     case resolve_command(state.command) do
       {:error, {:not_found, cmd}} ->
@@ -409,7 +409,7 @@ defmodule CodePuppyControl.MCP.Server do
         1
       )
 
-    # bd-114: Use newline-delimited JSON for MCP stdio transport
+    # Use newline-delimited JSON for MCP stdio transport
     Port.command(port, Protocol.frame_newline(init_request))
 
     # Wait for initialize response
@@ -427,7 +427,7 @@ defmodule CodePuppyControl.MCP.Server do
                 initialized_notification =
                   Protocol.encode_notification("notifications/initialized", %{})
 
-                # bd-114: Use newline-delimited JSON for MCP stdio transport
+                # Use newline-delimited JSON for MCP stdio transport
                 Port.command(port, Protocol.frame_newline(initialized_notification))
                 {:ok, port}
 
@@ -456,7 +456,7 @@ defmodule CodePuppyControl.MCP.Server do
       _info ->
         # Send tools/list as a lightweight health probe
         message = Protocol.encode_request("tools/list", %{}, nil)
-        # bd-114: Use newline-delimited JSON for MCP stdio transport
+        # Use newline-delimited JSON for MCP stdio transport
         Port.command(state.port, Protocol.frame_newline(message))
 
         receive do

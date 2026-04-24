@@ -1,6 +1,6 @@
-defmodule CodePuppyControl.REPL.DispatchPersistenceBD257Test do
+defmodule CodePuppyControl.REPL.DispatchPersistenceTest do
   @moduledoc """
-  Regression tests for bd-257: compaction-safe persistence after send_to_agent.
+  Regression tests for: compaction-safe persistence after send_to_agent.
 
   The old code used `Enum.drop(final_messages, pre_count)` to extract new
   messages from the Agent.Loop, which assumes final_messages is prefix-aligned
@@ -23,9 +23,9 @@ defmodule CodePuppyControl.REPL.DispatchPersistenceBD257Test do
   # test files' mocks.
   # ---------------------------------------------------------------------------
 
-  defmodule BD257MockLLM do
+  defmodule DispatchPersistenceMockLLM do
     @moduledoc """
-    Mock LLM for bd-257 dispatch persistence tests.
+    Mock LLM for dispatch persistence dispatch persistence tests.
 
     Implements `CodePuppyControl.Agent.LLM` behaviour with controllable
     responses via an Elixir Agent process.
@@ -86,8 +86,8 @@ defmodule CodePuppyControl.REPL.DispatchPersistenceBD257Test do
     session_id = :crypto.strong_rand_bytes(4) |> Base.encode16(case: :lower)
 
     prev_llm = Application.get_env(:code_puppy_control, :repl_llm_module)
-    Application.put_env(:code_puppy_control, :repl_llm_module, BD257MockLLM)
-    BD257MockLLM.reset()
+    Application.put_env(:code_puppy_control, :repl_llm_module, DispatchPersistenceMockLLM)
+    DispatchPersistenceMockLLM.reset()
 
     try do
       AgentCatalogue.discover_agent_modules()
@@ -104,7 +104,7 @@ defmodule CodePuppyControl.REPL.DispatchPersistenceBD257Test do
 
       Application.delete_env(:code_puppy_control, :test_compaction_opts)
 
-      BD257MockLLM.stop()
+      DispatchPersistenceMockLLM.stop()
 
       try do
         State.clear_messages(session_id, "code_puppy")
@@ -138,17 +138,17 @@ defmodule CodePuppyControl.REPL.DispatchPersistenceBD257Test do
   end
 
   # ===========================================================================
-  # Success-path persistence via set_messages (bd-257)
+  # Success-path persistence via set_messages (dispatch persistence)
   # ===========================================================================
 
-  describe "dispatch_after_append — compaction-safe persistence (bd-257)" do
+  describe "dispatch_after_append — compaction-safe persistence (dispatch persistence)" do
     setup :setup_mock_llm_and_session
 
     test "assistant reply persisted after successful dispatch", %{
       state: state,
       session_id: session_id
     } do
-      BD257MockLLM.set_response(%{text: "I am a helpful assistant!", tool_calls: []})
+      DispatchPersistenceMockLLM.set_response(%{text: "I am a helpful assistant!", tool_calls: []})
 
       ExUnit.CaptureIO.capture_io(fn ->
         assert {:continue, ^state} = Loop.handle_input("Hello", state)
@@ -185,7 +185,7 @@ defmodule CodePuppyControl.REPL.DispatchPersistenceBD257Test do
 
       assert length(State.get_messages(session_id, "code_puppy")) == 2
 
-      BD257MockLLM.set_response(%{text: "second answer", tool_calls: []})
+      DispatchPersistenceMockLLM.set_response(%{text: "second answer", tool_calls: []})
 
       ExUnit.CaptureIO.capture_io(fn ->
         assert {:continue, ^state} = Loop.handle_input("second question", state)
@@ -231,7 +231,7 @@ defmodule CodePuppyControl.REPL.DispatchPersistenceBD257Test do
 
       assert length(State.get_messages(session_id, "code_puppy")) == 5
 
-      BD257MockLLM.set_response(%{text: "compaction-safe reply", tool_calls: []})
+      DispatchPersistenceMockLLM.set_response(%{text: "compaction-safe reply", tool_calls: []})
 
       ExUnit.CaptureIO.capture_io(fn ->
         assert {:continue, ^state} = Loop.handle_input("trigger compaction", state)
@@ -255,7 +255,7 @@ defmodule CodePuppyControl.REPL.DispatchPersistenceBD257Test do
       state: state,
       session_id: session_id
     } do
-      # WATCHDOG REGRESSION TEST (bd-257 critic feedback):
+      # WATCHDOG REGRESSION TEST (dispatch persistence critic feedback):
       # This test forces ACTUAL compaction that shrinks the message count,
       # proving that the old Enum.drop(final_messages, pre_count) logic
       # would silently return [] and drop the assistant reply.
@@ -300,7 +300,7 @@ defmodule CodePuppyControl.REPL.DispatchPersistenceBD257Test do
         keep_fraction: 0.05
       )
 
-      BD257MockLLM.set_response(%{text: "post-compaction reply", tool_calls: []})
+      DispatchPersistenceMockLLM.set_response(%{text: "post-compaction reply", tool_calls: []})
 
       ExUnit.CaptureIO.capture_io(fn ->
         assert {:continue, ^state} = Loop.handle_input("new question", state)
@@ -401,7 +401,7 @@ defmodule CodePuppyControl.REPL.DispatchPersistenceBD257Test do
       state: state,
       session_id: session_id
     } do
-      # Verify that the bd-254 rollback semantics are preserved:
+      # Verify that the dispatch rollback rollback semantics are preserved:
       # on error, messages_before should be restored even though
       # the success path now uses set_messages.
 
@@ -412,13 +412,13 @@ defmodule CodePuppyControl.REPL.DispatchPersistenceBD257Test do
 
       assert [%{"role" => "user"}] = State.get_messages(session_id, "code_puppy")
 
-      BD257MockLLM.set_response(%{text: "should not persist", tool_calls: []})
+      DispatchPersistenceMockLLM.set_response(%{text: "should not persist", tool_calls: []})
 
       # Inject a success-path fault to trigger rollback
       Application.put_env(
         :code_puppy_control,
         :test_dispatch_success_fault,
-        "bd-257 rollback test"
+        "dispatch persistence rollback test"
       )
 
       ExUnit.CaptureIO.capture_io(fn ->

@@ -8,10 +8,10 @@ defmodule CodePuppyControl.TUI.Screens.Chat do
 
   ## Input Handling
 
-    * Regular text  → sent to the agent loop as a user message
-    * `/help`       → switch to Help screen
-    * `/config`     → switch to Config screen
-    * `/quit`       → exit the TUI
+    * Regular text → sent to the agent loop as a user message
+    * `/help` → switch to Help screen
+    * `/config` → switch to Config screen
+    * `/quit` → exit the TUI
 
   ## State
 
@@ -103,7 +103,7 @@ defmodule CodePuppyControl.TUI.Screens.Chat do
     user_msg = %{role: :user, content: input}
     new_messages = state.messages ++ [user_msg]
 
-    # TODO(bd-162): Wire to Agent.Loop.run_turn/1 for real agent invocation.
+    # TODO: Wire to Agent.Loop.run_turn/1 for real agent invocation.
     # For now, record the message and echo a placeholder assistant response.
     assistant_msg = %{role: :assistant, content: "(agent not yet wired — you said: #{input})"}
     final_messages = new_messages ++ [assistant_msg]
@@ -144,7 +144,7 @@ defmodule CodePuppyControl.TUI.Screens.Chat do
   end
 
   defp render_history([]) do
-    Owl.Data.tag("\n  No messages yet. Type something to start chatting!\n", :faint)
+    Owl.Data.tag("\n No messages yet. Type something to start chatting!\n", :faint)
   end
 
   defp render_history(messages) do
@@ -178,11 +178,11 @@ defmodule CodePuppyControl.TUI.Screens.Chat do
   end
 
   defp render_prompt(:streaming) do
-    Owl.Data.tag("  ⏳ Waiting for response... (input ignored)\n", :faint)
+    Owl.Data.tag(" ⏳ Waiting for response... (input ignored)\n", :faint)
   end
 
   defp render_prompt(:idle) do
-    Owl.Data.tag("  > ", :cyan)
+    Owl.Data.tag(" > ", :cyan)
   end
 
   # ── Helpers ────────────────────────────────────────────────────────────────

@@ -1,5 +1,5 @@
 defmodule Mix.Tasks.PupEx.Auth.Login do
-  @shortdoc "Authenticate with ChatGPT via OAuth (bd-290)"
+  @shortdoc "Authenticate with ChatGPT via OAuth"
   @moduledoc """
   Initialize the auth directory for Elixir pup-ex.
 
@@ -11,7 +11,7 @@ defmodule Mix.Tasks.PupEx.Auth.Login do
 
   1. Creates `~/.code_puppy_ex/auth/` (via isolation-safe mkdir)
   2. Writes a placeholder file explaining the directory's purpose
-  3. Prints a message directing users to bd-166 for full OAuth
+  3. Prints a message directing users for full OAuth
 
   ## What it does NOT do
 
@@ -19,7 +19,7 @@ defmodule Mix.Tasks.PupEx.Auth.Login do
   - Does NOT implement any OAuth flow
   - Does NOT share credentials with the Python pup
 
-  Run `mix pup_ex.auth.login` again after bd-166 lands to authenticate.
+  Run `mix pup_ex.auth.login` again once available to authenticate.
   """
   use Mix.Task
 
@@ -27,10 +27,10 @@ defmodule Mix.Tasks.PupEx.Auth.Login do
 
   @placeholder_content """
   This directory is reserved for pup-ex OAuth credentials.
-  Full OAuth flow is tracked in bd-166.
+  Full OAuth flow is not yet available.
 
   pup-ex will NEVER read credentials from ~/.code_puppy/auth/.
-  Run `mix pup_ex.auth.login` again after bd-166 lands to authenticate.
+  Run `mix pup_ex.auth.login` again once available to authenticate.
   """
 
   @impl Mix.Task
@@ -45,7 +45,7 @@ defmodule Mix.Tasks.PupEx.Auth.Login do
       Isolation.safe_write!(placeholder_path, @placeholder_content)
 
       Mix.shell().info(
-        "Auth scaffolding initialized at #{auth_dir}/. Full OAuth flow lands with bd-166."
+        "Auth scaffolding initialized at #{auth_dir}/. Full OAuth flow will be available later."
       )
     rescue
       e in Isolation.IsolationViolation ->

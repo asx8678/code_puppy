@@ -1,6 +1,6 @@
 """Fast Puppy Plugin — Native acceleration management (REMOVED).
 
-bd-50: Native acceleration layer removed. This plugin is now a minimal
+Native acceleration layer removed. This plugin is now a minimal
 stub that only reports that the acceleration layer has been removed.
 """
 
@@ -11,7 +11,7 @@ def _on_custom_command(command: str, name: str):
     """Handle /fast_puppy command — reports acceleration removed."""
     if name != "fast_puppy":
         return None
-    return "🐍 Fast Puppy: Native acceleration layer removed (bd-86/bd-50). All operations use pure Python."
+    return "🐍 Fast Puppy: Native acceleration layer removed (removed). All operations use pure Python."
 
 
 def _on_custom_command_help():

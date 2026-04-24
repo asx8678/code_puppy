@@ -1,6 +1,6 @@
 # Thin Shell Contract: Python → Elixir Migration
 
-> **Issue:** bd-76  
+> **Issue:** Thin Shell Contract  
 > **Status:** Draft - Shepherd Review Addressed — Complete module classification, verified line counts, full RPC documentation  
 > **Last Updated:** 2026-04-17  
 > **Changes:** Fixed base_agent.py count (3,152 vs ~1,300), added command_line/ tier, documented all 34 bridge RPC methods, added "Uncategorized" section with 62K+ lines, corrected Rust counts (38 files, 119K lines)
@@ -95,7 +95,7 @@ This document defines the **"thin shell"** — the minimal Python surface that r
 | `code_puppy/agents/event_stream_handler.py` | ~600 | Streaming response handling. |
 | `code_puppy/agents/agent_manager.py` | ~800 | Agent registry and discovery. |
 | `code_puppy/agents/agent_code_puppy.py` | ~150 | Default agent implementation. |
-| `code_puppy/agents/pack/*.py` | ~400 total | Pack sub-agents (Bloodhound, Retriever, etc.). |
+| `code_puppy/agents/pack/*.py` | ~400 total | Pack sub-agents (Retriever, Shepherd, etc.). |
 
 ### Tier 5: Bridge Layer (Must Stay - Communication)
 
@@ -163,7 +163,7 @@ The following **62,000+ lines** across major modules are not yet classified as r
 
 | Module | Files | Lines | Current Usage | Proposed Direction |
 |--------|-------|-------|---------------|-------------------|
-| `tools/browser/` | 13 | 4,750 | Browser automation, Playwright | **DROP-V1** — No mature Elixir browser automation; revisit post-v1 via bd-209 |
+| `tools/browser/` | 13 | 4,750 | Browser automation, Playwright | **DROP-V1** — No mature Elixir browser automation; revisit post-v1 |
 | `mcp_/` | 19 | 8,158 | MCP server management | **Under Review** — Elixir has native MCP |
 
 ### Agents Beyond Base
@@ -247,21 +247,21 @@ Key unclassified top-level modules:
 
 ### Already Migrated ✅
 
-| Category | Python Module | Elixir Replacement | Issue |
-|----------|---------------|-------------------|-------|
-| **File Operations** | `tools/file_operations.py` | `FileOps` (Elixir) | bd-7, bd-8 |
-| **File List** | `utils/file_display.py` (partial) | `FileOps.Lister` | bd-9 |
-| **Grep** | `utils/` grep functions | `FileOps.Grep` | — |
-| **Scheduler** | `scheduler/*.py` | `Scheduler` (Oban) | — |
-| **Repo Indexer** | `plugins/repo_compass/` | `Indexer.RepoCompass` | bd-9 |
-| **Text Processing** | | | |
-| ├─ Content Prep | Rust `content_prep.rs` | `Text.ContentPrep` | bd-34 |
-| ├─ Path Classify | Rust `path_classify.rs` | `FileOps.PathClassifier` | bd-35 |
-| ├─ Line Numbers | Rust `line_numbers.rs` | `Text.LineNumbers` | bd-36 |
-| ├─ Unified Diff | Rust `unified_diff.rs` | `Text.Diff` | bd-37 |
-| ├─ Fuzzy Match | Rust `fuzzy_match.rs` | `Text.FuzzyMatch` | bd-38 |
-| ├─ Replace Engine | Rust `replace_engine.rs` | `Text.ReplaceEngine` | bd-39 |
-| └─ Hashline | Rust `hashline.rs` | `HashlineNif` (Elixir NIF) | bd-88 |
+| Category | Python Module | Elixir Replacement |
+|----------|---------------|-------------------|
+| **File Operations** | `tools/file_operations.py` | `FileOps` (Elixir) |
+| **File List** | `utils/file_display.py` (partial) | `FileOps.Lister` |
+| **Grep** | `utils/` grep functions | `FileOps.Grep` |
+| **Scheduler** | `scheduler/*.py` | `Scheduler` (Oban) |
+| **Repo Indexer** | `plugins/repo_compass/` | `Indexer.RepoCompass` |
+| **Text Processing** | | |
+| ├─ Content Prep | Rust `content_prep.rs` | `Text.ContentPrep` |
+| ├─ Path Classify | Rust `path_classify.rs` | `FileOps.PathClassifier` |
+| ├─ Line Numbers | Rust `line_numbers.rs` | `Text.LineNumbers` |
+| ├─ Unified Diff | Rust `unified_diff.rs` | `Text.Diff` |
+| ├─ Fuzzy Match | Rust `fuzzy_match.rs` | `Text.FuzzyMatch` |
+| ├─ Replace Engine | Rust `replace_engine.rs` | `Text.ReplaceEngine` |
+| └─ Hashline | Rust `hashline.rs` | `HashlineNif` (Elixir NIF) |
 | **API Layer** | `api/*.py` | May be replaced by Elixir Phoenix controllers |
 | **MCP Python** | `mcp_/*.py` | Elixir has native MCP implementation |
 | **Scheduler CLI** | `scheduler/cli.py` | Elixir provides CLI |
@@ -326,7 +326,7 @@ These 34 methods are registered in `bridge_controller.py` handlers dict — Elix
 | `concurrency.release` | Release slot | `type` |
 | `concurrency.status` | Get status | — |
 
-#### Run Limiter (4 methods) — bd-100
+#### Run Limiter (4 methods)
 | Method | Purpose | Params |
 |--------|---------|--------|
 | `run_limiter.acquire` | Acquire run slot | `timeout` |
@@ -334,7 +334,7 @@ These 34 methods are registered in `bridge_controller.py` handlers dict — Elix
 | `run_limiter.status` | Get limiter status | — |
 | `run_limiter.set_limit` | Update limit | `limit` |
 
-#### MCP Bridge (6 methods) — bd-81
+#### MCP Bridge (6 methods)
 | Method | Purpose | Params |
 |--------|---------|--------|
 | `mcp.register` | Register MCP server | `name`, `command`, `args`, `env`, `opts` |
@@ -344,12 +344,12 @@ These 34 methods are registered in `bridge_controller.py` handlers dict — Elix
 | `mcp.call_tool` | Call tool (limited) | `server_id`, `method`, `params` |
 | `mcp.health_check` | Health check all | — |
 
-#### EventBus (1 method) — bd-79
+#### EventBus (1 method)
 | Method | Purpose | Params |
 |--------|---------|--------|
 | `eventbus.event` | Route Elixir→Python events | `topic`, `event_type`, `payload` |
 
-#### Rate Limiter (4 methods) — bd-101
+#### Rate Limiter (4 methods)
 | Method | Purpose | Params |
 |--------|---------|--------|
 | `rate_limiter.record_limit` | Record 429 | `model_name` |
@@ -357,7 +357,7 @@ These 34 methods are registered in `bridge_controller.py` handlers dict — Elix
 | `rate_limiter.get_limit` | Get limit | `model_name` |
 | `rate_limiter.circuit_status` | Circuit state | `model_name` |
 
-#### Agent Manager (4 methods) — bd-102
+#### Agent Manager (4 methods)
 | Method | Purpose | Params |
 |--------|---------|--------|
 | `agent_manager.register` | Register agent | `agent_name`, `agent_info` |
@@ -422,7 +422,7 @@ RuntimeError               # Elixir returned error response
 
 | Module | Decision | Rationale |
 |--------|----------|-----------|
-| `turbo_parse` | **Migrated** | Tree-sitter now handled via `turbo_parse_nif` Elixir NIF. Decision resolved: Rust completely removed in favor of Elixir (bd-51). |
+| `turbo_parse` | **Migrated** | Tree-sitter now handled via `turbo_parse_nif` Elixir NIF. Decision resolved: Rust completely removed in favor of Elixir. |
 | `messaging/bus.py` | **Conditional** | MessageBus may stay as local event router even with Elixir EventBus for intra-Python events. Hybrid approach likely. |
 | `plugins/*/register_callbacks.py` | **Stay** | Plugin contract is Python-first by design. Elixir plugins would need separate discovery mechanism. |
 
@@ -436,7 +436,7 @@ RuntimeError               # Elixir returned error response
 |-----------|-------|-------|-------|
 | **Python files** | 523 | 144,818 | Measured via `find` |
 | **Rust files** | 0 | 0 | **Removed** — All Rust code migrated to Elixir (2026-Q2) |
-| **Elixir files** | ~121 | — | Per MIGRATION_STATUS.md |
+| **Elixir files** | ~121 | — | Approximate count |
 
 > **Historical Context:** The original Rust components (`code_puppy_core/`, `turbo_parse/`, `turbo_parse_core/`) were completely removed in favor of Elixir NIFs. The `turbo_parse/` directory contained ~112K lines largely from generated tree-sitter bindings.
 
@@ -487,7 +487,7 @@ code_puppy/
 │   ├── agent_prompt_mixin.py # Prompt assembly (~200 lines)
 │   ├── agent_code_puppy.py  # Default agent (~150 lines)
 │   ├── event_stream_handler.py # Streaming (~600 lines)
-│   └── pack/                # Sub-agents (Retrieval, Bloodhound, etc.)
+│   └── pack/                # Sub-agents (Retriever, Shepherd, etc.)
 │
 ├── command_line/            # CLI components (58 files, 17,143 lines)
 │   ├── command_handler.py   # Slash command routing
@@ -537,7 +537,6 @@ code_puppy/
 
 | Document | Purpose |
 |----------|---------|
-| `MIGRATION_STATUS.md` | Current migration status and issues |
 | `ARCHITECTURE.md` | Overall system architecture |
 | `docs/protocol/BRIDGE_PROTOCOL_V1.md` | RPC contract specification |
 | `docs/protocol/ELIXIR_STANDALONE_TRANSPORT.md` | Transport details |
@@ -545,4 +544,4 @@ code_puppy/
 
 ---
 
-*Generated by Code Puppy 🐕 — bd-76*
+*Generated by Code Puppy 🐕*

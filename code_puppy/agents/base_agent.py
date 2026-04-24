@@ -23,8 +23,8 @@ import pydantic
 try:
     from dbos import DBOS, SetWorkflowID
 except ImportError:
-    DBOS = None  # type: ignore[assignment,misc]
-    SetWorkflowID = None  # type: ignore[assignment,misc]
+    DBOS = None # type: ignore[assignment,misc]
+    SetWorkflowID = None # type: ignore[assignment,misc]
 from pydantic_ai import Agent as PydanticAgent
 from pydantic_ai.exceptions import UnexpectedModelBehavior
 from pydantic_ai import (
@@ -38,7 +38,7 @@ from pydantic_ai import (
 try:
     from pydantic_ai.durable_exec.dbos import DBOSAgent
 except ImportError:
-    DBOSAgent = None  # type: ignore[assignment,misc]
+    DBOSAgent = None # type: ignore[assignment,misc]
 
 from pydantic_ai.messages import (
     ModelMessage,
@@ -141,7 +141,7 @@ class BaseAgent(ABC, AgentPromptMixin):
     )
 
     def __init__(self):
-        self.id = str(uuid.uuid7())  # time-sortable for chronological ordering
+        self.id = str(uuid.uuid7()) # time-sortable for chronological ordering
         # Mutable runtime state container - separates state from immutable config
         self._state = AgentRuntimeState()
 
@@ -409,7 +409,7 @@ class BaseAgent(ABC, AgentPromptMixin):
             List of messages guaranteed to end with ModelRequest, or empty list
             if no ModelRequest is found.
         """
-        messages = list(messages)  # defensive copy
+        messages = list(messages) # defensive copy
         if not messages:
             return messages
 
@@ -611,8 +611,8 @@ class BaseAgent(ABC, AgentPromptMixin):
             prepared = prepare_prompt_for_model(
                 model_name=model_name,
                 system_prompt=system_prompt,
-                user_prompt="",  # Empty - we just need the instructions
-                prepend_system_to_user=False,  # Don't modify prompt, just get instructions
+                user_prompt="", # Empty - we just need the instructions
+                prepend_system_to_user=False, # Don't modify prompt, just get instructions
             )
 
             if prepared.instructions:
@@ -797,7 +797,7 @@ class BaseAgent(ABC, AgentPromptMixin):
     def _check_token_budgets(self, estimated_input: int) -> None:
         """Check hard token budgets before making an API call.
 
-        bd-113: Enforce per-session and per-run token limits.
+        Enforce per-session and per-run token limits.
         Raises RuntimeError if budgets are exceeded.
         """
         from code_puppy.config import get_max_session_tokens, get_max_run_tokens
@@ -829,7 +829,7 @@ class BaseAgent(ABC, AgentPromptMixin):
         Raises RuntimeError if estimated tokens exceed the model's output limit,
         giving early warning before API call rather than mid-generation failure.
 
-        This is part of bd-18: context budget enforcement.
+        This is part of context budget enforcement.
         """
         try:
             model_name = self.get_model_name()
@@ -946,7 +946,7 @@ class BaseAgent(ABC, AgentPromptMixin):
         adjusted_idx = initial_split_idx
         for i in range(
             initial_split_idx - 1, 0, -1
-        ):  # Don't include system message at 0
+        ): # Don't include system message at 0
             msg = messages[i]
             has_matching_tool_use = False
             for part in getattr(msg, "parts", None) or ():
@@ -986,7 +986,7 @@ class BaseAgent(ABC, AgentPromptMixin):
         The system message (first message) is always protected.
         All other messages that don't fit in the protected zone will be summarized.
         """
-        if len(messages) <= 1:  # Just system message or empty
+        if len(messages) <= 1: # Just system message or empty
             return [], messages
 
         # Always protect the system message (first message)
@@ -1004,7 +1004,7 @@ class BaseAgent(ABC, AgentPromptMixin):
             model_name,
             trigger_fraction=cfg.summarization_trigger_fraction,
             keep_fraction=cfg.summarization_keep_fraction,
-            absolute_trigger=int(cfg.compaction_threshold * model_max),  # Convert proportion to tokens
+            absolute_trigger=int(cfg.compaction_threshold * model_max), # Convert proportion to tokens
             absolute_protected=cfg.protected_token_count,
         )
         # Use the keep_tokens (protected zone) from computed thresholds
@@ -1012,12 +1012,12 @@ class BaseAgent(ABC, AgentPromptMixin):
 
         # Calculate tokens for messages from most recent backwards (excluding system message)
         protected_messages = []
-        protected_token_count = system_tokens  # Start with system message tokens
+        protected_token_count = system_tokens # Start with system message tokens
 
         # Go backwards through non-system messages to find protected zone
         for i in range(
             len(messages) - 1, 0, -1
-        ):  # Stop at 1, not 0 (skip system message)
+        ): # Stop at 1, not 0 (skip system message)
             message = messages[i]
             message_tokens = self.estimate_tokens_for_message(message)
 
@@ -1110,7 +1110,7 @@ class BaseAgent(ABC, AgentPromptMixin):
 
         When the messages to summarize exceed the summarizer model's context
         window, this method splits them in half, summarizes the first half,
-        and checks whether the result plus the second half now fits.  If not,
+        and checks whether the result plus the second half now fits. If not,
         it recurses on the combined result.
 
         This guarantees convergence because each recursion at least halves the
@@ -1150,7 +1150,7 @@ class BaseAgent(ABC, AgentPromptMixin):
         mid = len(messages_to_summarize) // 2
 
         # Adjust the split point to avoid breaking tool_use / tool_result
-        # pairs.  _find_safe_split_index expects a full message list with the
+        # pairs. _find_safe_split_index expects a full message list with the
         # system message at index 0, so we temporarily prepend a placeholder.
         # Instead, we manually scan for tool-call boundaries near the midpoint.
         mid = self._find_safe_summarize_split(messages_to_summarize, mid)
@@ -1349,7 +1349,7 @@ class BaseAgent(ABC, AgentPromptMixin):
                     f"\U0001f4a1 Tip: Underlying error was {type(e.original_error).__name__}. "
                     "Consider using '/set compaction_strategy=truncation' as a fallback."
                 )
-            return messages, []  # Return original messages on failure
+            return messages, [] # Return original messages on failure
         except Exception as e:
             # Catch-all for unexpected errors
             error_type = type(e).__name__
@@ -1357,7 +1357,7 @@ class BaseAgent(ABC, AgentPromptMixin):
             emit_error(
                 f"Unexpected error during compaction: [{error_type}] {error_msg}"
             )
-            return messages, []  # Return original messages on failure
+            return messages, [] # Return original messages on failure
 
     def get_model_context_length(self) -> int:
         """
@@ -1415,7 +1415,7 @@ class BaseAgent(ABC, AgentPromptMixin):
         hasher.update(str(len(messages)).encode())
         for msg in messages:
             hasher.update(self.hash_message(msg).encode())
-        cache_key = hasher.hexdigest()[:32]  # 128 bits is sufficient
+        cache_key = hasher.hexdigest()[:32] # 128 bits is sufficient
         if (
             self._state.tool_ids_cache is not None
             and self._state.tool_ids_cache[0] == cache_key
@@ -1483,7 +1483,7 @@ class BaseAgent(ABC, AgentPromptMixin):
         # Check if it's now safe to compact
         messages = self.get_message_history()
         if not self.has_pending_tool_calls(messages):
-            self._state.delayed_compaction_requested = False  # Reset the flag
+            self._state.delayed_compaction_requested = False # Reset the flag
             return True
 
         return False
@@ -1568,7 +1568,7 @@ class BaseAgent(ABC, AgentPromptMixin):
                 continue
             pruned.append(msg)
         
-        # Shadow mode: compare with Elixir implementation (bd-112)
+        # Shadow mode: compare with Elixir implementation
         shadow_prune_and_filter(messages, pruned)
         
         return pruned
@@ -1610,7 +1610,7 @@ class BaseAgent(ABC, AgentPromptMixin):
                 has_pending, pending_count = self._check_pending_tool_calls(messages)
                 if has_pending:
                     emit_warning(
-                        f"⚠️  Summarization deferred: {pending_count} pending tool call(s) detected. "
+                        f"⚠️ Summarization deferred: {pending_count} pending tool call(s) detected. "
                         "Waiting for tool execution to complete before compaction.",
                         message_group="token_context_status",
                     )
@@ -1884,7 +1884,7 @@ class BaseAgent(ABC, AgentPromptMixin):
             output_type: The output type for the agent (default ``str``).
             message_group: Optional message group for logging; auto-generated
                 if omitted.
-            mcp_servers: MCP server toolsets to use.  Pass ``None`` (default)
+            mcp_servers: MCP server toolsets to use. Pass ``None`` (default)
                 to reuse the cached ``self._mcp_servers``, or pass an explicit
                 list (e.g. freshly loaded servers for a reload).
 
@@ -1957,7 +1957,7 @@ class BaseAgent(ABC, AgentPromptMixin):
         """Force-reload the pydantic-ai Agent based on current config and model."""
         # Invalidate the project-local rules cache so a fresh read from the
         # current working directory is performed on the next load_puppy_rules()
-        # call.  This is critical for /cd: the user may have switched to a
+        # call. This is critical for /cd: the user may have switched to a
         # different project that has its own AGENT.md (or none at all).
         self._state.puppy_rules = None
         # Invalidate ALL token caches since agent reload changes tools/prompt
@@ -2140,7 +2140,7 @@ class BaseAgent(ABC, AgentPromptMixin):
             on_message_history_processor_start(
                 agent_name=self.name,
                 session_id=getattr(self, "session_id", None),
-                message_history=list(_message_history),  # Copy to avoid mutation issues
+                message_history=list(_message_history), # Copy to avoid mutation issues
                 incoming_messages=list(messages),
             )
         # Use Python hashing for dedup in the accumulator.
@@ -2160,7 +2160,7 @@ class BaseAgent(ABC, AgentPromptMixin):
                 # if its hash matches a previously compacted/summarized message.
                 # Short or repeated prompts (e.g. "yes", "1") can collide with
                 # compacted hashes, which would silently drop the user's input
-                # and leave the history ending with a ModelResponse.  That
+                # and leave the history ending with a ModelResponse. That
                 # triggers an Anthropic API error: "This model does not support
                 # assistant message prefill."
                 if (
@@ -2213,7 +2213,7 @@ class BaseAgent(ABC, AgentPromptMixin):
             on_message_history_processor_end(
                 agent_name=self.name,
                 session_id=getattr(self, "session_id", None),
-                message_history=list(final_history),  # Copy to avoid mutation issues
+                message_history=list(final_history), # Copy to avoid mutation issues
                 messages_added=messages_added,
                 messages_filtered=messages_filtered,
             )
@@ -2290,7 +2290,7 @@ class BaseAgent(ABC, AgentPromptMixin):
             try:
                 if msvcrt.kbhit():
                     key = msvcrt.getwch()
-                    if key == "\x18":  # Ctrl+X
+                    if key == "\x18": # Ctrl+X
                         try:
                             on_escape()
                         except Exception:
@@ -2353,7 +2353,7 @@ class BaseAgent(ABC, AgentPromptMixin):
                 data = stdin.read(1)
                 if not data:
                     break
-                if data == "\x18":  # Ctrl+X
+                if data == "\x18": # Ctrl+X
                     try:
                         on_escape()
                     except Exception:
@@ -2514,10 +2514,10 @@ class BaseAgent(ABC, AgentPromptMixin):
                 )
 
                 with _mcp_injection(), workflow_ctx:
-                    # Pre-send context budget check (bd-18)
+                    # Pre-send context budget check
                     self._check_context_budget_before_send(prompt_payload)
 
-                    # bd-113: Check hard token budgets
+                    # Check hard token budgets
                     try:
                         _pre_est = (
                             self.estimate_context_overhead_tokens()
@@ -2530,7 +2530,7 @@ class BaseAgent(ABC, AgentPromptMixin):
                         logger.debug("Token budget check failed, continuing", exc_info=True)
 
 
-                    # bd-115: Pre-compute estimated tokens for ledger reporting
+                    # Pre-compute estimated tokens for ledger reporting
                     try:
                         _est_input = (
                             self.estimate_context_overhead_tokens()
@@ -2730,7 +2730,7 @@ class BaseAgent(ABC, AgentPromptMixin):
         # (e.g., token refresh heartbeats for OAuth models)
         # Also creates a RunContext for hierarchical tracing
         _run_context = None
-        _run_usage = None  # Will hold provider usage data for trace reconciliation
+        _run_usage = None # Will hold provider usage data for trace reconciliation
         try:
             _start_results, _run_context = await on_agent_run_start(
                 agent_name=self.name,
@@ -2763,7 +2763,7 @@ class BaseAgent(ABC, AgentPromptMixin):
                 )
                 for task in list(
                     _active_subagent_tasks
-                ):  # Create a copy since we'll be modifying the set
+                ): # Create a copy since we'll be modifying the set
                     if not task.done():
                         loop.call_soon_threadsafe(task.cancel)
             loop.call_soon_threadsafe(agent_task.cancel)
@@ -2808,14 +2808,14 @@ class BaseAgent(ABC, AgentPromptMixin):
                 key_listener_stop_event = threading.Event()
                 _key_listener_thread = self._spawn_ctrl_x_key_listener(
                     key_listener_stop_event,
-                    on_escape=lambda: None,  # Ctrl+X handled by command_runner
+                    on_escape=lambda: None, # Ctrl+X handled by command_runner
                     on_cancel_agent=schedule_agent_cancel,
                 )
 
             # Wait for the task to complete or be cancelled
             result = await agent_task
 
-            # Extract provider usage for trace reconciliation (bd-66)
+            # Extract provider usage for trace reconciliation
             try:
                 if result is not None and hasattr(result, 'usage'):
                     usage = result.usage()
@@ -2852,12 +2852,12 @@ class BaseAgent(ABC, AgentPromptMixin):
             return result
         except asyncio.CancelledError:
             _run_success = False
-            _run_error = None  # Cancellation is not an error
+            _run_error = None # Cancellation is not an error
             _run_response_text = ""
             agent_task.cancel()
         except KeyboardInterrupt:
             _run_success = False
-            _run_error = None  # User interrupt is not an error
+            _run_error = None # User interrupt is not an error
             _run_response_text = ""
             if not agent_task.done():
                 agent_task.cancel()
@@ -2897,5 +2897,5 @@ class BaseAgent(ABC, AgentPromptMixin):
             # Restore original signal handler
             if (
                 original_handler is not None
-            ):  # Explicit None check - SIG_DFL can be 0/falsy!
+            ): # Explicit None check - SIG_DFL can be 0/falsy!
                 signal.signal(signal.SIGINT, original_handler)

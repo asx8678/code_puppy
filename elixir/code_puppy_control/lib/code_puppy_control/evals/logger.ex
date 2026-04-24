@@ -4,7 +4,7 @@ defmodule CodePuppyControl.Evals.Logger do
 
   Writes to `<cwd>/evals/logs/<sanitized>.json` by default — the SAME directory
   Python writes to — so `diff evals/logs/<name>.json` across runs is the
-  parity gate for bd-175.
+  parity gate for .
 
   JSON key order is preserved (name, timestamp, model, duration_seconds,
   response_text, tool_calls) to match the Python reference output using

@@ -6,7 +6,7 @@
 > 
 > - **Python layer**: TUI (Textual), CLI interface, pydantic-ai agent loop
 > - **Elixir layer**: ALL runtime operations (file ops, parsing, job scheduling, message processing)
-> - **Rust layer**: **COMPLETELY ELIMINATED** (bd-167, bd-43 migration epic)
+> - **Rust layer**: **COMPLETELY ELIMINATED**
 >
 > Architecture: Thin Python shell → Elixir backend only (zero Rust)
 
@@ -202,7 +202,7 @@ User Input
 | Aspect | Decision | Rationale |
 |--------|----------|-----------|
 | **Plugin System** | Hook-based callbacks | Hot-swappable, zero core modification |
-| **Native Accel** | Pure Elixir runtime (bd-167 complete) | Thin Python shell + full Elixir backend (zero Rust) |
+| **Native Accel** | Pure Elixir runtime | Thin Python shell + full Elixir backend (zero Rust) |
 | **Agent Concurrency** | Pack Leader with MAX=8 | Prevents resource exhaustion |
 | **Model Routing** | Adaptive rate limiting | Protects against rate limit storms |
 | **MCP Security** | Circuit breaker + whitelist | Defense in depth for external tools |
@@ -227,7 +227,7 @@ BaseAgent (ABC)
 ├── CreatorAgent
 │
 └── Pack sub-agents
-    ├── Bloodhound (search)
+    ├── Retriever (search)
     ├── Retriever (file find)
     ├── Shepherd (delegation)
     ├── Terrier (grep)

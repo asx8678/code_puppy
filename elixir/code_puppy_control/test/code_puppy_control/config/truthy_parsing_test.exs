@@ -6,7 +6,7 @@ defmodule CodePuppyControl.Config.TruthyParsingTest do
   modules Debug, Limits, Cache, and TUI all share a truthy? pattern that
   parses string values from puppy.cfg into booleans.
 
-  These are Wave 2 tests for bd-210.
+  These are Wave 2 tests for .
   """
 
   use ExUnit.Case, async: false
@@ -182,7 +182,7 @@ defmodule CodePuppyControl.Config.TruthyParsingTest do
   describe "whitespace trimming" do
     test "whitespace-padded 'true' is recognized as truthy" do
       path = tmp_cfg_path()
-      File.write!(path, "yolo_mode =   true  \n")
+      File.write!(path, "yolo_mode = true \n")
 
       try do
         Loader.load(path)
@@ -194,7 +194,7 @@ defmodule CodePuppyControl.Config.TruthyParsingTest do
 
     test "whitespace-padded 'false' is recognized as falsy" do
       path = tmp_cfg_path()
-      File.write!(path, "yolo_mode =   false  \n")
+      File.write!(path, "yolo_mode = false \n")
 
       try do
         Loader.load(path)

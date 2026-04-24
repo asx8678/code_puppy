@@ -45,7 +45,7 @@ class MessageCategory(str, Enum):
 class BaseMessage(BaseModel):
     """Base class for all structured messages with auto-generated id and timestamp.
     
-    Note on Elixir Migration (bd-27):
+    Note on Elixir Migration:
         Added run_id and timestamp_unix_ms fields to support the Elixir wire protocol
         for event streaming. These are optional to maintain backward compatibility.
         See event_schema.md for full protocol documentation.

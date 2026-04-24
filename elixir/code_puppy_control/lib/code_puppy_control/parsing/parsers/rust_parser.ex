@@ -14,7 +14,7 @@ defmodule CodePuppyControl.Parsing.Parsers.RustParser do
   - Constants (const declarations)
   - Static items (static declarations)
 
-  This parser uses the Rust lexer (from bd-112) for tokenization
+  This parser uses the Rust lexer (from ) for tokenization
   and a Yecc-generated parser for building the AST.
 
   ## Examples

@@ -28,11 +28,11 @@ defmodule CodePuppyControl.LLM do
   Models are resolved through `ModelRegistry.get_config/1`. The `"type"` field
   maps to providers:
 
-  | Type               | Provider Module                        |
+  | Type | Provider Module |
   |--------------------|----------------------------------------|
-  | `"openai"`         | `CodePuppyControl.LLM.Providers.OpenAI`|
-  | `"anthropic"`      | `CodePuppyControl.LLM.Providers.Anthropic`|
-  | `"custom_openai"`  | `CodePuppyControl.LLM.Providers.OpenAI`|
+  | `"openai"` | `CodePuppyControl.LLM.Providers.OpenAI`|
+  | `"anthropic"` | `CodePuppyControl.LLM.Providers.Anthropic`|
+  | `"custom_openai"` | `CodePuppyControl.LLM.Providers.OpenAI`|
   | `"custom_anthropic"` | `CodePuppyControl.LLM.Providers.Anthropic`|
 
   Options are forwarded to the provider. The `:model` option defaults to the
@@ -260,7 +260,7 @@ defmodule CodePuppyControl.LLM do
   defp default_api_key_env(CodePuppyControl.LLM.Providers.Together), do: "TOGETHER_API_KEY"
   defp default_api_key_env(_), do: "API_KEY"
 
-  # ── Rate Limiter Integration (bd-151) ──────────────────────────────────────
+  # ── Rate Limiter Integration ──────────────────────────────────────
   defp result_status({:ok, _}), do: 200
   defp result_status({:error, %{status: status}}), do: status
   defp result_status({:error, _}), do: 500

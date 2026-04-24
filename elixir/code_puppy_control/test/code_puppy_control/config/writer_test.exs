@@ -86,7 +86,7 @@ defmodule CodePuppyControl.Config.WriterTest do
     end
   end
 
-  describe "bd-197 regression: consecutive writes without explicit reload" do
+  describe "regression: consecutive writes without explicit reload" do
     test "consecutive writes stay in the originally loaded file", %{cfg_path: cfg_path} do
       ensure_writer_started()
 

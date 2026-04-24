@@ -2,7 +2,7 @@
 # ---------------------------------------------------------------------------
 # File operations - thin wrappers over Elixir transport
 #
-# bd-66: Retired heavy Python implementations. Read operations now route
+# Retired heavy Python implementations. Read operations now route
 # through Elixir transport. Write/edit/delete operations remain in
 # file_modifications.py until Elixir equivalents are built.
 # ---------------------------------------------------------------------------

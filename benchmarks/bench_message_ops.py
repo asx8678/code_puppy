@@ -1,4 +1,4 @@
-"""Benchmark Python vs Elixir message processing operations (bd-114).
+"""Benchmark Python vs Elixir message processing operations.
 
 This module benchmarks the performance of message operations comparing:
 1. Pure Python implementations (baseline)
@@ -43,12 +43,12 @@ class BenchmarkResult:
 
         if self.python_time_ms > 0:
             lines.append(
-                f"  Python: {self.python_time_ms:.3f} ms ({self.python_value:.2f} {self.metric})"
+                f" Python: {self.python_time_ms:.3f} ms ({self.python_value:.2f} {self.metric})"
             )
 
         if self.elixir_time_ms is not None and self.elixir_time_ms > 0:
             lines.append(
-                f"  Elixir: {self.elixir_time_ms:.3f} ms ({self.elixir_value:.2f} {self.metric})"
+                f" Elixir: {self.elixir_time_ms:.3f} ms ({self.elixir_value:.2f} {self.metric})"
             )
             if self.python_time_ms > 0:
                 ratio = (
@@ -58,12 +58,12 @@ class BenchmarkResult:
                 )
                 winner = "Python" if ratio > 1 else "Elixir"
                 lines.append(
-                    f"  Winner: {winner} ({ratio:.2f}x {'faster' if ratio > 1 else 'slower'})"
+                    f" Winner: {winner} ({ratio:.2f}x {'faster' if ratio > 1 else 'slower'})"
                 )
         else:
-            lines.append("  Elixir: not available")
+            lines.append(" Elixir: not available")
 
-        lines.append(f"  Iterations: {self.iterations}")
+        lines.append(f" Iterations: {self.iterations}")
         return "\n".join(lines)
 
 
@@ -401,7 +401,7 @@ def run_all_benchmarks(
 ) -> BenchmarkSuite:
     suite = BenchmarkSuite()
     has_elixir = elixir_available() if include_elixir else False
-    print("🐶 Message Operations Benchmark Suite (bd-114)")
+    print("🐶 Message Operations Benchmark Suite")
     print("=" * 60)
     print(f"Iterations: {iterations}")
     print(f"Elixir available: {has_elixir}")
@@ -440,7 +440,7 @@ def main() -> int:
     import argparse
 
     parser = argparse.ArgumentParser(
-        description="Benchmark Python vs Elixir message processing (bd-114)",
+        description="Benchmark Python vs Elixir message processing",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:

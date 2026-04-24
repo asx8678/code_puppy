@@ -121,10 +121,10 @@ defmodule Mix.Tasks.CodePuppy.StdioService do
     Code.ensure_loaded(CodePuppyControl.Protocol)
     Code.ensure_loaded(CodePuppyControl.RuntimeState)
 
-    # Start RuntimeState GenServer for runtime state management (bd-75)
+    # Start RuntimeState GenServer for runtime state management
     {:ok, _} = CodePuppyControl.RuntimeState.start_link([])
 
-    # Start model services for RPC handlers (bd-96)
+    # Start model services for RPC handlers
     {:ok, _} = CodePuppyControl.ModelRegistry.start_link([])
     {:ok, _} = CodePuppyControl.ModelAvailability.start_link([])
     {:ok, _} = CodePuppyControl.ModelPacks.start_link([])
@@ -132,7 +132,7 @@ defmodule Mix.Tasks.CodePuppy.StdioService do
     # Give the service a moment to suppress any startup output
     Process.sleep(100)
 
-    # Emit startup handshake banner (bd-133)
+    # Emit startup handshake banner
     # This JSON-RPC notification signals that the service is ready to accept requests.
     # Clients should drop all output before this line to avoid processing startup noise.
     handshake = %{"jsonrpc" => "2.0", "method" => "_ready", "params" => %{}}

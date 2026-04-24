@@ -1,5 +1,5 @@
 defmodule Mix.Tasks.PupEx.Auth.List do
-  @shortdoc "List credential key names in the encrypted store (bd-167)"
+  @shortdoc "List credential key names in the encrypted store"
   @moduledoc """
   List the names of credentials stored in the encrypted credential store.
 
@@ -33,7 +33,7 @@ defmodule Mix.Tasks.PupEx.Auth.List do
 
       [] ->
         Mix.shell().info("No credentials stored.")
-        Mix.shell().info("  Add one with: mix pup_ex.auth.set <KEY_NAME>")
+        Mix.shell().info(" Add one with: mix pup_ex.auth.set <KEY_NAME>")
 
       keys when is_list(keys) ->
         path = CodePuppyControl.Credentials.store_path([])
@@ -43,7 +43,7 @@ defmodule Mix.Tasks.PupEx.Auth.List do
         Mix.shell().info("#{count} #{plural} stored in #{path}:")
 
         for key <- keys do
-          Mix.shell().info("  - #{key}")
+          Mix.shell().info(" - #{key}")
         end
     end
   end

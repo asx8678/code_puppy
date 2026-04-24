@@ -32,7 +32,7 @@ Code Puppy has a **runtime backend selector** called `fast_puppy` that routes pe
 | `repo_index` | `repo_index` | Repository indexing |
 | `parse` | `CodePuppyControl.Parsing.Parser` | Pure-Elixir parsers (elixir, erlang, python, javascript, typescript, tsx, rust) |
 
-**Phase 4 Update (bd-208):** The native acceleration layer has been fully removed. Parse operations now live exclusively in Elixir under `CodePuppyControl.Parsing.Parser`.
+**Phase 4 Update:** The native acceleration layer has been fully removed. Parse operations now live exclusively in Elixir under `CodePuppyControl.Parsing.Parser`.
 
 Python access pattern:
 ```python
@@ -220,51 +220,3 @@ Per-module coverage requirements (CI-enforced):
 | `code_puppy/tools/command_runner.py` | Security-scanned + tested |
 
 **Rule**: Coverage gates are **minimums**, not targets. Prefer quality over percentage.
-
-<!-- BEGIN BEADS INTEGRATION v:1 profile:minimal hash:ca08a54f -->
-## Beads Issue Tracker
-
-This project uses **bd (beads)** for issue tracking. Run `bd prime` to see full workflow context and commands.
-
-### Quick Reference
-
-```bash
-bd ready              # Find available work
-bd show <id>          # View issue details
-bd update <id> --claim  # Claim work
-bd close <id>         # Complete work
-```
-
-### Rules
-
-- Use `bd` for ALL task tracking — do NOT use TodoWrite, TaskCreate, or markdown TODO lists
-- Run `bd prime` for detailed command reference and session close protocol
-- Use `bd remember` for persistent knowledge — do NOT use MEMORY.md files
-- **NEVER read `.bd/` files directly** — always use `bd show`, `bd list`, etc. Storage is a single `.bd/issues.json` file, NOT per-issue files like `.bd/issues/bd-1.json`
-
-## Session Completion
-
-**When ending a work session**, you MUST complete ALL steps below. Work is NOT complete until `git push` succeeds.
-
-**MANDATORY WORKFLOW:**
-
-1. **File issues for remaining work** - Create issues for anything that needs follow-up
-2. **Run quality gates** (if code changed) - Tests, linters, builds
-3. **Update issue status** - Close finished work, update in-progress items
-4. **PUSH TO REMOTE** - This is MANDATORY:
-   > **Note:** bd is configured for local-only operation (no dolt remote). Do NOT run `bd dolt push`.
-   ```bash
-   git pull --rebase
-   git push
-   git status  # MUST show "up to date with origin"
-   ```
-5. **Clean up** - Clear stashes, prune remote branches
-6. **Verify** - All changes committed AND pushed
-7. **Hand off** - Provide context for next session
-
-**CRITICAL RULES:**
-- Work is NOT complete until `git push` succeeds
-- NEVER stop before pushing - that leaves work stranded locally
-- NEVER say "ready to push when you are" - YOU must push
-- If push fails, resolve and retry until it succeeds
-<!-- END BEADS INTEGRATION -->

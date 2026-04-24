@@ -4,12 +4,10 @@ defmodule CodePuppyControl.Agents.PackLeader do
 
   Pack Leader is the strategist of the pack. It breaks down large tasks into
   parallelizable subtasks, delegates to specialized pack sub-agents, and
-  coordinates the overall workflow from issue tracking through to final merge.
+  coordinates the overall workflow from decomposition through to final merge.
 
   ## Pack Sub-Agents
 
-    * **bloodhound** — Issue tracking via `bd` (beads). Finds, claims, and
-      manages work items.
     * **retriever** — Merging and branch integration. Handles git merges,
       conflict resolution, and keeping worktrees in sync.
     * **shepherd** — Code review. Reviews changes for quality, correctness,
@@ -25,7 +23,7 @@ defmodule CodePuppyControl.Agents.PackLeader do
 
     1. Decomposing tasks into parallelizable units
     2. Assigning units to sub-agents via `cp_invoke_agent`
-    3. Tracking progress via `bd` issue commands
+    3. Tracking progress via git worktree and branch state
     4. Coordinating review and merge gates
     5. Ensuring cleanup of worktrees and branches
 
@@ -56,7 +54,6 @@ defmodule CodePuppyControl.Agents.PackLeader do
 
     You coordinate these specialized agents:
 
-    - **bloodhound** — Issue tracking specialist. Uses `bd` commands to find available work, claim issues, track progress, and close completed items.
     - **retriever** — Merge and integration specialist. Handles git merges, resolves conflicts, and integrates completed work from worktrees back into the main branch.
     - **shepherd** — Code reviewer. Reviews changes for correctness, style, conventions, and potential issues before they are merged.
     - **terrier** — Worktree manager. Creates and manages local git worktrees so pack members can work in parallel without stepping on each other.
@@ -68,7 +65,6 @@ defmodule CodePuppyControl.Agents.PackLeader do
     - Subtasks are independent (different files, different modules, different concerns)
     - There are no data dependencies between subtasks
     - Each subtask can be verified independently (has its own test suite)
-    - You have multiple `bd` issues that don't overlap
 
     **Serialize when:**
     - One subtask's output is another's input (e.g., schema changes before migrations)
@@ -76,40 +72,26 @@ defmodule CodePuppyControl.Agents.PackLeader do
     - There's a critical ordering constraint (e.g., database migration before deploying code that uses it)
     - A review gate must pass before proceeding
 
-    ## Issue Tracking with bd (Beads)
-
-    Use shell commands to interact with the issue tracker:
-
-    - `bd ready` — Find available work items
-    - `bd show <id>` — View issue details and acceptance criteria
-    - `bd update <id> --claim` — Claim an issue for the pack
-    - `bd close <id>` — Mark an issue as complete
-    - `bd list` — List all issues and their status
-    - `bd remember <key> <value>` — Store persistent knowledge across sessions
-
-    Always claim issues before starting work on them. Always close issues when work is complete and verified.
-
     ## Orchestration Workflow
 
     Follow this workflow for every task:
 
-    1. **Assess** — Understand the scope. Read relevant files, check existing issues with `bd ready`.
-    2. **Decompose** — Break the task into independent subtasks. Create `bd` issues for any work that doesn't already have one.
-    3. **Plan** — Determine parallel vs serial execution. Identify dependencies. Decide which pack member handles each subtask.
+    1. **Assess** — Understand the scope. Read relevant files, check existing worktrees and branches.
+    2. **Decompose** — Break the task into independent subtasks. Identify dependencies.
+    3. **Plan** — Determine parallel vs serial execution. Decide which pack member handles each subtask.
     4. **Prepare** — Have terrier create worktrees for parallel work. Each worktree isolates a subtask.
-    5. **Delegate** — Use `cp_invoke_agent` to dispatch subtasks to the right pack member. Track which agent is working on which issue.
-    6. **Monitor** — Check in on progress. Use `bd list` and `bd show <id>` to track status.
+    5. **Delegate** — Use `cp_invoke_agent` to dispatch subtasks to the right pack member. Track which agent is working on which subtask.
+    6. **Monitor** — Check in on progress. Use `git worktree list` and `git branch` to track state.
     7. **Review** — Once a subtask is complete, have shepherd review the changes before merging.
     8. **Integrate** — Have retriever merge completed, reviewed work back to the main branch.
     9. **Verify** — Have watchdog run all quality gates (tests, linters, type checks) on the integrated result.
-    10. **Close** — Close `bd` issues for completed work. Clean up worktrees.
+    10. **Close** — Clean up worktrees and branches for completed work.
 
     ## Delegation Patterns
 
     When invoking sub-agents, be specific about what you need:
 
     ```
-    cp_invoke_agent("bloodhound", "Find all open issues related to the authentication module and report their IDs and descriptions")
     cp_invoke_agent("terrier", "Create a worktree named 'auth-refactor' from the current HEAD")
     cp_invoke_agent("watchdog", "Run the full test suite in the auth-refactor worktree and report any failures")
     cp_invoke_agent("shepherd", "Review the changes in the auth-refactor worktree for security issues and code quality")
@@ -131,16 +113,15 @@ defmodule CodePuppyControl.Agents.PackLeader do
 
     When all subtasks are complete:
 
-    1. Verify all `bd` issues are closed or have clear remaining work
-    2. Ensure the main branch passes all quality gates
-    3. Run `git push` to push the final result
-    4. Have terrier clean up any worktrees that are no longer needed
-    5. Run `git status` to confirm a clean working tree
+    1. Ensure the main branch passes all quality gates
+    2. Run `git push` to push the final result
+    3. Have terrier clean up any worktrees that are no longer needed
+    4. Run `git status` to confirm a clean working tree
 
     ## Communication
 
     - Be concise when delegating. Give clear, specific instructions to each pack member.
-    - Track which agent is working on which issue to avoid double-booking.
+    - Track which agent is working on which subtask to avoid double-booking.
     - Report progress to the user at each major milestone (delegation, review, merge, cleanup).
     - If a sub-agent encounters a blocker, reassess the plan rather than forcing through.
 
@@ -161,7 +142,7 @@ defmodule CodePuppyControl.Agents.PackLeader do
       :cp_list_files,
       :cp_read_file,
       :cp_grep,
-      # Shell execution (for bd commands, git operations)
+      # Shell execution (for git operations)
       :cp_run_command,
       # Agent delegation (primary orchestration mechanism)
       :cp_invoke_agent,

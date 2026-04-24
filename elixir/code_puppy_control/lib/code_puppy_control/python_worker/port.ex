@@ -19,7 +19,7 @@ defmodule CodePuppyControl.PythonWorker.Port do
 
       {"jsonrpc":"2.0","id":1,"method":"initialize"}
 
-  ## Batch Support (bd-103)
+  ## Batch Support
 
   Supports JSON-RPC 2.0 batch format for multiple messages in a single frame:
 
@@ -66,7 +66,7 @@ defmodule CodePuppyControl.PythonWorker.Port do
   end
 
   @doc """
-  Sends multiple JSON-RPC requests as a batch (bd-103).
+  Sends multiple JSON-RPC requests as a batch.
   Batching reduces IPC overhead by combining N requests into a single write.
   """
   @spec call_batch(String.t(), list({String.t(), map()}), timeout()) ::
@@ -180,7 +180,7 @@ defmodule CodePuppyControl.PythonWorker.Port do
 
   @impl true
   def handle_call({:call_batch, calls, timeout}, from, state) do
-    # bd-103: Batch request support
+    # Batch request support
     {messages, request_ids} =
       Enum.map_reduce(calls, [], fn {method, params}, acc ->
         request_id = generate_request_id(state)
@@ -252,7 +252,7 @@ defmodule CodePuppyControl.PythonWorker.Port do
 
     # Process each message
     for message <- messages do
-      # bd-103: Handle batch messages (list) or single message (map)
+      # Handle batch messages (list) or single message (map)
       handle_incoming_messages(message, state.run_id, state.port)
     end
 
@@ -293,7 +293,7 @@ defmodule CodePuppyControl.PythonWorker.Port do
 
   # Private functions
 
-  # bd-103: Handle batch messages (list) or single message (map)
+  # Handle batch messages (list) or single message (map)
   defp handle_incoming_messages(messages, run_id, port) when is_list(messages) do
     for message <- messages do
       handle_incoming_message(message, run_id, port)
@@ -408,7 +408,7 @@ defmodule CodePuppyControl.PythonWorker.Port do
   end
 
   # Parse operation handlers using CodePuppyControl.Parsing.Parser
-  # bd-208: Updated from deprecated TurboParseNIF to use Parsing.Parser
+  # Updated from deprecated TurboParseNIF to use Parsing.Parser
 
   defp handle_file_request("parse_source", params) do
     source = params["source"]
@@ -454,11 +454,11 @@ defmodule CodePuppyControl.PythonWorker.Port do
     Protocol.encode_response(%{"languages" => languages}, nil)
   end
 
-  # bd-11: Added handlers for missing parse contract methods
+  # Added handlers for missing parse contract methods
   defp handle_file_request("is_language_supported", params) do
     language = params["language"]
 
-    # bd-114: Now using Parser.is_language_supported which routes to pure Elixir parsers
+    # Now using Parser.is_language_supported which routes to pure Elixir parsers
     supported = CodePuppyControl.Parser.is_language_supported(language)
 
     Protocol.encode_response(%{"supported" => supported}, nil)
@@ -543,7 +543,7 @@ defmodule CodePuppyControl.PythonWorker.Port do
     end
   end
 
-  # bd-9: Repo Compass compact indexing
+  # Repo Compass compact indexing
   defp handle_file_request("repo_compass_index", params) do
     root = Map.get(params, "root", ".")
     max_files = Map.get(params, "max_files", 40)
@@ -589,7 +589,7 @@ defmodule CodePuppyControl.PythonWorker.Port do
     Protocol.encode_response(stats, nil)
   end
 
-  # bd-137: Session storage handlers (Ecto/SQLite backed)
+  # Session storage handlers (Ecto/SQLite backed)
 
   defp handle_file_request("session_save", params) do
     name = params["name"]

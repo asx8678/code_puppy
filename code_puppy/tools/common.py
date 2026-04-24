@@ -25,12 +25,12 @@ try:
 
     _HAS_PROMPT_TOOLKIT = True
 except ImportError:
-    Application = None  # type: ignore
-    HTML = None  # type: ignore
-    KeyBindings = None  # type: ignore
-    Layout = None  # type: ignore
-    Window = None  # type: ignore
-    FormattedTextControl = None  # type: ignore
+    Application = None # type: ignore
+    HTML = None # type: ignore
+    KeyBindings = None # type: ignore
+    Layout = None # type: ignore
+    Window = None # type: ignore
+    FormattedTextControl = None # type: ignore
     _HAS_PROMPT_TOOLKIT = False
 from rapidfuzz.distance import JaroWinkler
 from rich.console import Console
@@ -142,30 +142,30 @@ DIR_IGNORE_PATTERNS = [
     "**/.hg/**",
     "**/.bzr/**",
     # Cross-language common patterns (shared across multiple ecosystems)
-    "**/target/**",  # Java, Rust, Scala, Clojure
+    "**/target/**", # Java, Rust, Scala, Clojure
     "**/target",
-    "**/build/**",  # Node.js, Java, Dart/Flutter, Kotlin
+    "**/build/**", # Node.js, Java, Dart/Flutter, Kotlin
     "**/build",
-    "**/dist/**",  # Node.js, Python, Haskell
+    "**/dist/**", # Node.js, Python, Haskell
     "**/dist",
-    "**/bin/**",  # .NET/C#, Java
-    "**/vendor/**",  # Go, Ruby, PHP
-    "**/deps/**",  # Elixir, Erlang
-    "**/coverage/**",  # Node.js, Ruby
-    "**/doc/**",  # Ruby, Elixir
-    "**/_build/**",  # Perl, Elixir
-    "**/.gradle/**",  # Java, Kotlin
-    "**/project/target/**",  # Java, Scala
-    "**/project/project/**",  # Java, Scala
-    "**/*.class",  # Java, Scala, Kotlin, Clojure
-    "**/*.jar",  # Java, Scala, Kotlin, Clojure
-    "**/*.dll",  # Go, .NET/C#, C/C++
-    "**/*.exe",  # Go, .NET/C#, C/C++
-    "**/*.so",  # Go, C/C++
-    "**/*.dylib",  # Go, C/C++
-    "**/*.pdb",  # Rust, .NET/C#
-    "**/*.o",  # C/C++, Haskell
-    "**/*.beam",  # Elixir, Erlang
+    "**/bin/**", # .NET/C#, Java
+    "**/vendor/**", # Go, Ruby, PHP
+    "**/deps/**", # Elixir, Erlang
+    "**/coverage/**", # Node.js, Ruby
+    "**/doc/**", # Ruby, Elixir
+    "**/_build/**", # Perl, Elixir
+    "**/.gradle/**", # Java, Kotlin
+    "**/project/target/**", # Java, Scala
+    "**/project/project/**", # Java, Scala
+    "**/*.class", # Java, Scala, Kotlin, Clojure
+    "**/*.jar", # Java, Scala, Kotlin, Clojure
+    "**/*.dll", # Go, .NET/C#, C/C++
+    "**/*.exe", # Go, .NET/C#, C/C++
+    "**/*.so", # Go, C/C++
+    "**/*.dylib", # Go, C/C++
+    "**/*.pdb", # Rust, .NET/C#
+    "**/*.o", # C/C++, Haskell
+    "**/*.beam", # Elixir, Erlang
     # Node.js / JavaScript / TypeScript
     "**/node_modules/**",
     "**/node_modules/**/*.js",
@@ -371,7 +371,7 @@ DIR_IGNORE_PATTERNS = [
     "**/*.backup",
     "**/*.save",
     # Hidden files (but be careful with this one)
-    "**/.*",  # Commented out as it might be too aggressive
+    "**/.*", # Commented out as it might be too aggressive
     # Directory-only section ends here
 ]
 
@@ -447,11 +447,11 @@ def _compile_patterns(patterns: list[str] | frozenset[str]) -> _re.Pattern:
     # Single dedup pass: frozenset is already deduplicated, list needs dedup
     # dict.fromkeys() preserves order for lists while deduplicating
     if isinstance(patterns, frozenset):
-        unique_patterns = patterns  # Already deduplicated
+        unique_patterns = patterns # Already deduplicated
     else:
         unique_patterns = dict.fromkeys(patterns)
     if not unique_patterns:
-        return _re.compile(r"(?!)")  # matches nothing
+        return _re.compile(r"(?!)") # matches nothing
     return _re.compile("|".join(f"(?:{fnmatch.translate(p)})" for p in unique_patterns))
 
 
@@ -464,7 +464,7 @@ def _matches_compiled(path: str, compiled_re: _re.Pattern) -> bool:
 
     ``fnmatch.translate`` turns ``**`` into a regex that requires at least one
     ``/`` before the matched segment, so a bare ``foo.png`` won't match
-    ``**/*.png``.  We normalise by prepending ``./`` when the path has no
+    ``**/*.png``. We normalise by prepending ``./`` when the path has no
     leading directory to keep the semantics identical to the old loop-based
     implementation.
     """
@@ -601,7 +601,7 @@ def _get_token_color(token_type) -> str:
     for ttype, color in TOKEN_COLORS.items():
         if token_type in ttype:
             return color
-    return "#cccccc"  # Default light-grey for unmatched tokens
+    return "#cccccc" # Default light-grey for unmatched tokens
 
 
 def _highlight_code_line(code: str, bg_color: str | None, lexer) -> Text:
@@ -654,12 +654,12 @@ def _extract_file_extension_from_diff(diff_text: str) -> str:
     # Look for +++ b/filename.ext or --- a/filename.ext headers
     pattern = r"^(?:\+\+\+|---) [ab]/.*?(\.[a-zA-Z0-9]+)$"
 
-    for line in diff_text.split("\n")[:10]:  # Check first 10 lines
+    for line in diff_text.split("\n")[:10]: # Check first 10 lines
         match = _re.search(pattern, line)
         if match:
             return match.group(1)
 
-    return ".txt"  # Fallback to plain text
+    return ".txt" # Fallback to plain text
 
 
 # ============================================================================
@@ -724,7 +724,7 @@ def _format_diff_with_syntax_highlighting(
     bg_colors = {
         "removed": deletion_color,
         "added": addition_color,
-        "context": None,  # No background for unchanged lines
+        "context": None, # No background for unchanged lines
     }
 
     lines = diff_text.split("\n")
@@ -747,23 +747,23 @@ def _format_diff_with_syntax_highlighting(
             # Determine line type and extract code content
             if line.startswith("-"):
                 line_type = "removed"
-                code = line[1:]  # Remove the '-' prefix
+                code = line[1:] # Remove the '-' prefix
                 marker_style = f"bold {del_fg} on {bg_colors[line_type]}"
                 prefix = "- "
             elif line.startswith("+"):
                 line_type = "added"
-                code = line[1:]  # Remove the '+' prefix
+                code = line[1:] # Remove the '+' prefix
                 marker_style = f"bold {add_fg} on {bg_colors[line_type]}"
                 prefix = "+ "
             else:
                 line_type = "context"
                 code = line[1:] if line.startswith(" ") else line
                 # Context lines have no background - clean and minimal
-                marker_style = ""  # No special styling for context markers
-                prefix = "  "
+                marker_style = "" # No special styling for context markers
+                prefix = " "
 
             # Add the marker prefix
-            if marker_style:  # Only apply style if we have one
+            if marker_style: # Only apply style if we have one
                 result.append(prefix, style=marker_style)
             else:
                 result.append(prefix)
@@ -839,8 +839,8 @@ async def arrow_select_async(
     import html
     import textwrap
 
-    selected_index = [0]  # Mutable container for selected index
-    result = [None]  # Mutable container for result
+    selected_index = [0] # Mutable container for selected index
+    result = [None] # Mutable container for result
 
     # Hoist invariant escapes outside the closure (CM-M4 fix)
     # These don't change during arrow key navigation, so escape once upfront
@@ -865,7 +865,7 @@ async def arrow_select_async(
             if i == selected_index[0]:
                 lines.append(f"<ansigreen>❯ {safe_choice}</ansigreen>")
             else:
-                lines.append(f"  {safe_choice}")
+                lines.append(f" {safe_choice}")
         lines.append("")
 
         # Add preview section if callback provided
@@ -897,23 +897,23 @@ async def arrow_select_async(
     kb = KeyBindings()
 
     @kb.add("up")
-    @kb.add("c-p")  # Ctrl+P = previous (Emacs-style)
+    @kb.add("c-p") # Ctrl+P = previous (Emacs-style)
     def move_up(event):
         selected_index[0] = (selected_index[0] - 1) % len(choices)
-        event.app.invalidate()  # Force redraw to update preview
+        event.app.invalidate() # Force redraw to update preview
 
     @kb.add("down")
-    @kb.add("c-n")  # Ctrl+N = next (Emacs-style)
+    @kb.add("c-n") # Ctrl+N = next (Emacs-style)
     def move_down(event):
         selected_index[0] = (selected_index[0] + 1) % len(choices)
-        event.app.invalidate()  # Force redraw to update preview
+        event.app.invalidate() # Force redraw to update preview
 
     @kb.add("enter")
     def accept(event):
         result[0] = choices[selected_index[0]]
         event.app.exit()
 
-    @kb.add("c-c")  # Ctrl-C
+    @kb.add("c-c") # Ctrl-C
     def cancel(event):
         result[0] = None
         event.app.exit()
@@ -1106,7 +1106,7 @@ async def get_user_approval_async(
     except (ImportError, Exception):
         pass
 
-    await asyncio.sleep(0.05)  # Let spinners fully stop (CM-M1: reduced from 0.3)
+    await asyncio.sleep(0.05) # Let spinners fully stop (CM-M1: reduced from 0.3)
 
     # Display panel
     local_console = Console()
@@ -1117,7 +1117,7 @@ async def get_user_approval_async(
     # Flush and buffer before selector
     sys.stdout.flush()
     sys.stderr.flush()
-    await asyncio.sleep(0)  # CM-M1: reduced from 0.1, just yield control
+    await asyncio.sleep(0) # CM-M1: reduced from 0.1, just yield control
 
     user_feedback = None
     confirmed = False
@@ -1160,8 +1160,8 @@ async def get_user_approval_async(
         # Force Rich console to reset display state to prevent artifacts
         try:
             # Clear Rich's internal display state to prevent artifacts
-            local_console.file.write("\r")  # Return to start of line
-            local_console.file.write("\x1b[K")  # Clear current line
+            local_console.file.write("\r") # Return to start of line
+            local_console.file.write("\x1b[K") # Clear current line
             local_console.file.flush()
         except Exception:
             pass
@@ -1204,7 +1204,7 @@ def _find_best_window(
     Jaro-Winkler similarity to `needle`, along with that score.
     If nothing clears JW_THRESHOLD, return (None, score).
 
-    bd-50: Now always uses pure Python implementation (acceleration layer removed).
+    Now always uses pure Python implementation (acceleration layer removed).
     """
     return _do_fuzzy_match_python(haystack_lines, needle, _needle_lines_cache, _needle_len_cache)
 
@@ -1252,7 +1252,7 @@ def _do_fuzzy_match_python(
         prefix_sum[i + 1] = prefix_sum[i] + len(line)
 
     max_start = haystack_len - win_size + 1
-    threshold_ratio = 0.5  # 50% length difference threshold
+    threshold_ratio = 0.5 # 50% length difference threshold
 
     for i in range(max_start):
         # Pre-filter 1: Quick first-line length check
@@ -1302,10 +1302,10 @@ def generate_group_id(tool_name: str, extra_context: str = "") -> str:
         A string in format: tool_name_hash
     """
     # Create a unique identifier using timestamp, context, and a random component
-    timestamp = str(int(time.time() * 1000000))  # microseconds for more uniqueness
+    timestamp = str(int(time.time() * 1000000)) # microseconds for more uniqueness
     random_component = secrets.token_hex(
         8
-    )  # 16 hex chars of cryptographically strong randomness
+    ) # 16 hex chars of cryptographically strong randomness
     context_string = f"{tool_name}_{timestamp}_{random_component}_{extra_context}"
 
     # CM-L2 fix: Use blake2b instead of MD5 (fastest, FIPS-friendly)

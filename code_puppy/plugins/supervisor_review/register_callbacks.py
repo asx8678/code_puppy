@@ -1,4 +1,4 @@
-"""Plugin registration for supervisor_review (bd code_puppy-79p).
+"""Plugin registration for supervisor_review.
 
 Registers the `supervisor_review_loop` tool so any agent that wants
 quality-gated multi-agent review can call it. Adopted from

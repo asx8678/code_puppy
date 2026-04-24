@@ -16,9 +16,9 @@ Example:
     >>> # On reconnect:
     >>> history = buffer.get_history("session-123")
     >>> for event in history:
-    ...     await websocket.send_json(event)
-    >>> buffer.clear_session("session-123")  # Cleanup on disconnect
-    >>> buffer.cleanup_expired_sessions()  # Or let TTL cleanup run
+    ... await websocket.send_json(event)
+    >>> buffer.clear_session("session-123") # Cleanup on disconnect
+    >>> buffer.cleanup_expired_sessions() # Or let TTL cleanup run
 """
 
 import logging
@@ -72,7 +72,7 @@ class SessionHistoryBuffer:
     def _try_elixir(self, method: str, params: dict) -> dict | None:
         """Try to call Elixir EventStore via bridge. Returns None if unavailable.
 
-        bd-78: Proxy reads to Elixir EventStore when bridge is connected.
+        Proxy reads to Elixir EventStore when bridge is connected.
         Falls back to local deque when Elixir is not available.
         """
         try:
@@ -123,7 +123,7 @@ class SessionHistoryBuffer:
         Returns:
             List of events for the session, or empty list if session unknown.
         """
-        # bd-78: Try Elixir EventStore first (richer data, cursor-based)
+        # Try Elixir EventStore first (richer data, cursor-based)
         elixir_result = self._try_elixir("history_get", {"session_id": session_id})
         if elixir_result is not None:
             return elixir_result.get("events", [])

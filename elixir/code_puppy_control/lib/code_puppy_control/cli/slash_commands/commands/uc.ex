@@ -9,9 +9,9 @@ defmodule CodePuppyControl.CLI.SlashCommands.Commands.UC do
 
   ## Usage
 
-    /uc                          — list all UC tools with enabled/disabled status
-    /uc toggle <tool_name>       — toggle a tool's enabled/disabled status
-    /uc info <tool_name>         — show tool details (description, source path)
+    /uc — list all UC tools with enabled/disabled status
+    /uc toggle <tool_name> — toggle a tool's enabled/disabled status
+    /uc info <tool_name> — show tool details (description, source path)
   """
 
   alias CodePuppyControl.Tools.UniversalConstructor.Registry, as: UCRegistry
@@ -60,19 +60,19 @@ defmodule CodePuppyControl.CLI.SlashCommands.Commands.UC do
 
     IO.puts("")
 
-    IO.puts("    #{IO.ANSI.bright()}Universal Constructor Tools#{IO.ANSI.reset()}")
+    IO.puts(" #{IO.ANSI.bright()}Universal Constructor Tools#{IO.ANSI.reset()}")
 
     IO.puts("")
 
     if total_count == 0 do
-      IO.puts("    #{IO.ANSI.yellow()}No UC tools found.#{IO.ANSI.reset()}")
+      IO.puts(" #{IO.ANSI.yellow()}No UC tools found.#{IO.ANSI.reset()}")
 
       IO.puts(
-        "    #{IO.ANSI.faint()}Ask the LLM to create one with universal_constructor!#{IO.ANSI.reset()}"
+        " #{IO.ANSI.faint()}Ask the LLM to create one with universal_constructor!#{IO.ANSI.reset()}"
       )
     else
       IO.puts(
-        "    #{IO.ANSI.faint()}#{enabled_count} enabled of #{total_count} total#{IO.ANSI.reset()}"
+        " #{IO.ANSI.faint()}#{enabled_count} enabled of #{total_count} total#{IO.ANSI.reset()}"
       )
 
       IO.puts("")
@@ -92,16 +92,14 @@ defmodule CodePuppyControl.CLI.SlashCommands.Commands.UC do
             ""
           end
 
-        IO.puts(
-          "    #{status}  #{IO.ANSI.cyan()}#{tool.full_name}#{IO.ANSI.reset()}#{namespace_tag}"
-        )
+        IO.puts(" #{status} #{IO.ANSI.cyan()}#{tool.full_name}#{IO.ANSI.reset()}#{namespace_tag}")
       end)
     end
 
     IO.puts("")
 
     IO.puts(
-      "    #{IO.ANSI.faint()}Use /uc toggle <name> to enable/disable, /uc info <name> for details#{IO.ANSI.reset()}"
+      " #{IO.ANSI.faint()}Use /uc toggle <name> to enable/disable, /uc info <name> for details#{IO.ANSI.reset()}"
     )
 
     IO.puts("")
@@ -118,7 +116,7 @@ defmodule CodePuppyControl.CLI.SlashCommands.Commands.UC do
       nil ->
         IO.puts(
           IO.ANSI.red() <>
-            "    Unknown tool: '#{tool_name}'" <> IO.ANSI.reset()
+            " Unknown tool: '#{tool_name}'" <> IO.ANSI.reset()
         )
 
       _tool ->
@@ -135,7 +133,7 @@ defmodule CodePuppyControl.CLI.SlashCommands.Commands.UC do
             IO.puts("")
 
             IO.puts(
-              "    Tool '#{IO.ANSI.cyan()}#{tool_name}#{IO.ANSI.reset()}' is now #{IO.ANSI.green()}#{status}#{IO.ANSI.reset()}"
+              " Tool '#{IO.ANSI.cyan()}#{tool_name}#{IO.ANSI.reset()}' is now #{IO.ANSI.green()}#{status}#{IO.ANSI.reset()}"
             )
 
             IO.puts("")
@@ -143,7 +141,7 @@ defmodule CodePuppyControl.CLI.SlashCommands.Commands.UC do
           {:error, reason} ->
             IO.puts(
               IO.ANSI.red() <>
-                "    Failed to toggle tool: #{reason}" <> IO.ANSI.reset()
+                " Failed to toggle tool: #{reason}" <> IO.ANSI.reset()
             )
         end
     end
@@ -160,7 +158,7 @@ defmodule CodePuppyControl.CLI.SlashCommands.Commands.UC do
       nil ->
         IO.puts(
           IO.ANSI.red() <>
-            "    Unknown tool: '#{tool_name}'" <> IO.ANSI.reset()
+            " Unknown tool: '#{tool_name}'" <> IO.ANSI.reset()
         )
 
       _tool ->
@@ -168,18 +166,16 @@ defmodule CodePuppyControl.CLI.SlashCommands.Commands.UC do
 
         IO.puts("")
 
-        IO.puts(
-          "    #{IO.ANSI.bright()}Tool: #{IO.ANSI.cyan()}#{tool.full_name}#{IO.ANSI.reset()}"
-        )
+        IO.puts(" #{IO.ANSI.bright()}Tool: #{IO.ANSI.cyan()}#{tool.full_name}#{IO.ANSI.reset()}")
 
         IO.puts("")
 
-        IO.puts("    #{IO.ANSI.bright()}Name:#{IO.ANSI.reset()}         #{meta.name}")
+        IO.puts(" #{IO.ANSI.bright()}Name:#{IO.ANSI.reset()} #{meta.name}")
 
         namespace_display =
           if meta.namespace != "", do: meta.namespace, else: "(none)"
 
-        IO.puts("    #{IO.ANSI.bright()}Namespace:#{IO.ANSI.reset()}    #{namespace_display}")
+        IO.puts(" #{IO.ANSI.bright()}Namespace:#{IO.ANSI.reset()} #{namespace_display}")
 
         status =
           if meta.enabled do
@@ -188,28 +184,28 @@ defmodule CodePuppyControl.CLI.SlashCommands.Commands.UC do
             "#{IO.ANSI.red()}DISABLED#{IO.ANSI.reset()}"
           end
 
-        IO.puts("    #{IO.ANSI.bright()}Status:#{IO.ANSI.reset()}      #{status}")
-        IO.puts("    #{IO.ANSI.bright()}Version:#{IO.ANSI.reset()}     #{meta.version}")
+        IO.puts(" #{IO.ANSI.bright()}Status:#{IO.ANSI.reset()} #{status}")
+        IO.puts(" #{IO.ANSI.bright()}Version:#{IO.ANSI.reset()} #{meta.version}")
 
         if meta.author != "" do
-          IO.puts("    #{IO.ANSI.bright()}Author:#{IO.ANSI.reset()}      #{meta.author}")
+          IO.puts(" #{IO.ANSI.bright()}Author:#{IO.ANSI.reset()} #{meta.author}")
         end
 
         IO.puts(
-          "    #{IO.ANSI.bright()}Signature:#{IO.ANSI.reset()}   #{IO.ANSI.yellow()}#{tool.signature}#{IO.ANSI.reset()}"
+          " #{IO.ANSI.bright()}Signature:#{IO.ANSI.reset()} #{IO.ANSI.yellow()}#{tool.signature}#{IO.ANSI.reset()}"
         )
 
         IO.puts("")
 
-        IO.puts("    #{IO.ANSI.bright()}Description:#{IO.ANSI.reset()}")
+        IO.puts(" #{IO.ANSI.bright()}Description:#{IO.ANSI.reset()}")
 
-        IO.puts("    #{IO.ANSI.faint()}#{meta.description}#{IO.ANSI.reset()}")
+        IO.puts(" #{IO.ANSI.faint()}#{meta.description}#{IO.ANSI.reset()}")
 
         IO.puts("")
 
-        IO.puts("    #{IO.ANSI.bright()}Source:#{IO.ANSI.reset()}")
+        IO.puts(" #{IO.ANSI.bright()}Source:#{IO.ANSI.reset()}")
 
-        IO.puts("    #{IO.ANSI.faint()}#{tool.source_path}#{IO.ANSI.reset()}")
+        IO.puts(" #{IO.ANSI.faint()}#{tool.source_path}#{IO.ANSI.reset()}")
 
         IO.puts("")
     end
@@ -220,10 +216,10 @@ defmodule CodePuppyControl.CLI.SlashCommands.Commands.UC do
 
     IO.puts(
       IO.ANSI.yellow() <>
-        "    Usage: /uc [toggle <name> | info <name>]" <> IO.ANSI.reset()
+        " Usage: /uc [toggle <name> | info <name>]" <> IO.ANSI.reset()
     )
 
-    IO.puts("    #{IO.ANSI.faint()}Use /uc without arguments to list all tools#{IO.ANSI.reset()}")
+    IO.puts(" #{IO.ANSI.faint()}Use /uc without arguments to list all tools#{IO.ANSI.reset()}")
 
     IO.puts("")
   end
@@ -231,7 +227,7 @@ defmodule CodePuppyControl.CLI.SlashCommands.Commands.UC do
   # ── Source File Manipulation ──────────────────────────────────────────
 
   # Public entry-point for toggle so tests can call it directly without
-  # needing a running UC Registry (bd-269).
+  # needing a running UC Registry.
   @doc false
   @spec toggle_enabled_in_source(String.t(), boolean()) :: :ok | {:error, String.t()}
   def toggle_enabled_in_source(source_path, current_enabled) do
@@ -285,7 +281,7 @@ defmodule CodePuppyControl.CLI.SlashCommands.Commands.UC do
   # Uses line-by-line parsing with brace-depth and string tracking so that
   # nested maps or string literals containing "enabled:" are never touched.
   #
-  # This is the structural fix for bd-269: the old regex-based approach
+  # This is the structural fix for : the old regex-based approach
   # (~r/^\s*enabled:\s*(true|false)/m) could match `enabled:` keys inside
   # nested maps or string literals within the block.
   defp replace_enabled_in_uc_tool_block(content, new_value) do
@@ -318,7 +314,7 @@ defmodule CodePuppyControl.CLI.SlashCommands.Commands.UC do
     end
   end
 
-  # ── Structural replacement helpers (bd-269) ──────────────────────────
+  # ── Structural replacement helpers ──────────────────────────
 
   # Split the block into lines, walk them tracking brace-depth and string
   # state, and replace ONLY the first `enabled:` that sits at depth 1
@@ -377,7 +373,7 @@ defmodule CodePuppyControl.CLI.SlashCommands.Commands.UC do
   end
 
   # Character-level scanner that tracks whether we are inside a double-quoted
-  # string and the current brace nesting depth.  Respects escaped quotes (\")
+  # string and the current brace nesting depth. Respects escaped quotes (\")
   # so that `"foo\"bar"` is treated as one continuous string.
   defp scan_line_for_depth(line, in_string?, depth) do
     line
@@ -468,7 +464,7 @@ defmodule CodePuppyControl.CLI.SlashCommands.Commands.UC do
       nil ->
         IO.puts(
           IO.ANSI.red() <>
-            "    Universal Constructor registry is not running" <> IO.ANSI.reset()
+            " Universal Constructor registry is not running" <> IO.ANSI.reset()
         )
 
       _pid ->

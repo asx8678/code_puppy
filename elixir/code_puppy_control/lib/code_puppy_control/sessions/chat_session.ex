@@ -2,7 +2,7 @@ defmodule CodePuppyControl.Sessions.ChatSession do
   @moduledoc """
   Ecto schema for persisting agent chat sessions.
 
-  Implements bd-137: Store session history, compacted hashes, and metadata
+  Implements : Store session history, compacted hashes, and metadata
   in SQLite via Ecto instead of JSON files.
   """
 

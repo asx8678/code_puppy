@@ -9,18 +9,18 @@ driving a pure state struct.
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│                    Agent.Loop (GenServer)                    │
-│                                                             │
-│  ┌──────────┐    ┌─────────────┐    ┌───────────────────┐  │
-│  │  Turn n   │───→│  LLM Call   │───→│  Tool Dispatch    │──┤
-│  │ (pure     │    │ (streaming) │    │  (parallel TBD)   │  │
-│  │  state)   │←───│             │←───│                   │←─┤
-│  └──────────┘    └─────────────┘    └───────────────────┘  │
-│       │                                                    │
-│       ▼                                                    │
-│  ┌──────────────────────────────────────────────────────┐  │
-│  │           EventBus (PubSub + EventStore)             │  │
-│  └──────────────────────────────────────────────────────┘  │
+│ Agent.Loop (GenServer) │
+│ │
+│ ┌──────────┐ ┌─────────────┐ ┌───────────────────┐ │
+│ │ Turn n │───→│ LLM Call │───→│ Tool Dispatch │──┤
+│ │ (pure │ │ (streaming) │ │ (parallel TBD) │ │
+│ │ state) │←───│ │←───│ │←─┤
+│ └──────────┘ └─────────────┘ └───────────────────┘ │
+│ │ │
+│ ▼ │
+│ ┌──────────────────────────────────────────────────────┐ │
+│ │ EventBus (PubSub + EventStore) │ │
+│ └──────────────────────────────────────────────────────┘ │
 └─────────────────────────────────────────────────────────────┘
 ```
 
@@ -46,7 +46,7 @@ effects. This was a deliberate choice:
 
 ```
 idle ──→ calling_llm ──→ streaming ──→ tool_calling ──→ tool_awaiting ──→ done
-              │                │               │               │
+              │ │ │ │
               └────────────────┴───────────────┴───────────────┘
                                       │
                                     error
@@ -109,10 +109,9 @@ separate — the Python integration is being phased out.
 Future work could unify them, but premature abstraction here would couple us
 to the Python architecture we're replacing.
 
-## LLM Behaviour (Placeholder for bd-145)
+## LLM Behaviour (Placeholder)
 
-The `Agent.LLM` behaviour defines the interface that `CodePuppyControl.LLM`
-(bd-145) will implement. Key design decisions:
+The `Agent.LLM` behaviour defines the interface that `CodePuppyControl.LLM` will implement. Key design decisions:
 
 - **`stream_chat/4` callback**: Takes messages, tools, opts, and a callback
   function. The callback receives `{:text, chunk}` and `{:tool_call, name, args, id}`
@@ -122,13 +121,13 @@ The `Agent.LLM` behaviour defines the interface that `CodePuppyControl.LLM`
 - **No pydantic-ai concepts**: No `ModelMessage`, no `RunContext`, no `UsageLimits`.
   Just messages, tools, and a callback.
 
-## Tool Dispatch (Placeholder for bd-149)
+## Tool Dispatch (Placeholder)
 
 Current implementation uses a simple `Module.function/1` convention:
 - Tool `:file_read` maps to `Tool.FileRead.execute/1`
 - Tools must define `execute/1` returning `{:ok, result}` | `{:error, reason}`
 
-This is intentionally simple. bd-149 will build the proper tool registry with:
+This is intentionally simple. A future update will build the proper tool registry with:
 - Dynamic tool registration
 - Tool metadata (description, schema)
 - Tool middleware (auth, rate limiting)
@@ -138,15 +137,15 @@ This is intentionally simple. bd-149 will build the proper tool registry with:
 
 All agent events use `agent_` prefix:
 
-| Event                      | Type String                  | When                         |
+| Event | Type String | When |
 |----------------------------|------------------------------|------------------------------|
-| Turn started               | `agent_turn_started`         | Before LLM call              |
-| LLM stream chunk           | `agent_llm_stream`           | During token streaming       |
-| Tool call dispatched       | `agent_tool_call_start`      | Before tool execution        |
-| Tool call completed        | `agent_tool_call_end`        | After tool execution         |
-| Turn ended                 | `agent_turn_ended`           | After turn completes         |
-| Run completed              | `agent_run_completed`        | Run finished normally        |
-| Run failed                 | `agent_run_failed`           | Run failed with error        |
+| Turn started | `agent_turn_started` | Before LLM call |
+| LLM stream chunk | `agent_llm_stream` | During token streaming |
+| Tool call dispatched | `agent_tool_call_start` | Before tool execution |
+| Tool call completed | `agent_tool_call_end` | After tool execution |
+| Turn ended | `agent_turn_ended` | After turn completes |
+| Run completed | `agent_run_completed` | Run finished normally |
+| Run failed | `agent_run_failed` | Run failed with error |
 
 Events include `run_id`, `session_id`, and `timestamp` (inherited from
 EventBus schema).
@@ -162,15 +161,15 @@ EventBus schema).
 
 ## What's Explicitly Deferred
 
-| Feature             | Ticket   | Why deferred                                  |
+| Feature | Ticket | Why deferred |
 |---------------------|----------|-----------------------------------------------|
-| Tool registry       | bd-149   | Simple module lookup sufficient for Phase 1   |
-| Rate limiting       | bd-151   | Option plumbed through, no enforcement yet    |
-| Token ledger        | bd-152   | Just counting turns + rough usage             |
-| Concurrent tools    | TBD      | Sequential dispatch is simpler to reason about|
-| Model pack resolver | TBD      | Falls back to hardcoded model name            |
-| Message compaction  | TBD      | Python-side feature, not yet ported           |
-| MCP tool discovery  | TBD      | Depends on MCP module being fully ported      |
+| Tool registry | | Simple module lookup sufficient for Phase 1 |
+| Rate limiting | | Option plumbed through, no enforcement yet |
+| Token ledger | | Just counting turns + rough usage |
+| Concurrent tools | TBD | Sequential dispatch is simpler to reason about|
+| Model pack resolver | TBD | Falls back to hardcoded model name |
+| Message compaction | TBD | Python-side feature, not yet ported |
+| MCP tool discovery | TBD | Depends on MCP module being fully ported |
 
 ## Testing Strategy
 

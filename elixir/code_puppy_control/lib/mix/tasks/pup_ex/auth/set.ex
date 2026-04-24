@@ -1,5 +1,5 @@
 defmodule Mix.Tasks.PupEx.Auth.Set do
-  @shortdoc "Store an API key or token in the encrypted credential store (bd-167)"
+  @shortdoc "Store an API key or token in the encrypted credential store"
   @moduledoc """
   Store a named credential in the encrypted credential store.
 

@@ -578,8 +578,8 @@ defmodule CodePuppyControl.Agent.Loop do
     # Dispatch tool calls and collect results
     messages = dispatch_tool_calls(state, turn, messages)
 
-    # Record token usage in the ledger (bd-152).
-    # TODO(bd-152): When bd-145 delivers real LLM usage data, replace these
+    # Record token usage in the ledger.
+    # TODO: When real LLM usage data is available, replace these
     # zeros with actual prompt_tokens, completion_tokens, cached_tokens from
     # the provider response.
     model = resolve_model(state)
@@ -608,7 +608,7 @@ defmodule CodePuppyControl.Agent.Loop do
   end
 
   # ---------------------------------------------------------------------------
-  # Tool Dispatch — resolved via CodePuppyControl.Tool.Runner (bd-149)
+  # Tool Dispatch — resolved via CodePuppyControl.Tool.Runner
   # ---------------------------------------------------------------------------
 
   defp dispatch_tool_calls(state, turn, messages) do
@@ -717,7 +717,7 @@ defmodule CodePuppyControl.Agent.Loop do
   defp resolve_model(%__MODULE__{agent_module: agent_module}) do
     case agent_module.model_preference() do
       {:pack, role} ->
-        # TODO(bd-152): Integrate with model packs when available
+        # TODO: Integrate with model packs when available
         Logger.debug("Agent.Loop: model pack resolution not yet implemented for #{inspect(role)}")
         "claude-sonnet-4-20250514"
 

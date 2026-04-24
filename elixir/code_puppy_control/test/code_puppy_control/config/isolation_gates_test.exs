@@ -1,7 +1,7 @@
 defmodule CodePuppyControl.Config.IsolationGatesTest do
   @moduledoc """
   The 5 CI gates from ADR-003 Dual-Home Config Isolation.
-  All 5 MUST pass for bd-186 acceptance.
+  All 5 MUST pass for acceptance.
 
   GATE-1: No-write — full pup-ex operations write ZERO bytes to ~/.code_puppy/
   GATE-2: Guard raises — safe_write! on legacy paths raises IsolationViolation
@@ -81,10 +81,10 @@ defmodule CodePuppyControl.Config.IsolationGatesTest do
         end)
 
         # 3d. Run Doctor — exercises path resolution + guard probing
-        #     Doctor itself calls safe_write! on a legacy path (probe),
-        #     which raises IsolationViolation — that's expected. The
-        #     Doctor catches the violation and reports :pass. This is a
-        #     realistic operation that exercises the full guard stack.
+        # Doctor itself calls safe_write! on a legacy path (probe),
+        # which raises IsolationViolation — that's expected. The
+        # Doctor catches the violation and reports :pass. This is a
+        # realistic operation that exercises the full guard stack.
         checks = Doctor.run_checks()
         # We don't assert Doctor outcomes here — the point is that
         # Doctor must NOT write to the legacy home while running.
@@ -100,7 +100,7 @@ defmodule CodePuppyControl.Config.IsolationGatesTest do
         end
 
         # 3f. Run Importer in dry-run mode — must not write anything
-        #     to the fake legacy home (or anywhere).
+        # to the fake legacy home (or anywhere).
         result = Importer.run(__legacy_home__: fake_legacy)
         assert result.mode == :dry_run
 
@@ -111,7 +111,7 @@ defmodule CodePuppyControl.Config.IsolationGatesTest do
         assert before_snapshot == after_snapshot,
                "GATE-1 FAILED: legacy home was mutated!\n" <>
                  "Before: #{inspect(before_snapshot)}\n" <>
-                 "After:  #{inspect(after_snapshot)}"
+                 "After: #{inspect(after_snapshot)}"
       after
         File.rm_rf(pup_ex_home)
         File.rm_rf(fake_legacy)

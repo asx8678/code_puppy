@@ -1,6 +1,6 @@
 defmodule CodePuppyControl.TestSupport.OtpLifecycleHelpers do
   @moduledoc """
-  Shared helpers for OTP lifecycle/restart tests (bd-224).
+  Shared helpers for OTP lifecycle/restart tests.
 
   Provides process killing, restart waiting, and result collection
   utilities used across multiple OTP lifecycle test modules.

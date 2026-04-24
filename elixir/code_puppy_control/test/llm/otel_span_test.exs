@@ -1,6 +1,6 @@
 defmodule CodePuppyControl.LLM.OtelSpanTest do
   @moduledoc """
-  OpenTelemetry span attribute tests ported from Python (bd-227, originally bd-212).
+  OpenTelemetry span attribute tests ported from Python (originally ).
 
   Covers gap analysis items G30–G35:
   - G30: set_span_attributes when span is recording and model matches
@@ -54,7 +54,7 @@ defmodule CodePuppyControl.LLM.OtelSpanTest do
   @moduletag :otel
 
   @moduletag skip:
-               "OTel not yet implemented in Elixir — enable when CodePuppyControl.Telemetry gains span attribute support (bd-227)"
+               "OTel not yet implemented in Elixir — enable when CodePuppyControl.Telemetry gains span attribute support"
 
   # ---------------------------------------------------------------------------
   # Mock / stub span definitions
@@ -360,13 +360,13 @@ defmodule CodePuppyControl.LLM.OtelSpanTest do
 
     test "DummySpan is equivalent to Python's DummySpan fallback" do
       # Python's DummySpan:
-      #   class DummySpan:
-      #       def is_recording(self): return False
-      #       def set_attributes(self, attributes): pass
+      # class DummySpan:
+      # def is_recording(self): return False
+      # def set_attributes(self, attributes): pass
       #
       # Our Elixir DummySpan mirrors this exactly:
-      #   - is_recording/1 → false
-      #   - set_attributes/2 → identity (returns span unchanged)
+      # - is_recording/1 → false
+      # - set_attributes/2 → identity (returns span unchanged)
       span = DummySpan.new()
 
       assert DummySpan.is_recording(span) == false

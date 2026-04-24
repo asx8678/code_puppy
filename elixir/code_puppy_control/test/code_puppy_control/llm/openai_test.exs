@@ -268,7 +268,7 @@ defmodule CodePuppyControl.LLM.Providers.OpenAITest do
     end
   end
 
-  # ── URL Building Tests (bd-222) ─────────────────────────────────────────
+  # ── URL Building Tests ─────────────────────────────────────────
 
   describe "URL building" do
     test "does not duplicate /v1 in path when base_url already ends with /v1" do
@@ -349,7 +349,7 @@ defmodule CodePuppyControl.LLM.Providers.OpenAITest do
     end
   end
 
-  # ── Extra Headers Tests (bd-223) ─────────────────────────────────────────
+  # ── Extra Headers Tests ─────────────────────────────────────────
 
   describe "extra_headers forwarding" do
     test "custom endpoint headers are included in request" do

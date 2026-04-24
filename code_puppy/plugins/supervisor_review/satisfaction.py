@@ -1,4 +1,4 @@
-"""Pluggable satisfaction checkers for supervisor review loop (bd code_puppy-79p).
+"""Pluggable satisfaction checkers for supervisor review loop.
 
 Three strategies are provided:
 
@@ -9,7 +9,7 @@ Three strategies are provided:
    supervisor/orchestrator.py:179-187.
 3. LLMJudgeSatisfactionChecker — uses a second LLM call to judge the
    supervisor output. Expensive but most reliable. Full async implementation
-   with sync fallback (bd code_puppy-056).
+   with sync fallback.
 """
 
 from collections.abc import Callable
@@ -227,7 +227,7 @@ class KeywordSatisfactionChecker:
 
 
 # ---------------------------------------------------------------------------
-# LLM judge checker (bd code_puppy-056)
+# LLM judge checker
 # ---------------------------------------------------------------------------
 
 _JUDGE_PROMPT_TEMPLATE = """\

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# scripts/build-burrito.sh - Build a Burrito single-binary release (bd-171)
+# scripts/build-burrito.sh - Build a Burrito single-binary release
 #
 # Prerequisites:
 #   - Zig compiler on PATH (brew install zig / apt install zig / choco install zig)

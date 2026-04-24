@@ -1,7 +1,7 @@
 defmodule CodePuppyControl.LLM.RoundRobinConcurrencyTest do
   @moduledoc """
   Concurrency safety tests for RoundRobinModel, ported from Python
-  tests/test_round_robin_thread_safety.py (bd-212).
+  tests/test_round_robin_thread_safety.py.
 
   The Elixir RoundRobinModel is a GenServer backed by an ETS table with
   read/write concurrency enabled. These tests verify that `advance_and_get/0`

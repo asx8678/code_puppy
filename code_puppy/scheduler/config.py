@@ -1,6 +1,6 @@
 """Scheduler configuration and task management.
 
-# DEPRECATED(bd-62): Use Elixir scheduler. This module is retained for backward compatibility only.
+# DEPRECATED: Use Elixir scheduler. This module is retained for backward compatibility only.
 # The Elixir scheduler at CodePuppyControl.Scheduler.Task is now the production schema.
 
 Handles ScheduledTask dataclass definition and JSON persistence
@@ -32,15 +32,15 @@ class ScheduledTask:
     name: str = ""
     prompt: str = ""
     agent: str = "code-puppy"
-    model: str = ""  # Uses default if empty
-    schedule_type: str = "interval"  # "interval", "cron", "daily", "hourly"
-    schedule_value: str = "1h"  # e.g., "30m", "1h", "0 9 * * *" for cron
+    model: str = "" # Uses default if empty
+    schedule_type: str = "interval" # "interval", "cron", "daily", "hourly"
+    schedule_value: str = "1h" # e.g., "30m", "1h", "0 9 * * *" for cron
     working_directory: str = "."
-    log_file: str = ""  # Auto-generated if empty
+    log_file: str = "" # Auto-generated if empty
     enabled: bool = True
     created_at: str = field(default_factory=lambda: datetime.now().isoformat())
     last_run: str | None = None
-    last_status: str | None = None  # "success", "failed", "running"
+    last_status: str | None = None # "success", "failed", "running"
     last_exit_code: int | None = None
 
     def __post_init__(self):

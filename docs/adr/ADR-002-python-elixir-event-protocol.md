@@ -264,7 +264,7 @@ Elixir supports both:
 
 ## Related Issues
 
-- **bd-26 through bd-33**: Elixir migration epic (all CLOSED)
+- **Elixir migration epic** (all CLOSED)
 
 ## References
 

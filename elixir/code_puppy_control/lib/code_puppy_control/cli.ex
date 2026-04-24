@@ -13,14 +13,14 @@ defmodule CodePuppyControl.CLI do
 
   ## Options
 
-    * `-h`, `--help`        - Show help and exit
+    * `-h`, `--help` - Show help and exit
     * `-v`, `-V`, `--version` - Show version and exit
-    * `-m`, `--model MODEL`  - Model to use (default: from config)
-    * `-a`, `--agent AGENT`  - Agent to use (default: code-puppy)
-    * `-c`, `--continue`     - Continue last session
+    * `-m`, `--model MODEL` - Model to use (default: from config)
+    * `-a`, `--agent AGENT` - Agent to use (default: code-puppy)
+    * `-c`, `--continue` - Continue last session
     * `-p`, `--prompt PROMPT` - Execute a single prompt and exit
-    * `-i`, `--interactive`   - Run in interactive mode
-    * `--bridge-mode`        - Enable Mana LiveView TCP bridge
+    * `-i`, `--interactive` - Run in interactive mode
+    * `--bridge-mode` - Enable Mana LiveView TCP bridge
   """
 
   alias CodePuppyControl.CLI.Parser
@@ -95,7 +95,7 @@ defmodule CodePuppyControl.CLI do
   end
 
   defp run_single_prompt(opts) do
-    # TODO(bd-172): Wire to CodePuppyControl prompt runner
+    # TODO: Wire to CodePuppyControl prompt runner
     model = Map.get(opts, :model)
     prompt = opts[:prompt]
 
@@ -115,19 +115,19 @@ defmodule CodePuppyControl.CLI do
     Usage: pup [OPTIONS] [PROMPT]
 
     Options:
-      -h, --help            Show this help message and exit
-      -v, -V, --version     Show version and exit
-      -m, --model MODEL     Model to use (default: from config)
-      -a, --agent AGENT     Agent to use (default: code-puppy)
-      -c, --continue        Continue last session
-      -p, --prompt PROMPT   Execute a single prompt and exit
-      -i, --interactive     Run in interactive mode
-      --bridge-mode         Enable Mana LiveView TCP bridge
+      -h, --help Show this help message and exit
+      -v, -V, --version Show version and exit
+      -m, --model MODEL Model to use (default: from config)
+      -a, --agent AGENT Agent to use (default: code-puppy)
+      -c, --continue Continue last session
+      -p, --prompt PROMPT Execute a single prompt and exit
+      -i, --interactive Run in interactive mode
+      --bridge-mode Enable Mana LiveView TCP bridge
 
     Examples:
-      pup                           Start interactive mode
-      pup "explain this code"       Run single prompt
-      pup -m claude-sonnet -c       Continue with specific model
+      pup Start interactive mode
+      pup "explain this code" Run single prompt
+      pup -m claude-sonnet -c Continue with specific model
 
     For more information: https://github.com/anthropics/code-puppy
     """

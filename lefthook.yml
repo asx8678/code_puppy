@@ -1,4 +1,4 @@
-# Rust hooks removed as part of Phase 6 migration (bd-81)
+# Rust hooks removed as part of Phase 6 migration
 # - rustfmt and clippy blocks removed (project moving away from Rust)
 # - Verified clean of all Rust references: 2026-04-17
 

@@ -13,23 +13,23 @@ defmodule CodePuppyControlWeb.Router do
   - `POST /api/runs/:id/execute` - Execute a tool via Python worker
   - `GET /api/runs/:id/history` - Get run request/response history
 
-  ### Sessions (bd-214 Wave 2)
+  ### Sessions (Wave 2)
   - `GET /api/sessions` - List sessions with pagination
   - `GET /api/sessions/:id` - Get session metadata
   - `GET /api/sessions/:id/messages` - Get session messages
   - `DELETE /api/sessions/:id` - Delete a session
 
-  ### Config (bd-214 Wave 2)
+  ### Config (Wave 2)
   - `GET /api/config` - List all config keys/values
   - `GET /api/config/keys` - List valid config keys
   - `GET /api/config/:key` - Get a config value
   - `PUT /api/config/:key` - Set a config value
   - `DELETE /api/config/:key` - Reset a config value
 
-  ### Agents (bd-214 Wave 2)
+  ### Agents (Wave 2)
   - `GET /api/agents` - List all available agents
 
-  ### Commands (bd-214 Wave 2)
+  ### Commands (Wave 2)
   - `GET /api/commands` - List all slash commands
   - `GET /api/commands/:name` - Get command info
   - `POST /api/commands/execute` - Execute a command
@@ -82,23 +82,23 @@ defmodule CodePuppyControlWeb.Router do
     post "/runs/:id/execute", RunController, :execute
     get "/runs/:id/history", RunController, :history
 
-    # Session management (bd-214 Wave 2)
+    # Session management (Wave 2)
     get "/sessions", SessionsController, :index
     get "/sessions/:id", SessionsController, :show
     get "/sessions/:id/messages", SessionsController, :messages
     delete "/sessions/:id", SessionsController, :delete
 
-    # Configuration management (bd-214 Wave 2)
+    # Configuration management (Wave 2)
     get "/config", ConfigController, :index
     get "/config/keys", ConfigController, :keys
     get "/config/:key", ConfigController, :show
     put "/config/:key", ConfigController, :update
     delete "/config/:key", ConfigController, :delete
 
-    # Agent management (bd-214 Wave 2)
+    # Agent management (Wave 2)
     get "/agents", AgentsController, :index
 
-    # Command management (bd-214 Wave 2)
+    # Command management (Wave 2)
     get "/commands", CommandsController, :index
     get "/commands/:name", CommandsController, :show
     post "/commands/execute", CommandsController, :execute
@@ -114,14 +114,14 @@ defmodule CodePuppyControlWeb.Router do
   # LiveDashboard is available in development for monitoring
   # To enable, add :phoenix_live_dashboard to deps and uncomment below:
   # if Mix.env() == :dev do
-  #   import Phoenix.LiveDashboard.Router
+  # import Phoenix.LiveDashboard.Router
   #
-  #   scope "/dev" do
-  #     pipe_through [:fetch_session, :protect_from_forgery]
+  # scope "/dev" do
+  # pipe_through [:fetch_session, :protect_from_forgery]
   #
-  #     live_dashboard "/dashboard",
-  #       metrics: CodePuppyControlWeb.Telemetry,
-  #       ecto_repos: [CodePuppyControl.Repo]
-  #   end
+  # live_dashboard "/dashboard",
+  # metrics: CodePuppyControlWeb.Telemetry,
+  # ecto_repos: [CodePuppyControl.Repo]
+  # end
   # end
 end

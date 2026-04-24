@@ -1,6 +1,6 @@
 defmodule CodePuppyControl.LLM.SSEChunkErrorTest do
   @moduledoc """
-  SSE chunk-boundary error handling tests (bd-226).
+  SSE chunk-boundary error handling tests.
 
   Tests error scenarios with chunked SSE delivery:
   - Malformed JSON in data field

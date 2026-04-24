@@ -20,20 +20,20 @@ defmodule CodePuppyControl.REPL.Loop do
 
   ## Slash Commands (Phase 1)
 
-    * `/help`    — Show available commands
-    * `/quit`    — Exit the REPL
-    * `/exit`    — Alias for /quit
-    * `/model`   — Interactive model selection
+    * `/help` — Show available commands
+    * `/quit` — Exit the REPL
+    * `/exit` — Alias for /quit
+    * `/model` — Interactive model selection
     * `/model <name>` — Switch model directly
-    * `/agent`   — Interactive agent selection
+    * `/agent` — Interactive agent selection
     * `/agent <name>` — Switch agent directly
     * `/sessions` — Browse and switch sessions
-    * `/tui`     — Launch full TUI interface
-    * `/clear`   — Clear the terminal screen
+    * `/tui` — Launch full TUI interface
+    * `/clear` — Clear the terminal screen
     * `/history` — Show command history
 
   Phase 2-3 will add tab completion, raw-mode key handling,
-  and more commands (bd-161).
+  and more commands.
   """
 
   use GenServer
@@ -520,8 +520,8 @@ defmodule CodePuppyControl.REPL.Loop do
 
     🐶 Code Puppy — Interactive Mode
     ─────────────────────────────────
-    Agent:  #{state.agent}
-    Model:  #{state.model}
+    Agent: #{state.agent}
+    Model: #{state.model}
     Session: #{state.session_id}
 
     Type /help for commands, /quit to exit.

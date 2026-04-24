@@ -1,7 +1,7 @@
 # async: false — two tests below mutate the __BURRITO env var, which is a
 # process/node-global side effect incompatible with async test execution.
 # The remaining tests use `Application.put_env(:code_puppy_control,
-# :user_data_dir_override, tmp)` (see bd-237) to redirect the :user_data
+# :user_data_dir_override, tmp)` (see ) to redirect the :user_data
 # basedir to a per-test tmp dir instead of writing to the CI runner's
 # real user-data home. `Application.put_env` is itself global application
 # state, so this file must stay `async: false` even if the __BURRITO

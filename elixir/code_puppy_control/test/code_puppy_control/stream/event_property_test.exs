@@ -5,7 +5,7 @@ defmodule CodePuppyControl.Stream.EventPropertyTest do
   Proves that `to_wire/1` / `from_wire/1` form a lossless round-trip
   for all 11 canonical event types, including through JSON serialization.
 
-  Wave 1 pilot for bd-174 — these patterns set the convention for
+  Wave 1 pilot for — these patterns set the convention for
   future property tests in Waves 2–5.
   """
 

@@ -257,7 +257,7 @@ defmodule CodePuppyControl.CLI.SlashCommands.Registry do
         usage: "/diff [additions|deletions] <color>",
         category: "config"
       ),
-      # Model settings commands (read-only summary; interactive editor is bd-271)
+      # Model settings commands (read-only summary; interactive editor is )
       CommandInfo.new(
         name: "model_settings",
         description: "Show per-model settings (temperature, seed, etc.)",

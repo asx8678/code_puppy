@@ -1,6 +1,6 @@
 """Model packs with role-based routing and fallback chains.
 
-bd-132: Thin wrapper that routes to Elixir ModelPacks GenServer.
+Thin wrapper that routes to Elixir ModelPacks GenServer.
 Legacy Python implementation removed - now delegates all operations
 to the Elixir control plane via call_elixir_model_packs().
 
@@ -224,7 +224,7 @@ def load_user_packs() -> None:
 
 def save_user_packs() -> None:
     """Save user-defined model packs to disk (no-op in thin wrapper)."""
-    pass  # Persistence handled by Elixir
+    pass # Persistence handled by Elixir
 
 
 def get_packs_file() -> str:

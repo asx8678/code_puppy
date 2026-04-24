@@ -40,8 +40,8 @@ def _on_startup():
     """Initialize the orchestrator on startup."""
     global _orchestrator
     _orchestrator = TurboOrchestrator()
-    # bd-86: Native acceleration removed, always uses Python
-    ops_mode = "Python (native acceleration removed in bd-86)"
+    # Native acceleration removed, always uses Python
+    ops_mode = "Python (native acceleration removed)"
     logger.info(f"Turbo Executor plugin initialized (using {ops_mode})")
 
 
@@ -59,9 +59,9 @@ def _handle_turbo_command(command: str, name: str) -> Any:
     """Handle the /turbo slash command.
 
     Usage:
-        /turbo status     → Show turbo executor status
+        /turbo status → Show turbo executor status
         /turbo plan <json>→ Execute a plan from JSON string
-        /turbo help       → Show usage instructions
+        /turbo help → Show usage instructions
     """
     if name != "turbo":
         return None
@@ -72,37 +72,37 @@ def _handle_turbo_command(command: str, name: str) -> Any:
     if subcommand == "status":
         orch = _get_orchestrator()
         emit_info("🚀 Turbo Executor Status:")
-        emit_info(f"   Orchestrator ready: {orch is not None}")
-        emit_info(f"   Parallel mode: {orch.enable_parallel}")
-        # bd-86: Native acceleration removed, always uses Python
-        emit_info("   Operations source: Python (native acceleration removed in bd-86)")
-        emit_info("   Supported operations: list_files, grep, read_files")
+        emit_info(f" Orchestrator ready: {orch is not None}")
+        emit_info(f" Parallel mode: {orch.enable_parallel}")
+        # Native acceleration removed, always uses Python
+        emit_info(" Operations source: Python (native acceleration removed)")
+        emit_info(" Supported operations: list_files, grep, read_files")
         return True
 
     if subcommand == "help":
         orch = _get_orchestrator()
-        # bd-86: Native acceleration removed, always uses Python
-        ops_source = "Python (native acceleration removed in bd-86)"
+        # Native acceleration removed, always uses Python
+        ops_source = "Python (native acceleration removed)"
         emit_info("🚀 Turbo Executor — Batch File Operations")
         emit_info("")
         emit_info("Usage:")
-        emit_info("  /turbo status           → Show orchestrator status")
-        emit_info("  /turbo plan <json>      → Execute a plan from JSON")
+        emit_info(" /turbo status → Show orchestrator status")
+        emit_info(" /turbo plan <json> → Execute a plan from JSON")
         emit_info("")
         emit_info("Plan JSON format:")
-        emit_info('  {"id": "my-plan", "operations": [')
+        emit_info(' {"id": "my-plan", "operations": [')
         emit_info(
-            '    {"type": "list_files", "args": {"directory": "."}, "priority": 1},'
+            ' {"type": "list_files", "args": {"directory": "."}, "priority": 1},'
         )
         emit_info(
-            '    {"type": "grep", "args": {"search_string": "def "}, "priority": 2}'
+            ' {"type": "grep", "args": {"search_string": "def "}, "priority": 2}'
         )
-        emit_info("  ]}")
+        emit_info(" ]}")
         emit_info("")
         emit_info("Operations: list_files, grep, read_files")
         emit_info("Priority: lower numbers execute first (default 100)")
         emit_info("")
-        emit_info(f"Backend: {ops_source}")  # bd-86: Updated backend description
+        emit_info(f"Backend: {ops_source}") # Updated backend description
         return True
 
     if subcommand == "plan":
@@ -122,7 +122,7 @@ def _handle_turbo_command(command: str, name: str) -> Any:
             if errors:
                 emit_warning("Plan validation errors:")
                 for error in errors:
-                    emit_warning(f"  - {error}")
+                    emit_warning(f" - {error}")
                 return True
 
             emit_info(
@@ -142,12 +142,12 @@ def _handle_turbo_command(command: str, name: str) -> Any:
                 result = future.result()
                 emit_info(f"✅ Plan completed: {result.status}")
                 emit_info(
-                    f"   Operations: {result.success_count} success, {result.error_count} errors"
+                    f" Operations: {result.success_count} success, {result.error_count} errors"
                 )
                 if result.error_count > 0:
                     for err in result.get_errors():
                         emit_warning(
-                            f"   Error in {err.operation_id or err.type}: {err.error}"
+                            f" Error in {err.operation_id or err.type}: {err.error}"
                         )
                 return True
 
@@ -312,7 +312,7 @@ def _register_turbo_execute_tool(agent):
                 ]
 
             # Add human-readable summary if requested
-            # bd-208: Summary generation is non-fatal — if summarization raises,
+            # Summary generation is non-fatal — if summarization raises,
             # return the structured response with a fallback summary so the
             # caller always gets success_count / error_count.
             if summarize:

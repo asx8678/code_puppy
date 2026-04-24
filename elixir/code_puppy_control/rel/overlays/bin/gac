@@ -3,7 +3,7 @@
 # Invokes the Elixir Mix task or falls back to the Python CLI.
 #
 # NOTE: This wrapper is used by `mix release` output only.
-# For Burrito single-binary distribution (bd-171), see docs/burrito-release.md —
+# For Burrito single-binary distribution, see docs/burrito-release.md —
 # Burrito binaries are self-contained and do not use these overlays.
 set -euo pipefail
 

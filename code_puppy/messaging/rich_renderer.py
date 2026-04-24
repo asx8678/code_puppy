@@ -29,7 +29,7 @@ from code_puppy.utils import format_duration
 from code_puppy.config import get_subagent_verbose
 from code_puppy.tools.common import format_diff_with_colors
 
-# Adaptive rendering support (bd code_puppy-6ig)
+# Adaptive rendering support
 try:
     from code_puppy.utils.adaptive_render import (
         PayloadKind,
@@ -328,7 +328,7 @@ class RichConsoleRenderer:
         return preview
 
     # =========================================================================
-    # Adaptive Rendering Helpers (bd code_puppy-6ig)
+    # Adaptive Rendering Helpers
     # =========================================================================
 
     # Collapsible long-text thresholds
@@ -700,7 +700,7 @@ class RichConsoleRenderer:
 
         prefix = self._get_level_prefix(msg.level)
 
-        # Adaptive rendering integration (bd code_puppy-6ig)
+        # Adaptive rendering integration
         # Only for non-markdown text; markdown content is already structured
         if not msg.is_markdown and isinstance(msg.text, str):
             # Pre-process: normalize escaped whitespace
@@ -1300,7 +1300,7 @@ class RichConsoleRenderer:
 
         # Show details if present
         if msg.details:
-            # Adaptive rendering for details (bd code_puppy-6ig)
+            # Adaptive rendering for details
             # Try structured detection before falling back to plain text
             details = self._adaptive_preprocess_text(msg.details)
             if self._try_render_python_repr(details):

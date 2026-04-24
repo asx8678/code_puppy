@@ -99,7 +99,7 @@ Each operation follows this priority:
 2. **Python implementation** (always available)
 3. **Graceful degradation** (return empty/error result)
 
-> **Note:** The Rust step has been removed as Rust has been completely eliminated from the architecture (bd-167).
+> **Note:** The Rust step has been removed as Rust has been completely eliminated from the architecture.
 
 ## Building
 
@@ -126,9 +126,9 @@ No additional build steps required — the Python layer communicates with Elixir
 
 ## Migration Notes
 
-- **bd-167**: Rust has been completely eliminated from the architecture
-- **bd-93**: Parse operations route through `NativeBackend` with Elixir-first routing
-- **bd-94**: File operations route through Elixir
+- Rust has been completely eliminated from the architecture
+- Parse operations route through `NativeBackend` with Elixir-first routing
+- File operations route through Elixir
 
 ## Future Considerations
 
@@ -136,7 +136,7 @@ No additional build steps required — the Python layer communicates with Elixir
 - Elixir BEAM/OTP provides distributed, fault-tolerant operation
 - Future backends evaluated based on FFI sensitivity and ecosystem maturity
 
-## Capability Routing Table (bd-13, bd-167)
+## Capability Routing Table
 
 NativeBackend routes operations to the optimal backend based on the active profile. Use `NativeBackend.get_capability_routing(capability)` to introspect at runtime.
 
@@ -153,7 +153,7 @@ NativeBackend routes operations to the optimal backend based on the active profi
 
 - Elixir is tried first; Python fallback is always available
 - Python fallback is always available (never fails to import)
-- All native operations now route through Elixir (Rust eliminated in bd-167)
+- All native operations now route through Elixir (Rust eliminated)
 
 ### Runtime Introspection
 

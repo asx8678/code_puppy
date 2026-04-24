@@ -48,17 +48,17 @@ defmodule CodePuppyControl.MixProject do
       {:telemetry, "~> 1.2"},
       {:benchee, "~> 1.1", only: :dev, runtime: false},
       {:benchee_markdown, "~> 0.3", only: :dev, runtime: false},
-      # MessagePack for session serialization (bd-47)
+      # MessagePack for session serialization
       {:msgpax, "~> 2.4"},
-      # HTTP client with connection pooling (bd-69)
+      # HTTP client with connection pooling
       {:finch, "~> 0.18"},
-      # xxhash for pure Elixir HashLine implementation (bd-147)
+      # xxhash for pure Elixir HashLine implementation
       {:xxhash, "~> 0.3"},
-      # OS process management with PTY support (bd-217)
+      # OS process management with PTY support
       {:erlexec, "~> 2.0"},
-      # TUI rendering with Owl (bd-161)
+      # TUI rendering with Owl
       {:owl, "~> 0.11"},
-      # Burrito single-binary packaging (bd-171)
+      # Burrito single-binary packaging
       {:burrito, "~> 1.3", runtime: false}
     ]
   end

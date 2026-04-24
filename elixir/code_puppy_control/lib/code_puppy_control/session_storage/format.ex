@@ -12,7 +12,7 @@ defmodule CodePuppyControl.SessionStorage.Format do
   | `MSGPACK\\x01` | `MSGPACK\\x01` | Legacy Python msgpack sessions |
 
   The Elixir port writes exclusively to `~/.code_puppy_ex/sessions/` and never
-  touches `~/.code_puppy/` (isolation requirement from bd-165).
+  touches `~/.code_puppy/` (isolation requirement from ).
   """
 
   # --- Current format identifier ---

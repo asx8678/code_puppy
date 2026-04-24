@@ -8,7 +8,7 @@ defmodule CodePuppyControl.REPL.Input do
   - Prompt rendering with context (agent, model, session)
 
   Phase 2-3 will add raw mode for arrow keys, tab completion,
-  and full readline features (bd-161).
+  and full readline features.
   """
 
   # ── Prompt Rendering ─────────────────────────────────────────────────────
@@ -44,7 +44,7 @@ defmodule CodePuppyControl.REPL.Input do
   or `{:error, reason}` on failure.
 
   Uses `:io.get_line/2` as the basic input mechanism. Raw mode with
-  arrow keys and completion is deferred to Phase 2 (bd-161).
+  arrow keys and completion is deferred to Phase 2.
   """
   @spec read_line(String.t()) :: {:ok, String.t()} | :eof | {:error, term()}
   def read_line(prompt) do

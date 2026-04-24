@@ -2,10 +2,10 @@ defmodule CodePuppyControl.MessageCore.MessageBatch do
   @moduledoc """
   Placeholder namespace for message batch functionality.
 
-  This is a namespace-only module pending full implementation in bd-159.
+  This is a namespace-only module pending full implementation.
   No public API is available yet—there are no callable functions in this module.
 
-  ## Future Implementation (bd-159)
+  ## Future Implementation
 
   The MessageBatch module will eventually provide:
     * A struct for batched message containers
@@ -20,9 +20,9 @@ defmodule CodePuppyControl.MessageCore.MessageBatch do
   module hierarchy. It is not yet functional—do not attempt to call any functions.
 
   Downstream issues:
-    * bd-159 - Create MessageBatch Elixir struct with full API
+    * - Create MessageBatch Elixir struct with full API
   """
 
   # This module intentionally has no public API.
-  # Full implementation pending in bd-159.
+  # Full implementation pending.
 end

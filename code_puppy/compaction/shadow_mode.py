@@ -1,4 +1,4 @@
-"""Shadow mode utilities for Elixir message integration (bd-112).
+"""Shadow mode utilities for Elixir message integration.
 
 This module provides utilities for running message operations in shadow mode,
 where both Python and Elixir execute the same operation and results are compared.

@@ -3,7 +3,7 @@ defmodule CodePuppyControl.REPL.SendToAgentTest do
   Tests for send_to_agent/2 (tested via handle_input/2) and the
   Agent.LLMAdapter provider contract.
 
-  Extracted from loop_test.exs (bd-250 Phase 3 + Phase 4).
+  Extracted from loop_test.exs (Phase 3 + Phase 4).
   """
   use ExUnit.Case, async: false
 
@@ -156,7 +156,7 @@ defmodule CodePuppyControl.REPL.SendToAgentTest do
   end
 
   # ===========================================================================
-  # send_to_agent/2 tests (bd-250 Phase 3)
+  # send_to_agent/2 tests (Phase 3)
   # ===========================================================================
   #
   # send_to_agent/2 is private, so we test it through the public
@@ -287,7 +287,7 @@ defmodule CodePuppyControl.REPL.SendToAgentTest do
   end
 
   # ===========================================================================
-  # Agent.LLMAdapter provider contract tests (bd-250 Phase 4)
+  # Agent.LLMAdapter provider contract tests (Phase 4)
   # ===========================================================================
 
   defmodule REPLTestProviderMock do

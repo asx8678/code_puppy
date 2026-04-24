@@ -377,7 +377,7 @@ defmodule CodePuppyControl.CLI.SlashCommands.Commands.AddModelPersistenceTest do
     end
   end
 
-  # ── persist/2 when LockKeeper is down (bd-268 Blocker 2) ────────────────
+  # ── persist/2 when LockKeeper is down (Blocker 2) ────────────────
 
   describe "persist/2 when LockKeeper is down" do
     test "persist/2 propagates {:error, :not_running} from with_lock" do

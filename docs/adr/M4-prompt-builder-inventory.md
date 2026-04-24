@@ -16,7 +16,7 @@
 | `agent_planning.py` | :161 | session | get_system_prompt |
 | `prompt_reviewer.py` | :140 | session | get_system_prompt |
 | `agent_pack_leader.py` | :413 | session | get_system_prompt |
-| `pack/bloodhound.py` | :300 | session | get_system_prompt |
+| `pack/shepherd.py` | :300 | session | get_system_prompt |
 | `pack/watchdog.py` | :363 | session | get_system_prompt |
 | `pack/terrier.py` | :283 | session | get_system_prompt |
 | `pack/retriever.py` | :389 | session | get_system_prompt |

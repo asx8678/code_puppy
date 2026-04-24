@@ -2,7 +2,7 @@ defmodule CodePuppyControl.Plugins.FastPuppy do
   @moduledoc """
   Fast Puppy Plugin — Native acceleration management (REMOVED).
 
-  bd-50: Native acceleration layer removed. This plugin is now a minimal
+  Native acceleration layer removed. This plugin is now a minimal
   stub that only reports that the acceleration layer has been removed.
 
   Ported from Python: code_puppy/plugins/fast_puppy/register_callbacks.py
@@ -16,7 +16,7 @@ defmodule CodePuppyControl.Plugins.FastPuppy do
   def name, do: "fast_puppy"
 
   @impl true
-  def description, do: "Native acceleration status (removed in bd-86/bd-50)"
+  def description, do: "Native acceleration status (removed)"
 
   @impl true
   def register do
@@ -31,7 +31,7 @@ defmodule CodePuppyControl.Plugins.FastPuppy do
   @spec handle_custom_command(String.t(), String.t()) :: String.t() | nil
   def handle_custom_command(_command, name) do
     if name == "fast_puppy" do
-      "🐍 Fast Puppy: Native acceleration layer removed (bd-86/bd-50). All operations use pure Python."
+      "🐍 Fast Puppy: Native acceleration layer removed. All operations use pure Python."
     else
       nil
     end

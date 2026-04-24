@@ -318,7 +318,7 @@ defmodule CodePuppyControl.RequestTracker do
 
     for {id, target} <- stale_ids do
       Logger.warning("Cleaning up stale request #{id}")
-      # bd-72: Guard against nil target (register_only without awaiter)
+      # Guard against nil target (register_only without awaiter)
       if target, do: GenServer.reply(target, {:error, :stale_request})
     end
 

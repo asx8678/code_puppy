@@ -440,7 +440,7 @@ defmodule CodePuppyControl.CLI.SlashCommands.Commands.ModelSettingsTest do
     end
   end
 
-  # ── Interactive editor (bd-271) ──────────────────────────────────────────
+  # ── Interactive editor ──────────────────────────────────────────
 
   describe "Interactive.init/1" do
     test "initializes with model name and settings" do
@@ -478,7 +478,7 @@ defmodule CodePuppyControl.CLI.SlashCommands.Commands.ModelSettingsTest do
 
     test "shows transient message when present" do
       {:ok, state} = Interactive.init(%{model_name: "gpt-5"})
-      state = %{state | message: "  ✓ Test message"}
+      state = %{state | message: " ✓ Test message"}
       rendered = Interactive.render(state)
       assert rendered =~ "Test message"
     end

@@ -44,5 +44,5 @@ npm-debug.log
 # Escript build artifact
 /pup
 
-# Burrito single-binary release output (bd-171)
+# Burrito single-binary release output
 /burrito_out/
