@@ -40,8 +40,8 @@ pre-commit:
         fi
       stage_fixed: true
 
-# pre-push hook removed - tests run in CI only
-# (except for advisory test review — see below)
+# Local-only test gates — no GitHub Actions, trust-the-developer
+# Added post-bd-removal (commit b94b6222 follow-up)
 
 pre-push:
   commands:
@@ -57,6 +57,39 @@ pre-push:
           echo "Run manually: ./scripts/review-tests.sh <test_files>"
         fi
         echo "─────────────────────────────────────"
-        # Always exit 0 — advisory only, never blocks push
         exit 0
       fail_text: "Test review completed with findings (advisory — push continues)"
+
+    # --- Real gates below (these block push on failure) ---
+
+    elixir-compile:
+      glob: "elixir/**/*.{ex,exs}"
+      run: |
+        cd elixir/code_puppy_control && mix compile --warnings-as-errors
+      fail_text: "❌ Elixir compile failed. Fix warnings or run `mix compile` to debug."
+
+    elixir-test-fast:
+      glob: "elixir/**/*.{ex,exs}"
+      run: |
+        cd elixir/code_puppy_control && mix test --exclude slow --exclude integration --max-failures 5
+      fail_text: "❌ Elixir fast tests failed. Run `mix test` for full output."
+
+    python-ruff:
+      glob: "*.py"
+      run: |
+        if command -v uv >/dev/null 2>&1; then
+          uv run ruff check {push_files}
+        else
+          ruff check {push_files}
+        fi
+      fail_text: "❌ Ruff check failed on pushed Python files."
+
+    python-smoke-import:
+      glob: "code_puppy/**/*.py"
+      run: |
+        if command -v uv >/dev/null 2>&1; then
+          uv run python -c "import code_puppy; import code_puppy.agents.agent_pack_leader"
+        else
+          python -c "import code_puppy; import code_puppy.agents.agent_pack_leader"
+        fi
+      fail_text: "❌ Python smoke import failed — top-level package is broken."
