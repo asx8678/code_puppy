@@ -39,13 +39,15 @@ Elixir pup-ex resolves its home directory in this order:
 | Priority | Source | Behavior |
 |----------|--------|----------|
 | 1 (highest) | `PUP_EX_HOME` env var | Explicit override. If set, this IS the home. Period. |
-| 2 | XDG vars | Respected under the new home root. Same semantics as today — `XDG_CONFIG_HOME`, `XDG_DATA_HOME`, etc. resolve *relative to* the Elixir home, not independently. |
+| 2 | XDG vars | When `PUP_EX_HOME` is set, XDG vars are ignored (the env var IS the home). Otherwise, XDG vars resolve independently: `<XDG value>/code_puppy_ex` (e.g., `XDG_CONFIG_HOME=~/.config` → `~/.config/code_puppy_ex`). |
 | 3 (default) | `~/.code_puppy_ex/` | Used when no env var is set. Created on first run if absent. |
 | 4 (legacy) | `~/.code_puppy/` | **READ-ONLY** via explicit import flow only. Never a write target. Never auto-resolved as home. |
 
-> **Important**: XDG variables are respected *within* the Elixir home. For example,
-> `XDG_CONFIG_HOME` defaults to `~/.code_puppy_ex/config` (not `~/.config`), mirroring how
-> Python pup treats XDG under `~/.code_puppy/`. This preserves the "one tree per runtime" model.
+> **Important**: When `PUP_EX_HOME` is set, it takes total precedence and XDG vars are not
+> consulted for directory resolution. When no `PUP_EX_HOME` is set but an XDG var is present,
+> the path resolves to `<XDG value>/code_puppy_ex` (e.g., `XDG_CONFIG_HOME=~/.config` yields
+> `~/.config/code_puppy_ex`), which may be outside `~/.code_puppy_ex/`. When no XDG var is
+> set, all directories default under `~/.code_puppy_ex/`.
 
 ## Import Allowlist
 
@@ -116,7 +118,7 @@ Before any guard check, paths are resolved through **canonical path resolution**
 
 1. `Path.expand/1` — expands `~`, `..`, env vars
 2. `:file.read_link_info/1` — follows symlinks to their targets
-3. Compare resolved path against Elixir home prefix
+3. Compare resolved path against **legacy home** prefix (`~/.code_puppy/`)
 
 This blocks symlink attacks where `~/.code_puppy_ex/data → ~/.code_puppy/data` would bypass
 the guard. The check happens *after* resolution, against the real path.
@@ -193,7 +195,7 @@ acceptance — no partial credit.
 | GATE-2 | **Guard raises** | Direct call to `safe_write!("~/.code_puppy/any_file", "data")` raises `ConfigIsolationViolation`. | Proves the guard catches explicit violations. |
 | GATE-3 | **Import is opt-in** | Start app with legacy home present and populated. App does NOT auto-copy any files. | Proves no silent side-effects on startup. |
 | GATE-4 | **Doctor passes** | `mix pup_ex.doctor` on a freshly initialized `~/.code_puppy_ex/` returns ✅ with no warnings. | Proves the new home is self-sufficient. |
-| GATE-5 | **Paths audit** | Every `Paths.*_dir/0` and `*_file/0` function resolves under `~/.code_puppy_ex/` (or `PUP_EX_HOME`), never under the legacy home. | Proves path routing is complete. |
+| GATE-5 | **Paths audit** | Every `Paths.*_dir/0` and `*_file/0` function never resolves under the legacy home. When XDG vars are set without `PUP_EX_HOME`, paths may resolve to `<XDG value>/code_puppy_ex`. | Proves path routing is complete. |
 
 ## Consequences
 
