@@ -64,25 +64,18 @@ end
 
 defmodule CodePuppyControl.CLI.OneShotSmokeTest do
   @moduledoc """
-  Smoke-level tests for the CLI one-shot prompt path.
+  Smoke-level tests for CLI one-shot prompt routing and
+  Parser → OneShot integration.
 
-  Verifies that `pup -p "..."` (and equivalent invocations) reach
-  the OneShot runner/agent pipeline with parser-shaped opts, without
-  duplicating low-value tests already in `cli/one_shot_test.exs`.
-
-  ## What's tested here (and NOT in one_shot_test.exs)
-
-    * `CLI.resolve_run_mode/1` routing logic (one-shot vs interactive)
-    * Full Parser → OneShot pipeline (CLI args → parsed opts → OneShot.run)
-    * Combined flag interactions (`-p` with `-m`, `-a`, positional args)
-    * Parser opts shape / compatibility with `OneShot.run/1`
+  Focuses on what is NOT covered elsewhere:
+    * `CLI.resolve_run_mode/1` routing logic
+    * End-to-end Parser → OneShot pipeline (2-3 key paths)
     * Error propagation through the full CLI → OneShot pipeline
 
-  ## What's NOT tested here (already covered)
-
-    * OneShot.run/1 internal dispatch logic
-    * Message persistence / rollback details
-    * Per-agent routing inside OneShot (those are unit-level)
+  Does NOT duplicate:
+    * OneShot.run/1 unit dispatch logic (see cli/one_shot_test.exs)
+    * Parser flag shape (see cli/gac_parser_test.exs patterns)
+    * Help/version text (see cli/cli_test.exs)
   """
 
   use ExUnit.Case, async: false
@@ -95,7 +88,7 @@ defmodule CodePuppyControl.CLI.OneShotSmokeTest do
   alias CodePuppyControl.Tools.AgentCatalogue
 
   # ---------------------------------------------------------------------------
-  # Shared setup
+  # Shared setup — mock LLM + sandboxed session dir
   # ---------------------------------------------------------------------------
 
   defp setup_mock_llm(_context) do
@@ -105,6 +98,17 @@ defmodule CodePuppyControl.CLI.OneShotSmokeTest do
     Application.put_env(:code_puppy_control, :repl_llm_module, OneShotSmokeMockLLM)
     OneShotSmokeMockLLM.reset()
 
+    # Sandbox SessionStorage so successful OneShot.run never writes to
+    # the real ~/.code_puppy_ex/sessions/.  PUP_SESSION_DIR is the
+    # canonical env var (see SessionStorage.base_dir/0).  Must be under
+    # ~/.code_puppy_ex/ to pass validate_storage_dir!/1.
+    ex_home = Path.expand("~/.code_puppy_ex")
+    File.mkdir_p!(ex_home)
+    tmp_dir = Path.join([ex_home, "sessions", "pup_smoke_#{session_id}"])
+    File.mkdir_p!(tmp_dir)
+    prev_session_dir = System.get_env("PUP_SESSION_DIR")
+    System.put_env("PUP_SESSION_DIR", tmp_dir)
+
     try do
       AgentCatalogue.discover_agent_modules()
     catch
@@ -112,6 +116,12 @@ defmodule CodePuppyControl.CLI.OneShotSmokeTest do
     end
 
     on_exit(fn ->
+      # Drain any lingering async-save tasks BEFORE restoring env vars
+      # or removing dirs.  save_session_async/3 spawns Task processes that
+      # read PUP_SESSION_DIR and write session files; without this drain
+      # they may hit a deleted dir or write to the real user session path.
+      Process.sleep(100)
+
       if prev_llm do
         Application.put_env(:code_puppy_control, :repl_llm_module, prev_llm)
       else
@@ -120,7 +130,18 @@ defmodule CodePuppyControl.CLI.OneShotSmokeTest do
 
       OneShotSmokeMockLLM.stop()
 
-      Enum.each(["code_puppy", "code-puppy", "qa_kitten"], fn agent_key ->
+      # Restore PUP_SESSION_DIR and clean up sandbox dir.
+      # Use File.rm_rf/1 (non-bang) to tolerate concurrent async
+      # writes that may create files during removal.
+      if prev_session_dir do
+        System.put_env("PUP_SESSION_DIR", prev_session_dir)
+      else
+        System.delete_env("PUP_SESSION_DIR")
+      end
+
+      {:ok, _} = File.rm_rf(tmp_dir)
+
+      Enum.each(["code_puppy", "code-corgi", "qa_kitten"], fn agent_key ->
         try do
           State.clear_messages(session_id, agent_key)
         catch
@@ -161,117 +182,53 @@ defmodule CodePuppyControl.CLI.OneShotSmokeTest do
   end
 
   # ===========================================================================
-  # CLI routing logic
+  # CLI routing logic — the unique value of this smoke test
   # ===========================================================================
 
   describe "CLI.resolve_run_mode/1 — routing" do
     test "-p with non-empty prompt routes to one-shot" do
-      opts = %{prompt: "hello"}
-      assert :one_shot = CLI.resolve_run_mode(opts)
+      assert :one_shot = CLI.resolve_run_mode(%{prompt: "hello"})
     end
 
     test "positional prompt (non-empty string) routes to one-shot" do
-      opts = %{prompt: "explain this code"}
-      assert :one_shot = CLI.resolve_run_mode(opts)
+      assert :one_shot = CLI.resolve_run_mode(%{prompt: "explain this code"})
     end
 
     test "-p with -i routes to interactive with prompt" do
-      opts = %{prompt: "hello", interactive: true}
-      assert :interactive_with_prompt = CLI.resolve_run_mode(opts)
+      assert :interactive_with_prompt =
+               CLI.resolve_run_mode(%{prompt: "hello", interactive: true})
     end
 
     test "-c (continue) routes to continue session" do
-      opts = %{continue: true}
-      assert :continue_session = CLI.resolve_run_mode(opts)
+      assert :continue_session = CLI.resolve_run_mode(%{continue: true})
     end
 
     test "no prompt, no continue routes to interactive default" do
-      opts = %{}
-      assert :interactive_default = CLI.resolve_run_mode(opts)
+      assert :interactive_default = CLI.resolve_run_mode(%{})
     end
 
     test "nil prompt routes to interactive default (not one-shot)" do
-      opts = %{prompt: nil}
-      assert :interactive_default = CLI.resolve_run_mode(opts)
+      assert :interactive_default = CLI.resolve_run_mode(%{prompt: nil})
     end
 
-    test "empty string prompt routes to interactive default (not one-shot)" do
-      # Guard: `is_binary(prompt) and prompt != ""`
-      opts = %{prompt: ""}
-      assert :interactive_default = CLI.resolve_run_mode(opts)
+    test "empty string prompt routes to interactive default" do
+      assert :interactive_default = CLI.resolve_run_mode(%{prompt: ""})
     end
 
     test "-p with -c still routes to one-shot (prompt takes precedence)" do
-      # When both prompt and continue are set, prompt wins because
-      # it's matched first in the case statement.
-      opts = %{prompt: "hello", continue: true}
-      assert :one_shot = CLI.resolve_run_mode(opts)
+      assert :one_shot = CLI.resolve_run_mode(%{prompt: "hello", continue: true})
     end
   end
 
   # ===========================================================================
-  # Parser → OneShot pipeline — happy path
+  # Parser → OneShot pipeline — integration smoke (only unique paths)
   # ===========================================================================
 
-  describe "Parser → OneShot pipeline — happy path" do
+  describe "Parser → OneShot pipeline — integration smoke" do
     setup :setup_mock_llm
 
-    test "pup -p \"hello\" dispatches through OneShot and persists messages", %{
-      session_id: session_id
-    } do
-      OneShotSmokeMockLLM.set_response(%{text: "hello back!", tool_calls: []})
-
-      {output, _opts} = parse_and_run_one_shot(["-p", "hello"], session_id)
-
-      assert output =~ "hello back!"
-
-      messages = State.get_messages(session_id, "code_puppy")
-      assert length(messages) == 2
-      assert [%{"role" => "user"}, %{"role" => "assistant"}] = messages
-    end
-
-    test "pup \"explain this\" (positional) dispatches through OneShot", %{
-      session_id: session_id
-    } do
-      OneShotSmokeMockLLM.set_response(%{text: "explanation here", tool_calls: []})
-
-      {output, _opts} = parse_and_run_one_shot(["explain this"], session_id)
-
-      assert output =~ "explanation here"
-
-      messages = State.get_messages(session_id, "code_puppy")
-      assert length(messages) == 2
-    end
-
-    test "pup -p \"hello\" -m custom-model reaches LLM with correct model", %{
-      session_id: session_id
-    } do
-      OneShotSmokeMockLLM.set_response(%{text: "using custom model", tool_calls: []})
-
-      {_output, opts} = parse_and_run_one_shot(["-p", "hello", "-m", "gpt-4o-mini"], session_id)
-
-      # Verify the model opt was set in parsed opts
-      assert opts[:model] == "gpt-4o-mini"
-
-      # Verify the mock LLM received the model
-      assert Keyword.get(OneShotSmokeMockLLM.last_opts(), :model) == "gpt-4o-mini"
-    end
-
-    test "pup -p \"hello\" -a qa-kitten routes to qa_kitten bucket", %{
-      session_id: session_id
-    } do
-      OneShotSmokeMockLLM.set_response(%{text: "QA reply", tool_calls: []})
-
-      {_output, _opts} = parse_and_run_one_shot(["-p", "hello", "-a", "qa-kitten"], session_id)
-
-      messages = State.get_messages(session_id, "qa_kitten")
-      assert length(messages) == 2
-      assert [%{"role" => "user"}, %{"role" => "assistant"}] = messages
-    end
-
-    test "pup -p \"hello\" -m model -a agent combined reaches OneShot correctly", %{
-      session_id: session_id
-    } do
+    test "-p with -m and -a combined flows through Parser → OneShot end-to-end",
+         %{session_id: session_id} do
       OneShotSmokeMockLLM.set_response(%{text: "combined reply", tool_calls: []})
 
       {output, opts} =
@@ -292,16 +249,50 @@ defmodule CodePuppyControl.CLI.OneShotSmokeTest do
       assert Keyword.get(OneShotSmokeMockLLM.last_opts(), :model) ==
                "claude-sonnet-4-20250514"
     end
+
+    test "positional prompt dispatches through Parser → OneShot", %{
+      session_id: session_id
+    } do
+      OneShotSmokeMockLLM.set_response(%{text: "explanation here", tool_calls: []})
+
+      {output, _opts} = parse_and_run_one_shot(["explain this"], session_id)
+
+      assert output =~ "explanation here"
+
+      messages = State.get_messages(session_id, "code_puppy")
+      assert length(messages) == 2
+    end
+
+    test "Parser-produced agent: nil flows through OneShot with nil-defaulting", %{
+      session_id: session_id
+    } do
+      OneShotSmokeMockLLM.set_response(%{text: "nil-agent reply", tool_calls: []})
+
+      # Parser.parse(["-p", "hi"]) produces agent: nil
+      assert {:ok, parsed} = Parser.parse(["-p", "hi"])
+      assert parsed[:agent] == nil
+
+      output =
+        ExUnit.CaptureIO.capture_io(fn ->
+          opts = Map.put(parsed, :session_id, session_id)
+          assert :ok = OneShot.run(opts)
+        end)
+
+      assert output =~ "nil-agent reply"
+
+      messages = State.get_messages(session_id, "code_puppy")
+      assert length(messages) == 2
+    end
   end
 
   # ===========================================================================
-  # Parser → OneShot pipeline — error paths
+  # Error propagation through full pipeline (unique: Parser opts → OneShot)
   # ===========================================================================
 
-  describe "Parser → OneShot pipeline — error paths" do
+  describe "Parser → OneShot pipeline — error propagation" do
     setup :setup_mock_llm
 
-    test "pup -p \"test\" -a nonexistent-agent returns :error through pipeline", %{
+    test "nonexistent agent through full pipeline returns :error and rolls back", %{
       session_id: session_id
     } do
       output =
@@ -332,108 +323,6 @@ defmodule CodePuppyControl.CLI.OneShotSmokeTest do
       # Rollback: no orphaned user message
       messages = State.get_messages(session_id, "code_puppy")
       assert messages == []
-    end
-
-    test "Parser-produced agent: nil flows through OneShot with nil-defaulting", %{
-      session_id: session_id
-    } do
-      OneShotSmokeMockLLM.set_response(%{text: "nil-agent reply", tool_calls: []})
-
-      # Parser.parse(["-p", "hi"]) produces agent: nil
-      assert {:ok, parsed} = Parser.parse(["-p", "hi"])
-      assert parsed[:agent] == nil
-
-      output =
-        ExUnit.CaptureIO.capture_io(fn ->
-          opts = Map.put(parsed, :session_id, session_id)
-          assert :ok = OneShot.run(opts)
-        end)
-
-      assert output =~ "nil-agent reply"
-
-      # Messages land in code_puppy (default)
-      messages = State.get_messages(session_id, "code_puppy")
-      assert length(messages) == 2
-    end
-  end
-
-  # ===========================================================================
-  # Parser opts shape / compatibility with OneShot.run/1
-  # ===========================================================================
-
-  describe "Parser opts shape for OneShot.run/1" do
-    test "-p opts contain :prompt key fetchable by Map.fetch!" do
-      assert {:ok, opts} = Parser.parse(["-p", "hello"])
-      # OneShot.run/1 uses Map.fetch!(opts, :prompt) — must not raise
-      assert {:ok, prompt} = Map.fetch(opts, :prompt)
-      assert prompt == "hello"
-    end
-
-    test "combined -p -m -a opts produce complete map with all OneShot keys" do
-      assert {:ok, opts} =
-               Parser.parse(["-p", "do thing", "-m", "gpt-4o", "-a", "qa-kitten"])
-
-      # Verify every key OneShot.run/1 reads is present (even if nil)
-      assert Map.has_key?(opts, :prompt)
-      assert Map.has_key?(opts, :model)
-      assert Map.has_key?(opts, :agent)
-
-      # And they have the expected values
-      assert opts[:prompt] == "do thing"
-      assert opts[:model] == "gpt-4o"
-      assert opts[:agent] == "qa-kitten"
-    end
-
-    test "positional prompt produces :prompt key compatible with OneShot" do
-      assert {:ok, opts} = Parser.parse(["explain this code"])
-      assert Map.has_key?(opts, :prompt)
-      assert opts[:prompt] == "explain this code"
-    end
-
-    test "no prompt at all produces :prompt == nil (not missing key)" do
-      # Parser always includes the :prompt key, even when absent
-      assert {:ok, opts} = Parser.parse([])
-      assert Map.has_key?(opts, :prompt)
-      assert opts[:prompt] == nil
-    end
-
-    test "-p with empty string produces :prompt == \"\" (non-nil, but empty)" do
-      assert {:ok, opts} = Parser.parse(["-p", ""])
-      assert opts[:prompt] == ""
-      # This is correctly rejected by CLI.resolve_run_mode/1
-      assert :interactive_default = CLI.resolve_run_mode(opts)
-    end
-  end
-
-  # ===========================================================================
-  # CLI.main/1 fast-path routing (help / version / error)
-  # ===========================================================================
-
-  describe "CLI.main/1 routing via Parser" do
-    test "--help parses to {:help, _} (verified by Parser)" do
-      assert {:help, _opts} = Parser.parse(["--help"])
-    end
-
-    test "-h parses to {:help, _}" do
-      assert {:help, _opts} = Parser.parse(["-h"])
-    end
-
-    test "--version parses to {:version, _}" do
-      assert {:version, _opts} = Parser.parse(["--version"])
-    end
-
-    test "-v parses to {:version, _}" do
-      assert {:version, _opts} = Parser.parse(["-v"])
-    end
-
-    test "unknown flag parses to {:error, msg}" do
-      assert {:error, msg} = Parser.parse(["--absolutely-bogus"])
-      assert msg =~ "absolutely-bogus"
-    end
-
-    test "valid one-shot args parse to {:ok, opts} with prompt" do
-      assert {:ok, opts} = Parser.parse(["-p", "do something"])
-      assert opts[:prompt] == "do something"
     end
   end
 end
