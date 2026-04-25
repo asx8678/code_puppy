@@ -6,10 +6,10 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import AsyncGenerator
 
-from fastapi import FastAPI, Request
+from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
-from starlette.middleware.base import BaseHTTPMiddleware
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse
+from starlette.types import ASGIApp, Receive, Scope, Send
 
 logger = logging.getLogger(__name__)
 
@@ -17,33 +17,50 @@ logger = logging.getLogger(__name__)
 REQUEST_TIMEOUT = 30.0
 
 
-class TimeoutMiddleware(BaseHTTPMiddleware):
-    """Middleware to enforce request timeouts and prevent hanging requests."""
+class TimeoutMiddleware:
+    """ASGI middleware to enforce request timeouts and prevent hanging requests."""
 
-    def __init__(self, app, timeout: float = REQUEST_TIMEOUT):
-        super().__init__(app)
+    def __init__(self, app: ASGIApp, timeout: float = REQUEST_TIMEOUT):
+        self.app = app
         self.timeout = timeout
 
-    async def dispatch(self, request: Request, call_next):
-        # Skip timeout for WebSocket upgrades and streaming endpoints
-        if request.headers.get(
-            "upgrade", ""
-        ).lower() == "websocket" or request.url.path.startswith("/ws/"):
-            return await call_next(request)
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        # Only wrap HTTP requests. WebSocket connections and /ws/* endpoints must be
+        # allowed to stay open, otherwise event streams and terminals would be cut off.
+        if scope.get("type") != "http" or str(scope.get("path", "")).startswith("/ws/"):
+            await self.app(scope, receive, send)
+            return
+
+        response_started = False
+
+        async def send_with_tracking(message):
+            nonlocal response_started
+            if message.get("type") == "http.response.start":
+                response_started = True
+            await send(message)
 
         try:
-            return await asyncio.wait_for(
-                call_next(request),
+            await asyncio.wait_for(
+                self.app(scope, receive, send_with_tracking),
                 timeout=self.timeout,
             )
         except asyncio.TimeoutError:
-            return JSONResponse(
+            if response_started:
+                # The response headers are already out, so a fresh JSON 504 cannot be
+                # sent. Close the response body cleanly instead.
+                await send(
+                    {"type": "http.response.body", "body": b"", "more_body": False}
+                )
+                return
+
+            response = JSONResponse(
                 status_code=504,
                 content={
                     "detail": f"Request timed out after {self.timeout}s",
                     "error": "timeout",
                 },
             )
+            await response(scope, receive, send)
 
 
 @asynccontextmanager
@@ -52,8 +69,22 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
 
     Handles graceful cleanup of resources when the server shuts down.
     """
-    # Startup: nothing special needed yet, but this is where you'd do it
     logger.info("🐶 Code Puppy API starting up...")
+    try:
+        from code_puppy import plugins
+        from code_puppy.config import CONFIG_FILE, load_api_keys_to_environment
+
+        if Path(CONFIG_FILE).exists():
+            load_api_keys_to_environment()
+            plugins.load_plugin_callbacks()
+            logger.info("✓ Code Puppy config and plugins loaded")
+        else:
+            logger.warning(
+                "Code Puppy config file was not found; skipping interactive setup "
+                "during API startup"
+            )
+    except Exception as e:
+        logger.error(f"Error during API startup initialization: {e}")
     yield
     # Shutdown: clean up all the things!
     logger.info("🐶 Code Puppy API shutting down, cleaning up...")
@@ -104,12 +135,13 @@ def create_app() -> FastAPI:
     )
 
     # Include routers
-    from code_puppy.api.routers import agents, commands, config, sessions
+    from code_puppy.api.routers import agents, commands, config, runtime, sessions
 
     app.include_router(config.router, prefix="/api/config", tags=["config"])
     app.include_router(commands.router, prefix="/api/commands", tags=["commands"])
     app.include_router(sessions.router, prefix="/api/sessions", tags=["sessions"])
     app.include_router(agents.router, prefix="/api/agents", tags=["agents"])
+    app.include_router(runtime.router, prefix="/api/runtime", tags=["runtime"])
 
     # WebSocket endpoints (events + terminal)
     from code_puppy.api.websocket import setup_websocket
@@ -135,6 +167,9 @@ def create_app() -> FastAPI:
         <h1 class="text-6xl mb-4">🐶</h1>
         <h2 class="text-3xl font-bold mb-8">Code Puppy</h2>
         <div class="space-x-4">
+            <a href="/dashboard" class="px-6 py-3 bg-emerald-600 hover:bg-emerald-700 rounded-lg text-lg font-semibold">
+                Open Dashboard
+            </a>
             <a href="/terminal" class="px-6 py-3 bg-blue-600 hover:bg-blue-700 rounded-lg text-lg font-semibold">
                 Open Terminal
             </a>
@@ -150,6 +185,22 @@ def create_app() -> FastAPI:
 </html>
         """
         )
+
+    @app.get("/dashboard")
+    async def dashboard_page():
+        """Serve the integrated Code Puppy dashboard."""
+        html_file = templates_dir / "dashboard.html"
+        if html_file.exists():
+            return FileResponse(html_file, media_type="text/html")
+        return HTMLResponse(
+            content="<h1>Dashboard template not found</h1>",
+            status_code=404,
+        )
+
+    @app.get("/app")
+    async def app_page():
+        """Backward-friendly alias for the dashboard."""
+        return RedirectResponse(url="/dashboard")
 
     @app.get("/terminal")
     async def terminal_page():

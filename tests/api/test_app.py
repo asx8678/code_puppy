@@ -34,6 +34,7 @@ async def test_root(client: AsyncClient) -> None:
     resp = await client.get("/")
     assert resp.status_code == 200
     assert "Code Puppy" in resp.text
+    assert "Open Dashboard" in resp.text
     assert "Open Terminal" in resp.text
 
 
@@ -146,8 +147,8 @@ async def test_timeout_middleware_returns_504() -> None:
 
 
 @pytest.mark.asyncio
-async def test_timeout_middleware_skips_websocket_upgrade() -> None:
-    """Requests with upgrade:websocket header skip timeout."""
+async def test_timeout_middleware_skips_ws_path() -> None:
+    """Requests to /ws/ path skip timeout middleware (ASGI-level check)."""
     app = create_app()
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as c:
@@ -155,6 +156,28 @@ async def test_timeout_middleware_skips_websocket_upgrade() -> None:
         resp = await c.get("/ws/nonexistent")
         # Will 404 but won't 504
         assert resp.status_code != 504
+
+
+@pytest.mark.asyncio
+async def test_dashboard_page_not_found() -> None:
+    """When dashboard template doesn't exist, returns 404 HTML."""
+    with patch("pathlib.Path.exists", return_value=False):
+        transport = ASGITransport(app=create_app())
+        async with AsyncClient(transport=transport, base_url="http://test") as c:
+            resp = await c.get("/dashboard")
+            assert resp.status_code == 404
+            assert "not found" in resp.text.lower()
+
+
+@pytest.mark.asyncio
+async def test_app_page_redirects_to_dashboard() -> None:
+    """The /app route redirects to /dashboard."""
+    transport = ASGITransport(app=create_app())
+    async with AsyncClient(
+        transport=transport, base_url="http://test", follow_redirects=False
+    ) as c:
+        resp = await c.get("/app")
+        assert resp.status_code in (307, 308)
 
 
 @pytest.mark.asyncio
