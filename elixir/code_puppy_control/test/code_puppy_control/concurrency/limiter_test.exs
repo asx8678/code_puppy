@@ -3,22 +3,8 @@ defmodule CodePuppyControl.Concurrency.LimiterTest do
 
   alias CodePuppyControl.Concurrency.Limiter
 
-  @table :concurrency_limits
-
   setup do
-    # Wait for limiter to be ready and flush any pending messages
-    Limiter.ping()
-
-    # Reset ETS counters before each test
-    for type <- [:file_ops, :api_calls, :tool_calls] do
-      case :ets.lookup(@table, type) do
-        [{^type, _current, limit}] -> :ets.insert(@table, {type, 0, limit})
-        _ -> :ok
-      end
-    end
-
-    # Ping again to ensure GenServer has processed any pending state
-    Limiter.ping()
+    Limiter.reset()
 
     :ok
   end
@@ -103,6 +89,28 @@ defmodule CodePuppyControl.Concurrency.LimiterTest do
       assert result == {:error, :timeout}
 
       # Clean up
+      Limiter.release(:api_calls)
+      Limiter.release(:api_calls)
+    end
+
+    test "timed-out acquire is removed from waiter queue" do
+      :ok = Limiter.acquire(:api_calls)
+      :ok = Limiter.acquire(:api_calls)
+
+      assert {:error, :timeout} = Limiter.acquire(:api_calls, timeout: 50)
+
+      test_pid = self()
+
+      spawn(fn ->
+        result = Limiter.acquire(:api_calls, timeout: 5_000)
+        send(test_pid, {:acquired_after_timeout, result})
+      end)
+
+      Process.sleep(100)
+      Limiter.release(:api_calls)
+
+      assert_receive {:acquired_after_timeout, :ok}, 5_000
+
       Limiter.release(:api_calls)
       Limiter.release(:api_calls)
     end

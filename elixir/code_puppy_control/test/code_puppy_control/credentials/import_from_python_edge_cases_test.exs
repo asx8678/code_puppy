@@ -9,7 +9,7 @@ defmodule CodePuppyControl.Credentials.ImportFromPythonEdgeCasesTest do
     * Tolerates comment-like lines and section headers in puppy.cfg
     * All 14 recognised API key names round-trip
   """
-  use ExUnit.Case, async: true
+  use ExUnit.Case, async: false
 
   alias CodePuppyControl.Credentials
 

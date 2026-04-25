@@ -71,9 +71,21 @@ defmodule CodePuppyControl.Concurrency.Limiter do
   @spec acquire(limiter_type(), keyword()) :: :ok | {:error, :timeout}
   def acquire(type, opts \\ []) when type in [:file_ops, :api_calls, :tool_calls] do
     timeout = Keyword.get(opts, :timeout, @default_timeout)
-    GenServer.call(__MODULE__, {:acquire, type}, timeout + 5_000)
+
+    GenServer.call(__MODULE__, {:acquire, type, timeout}, call_timeout(timeout))
   catch
     :exit, {:timeout, _} -> {:error, :timeout}
+  end
+
+  @doc """
+  Resets all counters and pending waiters while preserving configured limits.
+
+  This is primarily used by test reset helpers to guarantee isolation across
+  tests that exercise blocking acquire timeouts.
+  """
+  @spec reset() :: :ok
+  def reset do
+    GenServer.call(__MODULE__, :reset)
   end
 
   @doc """
@@ -230,7 +242,15 @@ defmodule CodePuppyControl.Concurrency.Limiter do
   end
 
   @impl true
-  def handle_call({:acquire, type}, from, state) do
+  def handle_call(:reset, _from, state) do
+    reply_to_all_waiters(state, {:error, :timeout})
+    reset_counters()
+
+    {:reply, :ok, %{state | waiters: %{}}}
+  end
+
+  @impl true
+  def handle_call({:acquire, type, timeout}, from, state) do
     [{^type, current, limit}] = :ets.lookup(@table, type)
 
     if current < limit do
@@ -240,8 +260,10 @@ defmodule CodePuppyControl.Concurrency.Limiter do
       {:reply, :ok, state}
     else
       # No slot — queue the caller for later
+      ref = make_ref()
+      timer_ref = maybe_start_timeout_timer(type, ref, timeout)
       queue = Map.get(state.waiters, type, :queue.new())
-      queue = :queue.in(from, queue)
+      queue = :queue.in(%{from: from, ref: ref, timer_ref: timer_ref}, queue)
       {:noreply, put_in(state, [:waiters, type], queue)}
     end
   end
@@ -264,6 +286,17 @@ defmodule CodePuppyControl.Concurrency.Limiter do
   end
 
   @impl true
+  def handle_info({:acquire_timeout, type, ref}, state) do
+    {waiter, state} = pop_waiter(state, type, ref)
+
+    if waiter do
+      GenServer.reply(waiter.from, {:error, :timeout})
+    end
+
+    {:noreply, state}
+  end
+
+  @impl true
   def handle_info(_msg, state) do
     {:noreply, state}
   end
@@ -279,11 +312,22 @@ defmodule CodePuppyControl.Concurrency.Limiter do
     end)
   end
 
+  defp call_timeout(:infinity), do: :infinity
+  defp call_timeout(timeout), do: timeout + 5_000
+
+  defp maybe_start_timeout_timer(_type, _ref, :infinity), do: nil
+
+  defp maybe_start_timeout_timer(type, ref, timeout) do
+    Process.send_after(self(), {:acquire_timeout, type, ref}, timeout)
+  end
+
   defp dequeue_and_reply(state, type) do
     queue = Map.get(state.waiters, type, :queue.new())
 
     case :queue.out(queue) do
-      {{:value, from}, rest_queue} ->
+      {{:value, waiter}, rest_queue} ->
+        cancel_timeout_timer(waiter.timer_ref)
+
         # Increment counter for the woken waiter
         [{^type, current, limit}] = :ets.lookup(@table, type)
         new_count = current + 1
@@ -291,7 +335,7 @@ defmodule CodePuppyControl.Concurrency.Limiter do
 
         emit_acquire(type, new_count, limit)
 
-        GenServer.reply(from, :ok)
+        GenServer.reply(waiter.from, :ok)
 
         put_in(state, [:waiters, type], rest_queue)
 
@@ -300,6 +344,49 @@ defmodule CodePuppyControl.Concurrency.Limiter do
         Map.delete(state.waiters, type)
         |> then(&Map.put(state, :waiters, &1))
     end
+  end
+
+  defp pop_waiter(state, type, ref) do
+    queue = Map.get(state.waiters, type, :queue.new())
+
+    {matching_waiters, remaining_waiters} =
+      queue
+      |> :queue.to_list()
+      |> Enum.split_with(&(&1.ref == ref))
+
+    waiters =
+      if remaining_waiters == [] do
+        Map.delete(state.waiters, type)
+      else
+        Map.put(state.waiters, type, :queue.from_list(remaining_waiters))
+      end
+
+    {List.first(matching_waiters), %{state | waiters: waiters}}
+  end
+
+  defp reply_to_all_waiters(state, reply) do
+    state.waiters
+    |> Map.values()
+    |> Enum.flat_map(&:queue.to_list/1)
+    |> Enum.each(fn waiter ->
+      cancel_timeout_timer(waiter.timer_ref)
+      GenServer.reply(waiter.from, reply)
+    end)
+  end
+
+  defp reset_counters do
+    @table
+    |> :ets.tab2list()
+    |> Enum.each(fn {type, _current, limit} ->
+      :ets.insert(@table, {type, 0, limit})
+    end)
+  end
+
+  defp cancel_timeout_timer(nil), do: :ok
+
+  defp cancel_timeout_timer(timer_ref) do
+    Process.cancel_timer(timer_ref)
+    :ok
   end
 
   defp emit_acquire(type, current, limit) do

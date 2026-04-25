@@ -19,6 +19,16 @@ defmodule CodePuppyControl.Tool.SchemaPropertyTest do
 
   alias CodePuppyControl.Tool.Schema
 
+  defp non_integer_string_generator do
+    string(:alphanumeric)
+    |> StreamData.filter(fn value ->
+      case Integer.parse(value) do
+        {_int, ""} -> false
+        _ -> true
+      end
+    end)
+  end
+
   # ── Property 1: validate + cast identity for well-typed data ────────────
 
   describe "validate + cast consistency" do
@@ -266,7 +276,8 @@ defmodule CodePuppyControl.Tool.SchemaPropertyTest do
 
     property "non-integer value fails integer validation" do
       check all(
-              value <- one_of([string(:alphanumeric), boolean(), constant(%{}), constant([])]),
+              value <-
+                one_of([non_integer_string_generator(), boolean(), constant(%{}), constant([])]),
               max_runs: 100
             ) do
         assert {:error, violations} = Schema.validate(%{"type" => "integer"}, value)

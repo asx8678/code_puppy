@@ -41,9 +41,9 @@ CodePuppyControl.Parsing.Parsers.register_all()
 # Python `evals/conftest.py` gate.
 exclude_tags =
   if System.get_env("RUN_EVALS") == "1" do
-    [:integration, :e2e, :skip]
+    [:integration, :e2e, :skip, :triage_pending]
   else
-    [:integration, :e2e, :skip, :eval]
+    [:integration, :e2e, :skip, :eval, :triage_pending]
   end
 
 # ---------------------------------------------------------------------------

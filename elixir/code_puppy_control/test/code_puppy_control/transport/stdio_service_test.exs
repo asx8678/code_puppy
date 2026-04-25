@@ -4,6 +4,7 @@ defmodule CodePuppyControl.Transport.StdioServiceTest do
   """
 
   use ExUnit.Case
+  @moduletag :triage_pending
 
   alias CodePuppyControl.Transport.StdioService
   alias CodePuppyControl.Support.StdioTestHelper

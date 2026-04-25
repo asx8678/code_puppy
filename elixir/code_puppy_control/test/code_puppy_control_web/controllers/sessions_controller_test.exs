@@ -1,5 +1,14 @@
 defmodule CodePuppyControlWeb.SessionsControllerTest do
-  use CodePuppyControlWeb.ConnCase, async: true
+  use CodePuppyControlWeb.ConnCase, async: false
+
+  alias CodePuppyControl.Repo
+
+  setup do
+    owner = Ecto.Adapters.SQL.Sandbox.start_owner!(Repo, shared: true)
+    on_exit(fn -> Ecto.Adapters.SQL.Sandbox.stop_owner(owner) end)
+
+    :ok
+  end
 
   # ── GET /api/sessions ───────────────────────────────────────────────────
 

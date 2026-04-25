@@ -26,9 +26,10 @@ defmodule CodePuppyControl.Workers.AgentInvocationTest do
   end
 
   describe "worker configuration" do
-    test "worker module compiles and has correct struct" do
-      # Verify the worker module exists and is an Oban.Worker
-      assert function_exported?(AgentInvocation, :new, 1)
+    test "worker module compiles and exports perform/1" do
+      # Verify the worker module exists and implements the Oban.Worker callback.
+      assert Code.ensure_loaded?(AgentInvocation)
+      assert function_exported?(AgentInvocation, :perform, 1)
     end
 
     test "worker creates job with correct queue" do

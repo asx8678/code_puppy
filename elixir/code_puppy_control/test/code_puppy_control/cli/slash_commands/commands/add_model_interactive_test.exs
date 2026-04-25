@@ -17,9 +17,6 @@ defmodule CodePuppyControl.CLI.SlashCommands.Commands.AddModelInteractiveTest do
   alias CodePuppyControl.ModelsDevParser
   alias CodePuppyControl.ModelsDevParser.{ModelInfo, ProviderInfo}
 
-  # Fixture path — relative from this test file to test/support/
-  @fixture_path Path.join([__DIR__, "../../../../support/models_dev_parser_test_data.json"])
-
   setup do
     # Start the SlashCommands Registry GenServer if not already running
     case Process.whereis(Registry) do
@@ -219,8 +216,8 @@ defmodule CodePuppyControl.CLI.SlashCommands.Commands.AddModelInteractiveTest do
   # ── ModelRegistry.reload invocation ─────────────────────────────────────
 
   describe "ModelRegistry.reload/0 invocation via Interactive" do
-    setup context do
-      ensure_fixture_registry!()
+    setup %{tmp_dir: tmp_dir} = context do
+      ensure_fixture_registry!(tmp_dir)
 
       # Start ModelRegistry so we can verify reload makes models available
       case Process.whereis(CodePuppyControl.ModelRegistry) do
@@ -284,8 +281,8 @@ defmodule CodePuppyControl.CLI.SlashCommands.Commands.AddModelInteractiveTest do
   # ── run_with_inputs/1 end-to-end ───────────────────────────────────────
 
   describe "run_with_inputs/1 end-to-end" do
-    setup do
-      ensure_fixture_registry!()
+    setup %{tmp_dir: tmp_dir} do
+      ensure_fixture_registry!(tmp_dir)
 
       case Process.whereis(AddModelPersistence.LockKeeper) do
         nil -> start_supervised!({AddModelPersistence.LockKeeper, []})
@@ -347,8 +344,8 @@ defmodule CodePuppyControl.CLI.SlashCommands.Commands.AddModelInteractiveTest do
   # ── handle_add_model/2 ─────────────────────────────────────────────────
 
   describe "handle_add_model/2" do
-    setup do
-      ensure_fixture_registry!()
+    setup %{tmp_dir: tmp_dir} do
+      ensure_fixture_registry!(tmp_dir)
       :ok
     end
 
@@ -380,8 +377,8 @@ defmodule CodePuppyControl.CLI.SlashCommands.Commands.AddModelInteractiveTest do
   # ── run_interactive/0 end-to-end via stdin ────────────────────────────────
 
   describe "Interactive.run_interactive/0 — real stdin-driven flow" do
-    setup do
-      ensure_fixture_registry!()
+    setup %{tmp_dir: tmp_dir} do
+      ensure_fixture_registry!(tmp_dir)
 
       case Process.whereis(AddModelPersistence.LockKeeper) do
         nil -> start_supervised!({AddModelPersistence.LockKeeper, []})
@@ -659,7 +656,13 @@ defmodule CodePuppyControl.CLI.SlashCommands.Commands.AddModelInteractiveTest do
 
   # Starts a fixture-backed ModelsDevParser.Registry, ensuring we never
   # silently reuse an already-running instance that might have different data.
-  defp ensure_fixture_registry! do
+  #
+  # The fixture is written into this test's isolated temp directory rather than
+  # the shared test/support path. Other parser tests rewrite the shared fixture
+  # concurrently, which can make these stdin-driven flows see the wrong catalog.
+  defp ensure_fixture_registry!(tmp_dir) do
+    fixture_path = write_fixture_data!(tmp_dir)
+
     # The app supervisor starts ModelsDevParser.Registry. We need to stop
     # it and restart with fixture data. To prevent the app supervisor from
     # race-restarting it, we terminate AND delete the child spec, then
@@ -690,8 +693,60 @@ defmodule CodePuppyControl.CLI.SlashCommands.Commands.AddModelInteractiveTest do
       end
     end)
 
-    start_supervised!({ModelsDevParser.Registry, json_path: @fixture_path})
+    start_supervised!({ModelsDevParser.Registry, json_path: fixture_path})
 
     :ok
+  end
+
+  defp write_fixture_data!(tmp_dir) do
+    fixture_path = Path.join(tmp_dir, "models_dev_parser_fixture.json")
+
+    File.write!(
+      fixture_path,
+      Jason.encode!(%{
+        "another-provider" => %{
+          "id" => "another-provider",
+          "name" => "Another Provider",
+          "env" => ["ANOTHER_API_KEY"],
+          "api" => "https://api.another.test/v1",
+          "models" => %{
+            "gpt-model" => %{
+              "id" => "gpt-model",
+              "name" => "GPT Model",
+              "tool_call" => true,
+              "temperature" => true,
+              "limit" => %{"context" => 128_000, "output" => 8192},
+              "modalities" => %{"input" => ["text"], "output" => ["text"]}
+            }
+          }
+        },
+        "test-provider" => %{
+          "id" => "test-provider",
+          "name" => "Test Provider",
+          "env" => ["TEST_API_KEY"],
+          "api" => "https://api.test.test/v1",
+          "models" => %{
+            "cheap-model" => %{
+              "id" => "cheap-model",
+              "name" => "Cheap Model",
+              "tool_call" => false,
+              "temperature" => true,
+              "limit" => %{"context" => 16_000, "output" => 1024},
+              "modalities" => %{"input" => ["text"], "output" => ["text"]}
+            },
+            "test-model-1" => %{
+              "id" => "test-model-1",
+              "name" => "Test Model One",
+              "tool_call" => true,
+              "temperature" => true,
+              "limit" => %{"context" => 64_000, "output" => 4096},
+              "modalities" => %{"input" => ["text"], "output" => ["text"]}
+            }
+          }
+        }
+      })
+    )
+
+    fixture_path
   end
 end

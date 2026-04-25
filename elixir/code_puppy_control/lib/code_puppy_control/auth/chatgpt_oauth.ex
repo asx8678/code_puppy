@@ -263,7 +263,17 @@ defmodule CodePuppyControl.Auth.ChatGptOAuth do
   @spec load_stored_tokens() :: map() | nil
   def load_stored_tokens do
     path = token_storage_path()
-    with {:ok, data} <- File.read(path), {:ok, decoded} <- Jason.decode(data), do: decoded
+
+    case File.read(path) do
+      {:ok, data} ->
+        case Jason.decode(data) do
+          {:ok, decoded} when is_map(decoded) -> decoded
+          _ -> nil
+        end
+
+      {:error, _reason} ->
+        nil
+    end
   end
 
   @doc "Clear stored OAuth tokens."

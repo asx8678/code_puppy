@@ -148,7 +148,10 @@ defmodule CodePuppyControl.REPL.DispatchPersistenceTest do
       state: state,
       session_id: session_id
     } do
-      DispatchPersistenceMockLLM.set_response(%{text: "I am a helpful assistant!", tool_calls: []})
+      DispatchPersistenceMockLLM.set_response(%{
+        text: "I am a helpful assistant!",
+        tool_calls: []
+      })
 
       ExUnit.CaptureIO.capture_io(fn ->
         assert {:continue, ^state} = Loop.handle_input("Hello", state)

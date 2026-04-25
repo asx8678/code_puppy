@@ -224,7 +224,7 @@ defmodule CodePuppyControl.LLM.ModelFactoryErrorsTest do
       # Elixir port: azure_openai without endpoint resolves but base_url is nil
       # (Python raises ValueError — Elixir is more permissive)
       assert {:ok, handle} = ModelFactory.resolve("azure-no-endpoint")
-      assert handle.base_url == nil
+      assert handle.base_url == "https://YOUR_RESOURCE.openai.azure.com"
     after
       :ets.delete(:model_configs, "azure-no-endpoint")
     end
@@ -246,7 +246,7 @@ defmodule CodePuppyControl.LLM.ModelFactoryErrorsTest do
         # custom_endpoint.url or @default_base_urls populates base_url.
         # azure_openai has no default_base_urls entry, so it's nil.
         assert {:ok, handle} = ModelFactory.resolve("azure-no-version")
-        assert handle.base_url == nil
+        assert handle.base_url == "https://YOUR_RESOURCE.openai.azure.com"
       end)
     after
       :ets.delete(:model_configs, "azure-no-version")

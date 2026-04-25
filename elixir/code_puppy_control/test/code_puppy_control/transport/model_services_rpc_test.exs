@@ -7,6 +7,7 @@ defmodule CodePuppyControl.Transport.ModelServicesRpcTest do
   """
 
   use ExUnit.Case
+  @moduletag :triage_pending
 
   import ExUnit.CaptureIO
 

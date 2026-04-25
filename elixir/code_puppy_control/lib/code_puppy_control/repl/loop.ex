@@ -485,10 +485,22 @@ defmodule CodePuppyControl.REPL.Loop do
 
   defp safe_catalogue_lookup(name) do
     try do
-      AgentCatalogue.get_agent_module(name)
+      case AgentCatalogue.get_agent_module(name) do
+        :not_found -> discover_agent_module(name)
+        other -> other
+      end
     rescue
-      _ -> :not_found
+      _ -> discover_agent_module(name)
     end
+  end
+
+  defp discover_agent_module(name) when is_binary(name) do
+    AgentCatalogue.discover_agent_modules()
+    |> Enum.find_value(:not_found, fn {module, agent_name, _display_name, _description} ->
+      if to_string(agent_name) == name, do: {:ok, module}, else: false
+    end)
+  rescue
+    _ -> :not_found
   end
 
   defp ensure_agent_state_for(session_id, agent_key) do
