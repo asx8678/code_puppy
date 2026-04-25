@@ -13,12 +13,19 @@ import httpx
 # Light pydantic-ai imports needed at module scope for make_model_settings()
 from pydantic_ai.models.anthropic import AnthropicModelSettings
 from pydantic_ai.models.openai import (
+    OpenAIChatModel as _OpenAIChatModel,
     OpenAIChatModelSettings,
     OpenAIResponsesModelSettings,
 )
 from pydantic_ai.settings import ModelSettings
 
 from code_puppy.messaging import emit_warning
+from code_puppy.model_config import (
+    _CUSTOM_MODEL_PROVIDERS,
+    _MODEL_BUILDERS,
+    load_plugin_providers as _load_plugin_model_providers,
+    register_model_builder,
+)
 
 from . import callbacks
 from .config import EXTRA_MODELS_FILE, get_value, get_yolo_mode
@@ -137,15 +144,6 @@ def get_model_default_settings(model_config: Mapping[str, Any]) -> dict[str, Any
 
 # Pre-compiled regex pattern for environment variable substitution (e.g., ${VAR_NAME} or $VAR_NAME)
 _ENV_VAR_RE = re.compile(r"\$\{([^}]+)\}|\$([A-Za-z_][A-Za-z0-9_]*)")
-
-# Import centralized model configuration
-# Model builder registry and custom providers are now centralized in model_config module
-from code_puppy.model_config import (
-    _MODEL_BUILDERS,
-    _CUSTOM_MODEL_PROVIDERS,
-    register_model_builder,
-    load_plugin_providers as _load_plugin_model_providers,
-)
 
 
 # Anthropic beta header required for 1M context window support.
@@ -373,9 +371,6 @@ def make_model_settings(
         model_settings = ModelSettings(**model_settings_dict)
 
     return model_settings
-
-
-from pydantic_ai.models.openai import OpenAIChatModel as _OpenAIChatModel
 
 
 class ZaiChatModel(_OpenAIChatModel):
@@ -1144,6 +1139,5 @@ class ModelFactory:
                             ) from e
 
         raise ValueError(f"Unsupported model type: {model_type}")
-
 
 

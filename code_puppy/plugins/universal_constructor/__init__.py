@@ -5,14 +5,15 @@ that extend Code Puppy's capabilities. Tools are stored in the user's
 config directory and can be organized into namespaces via subdirectories.
 """
 
+from pathlib import Path
+
 from code_puppy.config_paths import resolve_path
 
 
 # User tools directory - where user-created UC tools live
 # Respects pup-ex isolation (ADR-003) — resolves under active home
-def _user_uc_dir() -> "Path":
+def _user_uc_dir() -> Path:
     """Return the UC tools directory under the active home."""
-    from pathlib import Path
     return resolve_path("plugins", "universal_constructor")
 
 

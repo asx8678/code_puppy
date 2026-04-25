@@ -75,6 +75,7 @@ __all__ = [
     "MemoryUpdater",
     "MockLLMClient",
     # Signal components
+    "CORRECTION_DELTA",
     "PREFERENCE_DELTA",
     "REINFORCEMENT_DELTA",
     "Signal",

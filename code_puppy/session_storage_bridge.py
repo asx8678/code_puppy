@@ -23,7 +23,7 @@ def _get_transport():
 
     if _transport_available is None:
         try:
-            from code_puppy.elixir_transport import ElixirTransport, ElixirTransportError
+            from code_puppy.elixir_transport import ElixirTransport
 
             _transport = ElixirTransport()
             _transport.start()

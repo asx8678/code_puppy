@@ -12,6 +12,8 @@ import threading
 from dataclasses import dataclass
 from typing import Any
 
+from code_puppy.token_counting import count_tokens as _count_tokens_accurate
+
 logger = logging.getLogger(__name__)
 
 # Thread-safe accumulator for session cost tracking
@@ -78,8 +80,6 @@ class TokenEstimate:
         parts.append(f"({self.method})")
         return " | ".join(parts)
 
-
-from code_puppy.token_counting import count_tokens as _count_tokens_accurate
 
 # Re-export for backward compatibility (tests may import these)
 # These functions are now implemented via the centralized token_counting module
@@ -170,10 +170,10 @@ def estimate_cost(
         # Use provider-aware accurate token counting
         input_tokens = _count_tokens_accurate(text, model_name=model)
         # Detect which method was used based on tiktoken availability
-        try:
-            import tiktoken
+        import importlib.util
+        if importlib.util.find_spec("tiktoken") is not None:
             method = "tiktoken"
-        except ImportError:
+        else:
             method = "heuristic"
 
     # Determine output token count — prefer provider data when available

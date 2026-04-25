@@ -89,7 +89,7 @@ def read_message() -> Optional[dict[str, Any]]:
             
         try:
             length = int(header_bytes.split(b":", 1)[1].strip())
-        except (ValueError, IndexError) as e:
+        except (ValueError, IndexError):
             log_error(f"Invalid Content-Length header: {header_bytes.decode('utf-8', errors='replace')}")
             return None
         
