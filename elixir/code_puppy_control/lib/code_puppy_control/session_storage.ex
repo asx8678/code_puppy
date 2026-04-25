@@ -502,7 +502,14 @@ defmodule CodePuppyControl.SessionStorage do
     canonical = Path.expand(dir)
     ex_home = Path.expand("~/.code_puppy_ex")
 
-    unless String.starts_with?(canonical, ex_home) do
+    # PUP_TEST_SESSION_ROOT: test-only alternative root. When set,
+    # paths under this prefix are also accepted.  This allows tests
+    # to redirect session storage to System.tmp_dir! without
+    # touching the real ~/.code_puppy_ex/.  (code_puppy-dku)
+    test_root = System.get_env("PUP_TEST_SESSION_ROOT")
+    allowed_roots = [ex_home] ++ if(test_root, do: [test_root], else: [])
+
+    unless Enum.any?(allowed_roots, &String.starts_with?(canonical, &1)) do
       raise ArgumentError,
             "Storage dir #{inspect(dir)} is outside ~/.code_puppy_ex/"
     end

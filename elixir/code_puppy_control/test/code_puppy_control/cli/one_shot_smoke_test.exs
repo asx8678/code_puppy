@@ -85,29 +85,26 @@ defmodule CodePuppyControl.CLI.OneShotSmokeTest do
   alias CodePuppyControl.CLI.OneShotSmokeMockLLM
   alias CodePuppyControl.CLI.Parser
   alias CodePuppyControl.REPL.OneShot
+  alias CodePuppyControl.TestSupport.OneShotSandbox
   alias CodePuppyControl.Tools.AgentCatalogue
 
   # ---------------------------------------------------------------------------
   # Shared setup — mock LLM + sandboxed session dir
   # ---------------------------------------------------------------------------
 
-  defp setup_mock_llm(_context) do
+  defp setup_mock_llm(context) do
+    # Sandbox SessionStorage so successful OneShot.run never writes to
+    # the real ~/.code_puppy_ex/sessions/.  Overrides HOME so
+    # validate_storage_dir!/1 is satisfied within the temp dir.
+    # (code_puppy-dku: previously used Path.expand("~/.code_puppy_ex")
+    # which touched the real user's home on normal runs.)
+    OneShotSandbox.setup_sandbox(context)
+
     session_id = :crypto.strong_rand_bytes(4) |> Base.encode16(case: :lower)
 
     prev_llm = Application.get_env(:code_puppy_control, :repl_llm_module)
     Application.put_env(:code_puppy_control, :repl_llm_module, OneShotSmokeMockLLM)
     OneShotSmokeMockLLM.reset()
-
-    # Sandbox SessionStorage so successful OneShot.run never writes to
-    # the real ~/.code_puppy_ex/sessions/.  PUP_SESSION_DIR is the
-    # canonical env var (see SessionStorage.base_dir/0).  Must be under
-    # ~/.code_puppy_ex/ to pass validate_storage_dir!/1.
-    ex_home = Path.expand("~/.code_puppy_ex")
-    File.mkdir_p!(ex_home)
-    tmp_dir = Path.join([ex_home, "sessions", "pup_smoke_#{session_id}"])
-    File.mkdir_p!(tmp_dir)
-    prev_session_dir = System.get_env("PUP_SESSION_DIR")
-    System.put_env("PUP_SESSION_DIR", tmp_dir)
 
     try do
       AgentCatalogue.discover_agent_modules()
@@ -116,11 +113,10 @@ defmodule CodePuppyControl.CLI.OneShotSmokeTest do
     end
 
     on_exit(fn ->
-      # Drain any lingering async-save tasks BEFORE restoring env vars
-      # or removing dirs.  save_session_async/3 spawns Task processes that
-      # read PUP_SESSION_DIR and write session files; without this drain
-      # they may hit a deleted dir or write to the real user session path.
-      Process.sleep(100)
+      # Drain async saves before test-specific cleanup.
+      # (Sandbox on_exit also drains, but this is defense-in-depth
+      # for the smoke test's longer pipeline paths.)
+      OneShotSandbox.drain_async_saves()
 
       if prev_llm do
         Application.put_env(:code_puppy_control, :repl_llm_module, prev_llm)
@@ -130,16 +126,9 @@ defmodule CodePuppyControl.CLI.OneShotSmokeTest do
 
       OneShotSmokeMockLLM.stop()
 
-      # Restore PUP_SESSION_DIR and clean up sandbox dir.
-      # Use File.rm_rf/1 (non-bang) to tolerate concurrent async
-      # writes that may create files during removal.
-      if prev_session_dir do
-        System.put_env("PUP_SESSION_DIR", prev_session_dir)
-      else
-        System.delete_env("PUP_SESSION_DIR")
-      end
-
-      {:ok, _} = File.rm_rf(tmp_dir)
+      # Note: PUP_SESSION_DIR and HOME restoration + sandbox dir cleanup
+      # are handled by OneShotSandbox.setup_sandbox/1's on_exit callback,
+      # which runs after this callback (LIFO order).
 
       Enum.each(["code_puppy", "code-corgi", "qa_kitten"], fn agent_key ->
         try do
