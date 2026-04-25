@@ -8,6 +8,14 @@ from typing import Any, Callable
 
 from .models import LatencyStats
 
+# Signal-based timeout is only available on Unix (SIGALRM).
+_HAS_SIGALRM = hasattr(signal, "SIGALRM") and hasattr(signal, "setitimer")
+
+
+def _timeout_handler(signum: int, frame: Any) -> None:
+    """SIGALRM handler that raises TimeoutError instead of killing the process."""
+    raise TimeoutError("benchmark iteration timed out")
+
 
 def time_function(
     func: Callable[[], Any],
@@ -17,11 +25,15 @@ def time_function(
 ) -> tuple[list[float], list[dict[str, Any]]]:
     """Time a function over multiple iterations with warmup and timeout.
 
+    Uses signal.setitimer (sub-second precision) with a proper SIGALRM handler
+    on Unix. Saves and restores the previous signal handler and itimer after
+    all iterations. Falls back to no-timeout on platforms without SIGALRM.
+
     Args:
         func: Function to time (should be callable with no args)
         iterations: Number of benchmark iterations
         warmup: Number of warmup iterations
-        timeout_sec: Maximum seconds per iteration
+        timeout_sec: Maximum seconds per iteration (0 to disable)
 
     Returns:
         Tuple of (successful_times_ms, failures) where failures is a list
@@ -30,41 +42,72 @@ def time_function(
     failures: list[dict[str, Any]] = []
     times_ms: list[float] = []
 
-    # Warmup (not timed, failures don't count)
-    for _ in range(warmup):
-        try:
-            # Apply timeout to warmup too
-            if timeout_sec > 0:
-                signal.alarm(int(timeout_sec))
-            func()
-            if timeout_sec > 0:
-                signal.alarm(0)
-        except Exception:
-            pass  # Warmup failures are OK
-        finally:
-            if timeout_sec > 0:
-                signal.alarm(0)
+    use_signal_timeout = _HAS_SIGALRM and timeout_sec > 0
 
-    # Benchmark with timeout enforcement
-    for i in range(iterations):
-        start = time.perf_counter()
+    # Save previous signal handler/timer once, restore at the end
+    old_handler: Any = None
+    old_itimer: tuple[float, float] | None = None
+
+    if use_signal_timeout:
+        old_handler = signal.getsignal(signal.SIGALRM)
+        # Save and clear any existing itimer so we don't corrupt it
+        old_itimer = signal.setitimer(signal.ITIMER_REAL, 0, 0)
         try:
-            if timeout_sec > 0:
-                signal.alarm(int(timeout_sec))
-            func()
-            if timeout_sec > 0:
-                signal.alarm(0)
-            end = time.perf_counter()
-            times_ms.append((end - start) * 1000)
-        except TimeoutError:
-            failures.append(
-                {"iteration": i, "error": "timeout", "type": "TimeoutError"}
-            )
-        except Exception as e:
-            failures.append({"iteration": i, "error": str(e), "type": type(e).__name__})
-        finally:
-            if timeout_sec > 0:
-                signal.alarm(0)
+            signal.signal(signal.SIGALRM, _timeout_handler)
+        except OSError, ValueError:
+            # Can't install handler (e.g. non-main thread); fall back
+            use_signal_timeout = False
+
+    try:
+        # Warmup (not timed, failures don't count)
+        for _ in range(warmup):
+            try:
+                if use_signal_timeout:
+                    signal.setitimer(signal.ITIMER_REAL, timeout_sec, 0)
+                func()
+            except TimeoutError:
+                pass  # Warmup timeouts are OK
+            except Exception:
+                pass  # Warmup failures are OK
+            finally:
+                if use_signal_timeout:
+                    signal.setitimer(signal.ITIMER_REAL, 0, 0)
+
+        # Benchmark with timeout enforcement
+        for i in range(iterations):
+            start = time.perf_counter()
+            try:
+                if use_signal_timeout:
+                    signal.setitimer(signal.ITIMER_REAL, timeout_sec, 0)
+                func()
+                if use_signal_timeout:
+                    signal.setitimer(signal.ITIMER_REAL, 0, 0)
+                end = time.perf_counter()
+                times_ms.append((end - start) * 1000)
+            except TimeoutError:
+                failures.append(
+                    {"iteration": i, "error": "timeout", "type": "TimeoutError"}
+                )
+            except Exception as e:
+                failures.append(
+                    {"iteration": i, "error": str(e), "type": type(e).__name__}
+                )
+            finally:
+                if use_signal_timeout:
+                    signal.setitimer(signal.ITIMER_REAL, 0, 0)
+    finally:
+        # Always restore previous signal state
+        if use_signal_timeout and old_handler is not None:
+            try:
+                signal.signal(signal.SIGALRM, old_handler)
+            except OSError, ValueError:
+                pass  # Best-effort restore
+        if use_signal_timeout and old_itimer is not None:
+            try:
+                if old_itimer != (0.0, 0.0):
+                    signal.setitimer(signal.ITIMER_REAL, *old_itimer)
+            except OSError, ValueError:
+                pass  # Best-effort restore
 
     return times_ms, failures
 

@@ -49,18 +49,20 @@ Benchmarks offline filesystem primitives to establish a baseline for comparison.
 
 ### 2. LLM Request Latency
 
-Minimal credential-gated probe for LLM API latency.
+Credential-gated probe for LLM API latency. **Requires operator-provided API
+keys; no live baseline numbers are committed to the repository.**
 
-**Status:** Implemented but requires credentials
+**Status:** Implemented, credential-gated
 
 When `PUP_ANTHROPIC_API_KEY` or `PUP_OPENAI_API_KEY` is set, runs a minimal probe:
 - Single-shot request to claude-sonnet-4 or gpt-4o-mini
 - Measures time-to-first-block (TTFB)
-- Safe 60-second timeout enforced
+- Harness `timeout` setting (default 60 s) passed to HTTP client
 
 Without credentials, reports `not_implemented` in JSON output.
 
-See [llm_latency_pending.md](llm_latency_pending.md) for full planned benchmarks.
+See [llm_latency_pending.md](llm_latency_pending.md) for planned streaming benchmarks
+and reproducible test fixtures.
 
 ## Existing Benchmarks
 

@@ -84,10 +84,8 @@ class TestTimeFunction(unittest.TestCase):
             self.assertEqual(f["type"], "ValueError")
             self.assertIn("test error", f["error"])
 
-    def test_timeout(self):
-        """Timeout parameter is accepted (platform-specific enforcement)."""
-        # Note: Signal-based timeout behavior varies by platform.
-        # This test verifies the function accepts and uses the timeout parameter.
+    def test_timeout_short_op_succeeds(self):
+        """Quick operation with generous timeout should complete successfully."""
         import time
 
         def quick_op():
@@ -96,9 +94,73 @@ class TestTimeFunction(unittest.TestCase):
         times, failures = time_function(
             quick_op, iterations=1, warmup=0, timeout_sec=5.0
         )
-        # Should complete successfully with generous timeout
         self.assertEqual(len(times), 1)
         self.assertEqual(len(failures), 0)
+
+    @unittest.skipUnless(
+        hasattr(__import__("signal"), "SIGALRM"),
+        "SIGALRM not available on this platform",
+    )
+    def test_timeout_exceeded_returns_failure_not_exit(self):
+        """Operation exceeding timeout should return failures, not kill process.
+
+        This is the critical self-test: signal.alarm() without a handler causes
+        exit 142. With a proper handler, the process survives and records a
+        TimeoutError failure instead.
+        """
+        import time
+
+        def slow_op():
+            time.sleep(10)  # Way beyond the short timeout
+
+        # Use a very short timeout (0.25s) to ensure the operation exceeds it
+        times, failures = time_function(
+            slow_op, iterations=3, warmup=0, timeout_sec=0.25
+        )
+
+        # All iterations should be recorded as timeout failures
+        self.assertEqual(
+            len(times), 0, "Expected no successful samples for timed-out ops"
+        )
+        self.assertEqual(len(failures), 3, "Expected 3 timeout failure records")
+        for f in failures:
+            self.assertEqual(f["type"], "TimeoutError")
+            self.assertEqual(f["error"], "timeout")
+
+    @unittest.skipUnless(
+        hasattr(__import__("signal"), "SIGALRM"),
+        "SIGALRM not available on this platform",
+    )
+    def test_timeout_survives_after_timeout(self):
+        """Process must continue normally after a timeout — not exit 142.
+
+        Verifies that signal handler/timer are properly restored so
+        subsequent operations work correctly.
+        """
+        import time
+
+        def slow_op():
+            time.sleep(10)
+
+        def fast_op():
+            time.sleep(0.01)
+
+        # First: trigger a timeout
+        times1, failures1 = time_function(
+            slow_op, iterations=1, warmup=0, timeout_sec=0.25
+        )
+        self.assertEqual(len(times1), 0)
+        self.assertEqual(len(failures1), 1)
+
+        # Second: verify a normal operation still works after timeout
+        times2, failures2 = time_function(
+            fast_op, iterations=2, warmup=0, timeout_sec=5.0
+        )
+        self.assertEqual(len(times2), 2)
+        self.assertEqual(len(failures2), 0)
+        # Sanity: times are reasonable
+        for t in times2:
+            self.assertGreater(t, 5)
 
 
 class TestBenchmarkSuite(unittest.TestCase):

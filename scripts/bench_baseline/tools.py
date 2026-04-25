@@ -359,8 +359,15 @@ class ToolOverheadBenchmarks:
                 print("  Elixir (bridge):  Not available (bridge not connected)")
 
         except Exception as e:
+            # Broad catch at benchmark boundary: records failure type/message
+            # explicitly so it is never reported as a successful latency sample.
             failures.append(
-                {"operation": "setup", "error": str(e), "type": type(e).__name__}
+                {
+                    "operation": "run_all_boundary",
+                    "error": str(e),
+                    "type": type(e).__name__,
+                    "note": "broad exception catch at benchmark boundary",
+                }
             )
             raise
         finally:

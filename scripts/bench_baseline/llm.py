@@ -43,7 +43,7 @@ class LLMLatencyBenchmarks:
         except ImportError:
             return None
 
-        client = anthropic.Anthropic(api_key=api_key, timeout=30.0)
+        client = anthropic.Anthropic(api_key=api_key, timeout=self.timeout)
         prompt = "Write a one-line Python function that adds two numbers."
 
         def make_request():
@@ -102,7 +102,7 @@ class LLMLatencyBenchmarks:
         except ImportError:
             return None
 
-        client = openai.OpenAI(api_key=api_key, timeout=30.0)
+        client = openai.OpenAI(api_key=api_key, timeout=self.timeout)
         prompt = "Write a one-line Python function that adds two numbers."
 
         def make_request():
