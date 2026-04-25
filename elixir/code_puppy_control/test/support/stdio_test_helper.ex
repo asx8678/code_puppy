@@ -10,7 +10,8 @@ defmodule CodePuppyControl.Support.StdioTestHelper do
   Capture stdio output during service execution.
 
   Takes a list of JSON-RPC request strings, runs the stdio service,
-  and returns the first non-empty line of output.
+  and returns the first JSON-RPC *response* (a line with an "id" field),
+  skipping the `_ready` handshake notification and any non-JSON noise.
 
   ## Examples
 
@@ -39,7 +40,9 @@ defmodule CodePuppyControl.Support.StdioTestHelper do
     # Verify mix.exs exists
     result =
       if File.exists?(Path.join(project_path, "mix.exs")) do
-        # Use shell command with explicit cd to the project directory
+        # Use shell command with explicit cd to the project directory.
+        # Do NOT merge stderr into stdout — Logger/compilation noise belongs
+        # on stderr and would pollute JSON-RPC output parsing.
         {output, exit_code} =
           System.cmd(
             "sh",
@@ -47,18 +50,11 @@ defmodule CodePuppyControl.Support.StdioTestHelper do
               "-c",
               "cd #{project_path} && cat #{input_file} | mix code_puppy.stdio_service"
             ],
-            stderr_to_stdout: true
+            stderr_to_stdout: false
           )
 
         if exit_code == 0 do
-          # Find first JSON line (skip non-JSON logs like "Compiling...")
-          output
-          |> String.split("\n")
-          |> Enum.find(&(String.starts_with?(&1, "{") and &1 != ""))
-          |> case do
-            nil -> "{}"
-            line -> line
-          end
+          find_json_rpc_response(output)
         else
           # Return error structure for non-zero exit
           Jason.encode!(%{
@@ -85,5 +81,41 @@ defmodule CodePuppyControl.Support.StdioTestHelper do
     File.rm(input_file)
 
     result
+  end
+
+  @doc """
+  Parse multi-line output and return the first JSON-RPC response.
+
+  Skips:
+  - Non-JSON lines (compilation noise, blank lines)
+  - The `_ready` handshake notification (has "method" but no "id")
+
+  Returns the first line that decodes as a JSON-RPC response (has "id"),
+  or "{}" if none found.
+  """
+  def find_json_rpc_response(output) do
+    output
+    |> String.split("\n")
+    |> Enum.filter(&(String.starts_with?(&1, "{") and &1 != ""))
+    |> Enum.find_value(fn line ->
+      case Jason.decode(line) do
+        {:ok, decoded} when is_map(decoded) ->
+          # JSON-RPC responses have an "id" field; notifications don't.
+          # The _ready handshake is a notification: {"jsonrpc":"2.0","method":"_ready","params":{}}
+          if Map.has_key?(decoded, "id") do
+            line
+          else
+            # Notification — skip it
+            nil
+          end
+
+        _ ->
+          nil
+      end
+    end)
+    |> case do
+      nil -> "{}"
+      line -> line
+    end
   end
 end
