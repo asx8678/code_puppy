@@ -8,7 +8,9 @@ defmodule CodePuppyControl.ModelFactory.Credentials do
   3. OS keychain (stubbed — TODO)
 
   Also handles custom endpoint header value substitution with
-  `${VAR_NAME}` and `$VAR_NAME` patterns.
+  `${VAR_NAME}` and `$VAR_NAME` patterns. Substitution resolves
+  via env first, then encrypted credential store fallback (same
+  `env_or_store/1` path as API key resolution).
 
   ## Examples
 
@@ -155,6 +157,8 @@ defmodule CodePuppyControl.ModelFactory.Credentials do
   Resolve custom endpoint headers with environment variable substitution.
 
   Supports both `${VAR_NAME}` and `$VAR_NAME` syntax.
+  Resolution order: env var first, then encrypted credential store fallback.
+  If neither source provides a value, substitutes empty string and logs a warning.
 
   ## Examples
 
@@ -214,10 +218,11 @@ defmodule CodePuppyControl.ModelFactory.Credentials do
 
   defp do_substitute(value, regex) do
     Regex.replace(regex, value, fn _full, var_name ->
-      case System.get_env(var_name) do
+      case env_or_store(var_name) do
         nil ->
           Logger.warning(
-            "Credentials: env var '#{var_name}' not set; using empty string in header value"
+            "Credentials: env var or credential store key '#{var_name}' not set; " <>
+              "using empty string in header value"
           )
 
           ""

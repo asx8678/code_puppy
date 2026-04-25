@@ -194,6 +194,92 @@ defmodule CodePuppyControl.ModelFactory.CredentialsTest do
     end
   end
 
+  describe "env var substitution with credential store fallback" do
+    setup do
+      # Unique key names to avoid collisions with other tests or real env
+      prefix = "CP_OYL_TEST_#{:erlang.unique_integer([:positive])}"
+      env_key = "#{prefix}_ENV_ONLY"
+      store_key = "#{prefix}_STORE_ONLY"
+      both_key = "#{prefix}_BOTH"
+      neither_key = "#{prefix}_NEITHER"
+
+      # Clean slate: delete all env vars
+      for k <- [env_key, store_key, both_key, neither_key] do
+        System.delete_env(k)
+      end
+
+      on_exit(fn ->
+        for k <- [env_key, store_key, both_key, neither_key] do
+          System.delete_env(k)
+          CodePuppyControl.Credentials.delete(k)
+        end
+      end)
+
+      {:ok, env_key: env_key, store_key: store_key, both_key: both_key, neither_key: neither_key}
+    end
+
+    test "header substitution: env var takes precedence over store", context do
+      System.put_env(context.both_key, "env-value")
+      :ok = CodePuppyControl.Credentials.set(context.both_key, "store-value")
+
+      result = Credentials.resolve_headers(%{"X-Test" => "${#{context.both_key}}"})
+      assert [{"X-Test", "env-value"}] = result
+    end
+
+    test "header substitution: falls back to credential store when env unset", context do
+      :ok = CodePuppyControl.Credentials.set(context.store_key, "store-secret")
+
+      result = Credentials.resolve_headers(%{"X-Auth" => "Bearer $#{context.store_key}"})
+      assert [{"X-Auth", "Bearer store-secret"}] = result
+    end
+
+    test "header substitution: empty string when neither env nor store", context do
+      result =
+        Credentials.resolve_headers(%{"X-Missing" => "prefix-${#{context.neither_key}}-suffix"})
+
+      assert [{"X-Missing", "prefix--suffix"}] = result
+    end
+
+    test "custom endpoint api_key: falls back to credential store when env unset", context do
+      :ok = CodePuppyControl.Credentials.set(context.store_key, "sk-store-endpoint")
+
+      config = %{
+        "url" => "https://custom.example.com",
+        "api_key" => "$#{context.store_key}"
+      }
+
+      assert {:ok, {_url, _headers, api_key}} = Credentials.resolve_custom_endpoint(config)
+      assert api_key == "sk-store-endpoint"
+    end
+
+    test "custom endpoint headers: falls back to credential store when env unset", context do
+      :ok = CodePuppyControl.Credentials.set(context.store_key, "token-from-store")
+
+      config = %{
+        "url" => "https://custom.example.com",
+        "headers" => %{"Authorization" => "Bearer ${#{context.store_key}}"}
+      }
+
+      assert {:ok, {_url, headers, _api_key}} = Credentials.resolve_custom_endpoint(config)
+      assert headers == [{"Authorization", "Bearer token-from-store"}]
+    end
+
+    test "braced and unbraced syntax both resolve from store", context do
+      :ok = CodePuppyControl.Credentials.set(context.store_key, "braced-val")
+
+      result_braced =
+        Credentials.resolve_headers(%{"X-A" => "${#{context.store_key}}"})
+
+      :ok = CodePuppyControl.Credentials.set(context.store_key, "unbraced-val")
+
+      result_unbraced =
+        Credentials.resolve_headers(%{"X-B" => "$#{context.store_key}"})
+
+      assert [{"X-A", "braced-val"}] = result_braced
+      assert [{"X-B", "unbraced-val"}] = result_unbraced
+    end
+  end
+
   describe "resolve_api_key/2 with credential store" do
     setup do
       dir = Path.join(System.tmp_dir!(), "cred_mf_test_#{:erlang.unique_integer([:positive])}")
