@@ -13,6 +13,12 @@ defmodule CodePuppyControl.Support.StdioTestHelper do
   and returns the first JSON-RPC *response* (a line with an "id" field),
   skipping the `_ready` handshake notification and any non-JSON noise.
 
+  ## Options
+
+    * `:env` — list of `{key, value}` tuples passed to the subprocess
+      via `System.cmd/3`. Useful for overriding Application config
+      at subprocess startup (e.g. `PUP_BUNDLED_MODELS_PATH`).
+
   ## Examples
 
       request = %{"jsonrpc" => "2.0", "id" => 1, "method" => "ping", "params" => %{}}
@@ -21,11 +27,11 @@ defmodule CodePuppyControl.Support.StdioTestHelper do
       assert response["result"]["pong"] == true
 
   """
-  def capture_stdio(inputs, _fun \\ nil) do
-    do_capture_stdio(inputs)
+  def capture_stdio(inputs, _fun \\ nil, opts \\ []) do
+    do_capture_stdio(inputs, opts)
   end
 
-  defp do_capture_stdio(inputs) do
+  defp do_capture_stdio(inputs, opts) do
     # Write inputs to a temp file
     input_file =
       Path.join(System.tmp_dir!(), "stdio_input_#{:erlang.unique_integer([:positive])}.jsonl")
@@ -43,6 +49,8 @@ defmodule CodePuppyControl.Support.StdioTestHelper do
         # Use shell command with explicit cd to the project directory.
         # Do NOT merge stderr into stdout — Logger/compilation noise belongs
         # on stderr and would pollute JSON-RPC output parsing.
+        env = Keyword.get(opts, :env, [])
+
         {output, exit_code} =
           System.cmd(
             "sh",
@@ -50,6 +58,7 @@ defmodule CodePuppyControl.Support.StdioTestHelper do
               "-c",
               "cd #{project_path} && cat #{input_file} | mix code_puppy.stdio_service"
             ],
+            env: env,
             stderr_to_stdout: false
           )
 
