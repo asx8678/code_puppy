@@ -40,8 +40,8 @@ defmodule CodePuppyControl.HttpClient do
       ...> )
 
   Streaming response:
-      iex> HttpClient.stream(:get, "https://api.example.com/large-file")
-      {:ok, stream}  # Returns a Stream that yields data chunks
+      iex> stream = HttpClient.stream(:get, "https://api.example.com/large-file")
+      iex> Enum.reduce(stream, "", fn {:data, chunk}, acc -> acc <> chunk; _, acc -> acc end)
 
   ## Configuration
 
@@ -265,140 +265,15 @@ defmodule CodePuppyControl.HttpClient do
     timeout = Keyword.get(opts, :timeout, 180_000)
     pool_timeout = Keyword.get(opts, :pool_timeout, 5_000)
 
-    Stream.resource(
-      fn -> start_stream(method, url, headers, body, pool_timeout, timeout) end,
-      &next_stream_element/1,
-      &close_stream/1
+    CodePuppyControl.HttpClient.Streaming.build_stream(
+      method,
+      url,
+      headers,
+      body,
+      pool_timeout,
+      timeout
     )
   end
-
-  # ── Stream internals ─────────────────────────────────────────────────────
-
-  # Spawns a process that runs Finch.stream and sends chunks to the caller.
-  # This avoids the broken pattern of returning Stream-resource tuples from
-  # inside the Finch callback — Finch callbacks must return {:cont, acc}.
-  defp start_stream(method, url, headers, body, pool_timeout, timeout) do
-    parent = self()
-    ref = make_ref()
-
-    pid =
-      spawn(fn ->
-        run_finch_stream(parent, ref, method, url, headers, body, pool_timeout, timeout)
-      end)
-
-    mon_ref = Process.monitor(pid)
-    {pid, mon_ref, ref, timeout}
-  end
-
-  # Runs Finch.stream in a separate process, sending data chunks to the parent
-  # via message passing. For 2xx responses, chunks are sent immediately.
-  # For non-2xx, the body is accumulated and sent as a single error element.
-  defp run_finch_stream(parent, ref, method, url, headers, body, pool_timeout, timeout) do
-    pool_name = Config.default_pool_name()
-    req = build_finch_request(method, url, headers, body)
-
-    initial_acc = %{status: nil, headers: [], body_parts: []}
-
-    result =
-      Finch.stream(
-        req,
-        pool_name,
-        initial_acc,
-        fn
-          {:status, status}, acc ->
-            {:cont, %{acc | status: status}}
-
-          {:headers, resp_headers}, acc ->
-            {:cont, %{acc | headers: resp_headers}}
-
-          {:data, data}, acc ->
-            if acc.status in 200..299 do
-              send(parent, {ref, {:data, data}})
-              {:cont, acc}
-            else
-              # Non-2xx: accumulate body instead of streaming to parent
-              {:cont, %{acc | body_parts: [data | acc.body_parts]}}
-            end
-        end,
-        pool_timeout: pool_timeout,
-        receive_timeout: timeout
-      )
-
-    case result do
-      {:ok, %{status: status, headers: resp_headers}} when status in 200..299 ->
-        send(parent, {ref, {:done, %{status: status, headers: resp_headers}}})
-
-      {:ok, %{status: status, headers: resp_headers, body_parts: body_parts}} ->
-        body = body_parts |> Enum.reverse() |> Enum.join()
-        send(parent, {ref, {:error, %{status: status, headers: resp_headers, body: body}}})
-
-      {:error, reason} ->
-        send(parent, {ref, {:transport_error, reason}})
-    end
-  rescue
-    e ->
-      send(parent, {ref, {:transport_error, Exception.message(e)}})
-  end
-
-  # Receives the next element from the spawned stream process.
-  defp next_stream_element({pid, mon_ref, ref, timeout} = state) do
-    receive do
-      {^ref, {:data, chunk}} ->
-        {[{:data, chunk}], state}
-
-      {^ref, {:done, metadata}} ->
-        Process.demonitor(mon_ref, [:flush])
-        {[{:done, metadata}], :done}
-
-      {^ref, {:error, details}} ->
-        Process.demonitor(mon_ref, [:flush])
-        {[{:error, details}], :done}
-
-      {^ref, {:transport_error, reason}} ->
-        Process.demonitor(mon_ref, [:flush])
-        {[{:error, format_error(reason)}], :done}
-
-      {:DOWN, ^mon_ref, :process, ^pid, :normal} ->
-        # Process exited normally; drain any final message
-        drain_stream_completion(ref)
-
-      {:DOWN, ^mon_ref, :process, ^pid, reason} ->
-        {[{:error, "Stream process exited: #{inspect(reason)}"}], :done}
-    after
-      timeout ->
-        Process.exit(pid, :kill)
-        Process.demonitor(mon_ref, [:flush])
-        {[{:error, "Stream receive timeout"}], :done}
-    end
-  end
-
-  defp next_stream_element(:done), do: {:halt, :done}
-
-  # After the stream process exits normally, give it a brief window to
-  # deliver the final :done / :error / :transport_error message.
-  defp drain_stream_completion(ref) do
-    receive do
-      {^ref, {:done, metadata}} ->
-        {[{:done, metadata}], :done}
-
-      {^ref, {:error, details}} ->
-        {[{:error, details}], :done}
-
-      {^ref, {:transport_error, reason}} ->
-        {[{:error, format_error(reason)}], :done}
-    after
-      100 ->
-        {[{:error, "Stream process exited without completion signal"}], :done}
-    end
-  end
-
-  defp close_stream({pid, mon_ref, _ref, _timeout}) do
-    Process.exit(pid, :kill)
-    Process.demonitor(mon_ref, [:flush])
-    :ok
-  end
-
-  defp close_stream(:done), do: :ok
 
   # ============================================================================
   # Request Building
@@ -668,18 +543,21 @@ defmodule CodePuppyControl.HttpClient do
     }
   end
 
+  @doc false
   # format_error returns plain strings, not wrapped tuples.
   # Callers wrap with {:error, format_error(reason)}.
-  defp format_error(%{reason: reason}), do: format_error(reason)
-  defp format_error(:timeout), do: "Request timeout"
-  defp format_error(:pool_timeout), do: "Pool checkout timeout"
-  defp format_error(:nxdomain), do: "Domain not found"
-  defp format_error(:econnrefused), do: "Connection refused"
-  defp format_error(:enetunreach), do: "Network unreachable"
-  defp format_error(:closed), do: "Connection closed"
-  defp format_error(reason) when is_atom(reason), do: Atom.to_string(reason)
-  defp format_error(reason) when is_binary(reason), do: reason
-  defp format_error(reason), do: inspect(reason)
+  # Made public (doc: false) so HttpClient.Streaming can call it.
+  @spec format_error(any()) :: String.t()
+  def format_error(%{reason: reason}), do: format_error(reason)
+  def format_error(:timeout), do: "Request timeout"
+  def format_error(:pool_timeout), do: "Pool checkout timeout"
+  def format_error(:nxdomain), do: "Domain not found"
+  def format_error(:econnrefused), do: "Connection refused"
+  def format_error(:enetunreach), do: "Network unreachable"
+  def format_error(:closed), do: "Connection closed"
+  def format_error(reason) when is_atom(reason), do: Atom.to_string(reason)
+  def format_error(reason) when is_binary(reason), do: reason
+  def format_error(reason), do: inspect(reason)
 
   defp cerebras?(model_name) do
     model_name |> String.downcase() |> String.contains?("cerebras")
