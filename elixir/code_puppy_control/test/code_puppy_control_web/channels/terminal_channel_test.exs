@@ -156,7 +156,6 @@ defmodule CodePuppyControlWeb.TerminalChannelTest do
       Phoenix.ChannelTest.leave(socket)
     end
 
-    @tag :triage_pending
     test "close uses pty_session_id, not topic session_id" do
       CodePuppyControl.PtyManager.Stub.set_custom_pty_id("pty-close-999")
 

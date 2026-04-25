@@ -89,25 +89,42 @@ defmodule Mix.Tasks.CodePuppy.StdioService do
     # This must happen before any app startup that might emit to stdout
     Mix.shell(Mix.Shell.Quiet)
 
-    # Redirect all logging to stderr BEFORE starting any applications
-    # All logging must go to stderr for JSON-RPC protocol compliance
-    Logger.configure_backend(:console, device: :stderr)
-    Logger.put_application_level(:code_puppy_control, :none)
-
-    # Start required applications without the full Phoenix stack
+    # Start required applications without the full Phoenix stack.
+    # Order matters: start ALL apps first, then redirect Logger to stderr.
+    # Any Application.ensure_all_started call can reinitialize the console
+    # backend from application config, resetting device to :user (stdout).
     Application.ensure_all_started(:logger)
     Application.ensure_all_started(:jason)
-
-    # Start Ecto/SQLite and PubSub for session persistence and event bus
     Application.ensure_all_started(:ecto)
     Application.ensure_all_started(:ecto_sql)
     Application.ensure_all_started(:ecto_sqlite3)
     Application.ensure_all_started(:phoenix_pubsub)
 
+    # Redirect all logging to stderr AFTER all app startups.
+    # All logging must go to stderr for JSON-RPC protocol compliance —
+    # stdout is reserved exclusively for newline-delimited JSON-RPC.
+    #
+    # Elixir's Logger uses the Erlang :logger subsystem under the hood.
+    # The default handler (:logger_std_h, type: :standard_io) writes to
+    # stdout regardless of Logger.configure_backend(:console, device: :stderr).
+    # We must remove the default Erlang handler and replace it with one
+    # that targets :standard_error instead.
+    :logger.remove_handler(:default)
+
+    :logger.add_handler(
+      :code_puppy_stderr_handler,
+      :logger_std_h,
+      %{config: %{type: :standard_error}}
+    )
+
+    Logger.put_application_level(:code_puppy_control, :none)
+
     # Start the Ecto repo (SQLite) - required for session save/load
     {:ok, _} = CodePuppyControl.Repo.start_link([])
 
     # Run pending migrations (creates chat_sessions table, etc.)
+    # Migrator uses Logger internally; now that stderr redirect is active,
+    # its output won't pollute stdout.
     Ecto.Migrator.run(CodePuppyControl.Repo, :up, all: true)
 
     # Start PubSub for event distribution
@@ -129,8 +146,9 @@ defmodule Mix.Tasks.CodePuppy.StdioService do
     {:ok, _} = CodePuppyControl.ModelAvailability.start_link([])
     {:ok, _} = CodePuppyControl.ModelPacks.start_link([])
 
-    # Give the service a moment to suppress any startup output
-    Process.sleep(100)
+    # Flush any stale Logger messages that might still land on stdout
+    # due to the brief window before we redirected the backend to stderr.
+    Logger.flush()
 
     # Emit startup handshake banner
     # This JSON-RPC notification signals that the service is ready to accept requests.
