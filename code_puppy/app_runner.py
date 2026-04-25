@@ -117,7 +117,7 @@ class AppRunner:
         parser.add_argument(
             "--bridge-mode",
             action="store_true",
-            help="Enable Mana LiveView TCP bridge (CODE_PUPPY_BRIDGE=1)",
+            help="Enable bridge mode (sets CODE_PUPPY_BRIDGE=1)",
         )
         parser.add_argument(
             "command",

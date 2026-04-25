@@ -127,15 +127,14 @@ Options:
   -v, -V, --version     Show version and exit
   -m, --model MODEL     Model to use (default: from config)
   -a, --agent AGENT     Agent to use (default: code-puppy)
-  -c, --continue        Continue last session
   -p, --prompt PROMPT   Execute a single prompt and exit
   -i, --interactive     Run in interactive mode
-  --bridge-mode         Enable Mana LiveView TCP bridge
+  --bridge-mode         Enable bridge mode (sets CODE_PUPPY_BRIDGE=1)
 
 Examples:
   pup                           Start interactive mode
   pup "explain this code"       Run single prompt
-  pup -m claude-sonnet -c       Continue with specific model
+  pup -m claude-sonnet -i       Start interactive with specific model
 
 For more information: https://github.com/anthropics/code-puppy
 """
