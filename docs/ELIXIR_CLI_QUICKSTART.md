@@ -8,12 +8,12 @@
 
 1. [Prerequisites](#1-prerequisites)
 2. [Setup](#2-setup)
-3. [Isolation & Home Directory](#3-isolation--home-directory)
+3. [Isolation & Home Directory](#3-isolation-home-directory)
 4. [Credentials](#4-credentials)
 5. [No-Network Smoke (`mix pup_ex.smoke`)](#5-no-network-smoke-mix-pup_exsmoke)
 6. [Escript Build](#6-escript-build)
 7. [CLI Usage](#7-cli-usage)
-8. [Troubleshooting & Known Caveats](#8-troubleshooting--known-caveats)
+8. [Troubleshooting & Known Caveats](#8-troubleshooting-known-caveats)
 
 ---
 
@@ -59,7 +59,7 @@ mix pup_ex.import --confirm --force
 mix pup_ex.doctor
 ```
 
-Expected output ends with `Status: ISOLATED ✅`. If you see warnings, check [Troubleshooting](#8-troubleshooting--known-caveats) below.
+Expected output ends with `Status: ISOLATED ✅`. If you see warnings, check [Troubleshooting](#8-troubleshooting-known-caveats) below.
 
 ## 3. Isolation & Home Directory
 
@@ -78,7 +78,7 @@ Elixir pup-ex uses a **separate home** from Python pup to prevent config corrupt
 | `PUP_HOME` | Deprecated — logs warning | — |
 | `PUPPY_HOME` | Legacy — logs warning | — |
 
-> **Use `PUP_EX_HOME` for Elixir.** `PUP_HOME`/`PUPPY_HOME` control Python's home and will cause deprecation warnings in Elixir.
+> **Use `PUP_EX_HOME` for Elixir.** `PUP_HOME`/`PUPPY_HOME` are deprecated fallbacks honoured by both Python and Elixir (Elixir logs a deprecation warning). They will be removed in a future release.
 
 ### Directory layout
 
@@ -103,11 +103,11 @@ Elixir pup-ex uses a **separate home** from Python pup to prevent config corrupt
 
 ### Isolation enforcement
 
-All file writes go through `CodePuppyControl.Config.Isolation` safe wrappers (`safe_write!`, `safe_mkdir_p!`, `safe_rm!`, `safe_rm_rf!`). Any attempt to write under `~/.code_puppy/` raises `IsolationViolation` — no exceptions, no config bypass. Symlink attacks are blocked via canonical path resolution.
+All file writes go through `CodePuppyControl.Config.Isolation` safe wrappers (`safe_write!`, `safe_mkdir_p!`, `safe_rm!`, `safe_rm_rf!`). Any attempt to write under `~/.code_puppy/` via these wrappers raises `IsolationViolation`. Symlink attacks are blocked via canonical path resolution. **Caveat:** ~8 hardcoded path references still resolve outside `Paths.*` (tracked for Phase 2 cleanup); the isolation guarantee covers code using the `safe_*` API, not every possible I/O path in the codebase.
 
 ## 4. Credentials
 
-API keys and tokens are stored in an AES-256-GCM encrypted file at `~/.code_puppy_ex/credentials/store.json`. Encryption keys are machine-bound (derived from hostname + username via HMAC-SHA256), so credentials are not portable across machines.
+API keys and tokens are stored in an AES-256-GCM encrypted file at `~/.code_puppy_ex/credentials/store.json`. Encryption keys are derived from a persistent random secret stored at `~/.code_puppy_ex/.machine_secret` (32 bytes, created on first use with `0o600` permissions). Credentials are not portable across machines because each installation generates its own secret. (The secret path is overridable via `PUP_MACHINE_SECRET_PATH`.)
 
 ### Mix tasks
 
@@ -256,7 +256,7 @@ Options:
   -c, --continue        Continue last session
   -p, --prompt PROMPT   Execute a single prompt and exit
   -i, --interactive     Run in interactive mode
-  --bridge-mode         Enable Mana LiveView TCP bridge
+  --bridge-mode         Parsed; delegates to Python via CODE_PUPPY_BRIDGE=1
 ```
 
 ### One-shot prompt (non-interactive)
@@ -282,7 +282,7 @@ The first positional argument is treated as the prompt if `-p` is not given:
 
 ```bash
 ./pup "what does this code do?"        # equivalent to -p "what does this code do?"
-./pup -i "start here"                 # interactive mode with initial prompt
+./pup -i                              # interactive mode (same as bare ./pup)
 ./pup -m gpt-4o "refactor this"       # one-shot with model override
 ```
 
@@ -294,14 +294,15 @@ Start a REPL with slash commands, model/agent switching, and session management:
 # Default interactive mode
 ./pup
 
-# Interactive with an initial prompt
-./pup -i "help me debug this"
+# Interactive (note: -i with a positional prompt is parsed but not yet dispatched;
+# use -p "help me debug this" for a single-shot prompt instead)
+./pup -i
 
-# Continue last session
+# -c is parsed but currently equivalent to interactive mode (no session restore yet)
 ./pup -c
 
-# Continue with a different model
-./pup -c -m claude-sonnet
+# With a different model
+./pup -m claude-sonnet
 ```
 
 #### Interactive slash commands
@@ -327,9 +328,9 @@ Start a REPL with slash commands, model/agent switching, and session management:
 | `IsolationViolation` at runtime | You have code writing to `~/.code_puppy/`. All writes must go through `Isolation.safe_*` wrappers under `PUP_EX_HOME`. |
 | `database is locked` in smoke | Harmless — multiple SQLite pool connections race during the short-lived smoke app start. Does not affect smoke results. |
 | Escript `--version` shows wrong version | Rebuild: `MIX_ENV=prod mix escript.build` |
-| `PUP_HOME` deprecation warnings | Switch to `PUP_EX_HOME`. `PUP_HOME`/`PUPPY_HOME` are Python-only and will be removed in a future Elixir release. |
+| `PUP_HOME` deprecation warnings | Switch to `PUP_EX_HOME`. `PUP_HOME`/`PUPPY_HOME` are deprecated fallbacks used by both Python and Elixir; they will be removed in a future release. |
 | OAuth flow not available | `mix pup_ex.auth.login` currently only creates directory scaffolding. Use `mix pup_ex.auth.set` for API keys in the meantime. |
-| Credentials not portable across machines | By design — AES-256-GCM key is derived from machine identity. Re-enter credentials on each machine. |
+| Credentials not portable across machines | By design — AES-256-GCM key is derived from a per-installation random secret at `~/.code_puppy_ex/.machine_secret`. Re-enter credentials on each machine. |
 
 ### Known caveats
 
@@ -337,7 +338,7 @@ Start a REPL with slash commands, model/agent switching, and session management:
 - **`mix pup_ex.auth.login` is scaffolding only.** Full OAuth PKCE flow (ChatGPT, Claude) is not yet implemented.
 - **SQLite lock warnings in smoke.** The smoke task starts the full OTP app briefly; multiple SQLite pool connections may log `database is locked` errors. These are cosmetic and do not affect smoke results.
 - **~8 hardcoded path references** still resolve outside `Paths.*` — tracked in ADR-003, scheduled for Phase 2 cleanup. No new hardcoded paths should be added.
-- **`--bridge-mode`** requires the Mana LiveView TCP bridge to be running separately; it is not a standalone mode.
+- **`--bridge-mode`** is parsed by the Elixir CLI but delegates to the Python bridge runtime (`CODE_PUPPY_BRIDGE=1`). It is not an Elixir-native orchestration mode; the former "Mana LiveView TCP bridge" reference was stale and has been removed.
 - **First-run marker.** After setup, `mix pup_ex.doctor` may note "First-run marker — not initialized yet." This is informational and does not block usage.
 
 ### Running `mix pup_ex.smoke` in CI
@@ -353,7 +354,18 @@ mix pup_ex.smoke --json > smoke-report.json
 MIX_ENV=prod mix escript.build && mix pup_ex.smoke --escript
 ```
 
-The JSON schema is stable — `status`, `duration_ms`, `sandbox_dir`, and `phases[]` with `phase`/`status`/`detail`/`metrics` keys. Safe to `jq` or diff across runs.
+The JSON schema is stable — `status`, `duration_ms`, `sandbox_dir`, and `phases[]` with `phase`/`status`/`detail`/`metrics` keys.
+
+**Caveat:** Elixir Logger output may precede the JSON on stdout, so piping directly to `jq .` can fail. To parse reliably, strip Logger lines before `jq`:
+
+```bash
+# Strip Logger lines (match HH:MM:SS.mmm [level] prefix)
+mix pup_ex.smoke --json 2>/dev/null | sed '/^[0-9][0-9]:[0-9][0-9]:[0-9][0-9]/d' | jq .
+
+# Or capture raw and strip when reading
+mix pup_ex.smoke --json > smoke-report.json
+sed '/^[0-9][0-9]:[0-9][0-9]:[0-9][0-9]/d' smoke-report.json | jq .
+```
 
 ---
 

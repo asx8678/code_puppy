@@ -148,8 +148,8 @@ The Python pup's env vars continue to work as before. They are **not** repurpose
 
 | Env Var | Scope | Behavior |
 |---------|-------|----------|
-| `PUP_HOME` | Python pup | Overrides Python's home directory. Logs deprecation warning (will be removed in future release). |
-| `PUPPY_HOME` | Python pup (legacy) | Same as `PUP_HOME` but older name. Logs deprecation warning. |
+| `PUP_HOME` | Python pup (deprecated fallback) | Overrides home directory for both Python and Elixir. Elixir logs deprecation warning (will be removed in future release). |
+| `PUPPY_HOME` | Legacy (deprecated) | Same as `PUP_HOME` but older name. Logs deprecation warning in both runtimes. |
 | `PUP_EX_HOME` | Elixir pup-ex | **New.** Overrides Elixir's home directory. This is the preferred var for isolation. |
 
 > **Why not reuse `PUP_HOME`?** Because `PUP_HOME` controls *which runtime's home* to use, and

@@ -591,7 +591,7 @@ Content-Length: 56\r\n\r\n
 |------|-------------|-------------|
 | **CLI Interactive** | `code-puppy` or `python -m code_puppy` | Local development, day-to-day coding |
 | **CLI Prompt-only** | `code-puppy -p "create a React component"` | CI/CD, automation, scripting |
-| **Bridge Mode** | `--bridge-mode` or `CODE_PUPPY_BRIDGE=1` | Elixir orchestration, distributed runs |
+| **Bridge Mode** | `--bridge-mode` or `CODE_PUPPY_BRIDGE=1` | Python bridge via JSON-RPC over stdio (Elixir spawns PythonWorker.Port) |
 | **HTTP API** | `elixir/CodePuppyControlWeb` | External integrations, web dashboards |
 | **WebSocket** | `ws://host/socket` | Real-time UIs, streaming responses |
 | **TUI Mode** | `CODE_PUPPY_TUI=1` | Rich terminal interface (Textual) |
