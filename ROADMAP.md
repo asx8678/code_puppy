@@ -40,8 +40,10 @@ Prerequisites before launching the Python-to-Elixir port.
 
 - [x] Port `code_puppy/model_factory.py` — provider registry (e0a481dc ProviderRegistry core merge + c2a5738f ModelFactory integration merge; `CodePuppyControl.ModelFactory.ProviderRegistry` backed by Agent; `ModelFactory.provider_module_for_type/1` delegates to `ProviderRegistry.lookup/1`; tests: runtime register/override, `reset_for_test/0`, `list_available/0`, `resolve/1`, malformed non-binary type rejection, provider-map parity — 110 model_factory tests + 29 LLM/parity tests pass)
 - [x] Port `code_puppy/messaging/*` — message types and serialization (073335a1, 366101ca, 45cbe34e, 3e67001e; smoke 521/0 across EventBus structured, EventsChannel, messaging, message_core, serializer; Types + Messages facade + split families, WireEvent, Commands, EventBus wire-envelope helpers, EventStore legacy `type` + structured `event_type` filtering)
-- [ ] Elixir-native streaming HTTP client for OpenAI / Anthropic / local models
-- [ ] Tool-call dispatch plumbing
+- [x] Elixir-native streaming HTTP client for OpenAI / Anthropic / local models (code_puppy-9l1 — `CodePuppyControl.HttpClient.Streaming`; hardened `HttpClient.stream/3`: 2xx → `{:data,…}/{:done,…}`, non-2xx/transport → `{:error,…}`; OpenAI + Anthropic provider streaming error tests; full post-merge suite: 5688 tests, 0 failures, 107 excluded; 89 properties; 9 doctests)
+- [x] Tool-call dispatch plumbing (code_puppy-j05 — `Agent.Loop` appends `assistant(tool_calls)` before tool-result messages; `LLMAdapter` preserves/converts assistant tool_calls to provider shape safely; Anthropic nil-content replay emits `tool_use`/`tool_result` blocks; malformed tool calls and atom safety tested)
+
+> **Phase B is now complete.** All four sub-items (provider registry, messaging, streaming HTTP client, tool-call dispatch) are merged and tested. No live credentialed LLM baseline numbers were committed as part of this work.
 
 ### Phase C: Base agent port
 
