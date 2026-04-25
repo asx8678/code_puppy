@@ -430,11 +430,17 @@ defmodule CodePuppyControl.SessionStorage do
     # History is already immutable in Elixir — no list() snapshot needed
     # unlike Python. The variable binding captures the current value.
     history_snapshot = history
-    opts_snapshot = opts
+    # Capture resolved base_dir BEFORE spawning the Task so that test
+    # teardown cannot race between env-var restoration and the delayed
+    # Task start.  Without this, save_session would re-read PUP_SESSION_DIR
+    # inside the Task and fall back to the real user session path.
+    # (code_puppy-dku)
+    resolved_base_dir = Keyword.get(opts, :base_dir, base_dir())
+    opts_with_dir = Keyword.put(opts, :base_dir, resolved_base_dir)
 
     _ =
       Task.start(fn ->
-        case save_session(name, history_snapshot, opts_snapshot) do
+        case save_session(name, history_snapshot, opts_with_dir) do
           {:ok, _meta} ->
             mark_autosave_complete(history_snapshot)
 
@@ -502,19 +508,39 @@ defmodule CodePuppyControl.SessionStorage do
     canonical = Path.expand(dir)
     ex_home = Path.expand("~/.code_puppy_ex")
 
-    # PUP_TEST_SESSION_ROOT: test-only alternative root. When set,
-    # paths under this prefix are also accepted.  This allows tests
-    # to redirect session storage to System.tmp_dir! without
-    # touching the real ~/.code_puppy_ex/.  (code_puppy-dku)
-    test_root = System.get_env("PUP_TEST_SESSION_ROOT")
+    # PUP_TEST_SESSION_ROOT: test-only alternative root. Only honoured
+    # when the :allow_test_session_root Application env is set (configured
+    # exclusively in test.exs).  This prevents production from expanding
+    # allowed roots via env var.  (code_puppy-dku)
+    test_root =
+      if Application.get_env(:code_puppy_control, :allow_test_session_root, false) do
+        System.get_env("PUP_TEST_SESSION_ROOT")
+      end
+
     allowed_roots = [ex_home] ++ if(test_root, do: [test_root], else: [])
 
-    unless Enum.any?(allowed_roots, &String.starts_with?(canonical, &1)) do
+    # Canonicalize each allowed root and perform a path-boundary check
+    # (not raw String.starts_with?/2) to prevent prefix/sibling escapes
+    # e.g. /tmp/root2 matching /tmp/root.  (code_puppy-dku)
+    unless Enum.any?(allowed_roots, &path_under_root?(canonical, &1)) do
       raise ArgumentError,
             "Storage dir #{inspect(dir)} is outside ~/.code_puppy_ex/"
     end
 
     canonical
+  end
+
+  # Returns true if `path` is equal to or a proper descendant of `root`.
+  # Uses Path.split/1 + segment comparison to avoid prefix/sibling escapes
+  # where e.g. "/tmp/root2" would match String.starts_with?("/tmp/root").
+  # Both arguments MUST be pre-expanded (via Path.expand/1).  (code_puppy-dku)
+  @spec path_under_root?(Path.t(), Path.t()) :: boolean()
+  defp path_under_root?(path, root) do
+    path_segments = Path.split(path)
+    root_segments = Path.split(root)
+
+    length(path_segments) >= length(root_segments) and
+      Enum.take(path_segments, length(root_segments)) == root_segments
   end
 
   defp write_tmp(path, data) do

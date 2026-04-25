@@ -1,5 +1,11 @@
 import Config
 
+# Allow PUP_TEST_SESSION_ROOT to be honoured in validate_storage_dir!/1
+# during tests only.  Production builds do not set this flag, so the env var
+# is silently ignored outside test — prevents expanding allowed roots via
+# env var in prod.  (code_puppy-dku)
+config :code_puppy_control, :allow_test_session_root, true
+
 # We don't run a server during test. If one is required,
 # you can enable the server option below.
 config :code_puppy_control, CodePuppyControlWeb.Endpoint,

@@ -84,6 +84,45 @@ defmodule CodePuppyControl.SessionStorageAsyncTest do
 
       assert loaded == original_history
     end
+
+    test "captures base_dir before Task spawn — immune to env teardown race", %{
+      base_dir: dir
+    } do
+      # (code_puppy-dku) save_session_async/3 must resolve base_dir
+      # BEFORE spawning the Task.  If it re-read PUP_SESSION_DIR inside
+      # the Task, test teardown that restores env vars before the Task
+      # starts would redirect the write to the real user session path.
+      history = [%{"role" => "user", "content" => "race-test"}]
+
+      # Set up env vars so base_dir/0 resolves to our temp dir.
+      prev_session_dir = System.get_env("PUP_SESSION_DIR")
+      prev_test_root = System.get_env("PUP_TEST_SESSION_ROOT")
+
+      # PUP_TEST_SESSION_ROOT needs to cover the parent of sessions
+      sandbox_ex = Path.join(dir, "..") |> Path.expand()
+      System.put_env("PUP_TEST_SESSION_ROOT", sandbox_ex)
+      System.put_env("PUP_SESSION_DIR", dir)
+
+      on_exit(fn ->
+        if prev_session_dir,
+          do: System.put_env("PUP_SESSION_DIR", prev_session_dir),
+          else: System.delete_env("PUP_SESSION_DIR")
+
+        if prev_test_root,
+          do: System.put_env("PUP_TEST_SESSION_ROOT", prev_test_root),
+          else: System.delete_env("PUP_TEST_SESSION_ROOT")
+      end)
+
+      # Call without explicit :base_dir — forces resolution via base_dir/0
+      :ok = SessionStorage.save_session_async("race-capture-test", history, [])
+
+      # Wait for the background Task to complete
+      Process.sleep(150)
+
+      # Verify the session landed in the expected dir (resolved from
+      # PUP_SESSION_DIR at call time, not at Task execution time)
+      assert SessionStorage.session_exists?("race-capture-test", base_dir: dir)
+    end
   end
 
   # ---------------------------------------------------------------------------

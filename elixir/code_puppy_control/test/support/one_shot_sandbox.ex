@@ -13,8 +13,9 @@ defmodule CodePuppyControl.TestSupport.OneShotSandbox do
   BEAM VM startup), overriding `HOME` env var has no effect on it.
 
   Instead, we set `PUP_TEST_SESSION_ROOT` — a test-only env var that
-  `validate_storage_dir!/1` also accepts as an allowed prefix.  Combined
-  with `PUP_SESSION_DIR` pointing into our temp dir, async saves
+  `validate_storage_dir!/1` accepts as an allowed prefix ONLY when the
+  `:allow_test_session_root` Application env is true (set in test.exs).
+  Combined with `PUP_SESSION_DIR` pointing into our temp dir, async saves
   write successfully to the sandbox and never touch the real
   `~/.code_puppy_ex/`.
 
@@ -58,8 +59,13 @@ defmodule CodePuppyControl.TestSupport.OneShotSandbox do
     prev_test_root = System.get_env("PUP_TEST_SESSION_ROOT")
     prev_session_dir = System.get_env("PUP_SESSION_DIR")
 
+    prev_allow_test_root =
+      Application.get_env(:code_puppy_control, :allow_test_session_root, false)
+
     # PUP_TEST_SESSION_ROOT: test-only root accepted by
     # validate_storage_dir!/1 as an alternative to ~/.code_puppy_ex.
+    # Requires :allow_test_session_root Application env (set in test.exs).
+    # (code_puppy-dku)
     System.put_env("PUP_TEST_SESSION_ROOT", sandbox_ex)
 
     # PUP_SESSION_DIR: explicit session dir for SessionStorage.base_dir/0
@@ -77,6 +83,10 @@ defmodule CodePuppyControl.TestSupport.OneShotSandbox do
       # 2. Restore env vars deterministically
       restore_env("PUP_TEST_SESSION_ROOT", prev_test_root)
       restore_env("PUP_SESSION_DIR", prev_session_dir)
+
+      # 3a. Restore :allow_test_session_root Application env
+      #     (normally always true in test, but preserve whatever was there)
+      restore_app_env(:code_puppy_control, :allow_test_session_root, prev_allow_test_root)
 
       # 3. Clean up sandbox dir (tolerate concurrent writes via rm_rf)
       {:ok, _} = File.rm_rf(tmp_root)
@@ -106,4 +116,11 @@ defmodule CodePuppyControl.TestSupport.OneShotSandbox do
   @spec restore_env(String.t(), String.t() | nil) :: :ok
   def restore_env(key, nil), do: System.delete_env(key)
   def restore_env(key, value), do: System.put_env(key, value)
+
+  @doc """
+  Restores an Application env key to its previous value (or deletes if nil).
+  """
+  @spec restore_app_env(atom(), atom(), term()) :: :ok
+  def restore_app_env(app, key, nil), do: Application.delete_env(app, key)
+  def restore_app_env(app, key, value), do: Application.put_env(app, key, value)
 end

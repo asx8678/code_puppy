@@ -524,5 +524,100 @@ defmodule CodePuppyControl.SessionStorageTest do
         SessionStorage.base_dir()
       end
     end
+
+    test "PUP_TEST_SESSION_ROOT is ignored without :allow_test_session_root" do
+      # (code_puppy-dku) PUP_TEST_SESSION_ROOT must be gated to test-only
+      # config.  When :allow_test_session_root is false (simulating prod),
+      # setting PUP_TEST_SESSION_ROOT should NOT expand allowed roots.
+      tmp =
+        Path.join(System.tmp_dir!(), "pup_test_root_gate_#{System.unique_integer([:positive])}")
+
+      File.mkdir_p!(tmp)
+
+      original_dir = System.get_env("PUP_SESSION_DIR")
+      original_root = System.get_env("PUP_TEST_SESSION_ROOT")
+      original_flag = Application.get_env(:code_puppy_control, :allow_test_session_root)
+
+      # Simulate production: flag is false/unset
+      Application.put_env(:code_puppy_control, :allow_test_session_root, false)
+      System.put_env("PUP_SESSION_DIR", Path.join(tmp, "sessions"))
+      System.put_env("PUP_TEST_SESSION_ROOT", tmp)
+
+      on_exit(fn ->
+        if original_dir,
+          do: System.put_env("PUP_SESSION_DIR", original_dir),
+          else: System.delete_env("PUP_SESSION_DIR")
+
+        if original_root,
+          do: System.put_env("PUP_TEST_SESSION_ROOT", original_root),
+          else: System.delete_env("PUP_TEST_SESSION_ROOT")
+
+        if original_flag != nil,
+          do: Application.put_env(:code_puppy_control, :allow_test_session_root, original_flag),
+          else: Application.delete_env(:code_puppy_control, :allow_test_session_root)
+
+        File.rm_rf(tmp)
+      end)
+
+      # Should still reject — PUP_TEST_SESSION_ROOT is ignored when flag is false
+      assert_raise ArgumentError, ~r/outside ~\/\.code_puppy_ex\//, fn ->
+        SessionStorage.base_dir()
+      end
+
+      # Now enable the flag (simulating test env)
+      Application.put_env(:code_puppy_control, :allow_test_session_root, true)
+
+      # Now it should succeed — PUP_TEST_SESSION_ROOT is honoured
+      assert SessionStorage.base_dir() == Path.expand(Path.join(tmp, "sessions"))
+    end
+
+    test "path-boundary check rejects sibling prefix escapes" do
+      # (code_puppy-dku) /tmp/root2 must not match /tmp/root.
+      # This tests the path_under_root? guard that replaced
+      # String.starts_with?/2.
+      tmp_a = Path.join(System.tmp_dir!(), "pup_root_a_#{System.unique_integer([:positive])}")
+
+      tmp_b =
+        Path.join(System.tmp_dir!(), "pup_root_a_sibling_#{System.unique_integer([:positive])}")
+
+      File.mkdir_p!(tmp_a)
+      File.mkdir_p!(tmp_b)
+
+      original_dir = System.get_env("PUP_SESSION_DIR")
+      original_root = System.get_env("PUP_TEST_SESSION_ROOT")
+      original_flag = Application.get_env(:code_puppy_control, :allow_test_session_root)
+
+      # Set test root to tmp_a
+      Application.put_env(:code_puppy_control, :allow_test_session_root, true)
+      System.put_env("PUP_TEST_SESSION_ROOT", tmp_a)
+
+      # Point session dir under tmp_b (a different sibling)
+      # Use a path that starts with tmp_a's string but is NOT a descendant
+      sibling_session_dir = Path.join(tmp_b, "sessions")
+      System.put_env("PUP_SESSION_DIR", sibling_session_dir)
+
+      on_exit(fn ->
+        if original_dir,
+          do: System.put_env("PUP_SESSION_DIR", original_dir),
+          else: System.delete_env("PUP_SESSION_DIR")
+
+        if original_root,
+          do: System.put_env("PUP_TEST_SESSION_ROOT", original_root),
+          else: System.delete_env("PUP_TEST_SESSION_ROOT")
+
+        if original_flag != nil,
+          do: Application.put_env(:code_puppy_control, :allow_test_session_root, original_flag),
+          else: Application.delete_env(:code_puppy_control, :allow_test_session_root)
+
+        File.rm_rf(tmp_a)
+        File.rm_rf(tmp_b)
+      end)
+
+      # Should reject — sibling path is NOT under the allowed root
+      # even though its string representation may share a prefix
+      assert_raise ArgumentError, ~r/outside ~\/\.code_puppy_ex\//, fn ->
+        SessionStorage.base_dir()
+      end
+    end
   end
 end
