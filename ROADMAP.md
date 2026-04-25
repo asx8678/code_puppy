@@ -31,7 +31,8 @@ Prerequisites before launching the Python-to-Elixir port.
 ### Phase A: Port planning formalization
 
 - [x] Write ADR-004: Python-to-Elixir migration strategy (scope, phases, rollback) — see [docs/adr/ADR-004-python-to-elixir-migration-strategy.md](docs/adr/ADR-004-python-to-elixir-migration-strategy.md)
-- [ ] Baseline performance benchmarks (LLM request latency, tool exec overhead)
+- [x] Baseline performance harness (tools) — see [docs/benchmarks/README.md](docs/benchmarks/README.md); offline filesystem primitives measured
+- [ ] Baseline performance (LLM latency) — minimal credential-gated probe implemented; requires PUP_ANTHROPIC_API_KEY or PUP_OPENAI_API_KEY
 - [ ] Dependency graph of Python modules — identify leaf modules (port first) vs hub modules (port last)
 
 ### Phase B: Elixir LLM client
