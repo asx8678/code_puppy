@@ -61,8 +61,21 @@ When `PUP_ANTHROPIC_API_KEY` or `PUP_OPENAI_API_KEY` is set, runs a minimal prob
 
 Without credentials, reports `not_implemented` in JSON output.
 
-See [llm_latency_pending.md](llm_latency_pending.md) for planned streaming benchmarks
-and reproducible test fixtures.
+### 3. Streaming LLM Metrics (Schema & Fixtures)
+
+Offline-safe schema and helpers for streaming TTFT/TBT metrics.
+**No live provider probes yet** — those are planned in code_puppy-axx.
+
+**What exists now:**
+- `scripts/bench_baseline/streaming_fixtures.py` — Deterministic prompt definitions (`short_v1`, `medium_v1`)
+- `scripts/bench_baseline/streaming.py` — `StreamingMetrics` dataclass, `compute_streaming_metrics()`, inter-token gap computation
+- `scripts/bench_baseline/streaming_self_test.py` — Offline self-test coverage
+
+**Key distinction:**
+- **TTFT** (time-to-first-token) = streaming metric, first token arrival
+- **TTFB** (time-to-first-block) = existing non-streaming metric
+
+See [llm_latency_pending.md](llm_latency_pending.md) for the full plan.
 
 ## Existing Benchmarks
 

@@ -12,6 +12,9 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 from scripts.bench_baseline.models import BenchmarkResult, BenchmarkSuite, LatencyStats
+from scripts.bench_baseline.streaming_self_test import (
+    load_streaming_tests as _load_streaming_tests,
+)
 from scripts.bench_baseline.utils import (
     format_stats,
     parse_env_bool,
@@ -492,12 +495,7 @@ class TestSubprocessEnvIsolation(TestHarnessEnvIntegration):
                 "Parent API keys must not leak; LLM bench should report no creds",
             )
         finally:
-            for k in (
-                "PUP_ANTHROPIC_API_KEY",
-                "PUP_OPENAI_API_KEY",
-                "ANTHROPIC_API_KEY",
-                "OPENAI_API_KEY",
-            ):
+            for k in self._SCRUB_EXACT:
                 os.environ.pop(k, None)
 
     def test_explicit_api_key_overrides_scrub(self):
@@ -522,30 +520,19 @@ class TestSubprocessEnvIsolation(TestHarnessEnvIntegration):
 
     def test_sanitized_env_strips_bench_prefix(self):
         """_build_sanitized_env must strip all PUP_BENCH_* prefix vars."""
-        os.environ["PUP_BENCH_QUICK"] = "maybe"
-        os.environ["PUP_BENCH_CATEGORY"] = "bogus"
-        os.environ["PUP_BENCH_OUTPUT"] = "/tmp/should-not-exist.json"
-        os.environ["PUP_BENCH_FUTURE_VAR"] = "whatever"
+        _bench_vars = {
+            "PUP_BENCH_QUICK": "maybe",
+            "PUP_BENCH_CATEGORY": "bogus",
+            "PUP_BENCH_OUTPUT": "/tmp/should-not-exist.json",
+            "PUP_BENCH_FUTURE_VAR": "whatever",
+        }
+        os.environ.update(_bench_vars)
         try:
             env = self._build_sanitized_env({})
-            for key in (
-                "PUP_BENCH_QUICK",
-                "PUP_BENCH_CATEGORY",
-                "PUP_BENCH_OUTPUT",
-                "PUP_BENCH_FUTURE_VAR",
-            ):
-                self.assertNotIn(
-                    key,
-                    env,
-                    f"{key} must be scrubbed from sanitized env",
-                )
+            for key in _bench_vars:
+                self.assertNotIn(key, env, f"{key} must be scrubbed from sanitized env")
         finally:
-            for k in (
-                "PUP_BENCH_QUICK",
-                "PUP_BENCH_CATEGORY",
-                "PUP_BENCH_OUTPUT",
-                "PUP_BENCH_FUTURE_VAR",
-            ):
+            for k in _bench_vars:
                 os.environ.pop(k, None)
 
     def test_sanitized_env_preserves_essentials(self):
@@ -588,9 +575,11 @@ class TestPendingNotImplemented(unittest.TestCase):
 
 
 def run_tests() -> int:
-    """Run all self-tests. Returns 0 on success, 1 on failure."""
+    """Run all self-tests including streaming tests. Returns 0 on success, 1 on failure."""
     loader = unittest.TestLoader()
     suite = loader.loadTestsFromModule(sys.modules[__name__])
+    # Include streaming fixtures/metrics tests from the split module
+    suite.addTest(_load_streaming_tests())
     runner = unittest.TextTestRunner(verbosity=2)
     result = runner.run(suite)
     return 0 if result.wasSuccessful() else 1

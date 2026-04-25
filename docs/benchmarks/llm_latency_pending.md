@@ -52,35 +52,42 @@ python scripts/bench_baseline_harness.py
 The current probe measures only TTFB for single-shot, non-streaming
 requests. Planned improvements (tracked in ROADMAP.md):
 
-### Time-to-First-Token (TTFT)
-- **Definition:** Time from request sent to first token received
+### Time-to-First-Token (TTFT) ✅ Schema implemented
+- **Definition:** Time from request dispatch to first token received (ms)
 - **Why it matters:** User-perceived latency, streaming responsiveness
-- **Requires:** Streaming API integration
+- **Status:** Schema + helpers in `scripts/bench_baseline/streaming.py`
+- **Live probes:** Pending (code_puppy-axx)
 
-### Time-Between-Tokens (TBT)
-- **Definition:** Inter-token latency during streaming
+### Time-Between-Tokens (TBT) ✅ Schema implemented
+- **Definition:** Inter-token latency during streaming (ms)
 - **Why it matters:** Smoothness of streaming experience
-- **Measurement:** Median and P95 of inter-token gaps
+- **Measurement:** LatencyStats (mean, median, p95, p99) of inter-token gaps
+- **Status:** Computed by `compute_inter_token_gaps()` / `compute_streaming_metrics()`
+- **Live probes:** Pending (code_puppy-axx)
 
 ### Cached vs Non-Cached
 - **Definition:** Comparison of cache hit vs miss latencies
 - **Why it matters:** Validates cache effectiveness
 - **Method:** Repeated identical prompts
+- **Status:** Not yet implemented
 
-### Reproducible Test Fixture
+### Reproducible Test Fixture ✅ Implemented
 
-When streaming benchmarks are implemented, they will use deterministic
-prompts:
+Streaming benchmarks use deterministic prompts defined in code:
 
 ```python
-# TODO(code_puppy-xmx): Implement standardized test prompts for streaming
-TEST_PROMPTS = {
-    "short": "Write a one-sentence Python function that adds two numbers.",
-    "medium": "Explain the difference between async/await and threading in Python.",
-    "long": "[100-line code review request]",
-    "tool_calling": "List all files in the current directory.",  # Forces tool use
-}
+from scripts.bench_baseline.streaming_fixtures import SHORT, MEDIUM, get_fixture
+
+# SHORT — minimal prompt, ~1 sentence of code
+assert SHORT.prompt_id == "short_v1"
+
+# MEDIUM — multi-paragraph explanatory prompt
+assert MEDIUM.prompt_id == "medium_v1"
 ```
+
+See `scripts/bench_baseline/streaming_fixtures.py` for the full catalogue.
+All fixtures carry a stable `prompt_id` (format: `<name>_v<n>`) so
+benchmark results can reference the exact prompt without embedding text.
 
 ## Tool Execution Baseline (Always Available)
 
@@ -109,4 +116,4 @@ These establish baseline metrics for:
 - [ADR-004: Migration Strategy](../adr/ADR-004-python-to-elixir-migration-strategy.md)
 - [Baseline Harness](../../scripts/bench_baseline_harness.py)
 - [Benchmarks README](README.md)
-- Issue: code_puppy-xmx
+- Issue: code_puppy-xmx (TTFB probe), code_puppy-sgc (streaming schema/fixtures)
