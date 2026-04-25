@@ -103,7 +103,7 @@ Elixir pup-ex uses a **separate home** from Python pup to prevent config corrupt
 
 ### Isolation enforcement
 
-All file writes go through `CodePuppyControl.Config.Isolation` safe wrappers (`safe_write!`, `safe_mkdir_p!`, `safe_rm!`, `safe_rm_rf!`). Any attempt to write under `~/.code_puppy/` via these wrappers raises `IsolationViolation`. Symlink attacks are blocked via canonical path resolution. **Caveat:** ~8 hardcoded path references still resolve outside `Paths.*` (tracked for Phase 2 cleanup); the isolation guarantee covers code using the `safe_*` API, not every possible I/O path in the codebase.
+New and guarded config write paths use `CodePuppyControl.Config.Isolation` safe wrappers (`safe_write!`, `safe_mkdir_p!`, `safe_rm!`, `safe_rm_rf!`). Any attempt to write under `~/.code_puppy/` via these wrappers raises `IsolationViolation`. Symlink attacks are blocked via canonical path resolution. **Caveat:** ~8 hardcoded `File.*` path references still bypass the `safe_*` API (tracked in ADR-003 Known Hardcoded Violations for Phase 2 cleanup). The isolation guarantee covers code using the `safe_*` API, not every possible I/O path in the codebase.
 
 ## 4. Credentials
 
@@ -253,10 +253,10 @@ Options:
   -v, -V, --version     Show version and exit
   -m, --model MODEL     Model to use (default: from config)
   -a, --agent AGENT     Agent to use (default: code-puppy)
-  -c, --continue        Continue last session
+  -c, --continue        Parsed flag; currently routes to interactive mode (no session restore yet)
   -p, --prompt PROMPT   Execute a single prompt and exit
   -i, --interactive     Run in interactive mode
-  --bridge-mode         Parsed; delegates to Python via CODE_PUPPY_BRIDGE=1
+  --bridge-mode         Parsed; reserved flag with no runtime effect in current Elixir CLI
 ```
 
 ### One-shot prompt (non-interactive)
@@ -325,7 +325,7 @@ Start a REPL with slash commands, model/agent switching, and session management:
 | Symptom | Fix |
 |---------|-----|
 | `mix pup_ex.doctor` shows failures | Re-run `mix pup_ex.import --confirm` to rebuild `~/.code_puppy_ex/` |
-| `IsolationViolation` at runtime | You have code writing to `~/.code_puppy/`. All writes must go through `Isolation.safe_*` wrappers under `PUP_EX_HOME`. |
+| `IsolationViolation` at runtime | Code using `Isolation.safe_*` wrappers attempted to write outside `PUP_EX_HOME`. Guarded write paths must target the Elixir home. |
 | `database is locked` in smoke | Harmless — multiple SQLite pool connections race during the short-lived smoke app start. Does not affect smoke results. |
 | Escript `--version` shows wrong version | Rebuild: `MIX_ENV=prod mix escript.build` |
 | `PUP_HOME` deprecation warnings | Switch to `PUP_EX_HOME`. `PUP_HOME`/`PUPPY_HOME` are deprecated fallbacks used by both Python and Elixir; they will be removed in a future release. |
@@ -338,7 +338,7 @@ Start a REPL with slash commands, model/agent switching, and session management:
 - **`mix pup_ex.auth.login` is scaffolding only.** Full OAuth PKCE flow (ChatGPT, Claude) is not yet implemented.
 - **SQLite lock warnings in smoke.** The smoke task starts the full OTP app briefly; multiple SQLite pool connections may log `database is locked` errors. These are cosmetic and do not affect smoke results.
 - **~8 hardcoded path references** still resolve outside `Paths.*` — tracked in ADR-003, scheduled for Phase 2 cleanup. No new hardcoded paths should be added.
-- **`--bridge-mode`** is parsed by the Elixir CLI but delegates to the Python bridge runtime (`CODE_PUPPY_BRIDGE=1`). It is not an Elixir-native orchestration mode; the former "Mana LiveView TCP bridge" reference was stale and has been removed.
+- **`--bridge-mode`** is parsed by the Elixir CLI as a reserved flag but has **no runtime effect** in the current Elixir CLI — it does not set `CODE_PUPPY_BRIDGE` or delegate to Python. (In the Python CLI, `--bridge-mode` does set `CODE_PUPPY_BRIDGE=1`; the Elixir flag is reserved for future bridge-mode support.)
 - **First-run marker.** After setup, `mix pup_ex.doctor` may note "First-run marker — not initialized yet." This is informational and does not block usage.
 
 ### Running `mix pup_ex.smoke` in CI

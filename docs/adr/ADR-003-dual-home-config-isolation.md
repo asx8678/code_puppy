@@ -92,7 +92,7 @@ There is no config flag to disable it. The guard is always active.
 
 ### Safe Wrappers
 
-All file mutations in Elixir pup-ex MUST go through these wrappers:
+New and guarded config write paths in Elixir pup-ex MUST go through these wrappers:
 
 | Wrapper | Purpose |
 |---------|---------|
@@ -102,7 +102,10 @@ All file mutations in Elixir pup-ex MUST go through these wrappers:
 | `safe_rm_rf!(path)` | Recursive delete; validates target is under Elixir home |
 
 Direct use of `File.write!/2`, `File.mkdir_p!/1`, `File.rm!/1`, or `File.rm_rf!/1` on
-config paths is a **violation of this ADR** and will be caught in code review.
+config paths is a **violation of this ADR** and will be caught in code review. **Caveat:**
+~8 hardcoded `File.*` references still bypass the `safe_*` API (see [Known Hardcoded Violations](#known-hardcoded-violations)).
+These are tracked for Phase 2 cleanup and represent known gaps in the isolation guarantee;
+no new direct `File.*` calls on config paths should be added.
 
 ### Canonical Path Resolution
 
@@ -144,7 +147,7 @@ needing to parse logs.
 
 ## Legacy Env Var Handling
 
-The Python pup's env vars continue to work as before. They are **not** repurposed for Elixir.
+The Python pup's env vars continue to work as before. They are **not adopted as the primary Elixir env var**; `PUP_EX_HOME` is the canonical variable for Elixir isolation. However, `PUP_HOME` and `PUPPY_HOME` are honoured as deprecated fallbacks by both Python and Elixir (Elixir logs a deprecation warning); they will be removed in a future release.
 
 | Env Var | Scope | Behavior |
 |---------|-------|----------|

@@ -17,10 +17,10 @@ defmodule CodePuppyControl.CLI do
     * `-v`, `-V`, `--version` - Show version and exit
     * `-m`, `--model MODEL` - Model to use (default: from config)
     * `-a`, `--agent AGENT` - Agent to use (default: code-puppy)
-    * `-c`, `--continue` - Continue last session
+    * `-c`, `--continue` - Parsed flag; currently routes to interactive mode without session restore
     * `-p`, `--prompt PROMPT` - Execute a single prompt and exit
     * `-i`, `--interactive` - Run in interactive mode
-    * `--bridge-mode` - Enable Mana LiveView TCP bridge
+    * `--bridge-mode` - Parsed flag; reserved for bridge-mode delegation (no runtime effect in current Elixir CLI)
   """
 
   alias CodePuppyControl.CLI.Parser
@@ -63,7 +63,7 @@ defmodule CodePuppyControl.CLI do
 
     * `:one_shot`               — Non-interactive prompt (`-p TEXT` / positional)
     * `:interactive_with_prompt` — Interactive mode with an initial prompt (`-p TEXT -i`)
-    * `:continue_session`       — Continue last session (`-c`)
+    * `:continue_session`       — Parsed flag (`-c`); currently routes to interactive mode without session restore
     * `:interactive_default`     — Plain interactive REPL (no prompt / empty prompt)
   """
   @spec resolve_run_mode(map()) ::
@@ -145,15 +145,15 @@ defmodule CodePuppyControl.CLI do
       -v, -V, --version Show version and exit
       -m, --model MODEL Model to use (default: from config)
       -a, --agent AGENT Agent to use (default: code-puppy)
-      -c, --continue Continue last session
+      -c, --continue Parsed flag; currently routes to interactive mode (no session restore yet)
       -p, --prompt PROMPT Execute a single prompt and exit
       -i, --interactive Run in interactive mode
-      --bridge-mode Enable Mana LiveView TCP bridge
+      --bridge-mode Parsed; reserved (no runtime effect in current Elixir CLI)
 
     Examples:
       pup Start interactive mode
       pup "explain this code" Run single prompt
-      pup -m claude-sonnet -c Continue with specific model
+      pup -m claude-sonnet -c       -c flag parsed (currently same as interactive mode)
 
     For more information: https://github.com/anthropics/code-puppy
     """
