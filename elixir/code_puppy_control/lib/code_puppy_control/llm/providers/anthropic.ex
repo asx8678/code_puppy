@@ -173,18 +173,7 @@ defmodule CodePuppyControl.LLM.Providers.Anthropic do
         content
 
       {tool_calls, nil} when is_list(tool_calls) ->
-        Enum.map(tool_calls, fn tc ->
-          %{
-            "type" => "tool_use",
-            "id" => tc[:id] || tc["id"] || "",
-            "name" => get_in(tc, [:function, :name]) || get_in(tc, ["function", "name"]) || "",
-            "input" =>
-              parse_tool_input(
-                get_in(tc, [:function, :arguments]) || get_in(tc, ["function", "arguments"]) ||
-                  "{}"
-              )
-          }
-        end)
+        to_anthropic_tool_use_blocks(tool_calls)
 
       {nil, tool_call_id} when is_binary(tool_call_id) ->
         [
@@ -198,7 +187,50 @@ defmodule CodePuppyControl.LLM.Providers.Anthropic do
   end
 
   defp format_content(content, _msg) when is_list(content), do: content
-  defp format_content(nil, _msg), do: ""
+
+  # Nil content with tool_calls must emit tool_use blocks (replay fix).
+  # Without this clause, assistant messages from history where content is nil
+  # but tool_calls are present silently return "" — the LLM never sees the
+  # tool invocations and replays them on every turn.
+  defp format_content(nil, msg) do
+    tool_calls = Map.get(msg, :tool_calls) || Map.get(msg, "tool_calls")
+    tool_call_id = Map.get(msg, :tool_call_id) || Map.get(msg, "tool_call_id")
+
+    cond do
+      is_list(tool_calls) and tool_calls != [] ->
+        to_anthropic_tool_use_blocks(tool_calls)
+
+      is_binary(tool_call_id) ->
+        [
+          %{
+            "type" => "tool_result",
+            "tool_use_id" => tool_call_id,
+            "content" => ""
+          }
+        ]
+
+      true ->
+        ""
+    end
+  end
+
+  # Shared conversion: internal tool_call maps → Anthropic tool_use content blocks.
+  # Handles both atom-keyed (%{id, function: %{name, arguments}}) and
+  # string-keyed (#{"id", "function" => #{"name", "arguments"}}) shapes.
+  defp to_anthropic_tool_use_blocks(tool_calls) do
+    Enum.map(tool_calls, fn tc ->
+      %{
+        "type" => "tool_use",
+        "id" => tc[:id] || tc["id"] || "",
+        "name" => get_in(tc, [:function, :name]) || get_in(tc, ["function", "name"]) || "",
+        "input" =>
+          parse_tool_input(
+            get_in(tc, [:function, :arguments]) || get_in(tc, ["function", "arguments"]) ||
+              "{}"
+          )
+      }
+    end)
+  end
 
   defp parse_tool_input(args) when is_binary(args) do
     case Jason.decode(args) do

@@ -683,6 +683,44 @@ defmodule CodePuppyControl.Agent.LLMAdapterMessageConversionTest do
       assert [%{role: "assistant", content: "Just text, no tools"}] =
                ProviderMock.captured_messages()
     end
+
+    test "malformed tool_call maps produce safe placeholder, no crash" do
+      # When message history contains a corrupt tool_call entry (e.g., a bare
+      # string or a map missing required keys), to_provider_tool_call/1's
+      # catch-all clause must return a safe placeholder instead of crashing.
+      msgs = [
+        %{
+          role: "assistant",
+          content: nil,
+          tool_calls: [
+            %{id: "tc-good", name: :good_tool, arguments: %{}},
+            "totally_wrong_shape",
+            %{"missing" => "keys"},
+            42
+          ]
+        }
+      ]
+
+      ProviderMock.set_response(%{id: "r1", content: "ok", tool_calls: []})
+
+      # Must not raise
+      assert {:ok, _} = LLMAdapter.stream_chat(msgs, [], [model: "test"], fn _ -> :ok end)
+
+      [captured] = ProviderMock.captured_messages()
+      assert length(captured.tool_calls) == 4
+
+      # First is the well-formed tool call
+      [tc_good, tc_bogus1, tc_bogus2, tc_bogus3] = captured.tool_calls
+      assert tc_good.function.name == "good_tool"
+
+      # Each malformed entry becomes the safe placeholder
+      for tc <- [tc_bogus1, tc_bogus2, tc_bogus3] do
+        assert tc.id == ""
+        assert tc.type == "function"
+        assert tc.function.name == "unknown"
+        assert tc.function.arguments == "{}"
+      end
+    end
   end
 
   # ===========================================================================

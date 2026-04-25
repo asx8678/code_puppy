@@ -279,6 +279,203 @@ defmodule CodePuppyControl.LLM.Providers.AnthropicTest do
     result
   end
 
+  # ── format_content(nil, msg) replay regression ───────────────────────────
+  #
+  # Tests the bug where assistant messages with content: nil and tool_calls
+  # present silently returned "" instead of emitting Anthropic tool_use blocks.
+  # This caused replay divergence — the LLM never saw the prior tool calls and
+  # re-invoked them on every turn.
+  #
+  # We test through chat/3 (intercepting the request body) because format_message
+  # and format_content are private.
+
+  describe "format_content/2: nil content with tool_calls" do
+    test "nil content + tool_calls emits Anthropic tool_use blocks (not empty string)" do
+      test_pid = self()
+
+      messages = [
+        %{role: "user", content: "Hello"},
+        %{
+          role: "assistant",
+          content: nil,
+          tool_calls: [
+            %{
+              id: "tc-replay-1",
+              type: "function",
+              function: %{name: "read_file", arguments: "{\"path\":\"foo.ex\"}"}
+            }
+          ]
+        }
+      ]
+
+      MockLLMHTTP.register(fn :post, url, opts ->
+        if url =~ "/messages" do
+          body = Jason.decode!(opts[:body])
+          send(test_pid, {:request_body, body})
+
+          {:ok,
+           %{
+             status: 200,
+             body: MockLLMHTTP.anthropic_chat_fixture(),
+             headers: []
+           }}
+        else
+          {:passthrough}
+        end
+      end)
+
+      assert {:ok, _} = Anthropic.chat(messages, [], @opts)
+
+      assert_received {:request_body, body}
+      # 2 messages: user + assistant
+      assert length(body["messages"]) == 2
+
+      assistant_msg = Enum.at(body["messages"], 1)
+      assert assistant_msg["role"] == "assistant"
+      # Must NOT be the empty string ""
+      assert is_list(assistant_msg["content"]),
+             "Expected tool_use blocks list, got: #{inspect(assistant_msg["content"])}"
+
+      [block] = assistant_msg["content"]
+      assert block["type"] == "tool_use"
+      assert block["id"] == "tc-replay-1"
+      assert block["name"] == "read_file"
+      assert block["input"] == %{"path" => "foo.ex"}
+    end
+
+    test "nil content + multiple tool_calls emits all tool_use blocks" do
+      test_pid = self()
+
+      messages = [
+        %{
+          role: "assistant",
+          content: nil,
+          tool_calls: [
+            %{id: "tc-a", type: "function", function: %{name: "tool_a", arguments: "{\"a\":1}"}},
+            %{id: "tc-b", type: "function", function: %{name: "tool_b", arguments: "{\"b\":2}"}}
+          ]
+        }
+      ]
+
+      MockLLMHTTP.register(fn :post, url, opts ->
+        if url =~ "/messages" do
+          body = Jason.decode!(opts[:body])
+          send(test_pid, {:request_body, body})
+
+          {:ok, %{status: 200, body: MockLLMHTTP.anthropic_chat_fixture(), headers: []}}
+        else
+          {:passthrough}
+        end
+      end)
+
+      assert {:ok, _} = Anthropic.chat(messages, [], @opts)
+
+      assert_received {:request_body, body}
+      [assistant_msg] = body["messages"]
+      assert is_list(assistant_msg["content"])
+      assert length(assistant_msg["content"]) == 2
+
+      [block_a, block_b] = assistant_msg["content"]
+      assert block_a["type"] == "tool_use"
+      assert block_a["name"] == "tool_a"
+      assert block_b["type"] == "tool_use"
+      assert block_b["name"] == "tool_b"
+    end
+
+    test "nil content + string-keyed tool_calls still emits tool_use blocks" do
+      test_pid = self()
+
+      messages = [
+        %{
+          "role" => "assistant",
+          "content" => nil,
+          "tool_calls" => [
+            %{
+              "id" => "tc-str",
+              "type" => "function",
+              "function" => %{"name" => "str_tool", "arguments" => "{\"x\":true}"}
+            }
+          ]
+        }
+      ]
+
+      MockLLMHTTP.register(fn :post, url, opts ->
+        if url =~ "/messages" do
+          body = Jason.decode!(opts[:body])
+          send(test_pid, {:request_body, body})
+
+          {:ok, %{status: 200, body: MockLLMHTTP.anthropic_chat_fixture(), headers: []}}
+        else
+          {:passthrough}
+        end
+      end)
+
+      assert {:ok, _} = Anthropic.chat(messages, [], @opts)
+
+      assert_received {:request_body, body}
+      [assistant_msg] = body["messages"]
+      assert is_list(assistant_msg["content"])
+
+      [block] = assistant_msg["content"]
+      assert block["type"] == "tool_use"
+      assert block["id"] == "tc-str"
+      assert block["name"] == "str_tool"
+    end
+
+    test "nil content + tool_call_id emits tool_result with empty string content" do
+      test_pid = self()
+
+      messages = [
+        %{role: "tool", content: nil, tool_call_id: "tc-result-1"}
+      ]
+
+      MockLLMHTTP.register(fn :post, url, opts ->
+        if url =~ "/messages" do
+          body = Jason.decode!(opts[:body])
+          send(test_pid, {:request_body, body})
+
+          {:ok, %{status: 200, body: MockLLMHTTP.anthropic_chat_fixture(), headers: []}}
+        else
+          {:passthrough}
+        end
+      end)
+
+      assert {:ok, _} = Anthropic.chat(messages, [], @opts)
+
+      assert_received {:request_body, body}
+      [tool_msg] = body["messages"]
+      assert is_list(tool_msg["content"])
+
+      [block] = tool_msg["content"]
+      assert block["type"] == "tool_result"
+      assert block["tool_use_id"] == "tc-result-1"
+      assert block["content"] == ""
+    end
+
+    test "nil content with neither tool_calls nor tool_call_id returns empty string" do
+      test_pid = self()
+
+      messages = [%{role: "assistant", content: nil}]
+
+      MockLLMHTTP.register(fn :post, url, opts ->
+        if url =~ "/messages" do
+          body = Jason.decode!(opts[:body])
+          send(test_pid, {:request_body, body})
+
+          {:ok, %{status: 200, body: MockLLMHTTP.anthropic_chat_fixture(), headers: []}}
+        else
+          {:passthrough}
+        end
+      end)
+
+      assert {:ok, _} = Anthropic.chat(messages, [], @opts)
+
+      assert_received {:request_body, body}
+      [assistant_msg] = body["messages"]
+      assert assistant_msg["content"] == ""
+    end
+  end
+
   # ── Extra Headers Tests ─────────────────────────────────────────
 
   describe "extra_headers forwarding" do

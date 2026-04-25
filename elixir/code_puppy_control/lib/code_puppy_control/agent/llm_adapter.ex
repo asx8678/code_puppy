@@ -267,7 +267,15 @@ defmodule CodePuppyControl.Agent.LLMAdapter do
 
   defp encode_arguments(args) when is_binary(args), do: args
 
-  defp encode_arguments(args) when is_map(args), do: Jason.encode!(args)
+  # Defensive: use Jason.encode/1 (returns {:ok, _} | {:error, _}) instead of
+  # Jason.encode!/1 which raises on non-encodable values.  Fallback to "{}"
+  # prevents a single bad map from crashing the entire stream.
+  defp encode_arguments(args) when is_map(args) do
+    case Jason.encode(args) do
+      {:ok, json} -> json
+      {:error, _} -> "{}"
+    end
+  end
 
   defp encode_arguments(_), do: "{}"
 
