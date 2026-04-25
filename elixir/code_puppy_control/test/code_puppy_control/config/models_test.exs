@@ -235,24 +235,16 @@ defmodule CodePuppyControl.Config.ModelsTest do
   end
 
   defp ensure_writer_started do
-    case GenServer.whereis(Writer) do
-      nil ->
-        {:ok, _} = Writer.start_link()
-        :ok
-
-      _pid ->
-        :ok
+    case Writer.start_link() do
+      {:ok, _} -> :ok
+      {:error, {:already_started, _}} -> :ok
     end
   end
 
   defp ensure_registry_started do
-    case GenServer.whereis(CodePuppyControl.ModelRegistry) do
-      nil ->
-        {:ok, _} = CodePuppyControl.ModelRegistry.start_link([])
-        :ok
-
-      _pid ->
-        :ok
+    case CodePuppyControl.ModelRegistry.start_link([]) do
+      {:ok, _} -> :ok
+      {:error, {:already_started, _}} -> :ok
     end
   end
 end
