@@ -422,6 +422,33 @@ async def run_with_mcp(
 
     agent_task = asyncio.create_task(run_agent_task())
 
+    # Set session context on the message bus so emitted messages are
+    # auto-tagged with this run's group_id.
+    try:
+        from code_puppy.messaging import set_session_context
+
+        set_session_context(group_id)
+    except Exception:
+        pass
+
+    # Emit agent_run_started event for the web dashboard.
+    try:
+        from code_puppy.api.redactor import redact_event_data
+        from code_puppy.plugins.frontend_emitter.emitter import emit_event
+
+        emit_event(
+            "agent_run_started",
+            redact_event_data(
+                {
+                    "session_id": group_id,
+                    "agent_name": agent.name,
+                    "model_name": agent.get_model_name(),
+                }
+            ),
+        )
+    except Exception:
+        pass
+
     try:
         await on_agent_run_start(
             agent_name=agent.name,
@@ -476,16 +503,23 @@ async def run_with_mcp(
     run_response_text = ""
 
     try:
-        if cancel_agent_uses_signal():
-            original_handler = signal.signal(signal.SIGINT, keyboard_interrupt_handler)
-        else:
-            original_handler = signal.signal(signal.SIGINT, graceful_sigint_handler)
-            key_listener_stop_event = threading.Event()
-            key_listener_thread = _key_listeners.spawn_key_listener(
-                key_listener_stop_event,
-                on_escape=lambda: None,  # Ctrl+X handled by command_runner
-                on_cancel_agent=schedule_agent_cancel,
-            )
+        # Signal handlers and keyboard-listener threads are only valid in the
+        # main thread.  The integrated web UI runs agents in a worker thread so
+        # the FastAPI event loop can keep serving approvals/WebSockets; in that
+        # mode cancellation is routed through RuntimeManager instead.
+        if threading.current_thread() is threading.main_thread():
+            if cancel_agent_uses_signal():
+                original_handler = signal.signal(
+                    signal.SIGINT, keyboard_interrupt_handler
+                )
+            else:
+                original_handler = signal.signal(signal.SIGINT, graceful_sigint_handler)
+                key_listener_stop_event = threading.Event()
+                key_listener_thread = _key_listeners.spawn_key_listener(
+                    key_listener_stop_event,
+                    on_escape=lambda: None,  # Ctrl+X handled by command_runner
+                    on_cancel_agent=schedule_agent_cancel,
+                )
 
         result = await agent_task
         run_success = True
@@ -502,6 +536,39 @@ async def run_with_mcp(
         run_error = e
         raise
     finally:
+        # Emit agent_run_completed / agent_run_failed / agent_run_cancelled
+        # event for the web dashboard.  Best-effort — never let event
+        # emission errors affect the agent cleanup path.
+        try:
+            from code_puppy.api.redactor import redact_event_data
+            from code_puppy.plugins.frontend_emitter.emitter import emit_event
+
+            if run_success:
+                event_type = "agent_run_completed"
+            elif isinstance(run_error, Exception):
+                event_type = "agent_run_failed"
+            else:
+                event_type = "agent_run_cancelled"
+
+            payload: dict[str, Any] = {
+                "session_id": group_id,
+                "agent_name": agent.name,
+                "model_name": agent.get_model_name(),
+            }
+            if run_error is not None:
+                payload["error"] = str(run_error)
+            emit_event(event_type, redact_event_data(payload))
+        except Exception:
+            pass
+
+        # Clear the message bus session context now the run is over.
+        try:
+            from code_puppy.messaging import set_session_context
+
+            set_session_context(None)
+        except Exception:
+            pass
+
         try:
             await on_agent_run_end(
                 agent_name=agent.name,

@@ -1055,6 +1055,38 @@ def get_user_approval(
 
         puppy_name = get_puppy_name().title()
 
+    # When the integrated web UI is running, route approvals through the
+    # browser instead of blocking on a terminal prompt.  This branch is
+    # intentionally best-effort; if anything goes wrong we fall back to the
+    # original CLI approval flow below.
+    if os.getenv("CODE_PUPPY_WEB_APPROVALS") == "1":
+        try:
+            from code_puppy.api.approvals import request_approval_sync
+
+            content_text = getattr(content, "plain", None)
+            if content_text is None:
+                content_text = str(content)
+
+            if preview:
+                try:
+                    from code_puppy.plugins.file_permission_handler.register_callbacks import (
+                        set_diff_already_shown,
+                    )
+
+                    set_diff_already_shown(True)
+                except ImportError:
+                    pass
+
+            return request_approval_sync(
+                title=title,
+                content=content_text,
+                preview=preview,
+                border_style=border_style,
+                puppy_name=puppy_name,
+            )
+        except Exception:
+            pass
+
     # Build panel content
     if isinstance(content, str):
         panel_content = Text(content)
@@ -1221,6 +1253,38 @@ async def get_user_approval_async(
         from code_puppy.config import get_puppy_name
 
         puppy_name = get_puppy_name().title()
+
+    # When the integrated web UI is running, route approvals through the
+    # browser instead of blocking on a terminal prompt.  This branch is
+    # intentionally best-effort; if anything goes wrong we fall back to the
+    # original CLI approval flow below.
+    if os.getenv("CODE_PUPPY_WEB_APPROVALS") == "1":
+        try:
+            from code_puppy.api.approvals import request_approval_sync
+
+            content_text = getattr(content, "plain", None)
+            if content_text is None:
+                content_text = str(content)
+
+            if preview:
+                try:
+                    from code_puppy.plugins.file_permission_handler.register_callbacks import (
+                        set_diff_already_shown,
+                    )
+
+                    set_diff_already_shown(True)
+                except ImportError:
+                    pass
+
+            return request_approval_sync(
+                title=title,
+                content=content_text,
+                preview=preview,
+                border_style=border_style,
+                puppy_name=puppy_name,
+            )
+        except Exception:
+            pass
 
     # Build panel content
     if isinstance(content, str):
