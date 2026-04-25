@@ -30,7 +30,7 @@ Prerequisites before launching the Python-to-Elixir port.
 
 ### Phase A: Port planning formalization
 
-- [ ] Write ADR-004: Python-to-Elixir migration strategy (scope, phases, rollback)
+- [x] Write ADR-004: Python-to-Elixir migration strategy (scope, phases, rollback) — see [docs/adr/ADR-004-python-to-elixir-migration-strategy.md](docs/adr/ADR-004-python-to-elixir-migration-strategy.md)
 - [ ] Baseline performance benchmarks (LLM request latency, tool exec overhead)
 - [ ] Dependency graph of Python modules — identify leaf modules (port first) vs hub modules (port last)
 
