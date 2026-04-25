@@ -559,12 +559,31 @@ defmodule CodePuppyControl.Agent.Loop do
   end
 
   defp finalize_turn(state, turn, turn_number) do
-    # Append accumulated text to messages as assistant response
+    # Build the assistant message for this turn.
+    #
+    # Provider APIs require that tool-result messages are preceded by an
+    # assistant message containing the tool_calls that initiated them.
+    # Previously we only appended assistant text, which omitted the required
+    # assistant(tool_calls) message for tool-call-only turns — breaking
+    # conversation history replay on subsequent LLM turns.
     messages =
-      if turn.accumulated_text != "" do
-        state.messages ++ [%{role: "assistant", content: turn.accumulated_text}]
-      else
-        state.messages
+      cond do
+        turn.pending_tool_calls != [] ->
+          # Tool calls present: always emit assistant message with tool_calls.
+          # Content is nil when the LLM emitted only tool calls (no text).
+          assistant_msg = %{
+            role: "assistant",
+            content: if(turn.accumulated_text != "", do: turn.accumulated_text),
+            tool_calls: turn.pending_tool_calls
+          }
+
+          state.messages ++ [assistant_msg]
+
+        turn.accumulated_text != "" ->
+          state.messages ++ [%{role: "assistant", content: turn.accumulated_text}]
+
+        true ->
+          state.messages
       end
 
     # Dispatch tool calls and collect results
