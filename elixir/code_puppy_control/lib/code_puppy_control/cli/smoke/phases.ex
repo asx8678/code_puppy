@@ -303,55 +303,198 @@ defmodule CodePuppyControl.CLI.Smoke.Phases do
         }
 
       path ->
-        run_escript_probe(path)
+        probe_packaged_cli(:escript, path)
     end
   end
 
-  defp run_escript_probe(path) do
-    case System.cmd(path, ["--version"],
-           stderr_to_stdout: true,
-           env: [
-             {"PUP_EX_HOME", System.get_env("PUP_EX_HOME") || ""},
-             {"PUP_SMOKE_PROBE", "1"}
-           ]
-         ) do
-      {output, 0} ->
-        if output =~ "code-puppy" do
-          %{
-            phase: :escript,
-            status: :pass,
-            detail: "escript --version exited 0; output mentions code-puppy",
-            metrics: %{path: path, bytes: byte_size(output)}
-          }
-        else
-          %{
-            phase: :escript,
-            status: :fail,
-            detail:
-              "escript --version exited 0 but output missing 'code-puppy' marker " <>
-                "(got #{inspect(String.slice(output, 0, 80))})",
-            metrics: %{path: path}
-          }
+  # ── Phase: burrito (opt-in) ───────────────────────────────────────────
+
+  # Burrito drops binaries under `burrito_out/<release_name>_<target>` after
+  # `MIX_ENV=prod mix release`.  Building Burrito artifacts requires Zig and
+  # is expensive; this phase is opt-in and skips deterministically when no
+  # artifact is present, so CI without a Zig toolchain stays green.
+  #
+  # Refs: code_puppy-d7m
+  @doc false
+  @spec burrito() :: phase_result()
+  def burrito do
+    case find_burrito_artifact() do
+      {:ok, path} ->
+        probe_packaged_cli(:burrito, path)
+
+      {:skip, reason, metrics} ->
+        %{
+          phase: :burrito,
+          status: :skip,
+          detail: reason,
+          metrics: metrics
+        }
+    end
+  end
+
+  # Locate a Burrito-built binary for the host or any target.  Returns:
+  #
+  #   * `{:ok, path}`           — found a regular file we can probe
+  #   * `{:skip, reason, m}`    — no artifact / dir missing; phase should skip
+  #
+  # Searches in this order so the host artifact is preferred over
+  # cross-compiled siblings (host artifact is the only one we can actually
+  # exec on the smoke runner):
+  #
+  #   1. `burrito_out/code_puppy_control_<host_target>` for the detected host
+  #   2. Any `burrito_out/code_puppy_control_*` regular file (last-resort)
+  defp find_burrito_artifact do
+    burrito_dir = Path.join(File.cwd!(), "burrito_out")
+
+    cond do
+      not File.dir?(burrito_dir) ->
+        {:skip,
+         "no `burrito_out/` directory — build host-only with " <>
+           "`scripts/build-burrito.sh --host-only` (requires Zig)", %{burrito_dir: burrito_dir}}
+
+      true ->
+        host_target = detect_host_target()
+        host_candidate = Path.join(burrito_dir, "code_puppy_control_#{host_target}")
+
+        cond do
+          File.regular?(host_candidate) ->
+            {:ok, host_candidate}
+
+          true ->
+            case list_any_burrito_binary(burrito_dir) do
+              {:ok, path} ->
+                {:ok, path}
+
+              :none ->
+                {:skip,
+                 "no `code_puppy_control_*` artifact found in #{burrito_dir} — " <>
+                   "build host-only with `scripts/build-burrito.sh --host-only`",
+                 %{burrito_dir: burrito_dir, host_target: host_target}}
+            end
+        end
+    end
+  end
+
+  defp list_any_burrito_binary(burrito_dir) do
+    burrito_dir
+    |> File.ls()
+    |> case do
+      {:ok, names} ->
+        names
+        |> Enum.filter(&String.starts_with?(&1, "code_puppy_control_"))
+        |> Enum.map(&Path.join(burrito_dir, &1))
+        |> Enum.find(&File.regular?/1)
+        |> case do
+          nil -> :none
+          path -> {:ok, path}
         end
 
-      {output, exit_status} ->
+      _ ->
+        :none
+    end
+  end
+
+  # Map the running BEAM's host (os, arch) to a Burrito target name as
+  # configured in `mix.exs`.  Best-effort — falls back to `host` if we
+  # can't recognise the platform, and the caller will then look for
+  # any matching artifact.
+  defp detect_host_target do
+    {os_family, _os_name} = :os.type()
+    arch = :erlang.system_info(:system_architecture) |> List.to_string()
+
+    case {os_family, arch} do
+      {:unix, "aarch64-apple" <> _} -> "macos_arm64"
+      {:unix, "arm64-apple" <> _} -> "macos_arm64"
+      {:unix, "x86_64-apple" <> _} -> "macos_x86_64"
+      {:unix, "aarch64" <> _} -> "linux_arm64"
+      {:unix, "x86_64" <> _} -> "linux_x86_64"
+      {:win32, _} -> "windows_x86_64"
+      _ -> "host"
+    end
+  end
+
+  # ── Shared probe helper ───────────────────────────────────────────────
+
+  # Run the canonical no-network smoke probes against a packaged CLI
+  # binary (escript or Burrito).  Both probes are deterministic and
+  # touch zero network/auth state:
+  #
+  #   1. `--version`  must exit 0 and contain the marker `code-puppy`.
+  #   2. `--help`     must exit 0 and contain the markers
+  #                   `Usage: pup [OPTIONS] [PROMPT]` and `--prompt`.
+  #
+  # Always invokes the binary with the active `PUP_EX_HOME` (so any
+  # accidental config touch lands in the smoke sandbox, NEVER
+  # `~/.code_puppy_ex/`) and `PUP_SMOKE_PROBE=1` so callees can
+  # detect-and-shortcircuit if they ever need to.
+  defp probe_packaged_cli(phase, path) do
+    env = packaged_cli_env()
+
+    with {:version, {ver_out, 0}} <-
+           {:version, System.cmd(path, ["--version"], stderr_to_stdout: true, env: env)},
+         true <- ver_out =~ "code-puppy" || {:fail, :version_marker_missing, ver_out},
+         {:help, {help_out, 0}} <-
+           {:help, System.cmd(path, ["--help"], stderr_to_stdout: true, env: env)},
+         true <-
+           help_out =~ "Usage: pup [OPTIONS] [PROMPT]" ||
+             {:fail, :help_usage_missing, help_out},
+         true <- help_out =~ "--prompt" || {:fail, :help_prompt_flag_missing, help_out} do
+      %{
+        phase: phase,
+        status: :pass,
+        detail: "#{phase} --version and --help exited 0 with stable markers",
+        metrics: %{
+          path: path,
+          version_bytes: byte_size(ver_out),
+          help_bytes: byte_size(help_out)
+        }
+      }
+    else
+      {:version, {output, exit_status}} ->
         %{
-          phase: :escript,
+          phase: phase,
           status: :fail,
           detail:
-            "escript --version exited #{exit_status}: " <>
+            "#{phase} --version exited #{exit_status}: " <>
               inspect(String.slice(output, 0, 120)),
-          metrics: %{path: path, exit_status: exit_status}
+          metrics: %{path: path, exit_status: exit_status, probe: "--version"}
+        }
+
+      {:help, {output, exit_status}} ->
+        %{
+          phase: phase,
+          status: :fail,
+          detail:
+            "#{phase} --help exited #{exit_status}: " <>
+              inspect(String.slice(output, 0, 120)),
+          metrics: %{path: path, exit_status: exit_status, probe: "--help"}
+        }
+
+      {:fail, reason, output} ->
+        %{
+          phase: phase,
+          status: :fail,
+          detail:
+            "#{phase} probe missing marker (#{reason}); first 120 bytes: " <>
+              inspect(String.slice(output, 0, 120)),
+          metrics: %{path: path, reason: reason}
         }
     end
   rescue
     err ->
       %{
-        phase: :escript,
+        phase: phase,
         status: :fail,
-        detail: "escript probe raised #{inspect(err.__struct__)}: #{Exception.message(err)}",
+        detail: "#{phase} probe raised #{inspect(err.__struct__)}: #{Exception.message(err)}",
         metrics: %{path: path}
       }
+  end
+
+  defp packaged_cli_env do
+    [
+      {"PUP_EX_HOME", System.get_env("PUP_EX_HOME") || ""},
+      {"PUP_SMOKE_PROBE", "1"}
+    ]
   end
 
   # ── Helpers ───────────────────────────────────────────────────────────

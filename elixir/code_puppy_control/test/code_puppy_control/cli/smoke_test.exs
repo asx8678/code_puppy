@@ -39,6 +39,12 @@ defmodule CodePuppyControl.CLI.SmokeTest do
       assert :sandbox in Smoke.default_phases()
       assert :one_shot in Smoke.default_phases()
     end
+
+    # Refs: code_puppy-d7m
+    test "burrito is an opt-in phase, not a default" do
+      assert :burrito in Smoke.all_phases(), "burrito phase must exist (opt-in)"
+      assert :burrito not in Smoke.default_phases(), "burrito must be opt-in, not default"
+    end
   end
 
   # ---------------------------------------------------------------------------
@@ -180,8 +186,10 @@ defmodule CodePuppyControl.CLI.SmokeTest do
 
         :pass ->
           # Surprise: someone built pup before running tests.  That's
-          # fine — just assert the canonical pass detail shape.
-          assert phase.detail =~ "code-puppy"
+          # fine — just assert the canonical pass detail shape produced
+          # by the shared probe helper (refs: code_puppy-d7m).
+          assert phase.detail =~ "--version"
+          assert phase.detail =~ "--help"
 
         other ->
           flunk("unexpected escript phase status #{inspect(other)}: #{inspect(phase)}")
@@ -192,6 +200,60 @@ defmodule CodePuppyControl.CLI.SmokeTest do
       result = Smoke.run([])
       escript_phase = Enum.find(result.phases, &(&1.phase == :escript))
       assert escript_phase == nil
+    end
+  end
+
+  # ---------------------------------------------------------------------------
+  # burrito phase (opt-in) — code_puppy-d7m
+  # ---------------------------------------------------------------------------
+
+  describe "phase: burrito" do
+    # The default test environment never builds Burrito artifacts (Zig is
+    # not part of `mix deps.get`), so the contract this exercises is the
+    # deterministic skip path: if `burrito_out/` is missing or empty,
+    # the phase reports `:skip` with a build hint — it does NOT fail and
+    # does NOT crash the smoke runner.
+    test "skips deterministically when no burrito artifact is present" do
+      result = Smoke.run(phases: [:burrito], burrito: true)
+
+      [phase] = result.phases
+      assert phase.phase == :burrito
+
+      case phase.status do
+        :skip ->
+          assert phase.detail =~ "burrito_out" or phase.detail =~ "code_puppy_control_",
+                 "skip reason should reference burrito_out or the artifact prefix; " <>
+                   "got: #{phase.detail}"
+
+          assert phase.detail =~ "build host-only",
+                 "skip reason should give a remediation hint; got: #{phase.detail}"
+
+        :pass ->
+          # If burrito_out happens to exist with a host artifact (e.g. a
+          # developer ran `scripts/build-burrito.sh --host-only` before
+          # tests), the phase still has to honour its contract: pass
+          # markers must be stable.
+          assert phase.detail =~ "--version"
+          assert phase.detail =~ "--help"
+
+        other ->
+          flunk("unexpected burrito phase status #{inspect(other)}: #{inspect(phase)}")
+      end
+    end
+
+    test "is excluded from default phases" do
+      result = Smoke.run([])
+      burrito_phase = Enum.find(result.phases, &(&1.phase == :burrito))
+      assert burrito_phase == nil
+    end
+
+    # Sanity check on the runner-level opt: requesting `:burrito` via
+    # the keyword opt should produce a phase entry, identical to passing
+    # it via `:phases`.
+    test "burrito: true keyword opt appends the phase" do
+      result = Smoke.run(burrito: true, phases: [:parser])
+      assert Enum.any?(result.phases, &(&1.phase == :burrito))
+      assert Enum.any?(result.phases, &(&1.phase == :parser))
     end
   end
 
@@ -331,6 +393,11 @@ defmodule CodePuppyControl.CLI.SmokeTest do
 
   describe "Smoke.MockLLM" do
     test "implements Agent.LLM behaviour" do
+      # `function_exported?/3` returns false on a not-yet-loaded module;
+      # ensure the module is loaded before introspecting (test seed order
+      # otherwise leaves this depending on whether an earlier test happened
+      # to invoke MockLLM first).
+      assert Code.ensure_loaded?(MockLLM)
       assert function_exported?(MockLLM, :stream_chat, 4)
     end
 
