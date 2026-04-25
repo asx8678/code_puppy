@@ -1,6 +1,8 @@
 """Tests for code_puppy/api/websocket.py."""
 
 import asyncio
+import tempfile
+from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -49,6 +51,7 @@ async def test_ws_events(app) -> None:
             return_value=recent,
             create=True,
         ),
+        patch("code_puppy.api.websocket.verify_token", return_value=True, create=True),
     ):
         with TestClient(app) as client:
             with client.websocket_connect("/ws/events") as ws:
@@ -115,6 +118,7 @@ async def test_ws_events_ping_on_timeout(app) -> None:
             return_value=[],
             create=True,
         ),
+        patch("code_puppy.api.websocket.verify_token", return_value=True, create=True),
         patch(
             "asyncio.wait_for",
             side_effect=[asyncio.TimeoutError, asyncio.CancelledError],
@@ -127,3 +131,44 @@ async def test_ws_events_ping_on_timeout(app) -> None:
                     assert data["type"] == "ping"
             except Exception:
                 pass  # Connection closes after ping
+
+
+@pytest.mark.asyncio
+async def test_ws_events_rejects_no_token() -> None:
+    """WS /ws/events rejects unauthenticated connections."""
+    from starlette.testclient import TestClient
+
+    app = create_app()
+    with tempfile.TemporaryDirectory() as tmpdir:
+        with (
+            patch(
+                "code_puppy.api.auth._token_path",
+                return_value=Path(tmpdir) / "rt",
+            ),
+            patch(
+                "code_puppy.api.websocket.verify_token", return_value=False, create=True
+            ),
+        ):
+            with TestClient(app) as client:
+                with pytest.raises(Exception):
+                    # Connection should be closed/rejected
+                    with client.websocket_connect("/ws/events"):
+                        pass
+
+
+@pytest.mark.asyncio
+async def test_ws_events_rejects_cross_origin() -> None:
+    """WS /ws/events rejects cross-origin connections."""
+    from starlette.testclient import TestClient
+
+    app = create_app()
+    with patch(
+        "code_puppy.api.websocket.validate_ws_origin", return_value=False, create=True
+    ):
+        with TestClient(app) as client:
+            with pytest.raises(Exception):
+                with client.websocket_connect(
+                    "/ws/events",
+                    headers={"origin": "https://evil.com"},
+                ) as _:
+                    pass
