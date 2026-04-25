@@ -7,6 +7,7 @@ import time
 from typing import Any
 
 from .models import BenchmarkResult, LatencyStats
+from .streaming_probes import StreamingProbes
 
 
 class LLMLatencyBenchmarks:
@@ -149,7 +150,7 @@ class LLMLatencyBenchmarks:
         )
 
     def run_all(self) -> tuple[list[BenchmarkResult], list[str]]:
-        """Run all LLM benchmarks.
+        """Run all LLM benchmarks (non-streaming + streaming).
 
         Returns:
             Tuple of (results, not_implemented_list).
@@ -171,6 +172,10 @@ class LLMLatencyBenchmarks:
             print('     export PUP_ANTHROPIC_API_KEY="sk-ant-..."')
             print("     python scripts/bench_baseline_harness.py --category llm")
             not_implemented.append("llm_latency_no_credentials")
+            # Also run streaming probes (will report no credentials)
+            streaming = StreamingProbes(self.mode, timeout=self.timeout)
+            _, stream_ni = streaming.run_all()
+            not_implemented.extend(stream_ni)
             return results, not_implemented
 
         # Try Anthropic
@@ -197,5 +202,11 @@ class LLMLatencyBenchmarks:
 
         if not results:
             not_implemented.append("llm_latency_all_probes_failed")
+
+        # Run streaming TTFT/TBT probes
+        streaming = StreamingProbes(self.mode, timeout=self.timeout)
+        stream_results, stream_ni = streaming.run_all()
+        results.extend(stream_results)
+        not_implemented.extend(stream_ni)
 
         return results, not_implemented

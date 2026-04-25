@@ -200,9 +200,11 @@ def main() -> int:
 
     tools_count = sum(1 for r in suite.results if r.category == "tool_execution")
     llm_count = sum(1 for r in suite.results if r.category == "llm_latency")
+    llm_streaming_count = sum(1 for r in suite.results if r.category == "llm_streaming")
 
     print(f"  - Tool execution: {tools_count}")
     print(f"  - LLM latency: {llm_count}")
+    print(f"  - LLM streaming: {llm_streaming_count}")
 
     if suite.failed_benchmarks:
         print(f"\nFailed benchmarks: {len(suite.failed_benchmarks)}")
