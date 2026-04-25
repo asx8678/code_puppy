@@ -99,12 +99,12 @@ These are style differences, not feature gaps.
 
 Original: 8 weeks → **Revised: 2-3 weeks**
 
-| Week | Action |
-|------|--------|
-| 1 | Add `PUP_TUI_DEPRECATED=1` warning |
-| 2 | Remove `textual>=8.2.1` from deps |
-| 2 | Delete `tui/` directory (227 KB) |
-| 3 | Update docs |
+| Week | Action | Status |
+|------|--------|--------|
+| 1 | Add `PUP_TUI_DEPRECATED=1` warning | ✅ DONE (code_puppy-k29) |
+| 2 | Remove `textual>=8.2.1` from deps | ⬜ |
+| 2 | Delete `tui/` directory (227 KB) | ⬜ |
+| 3 | Update docs | ⬜ |
 
 ---
 
