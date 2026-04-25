@@ -10,9 +10,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-# Add parent directory to path for imports
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
-
 from scripts.bench_baseline.models import BenchmarkResult, BenchmarkSuite, LatencyStats
 from scripts.bench_baseline.utils import (
     format_stats,
@@ -110,9 +108,8 @@ class TestTimeFunction(unittest.TestCase):
     def test_timeout_exceeded_returns_failure_not_exit(self):
         """Operation exceeding timeout should return failures, not kill process.
 
-        This is the critical self-test: signal.alarm() without a handler causes
-        exit 142. With a proper handler, the process survives and records a
-        TimeoutError failure instead.
+        signal.alarm() without a handler causes exit 142. With a proper
+        handler the process survives and records a TimeoutError instead.
         """
         import time
 
@@ -138,11 +135,7 @@ class TestTimeFunction(unittest.TestCase):
         "SIGALRM not available on this platform",
     )
     def test_timeout_survives_after_timeout(self):
-        """Process must continue normally after a timeout — not exit 142.
-
-        Verifies that signal handler/timer are properly restored so
-        subsequent operations work correctly.
-        """
+        """Process must continue normally after a timeout \u2014 not exit 142."""
         import time
 
         def slow_op():
@@ -335,12 +328,40 @@ class TestHarnessEnvIntegration(unittest.TestCase):
     """Integration tests: exercise actual harness with env vars via subprocess."""
 
     _HARNESS = str(Path(__file__).parent.parent / "bench_baseline_harness.py")
+    # Vars to scrub from inherited env so parent leaks don't poison child
+    _SCRUB_PREFIXES = ("PUP_BENCH_",)
+    _SCRUB_EXACT = frozenset(
+        {
+            "PUP_ANTHROPIC_API_KEY",
+            "PUP_OPENAI_API_KEY",
+            "ANTHROPIC_API_KEY",
+            "OPENAI_API_KEY",
+        }
+    )
+
+    def _build_sanitized_env(self, env_extra: dict[str, str]) -> dict[str, str]:
+        """Build a sanitized env for subprocess tests.
+
+        Strips PUP_BENCH_* and API-key variables from inherited env so
+        parent's env cannot influence integration test assertions.
+        Only variables explicitly passed in *env_extra* are included.
+        Essential vars (PATH, HOME, UV cache dirs, etc.) are preserved.
+        """
+        env = os.environ.copy()
+        # Remove PUP_BENCH_* prefix vars
+        to_remove = [k for k in env if k.startswith(self._SCRUB_PREFIXES)]
+        # Remove API key vars
+        to_remove.extend(k for k in self._SCRUB_EXACT if k in env)
+        for k in to_remove:
+            del env[k]
+        # Overlay explicit test env vars
+        env.update(env_extra)
+        return env
 
     def _run_harness(
         self, env_extra: dict[str, str], extra_args: list[str] | None = None
     ) -> subprocess.CompletedProcess[str]:  # type: ignore[type-arg]
-        env = os.environ.copy()
-        env.update(env_extra)
+        env = self._build_sanitized_env(env_extra)
         cmd = [sys.executable, self._HARNESS]
         if extra_args:
             cmd.extend(extra_args)
@@ -405,6 +426,139 @@ class TestHarnessEnvIntegration(unittest.TestCase):
             self.assertEqual(len(data["results"]), 1)
         finally:
             Path(path).unlink(missing_ok=True)
+
+
+class TestSubprocessEnvIsolation(TestHarnessEnvIntegration):
+    """Verify parent env vars do NOT leak into subprocess integration tests.
+
+    Inherits _build_sanitized_env / _run_harness from
+    TestHarnessEnvIntegration.  Each test deliberately pollutes the current
+    process's environment with bogus values, then asserts the subprocess
+    is unaffected.
+    """
+
+    def test_parent_bogus_category_does_not_break_harness(self):
+        """Parent PUP_BENCH_CATEGORY=bogus must not break subprocess harness.
+
+        The --self-test path short-circuits before env validation, so
+        it's naturally immune. The real danger is normal harness
+        invocations. _build_sanitized_env scrubs the bogus value.
+        """
+        os.environ["PUP_BENCH_CATEGORY"] = "bogus"
+        try:
+            # --category llm with no API keys -> quick exit, no live LLM
+            proc = self._run_harness({}, ["--category", "llm"])
+            self.assertEqual(
+                proc.returncode,
+                0,
+                f"Harness must succeed with parent PUP_BENCH_CATEGORY=bogus\n"
+                f"stderr: {proc.stderr}\nstdout: {proc.stdout}",
+            )
+            # Child must see CLI arg, not crash on parent's bogus env
+            self.assertIn("Category: llm", proc.stdout)
+        finally:
+            os.environ.pop("PUP_BENCH_CATEGORY", None)
+
+    def test_parent_invalid_quick_does_not_break_harness(self):
+        """Parent PUP_BENCH_QUICK=maybe must not break subprocess harness."""
+        os.environ["PUP_BENCH_QUICK"] = "maybe"
+        try:
+            proc = self._run_harness({}, ["--category", "llm"])
+            self.assertEqual(
+                proc.returncode,
+                0,
+                f"Harness must succeed even with parent PUP_BENCH_QUICK=maybe\n"
+                f"stderr: {proc.stderr}\nstdout: {proc.stdout}",
+            )
+            # The child must see 'full' mode (no --quick, no env var)
+            self.assertIn("Mode: full", proc.stdout)
+        finally:
+            os.environ.pop("PUP_BENCH_QUICK", None)
+
+    def test_parent_api_keys_not_inherited(self):
+        """Parent API keys must not leak into subprocess env."""
+        # Inject dummy API keys into parent env
+        os.environ["PUP_ANTHROPIC_API_KEY"] = "dummy-ant"
+        os.environ["PUP_OPENAI_API_KEY"] = "dummy-oai"
+        os.environ["ANTHROPIC_API_KEY"] = "dummy-ant2"
+        os.environ["OPENAI_API_KEY"] = "dummy-oai2"
+        try:
+            # Run harness with --category llm but NO keys in env_extra
+            proc = self._run_harness({}, ["--category", "llm"])
+            # Must NOT attempt live LLM — should report no credentials
+            self.assertIn(
+                "No credentials found",
+                proc.stdout,
+                "Parent API keys must not leak; LLM bench should report no creds",
+            )
+        finally:
+            for k in (
+                "PUP_ANTHROPIC_API_KEY",
+                "PUP_OPENAI_API_KEY",
+                "ANTHROPIC_API_KEY",
+                "OPENAI_API_KEY",
+            ):
+                os.environ.pop(k, None)
+
+    def test_explicit_api_key_overrides_scrub(self):
+        """API keys explicitly passed in env_extra should reach the subprocess."""
+        # This test verifies that explicit passing still works after scrub
+        os.environ["PUP_ANTHROPIC_API_KEY"] = "parent-leak-key"
+        try:
+            # Pass a DIFFERENT key explicitly
+            proc = self._run_harness(
+                {"PUP_ANTHROPIC_API_KEY": "explicit-test-key"},
+                ["--category", "llm"],
+            )
+            # The explicit key is passed, so harness should see credentials
+            # (it may fail the API call, but it should not say "no credentials")
+            self.assertNotIn(
+                "No credentials found",
+                proc.stdout,
+                "Explicitly passed API key should not be scrubbed",
+            )
+        finally:
+            os.environ.pop("PUP_ANTHROPIC_API_KEY", None)
+
+    def test_sanitized_env_strips_bench_prefix(self):
+        """_build_sanitized_env must strip all PUP_BENCH_* prefix vars."""
+        os.environ["PUP_BENCH_QUICK"] = "maybe"
+        os.environ["PUP_BENCH_CATEGORY"] = "bogus"
+        os.environ["PUP_BENCH_OUTPUT"] = "/tmp/should-not-exist.json"
+        os.environ["PUP_BENCH_FUTURE_VAR"] = "whatever"
+        try:
+            env = self._build_sanitized_env({})
+            for key in (
+                "PUP_BENCH_QUICK",
+                "PUP_BENCH_CATEGORY",
+                "PUP_BENCH_OUTPUT",
+                "PUP_BENCH_FUTURE_VAR",
+            ):
+                self.assertNotIn(
+                    key,
+                    env,
+                    f"{key} must be scrubbed from sanitized env",
+                )
+        finally:
+            for k in (
+                "PUP_BENCH_QUICK",
+                "PUP_BENCH_CATEGORY",
+                "PUP_BENCH_OUTPUT",
+                "PUP_BENCH_FUTURE_VAR",
+            ):
+                os.environ.pop(k, None)
+
+    def test_sanitized_env_preserves_essentials(self):
+        """_build_sanitized_env must preserve PATH, HOME, UV cache vars."""
+        # Ensure at least one essential var exists in parent
+        self.assertIn("PATH", os.environ, "PATH must exist in env")
+        env = self._build_sanitized_env({})
+        self.assertIn("PATH", env, "PATH must survive sanitization")
+        if "HOME" in os.environ:
+            self.assertIn("HOME", env, "HOME must survive sanitization")
+        for uv_var in ("UV_CACHE_DIR", "UV_DATA_DIR", "UV_TOOL_DIR"):
+            if uv_var in os.environ:
+                self.assertIn(uv_var, env, f"{uv_var} must survive sanitization")
 
 
 class TestPendingNotImplemented(unittest.TestCase):
