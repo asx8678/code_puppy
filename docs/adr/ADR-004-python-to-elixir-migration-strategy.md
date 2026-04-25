@@ -85,12 +85,16 @@ The migration proceeds in 8 phases (0 → H), with Python remaining functional t
 
 Port the model layer to Elixir-native implementation.
 
-- Port `code_puppy/model_factory.py` — provider registry
+- ✅ Port `code_puppy/model_factory.py` — provider registry (e0a481dc ProviderRegistry core merge + c2a5738f ModelFactory integration merge)
+  - `CodePuppyControl.ModelFactory.ProviderRegistry` — Agent-backed concurrency-safe `%{type => module}` registry
+  - `ModelFactory.provider_module_for_type/1` now delegates to `ProviderRegistry.lookup/1`
+  - `lookup_provider/1` preserves `:error` fallback for non-binary types
+  - Tests cover: runtime register/override, `reset_for_test/0`, `list_available/0`, `resolve/1`, malformed non-binary type rejection, provider-map parity (110 model_factory tests + 29 LLM/parity tests pass)
 - Port `code_puppy/messaging/*` — message types and serialization
 - Elixir-native streaming HTTP client (OpenAI, Anthropic, local models)
 - Tool-call dispatch plumbing
 
-**Exit criteria**: Elixir can make LLM requests without Python proxy; unit tests pass.
+**Exit criteria**: Elixir can make LLM requests without Python proxy; unit tests pass. Provider registry subitem is complete; remaining items still open.
 
 ### Phase C: Base Agent Port
 
