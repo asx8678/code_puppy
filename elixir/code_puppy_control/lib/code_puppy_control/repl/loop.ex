@@ -93,7 +93,8 @@ defmodule CodePuppyControl.REPL.Loop do
   """
   @spec run(map()) :: :ok
   def run(opts) when is_map(opts) do
-    agent = Map.get(opts, :agent, "code-puppy")
+    # Use || so that explicit nil from CLI parser falls back to default.
+    agent = opts[:agent] || "code-puppy"
     model = Map.get(opts, :model) || Models.global_model_name()
     session_id = Map.get(opts, :session_id) || generate_session_id()
 
@@ -110,54 +111,6 @@ defmodule CodePuppyControl.REPL.Loop do
 
     print_welcome(state)
     do_loop(state)
-  end
-
-  # ── One-Shot Runner ────────────────────────────────────────────────────
-
-  @doc """
-  Execute a single prompt in one-shot mode and return.
-
-  Constructs a REPL state from the given opts, dispatches the prompt
-  through the existing `send_to_agent/2` pipeline (which uses
-  `Dispatch.dispatch_after_append/4` for rendering, agent-loop execution,
-  message persistence, and autosave), then returns `:ok` or `:error`.
-
-  Unlike `run/1`, this does NOT start the interactive loop or print
-  a welcome banner.
-
-  ## Options
-
-    * `:prompt` — The user prompt text (required)
-    * `:model` — Model override (default: from config)
-    * `:agent` — Agent name (default: "code-puppy")
-    * `:session_id` — Session identifier (default: generated)
-
-  ## Returns
-
-    * `:ok` — Prompt dispatched and response persisted/autosaved
-    * `:error` — Dispatch failed (unknown agent, LLM error, etc.)
-  """
-  @spec run_one_shot(map()) :: :ok | :error
-  def run_one_shot(opts) when is_map(opts) do
-    agent = Map.get(opts, :agent, "code-puppy")
-    model = Map.get(opts, :model) || Models.global_model_name()
-    session_id = Map.get(opts, :session_id) || generate_session_id()
-    prompt = Map.fetch!(opts, :prompt)
-
-    state = %__MODULE__{
-      agent: agent,
-      model: model,
-      session_id: session_id,
-      running: true
-    }
-
-    # Reuse the full dispatch pipeline (resolve → ensure state →
-    # append → dispatch → persist → autosave) without starting
-    # the interactive loop.
-    case send_to_agent(prompt, state) do
-      :ok -> :ok
-      :error -> :error
-    end
   end
 
   @doc """
@@ -455,9 +408,7 @@ defmodule CodePuppyControl.REPL.Loop do
 
   # ── Agent Prompt Dispatch ─────────────────────────────────────────────────
 
-  @doc false
-  # Public for one-shot runner; also called by handle_input/2.
-  def send_to_agent(prompt, state) do
+  defp send_to_agent(prompt, state) do
     Logger.debug("REPL: send_to_agent agent=#{state.agent} model=#{state.model}")
 
     # Phase 1: resolve agent + ensure state — no state mutation, so no
@@ -509,7 +460,9 @@ defmodule CodePuppyControl.REPL.Loop do
     end
   end
 
-  defp resolve_agent_module(agent_name) when is_binary(agent_name) do
+  @doc false
+  # Public for REPL.OneShot dispatch; also used internally by resolve_agent_key/1.
+  def resolve_agent_module(agent_name) when is_binary(agent_name) do
     # Try the name as-given, then kebab↔snake variants. AgentCatalogue keys
     # are typically snake_case internally even when the UI shows kebab-case.
     candidates =
@@ -553,7 +506,9 @@ defmodule CodePuppyControl.REPL.Loop do
     _ -> :not_found
   end
 
-  defp ensure_agent_state_for(session_id, agent_key) do
+  @doc false
+  # Public for REPL.OneShot dispatch; also used internally by send_to_agent/2.
+  def ensure_agent_state_for(session_id, agent_key) do
     case State.start_agent_state(session_id, agent_key) do
       {:ok, _pid} -> :ok
       {:error, reason} -> {:error, reason}

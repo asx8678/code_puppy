@@ -65,7 +65,8 @@ defmodule CodePuppyControl.CLI.OneShotTest do
 
   alias CodePuppyControl.Agent.State
   alias CodePuppyControl.CLI.OneShotMockLLM
-  alias CodePuppyControl.REPL.Loop
+  alias CodePuppyControl.CLI.Parser
+  alias CodePuppyControl.REPL.OneShot
   alias CodePuppyControl.Tools.AgentCatalogue
 
   defp setup_mock_llm(_context) do
@@ -99,7 +100,9 @@ defmodule CodePuppyControl.CLI.OneShotTest do
       end)
 
       case Registry.lookup(CodePuppyControl.REPL.RendererRegistry, session_id) do
-        [] -> :ok
+        [] ->
+          :ok
+
         [{pid, _}] ->
           if Process.alive?(pid) do
             try do
@@ -114,7 +117,7 @@ defmodule CodePuppyControl.CLI.OneShotTest do
     {:ok, session_id: session_id}
   end
 
-  describe "run_one_shot/1 happy path" do
+  describe "OneShot.run/1 happy path" do
     setup :setup_mock_llm
 
     test "dispatches prompt and persists messages", %{session_id: session_id} do
@@ -122,7 +125,7 @@ defmodule CodePuppyControl.CLI.OneShotTest do
 
       output =
         ExUnit.CaptureIO.capture_io(fn ->
-          assert :ok = Loop.run_one_shot(%{prompt: "Do a thing", session_id: session_id})
+          assert :ok = OneShot.run(%{prompt: "Do a thing", session_id: session_id})
         end)
 
       assert output =~ "Sure thing!"
@@ -141,7 +144,7 @@ defmodule CodePuppyControl.CLI.OneShotTest do
 
       ExUnit.CaptureIO.capture_io(fn ->
         assert :ok =
-                 Loop.run_one_shot(%{
+                 OneShot.run(%{
                    prompt: "Review this",
                    agent: "qa-kitten",
                    session_id: session_id
@@ -158,7 +161,7 @@ defmodule CodePuppyControl.CLI.OneShotTest do
 
       ExUnit.CaptureIO.capture_io(fn ->
         assert :ok =
-                 Loop.run_one_shot(%{
+                 OneShot.run(%{
                    prompt: "test",
                    model: "gpt-4o-2024-08-06",
                    session_id: session_id
@@ -172,7 +175,7 @@ defmodule CodePuppyControl.CLI.OneShotTest do
       OneShotMockLLM.set_response(%{text: "hi", tool_calls: []})
 
       ExUnit.CaptureIO.capture_io(fn ->
-        assert :ok = Loop.run_one_shot(%{prompt: "hello", session_id: session_id})
+        assert :ok = OneShot.run(%{prompt: "hello", session_id: session_id})
       end)
 
       messages = State.get_messages(session_id, "code_puppy")
@@ -184,21 +187,21 @@ defmodule CodePuppyControl.CLI.OneShotTest do
 
       output =
         ExUnit.CaptureIO.capture_io(fn ->
-          assert :ok = Loop.run_one_shot(%{prompt: "hello"})
+          assert :ok = OneShot.run(%{prompt: "hello"})
         end)
 
       assert output =~ "generated session"
     end
   end
 
-  describe "run_one_shot/1 error paths" do
+  describe "OneShot.run/1 error paths" do
     setup :setup_mock_llm
 
     test "unknown agent returns :error", %{session_id: session_id} do
       output =
         ExUnit.CaptureIO.capture_io(fn ->
           assert :error =
-                   Loop.run_one_shot(%{
+                   OneShot.run(%{
                      prompt: "test",
                      agent: "nonexistent-agent-xyz",
                      session_id: session_id
@@ -213,7 +216,7 @@ defmodule CodePuppyControl.CLI.OneShotTest do
 
       output =
         ExUnit.CaptureIO.capture_io(fn ->
-          assert :error = Loop.run_one_shot(%{prompt: "hello", session_id: session_id})
+          assert :error = OneShot.run(%{prompt: "hello", session_id: session_id})
         end)
 
       assert output =~ "⚠" or output =~ "\e[31m"
@@ -223,38 +226,62 @@ defmodule CodePuppyControl.CLI.OneShotTest do
     end
   end
 
-  describe "send_to_agent/2 visibility" do
+  describe "OneShot.run/1 nil-agent defaulting (code_puppy-8ah)" do
     setup :setup_mock_llm
 
-    test "is callable externally", %{session_id: session_id} do
-      OneShotMockLLM.set_response(%{text: "direct call works", tool_calls: []})
-
-      state = %Loop{
-        session_id: session_id,
-        agent: "code-puppy",
-        model: "claude-sonnet-4-20250514",
-        running: true
-      }
+    test "agent: nil from Parser falls back to code-puppy", %{session_id: session_id} do
+      OneShotMockLLM.set_response(%{text: "default agent reply", tool_calls: []})
 
       output =
         ExUnit.CaptureIO.capture_io(fn ->
-          assert :ok = Loop.send_to_agent("test prompt", state)
+          assert :ok =
+                   OneShot.run(%{
+                     prompt: "hello",
+                     agent: nil,
+                     session_id: session_id
+                   })
         end)
 
-      assert output =~ "direct call works"
+      assert output =~ "default agent reply"
 
+      # Messages land in the code_puppy bucket, not nowhere.
       messages = State.get_messages(session_id, "code_puppy")
       assert length(messages) == 2
     end
+
+    test "Parser.parse([\"-p\", \"hi\"]) produces agent: nil that OneShot.run/1 handles" do
+      # Regression: pup -p "hi" must not crash when Parser returns agent: nil.
+      assert {:ok, parsed} = Parser.parse(["-p", "hi"])
+      assert parsed[:prompt] == "hi"
+      assert parsed[:agent] == nil
+
+      # Feeding those parsed opts directly into OneShot.run/1 should succeed
+      # (not crash on nil agent).
+      OneShotMockLLM.set_response(%{text: "hi back", tool_calls: []})
+
+      output =
+        ExUnit.CaptureIO.capture_io(fn ->
+          opts =
+            Map.put(
+              parsed,
+              :session_id,
+              :crypto.strong_rand_bytes(4) |> Base.encode16(case: :lower)
+            )
+
+          assert :ok = OneShot.run(opts)
+        end)
+
+      assert output =~ "hi back"
+    end
   end
 
-  describe "interactive mode preservation" do
-    test "send_to_agent/2 is still exported" do
-      assert function_exported?(Loop, :send_to_agent, 2)
+  describe "API boundary" do
+    test "send_to_agent/2 is private in Loop" do
+      refute function_exported?(CodePuppyControl.REPL.Loop, :send_to_agent, 2)
     end
 
-    test "run_one_shot/1 is exported" do
-      assert function_exported?(Loop, :run_one_shot, 1)
+    test "OneShot.run/1 is exported" do
+      assert function_exported?(OneShot, :run, 1)
     end
   end
 end

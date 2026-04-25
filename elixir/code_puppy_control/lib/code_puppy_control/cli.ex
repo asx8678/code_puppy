@@ -63,7 +63,7 @@ defmodule CodePuppyControl.CLI do
     Application.ensure_all_started(:code_puppy_control)
 
     case opts do
-      %{prompt: prompt, interactive: true} ->
+      %{prompt: _, interactive: true} ->
         # Interactive mode with initial prompt
         run_interactive(opts)
 
@@ -92,9 +92,7 @@ defmodule CodePuppyControl.CLI do
   end
 
   defp run_single_prompt(opts) do
-    result = CodePuppyControl.REPL.Loop.run_one_shot(opts)
-
-    case result do
+    case CodePuppyControl.REPL.OneShot.run(opts) do
       :ok ->
         :ok
 
