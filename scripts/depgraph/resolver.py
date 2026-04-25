@@ -5,41 +5,57 @@ from __future__ import annotations
 
 
 def resolve_relative_import(
-    current_module: str, level: int, module: str | None
+    current_module: str,
+    level: int,
+    module: str | None,
+    *,
+    is_package: bool = False,
 ) -> str | None:
     """
     Resolve a relative import to an absolute module name.
 
+    Uses CPython's rsplit algorithm (importlib._bootstrap._resolve_name).
+
     Args:
-        current_module: The module containing the import (e.g., 'code_puppy.tools.file_ops')
+        current_module: The module containing the import (e.g. 'code_puppy.tools.file_ops')
         level: Number of dots (1 for '.', 2 for '..', etc.)
-        module: The module name after the dots (e.g., 'utils' in 'from .utils import x')
+        module: The module name after the dots (e.g. 'utils' in 'from .utils import x')
+        is_package: True if current_module is from __init__.py (package context = self).
 
     Returns:
         Absolute module name or None if resolution fails
+
+    Examples:
+        >>> resolve_relative_import("pkg.sub", 1, "leaf", is_package=True)
+        'pkg.sub.leaf'
+        >>> resolve_relative_import("pkg.sub", 1, None, is_package=True)
+        'pkg.sub'
+        >>> resolve_relative_import("pkg.sub.mod", 1, "utils", is_package=False)
+        'pkg.sub.utils'
+        >>> resolve_relative_import("pkg.sub", 2, "sibling", is_package=True)
+        'pkg.sibling'
     """
     if level == 0:
         return module
 
-    parts = current_module.split(".")
+    # Compute package context matching Python's __package__ semantics
+    if is_package:
+        package_context = current_module
+    else:
+        parts = current_module.split(".")
+        package_context = ".".join(parts[:-1]) if len(parts) > 1 else current_module
 
-    # Check if we can go up 'level' times
-    if level > len(parts):
+    bits = package_context.rsplit(".", level - 1)
+    if len(bits) < level:
         return None
 
-    # Go up 'level' times
-    base_parts = parts[:-level]
+    base = bits[0]
+    if not base:
+        return None
 
     if module:
-        # from .module import x or from ..pkg.mod import y
-        if base_parts:
-            return ".".join(base_parts) + "." + module
-        return module
-    else:
-        # from . import x or from .. import y
-        if not base_parts:
-            return None
-        return ".".join(base_parts)
+        return f"{base}.{module}"
+    return base
 
 
 def find_matching_module(import_name: str, modules: set[str]) -> str | None:
@@ -65,7 +81,7 @@ def find_matching_module(import_name: str, modules: set[str]) -> str | None:
     best_len = 0
 
     for mod_name in modules:
-        # Check if import_name is the module or a submodule of it
+        # Check if import_name is the module or a submodule/symbol of it
         if import_name == mod_name or import_name.startswith(f"{mod_name}."):
             if len(mod_name) > best_len:
                 best_match = mod_name

@@ -1,5 +1,9 @@
 #!/usr/bin/env python3
-"""Report generation for dependency graph analysis."""
+"""Report generation for dependency graph analysis.
+
+Keeps generated artifacts under 600 lines by using compact JSON
+and summarized markdown (top-N sections, trimmed appendix).
+"""
 
 from __future__ import annotations
 
@@ -15,7 +19,6 @@ if TYPE_CHECKING:
 def format_timestamp(stable: bool = False) -> str:
     """Generate timestamp for reports."""
     if stable:
-        # Use a fixed timestamp for reproducible builds
         return "2026-01-01T00:00:00+00:00"
     return datetime.now(timezone.utc).isoformat()
 
@@ -65,36 +68,36 @@ def generate_markdown_report(
     lines.append(f"| Import cycles detected | {len(cycles)} |")
     lines.append("")
 
-    # High-fan-in hubs
+    # High-fan-in hubs (top 15)
     lines.append("## High-Fan-In Hub Modules (Port LAST)")
     lines.append("")
     lines.append(
-        "> These modules are imported by many others. Porting them early breaks dependents."
+        "> These modules are imported by many others. "
+        "Porting them early breaks dependents."
     )
     lines.append("")
-    hubs = sorted(modules.values(), key=lambda m: (-m.fan_in, m.name))[:20]
-    lines.append("| Module | Fan-In | Fan-Out | LOC | Description |")
-    lines.append("|--------|--------|---------|-----|-------------|")
+    hubs = sorted(modules.values(), key=lambda m: (-m.fan_in, m.name))[:15]
+    lines.append("| Module | Fan-In | Fan-Out | LOC |")
+    lines.append("|--------|--------|---------|-----|")
     for hub in hubs:
-        if hub.fan_in >= 5:  # Only show significant hubs
-            short = short_name(hub.name)
+        if hub.fan_in >= 5:
             lines.append(
-                f"| `{short}` | {hub.fan_in} | {hub.fan_out} | {hub.lines_of_code:,} | |"
+                f"| `{short_name(hub.name)}` | {hub.fan_in} | {hub.fan_out} "
+                f"| {hub.lines_of_code:,} |"
             )
     lines.append("")
 
-    # Leaf candidates - sort by fan_in ascending (lowest first), then by LOC descending
+    # Leaf candidates (top 20)
     lines.append("## Low-Dependency Leaf Candidates (Port FIRST)")
     lines.append("")
     lines.append(
         "> These modules have few or no internal dependencies. Safe to port early."
     )
     lines.append("")
-    # Sort leaves: lowest fan-in first, then highest LOC
     leaves = sorted(
         [m for m in modules.values() if m.is_leaf],
         key=lambda m: (m.fan_in, -m.lines_of_code, m.name),
-    )[:30]
+    )[:20]
     lines.append("| Module | Fan-In | LOC | Notes |")
     lines.append("|--------|--------|-----|-------|")
     for leaf in leaves:
@@ -105,7 +108,7 @@ def generate_markdown_report(
         )
     lines.append("")
 
-    # Cycles
+    # Cycles (top 10)
     if cycles:
         lines.append("## Import Cycles Detected")
         lines.append("")
@@ -113,7 +116,7 @@ def generate_markdown_report(
             "> Cycles must be broken before porting (refactor to remove circular deps)."
         )
         lines.append("")
-        for i, cycle in enumerate(cycles[:10], 1):  # Show first 10
+        for i, cycle in enumerate(cycles[:10], 1):
             cycle_str = " → ".join(short_name(c) for c in cycle)
             lines.append(f"{i}. `{cycle_str}`")
         if len(cycles) > 10:
@@ -136,7 +139,6 @@ def generate_markdown_report(
     lines.append("| Phase | Modules | Criteria |")
     lines.append("|-------|---------|----------|")
 
-    # Group by depth
     from collections import defaultdict
 
     depth_groups: dict[int, list[str]] = defaultdict(list)
@@ -146,7 +148,7 @@ def generate_markdown_report(
     phase_names = ["Foundation", "Utilities", "Core Services", "Agents", "Integration"]
     for depth in sorted(depth_groups.keys()):
         phase_name = phase_names[min(depth, len(phase_names) - 1)]
-        mods = depth_groups[depth][:5]  # Show first 5 per depth
+        mods = depth_groups[depth][:5]
         mod_str = ", ".join(f"`{short_name(m)}`" for m in mods)
         if len(depth_groups[depth]) > 5:
             mod_str += f" (+{len(depth_groups[depth]) - 5} more)"
@@ -155,37 +157,50 @@ def generate_markdown_report(
     lines.append("")
 
     # Limitations
-    lines.append("## Limitations of This Analysis")
+    lines.append("## Limitations")
     lines.append("")
     lines.append(
-        "1. **Static analysis only**: Dynamic imports (importlib, __import__) are not detected."
+        "1. **Static analysis only**: Dynamic imports (importlib, __import__) not detected."
     )
     lines.append(
-        "2. **Conditional imports**: Imports inside try/except or if TYPE_CHECKING are treated equally."
-    )
-    lines.append("3. **Star imports**: from x import * dependencies may be incomplete.")
-    lines.append(
-        "4. **External dependencies**: Third-party package internals are not analyzed."
+        "2. **Conditional imports**: Imports inside try/except or TYPE_CHECKING treated equally."
     )
     lines.append(
-        "5. **Runtime dependencies**: Plugin loading, config-driven imports are not captured."
+        "3. **Star imports**: `from x import *` dependencies may be incomplete."
     )
-    lines.append("")
     lines.append(
-        "For complete accuracy, supplement with runtime profiling and manual review."
+        "4. **External dependencies**: Third-party package internals not analyzed."
+    )
+    lines.append(
+        "5. **Runtime dependencies**: Plugin loading, config-driven imports not captured."
     )
     lines.append("")
 
-    # Appendix: Full module list
-    lines.append("## Appendix: All Modules")
+    # Compact appendix: top-N table per depth, JSON has full data
+    lines.append("## Appendix: Modules by Depth")
     lines.append("")
-    lines.append("| Module | Fan-In | Fan-Out | LOC |")
-    lines.append("|--------|--------|---------|-----|")
-    for mod_name in sorted(modules.keys()):
-        m = modules[mod_name]
-        short = short_name(mod_name)
-        lines.append(f"| `{short}` | {m.fan_in} | {m.fan_out} | {m.lines_of_code:,} |")
+    lines.append(
+        "Full module data in [python_dependency_graph.json](python_dependency_graph.json)."
+    )
     lines.append("")
+
+    top_n = 20
+    for depth in sorted(depth_groups.keys()):
+        group = depth_groups[depth]
+        lines.append(f"### Depth {depth} ({len(group)} modules)")
+        lines.append("")
+        shown = sorted(group, key=lambda m: (-modules[m].fan_in, m))[:top_n]
+        lines.append("| Module | Fan-In | Fan-Out | LOC |")
+        lines.append("|--------|--------|---------|-----|")
+        for mod_name in shown:
+            m = modules[mod_name]
+            lines.append(
+                f"| `{short_name(mod_name)}` | {m.fan_in} | {m.fan_out} "
+                f"| {m.lines_of_code:,} |"
+            )
+        if len(group) > top_n:
+            lines.append(f"\n> ... {len(group) - top_n} more at this depth")
+        lines.append("")
 
     content = "\n".join(lines)
 
@@ -203,7 +218,10 @@ def generate_json_report(
     output_path: Path | None = None,
     stable: bool = False,
 ) -> str:
-    """Generate a JSON report for programmatic use."""
+    """Generate a compact JSON report for programmatic use.
+
+    Uses separators=(',',':') to keep file size manageable.
+    """
     data = {
         "metadata": {
             "generated_at": format_timestamp(stable),
@@ -218,7 +236,7 @@ def generate_json_report(
         },
         "hubs": [
             m.to_dict()
-            for m in sorted(modules.values(), key=lambda x: (-x.fan_in, x.name))[:20]
+            for m in sorted(modules.values(), key=lambda x: (-x.fan_in, x.name))[:15]
             if m.fan_in >= 5
         ],
         "leaves": [
@@ -226,9 +244,9 @@ def generate_json_report(
             for m in sorted(
                 [m for m in modules.values() if m.is_leaf],
                 key=lambda x: (x.fan_in, -x.lines_of_code, x.name),
-            )[:30]
+            )[:20]
         ],
-        "cycles": [c for c in cycles],
+        "cycles": cycles[:20],
         "porting_order": [
             {"module": mod, "depth": depth, "priority": i + 1}
             for i, (mod, depth) in enumerate(porting_order)
@@ -236,7 +254,8 @@ def generate_json_report(
         "all_modules": {name: mod.to_dict() for name, mod in sorted(modules.items())},
     }
 
-    content = json.dumps(data, indent=2)
+    # Compact JSON: no whitespace between separators
+    content = json.dumps(data, separators=(",", ":"))
 
     if output_path:
         output_path.write_text(content)

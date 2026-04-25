@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from .models import ModuleInfo
+from .resolver import find_matching_module
 from .stdlib_list import STDLIB_MODULES
 
 if TYPE_CHECKING:
@@ -15,14 +16,41 @@ if TYPE_CHECKING:
 
 
 class ImportVisitor(ast.NodeVisitor):
-    """AST visitor to collect import statements with proper resolution."""
+    """AST visitor to collect import statements with proper resolution.
 
-    def __init__(self, package_name: str, current_module: str):
+    Uses Python's import semantics for relative imports:
+    - For __init__.py (is_package=True), the package context IS the module itself.
+    - For regular modules (is_package=False), the package context is the parent.
+    - Resolution uses rsplit like CPython's importlib._bootstrap._resolve_name.
+    - Imported symbols/classes are NOT counted as module deps;
+      only the containing module is recorded.
+    """
+
+    def __init__(
+        self,
+        package_name: str,
+        current_module: str,
+        is_package: bool = False,
+    ):
         self.package_name = package_name
         self.current_module = current_module
+        self.is_package = is_package
         self.internal_imports: set[str] = set()
         self.external_imports: set[str] = set()
         self.stdlib_imports: set[str] = set()
+
+    @property
+    def package_context(self) -> str:
+        """The package context for relative import resolution.
+
+        Matches Python's __package__ semantics:
+        - For __init__.py: the package IS the module (e.g. pkg.sub)
+        - For regular modules: the parent package (e.g. pkg.sub for pkg.sub.mod)
+        """
+        if self.is_package:
+            return self.current_module
+        parts = self.current_module.split(".")
+        return ".".join(parts[:-1]) if len(parts) > 1 else self.current_module
 
     def _is_stdlib(self, name: str) -> bool:
         """Check if a module is from stdlib."""
@@ -34,34 +62,33 @@ class ImportVisitor(ast.NodeVisitor):
         return name.startswith(self.package_name + ".") or name == self.package_name
 
     def _resolve_relative(self, level: int, module: str | None) -> str | None:
-        """Resolve a relative import to absolute module name."""
+        """Resolve a relative import using CPython's rsplit algorithm.
+
+        Mirrors importlib._bootstrap._resolve_name:
+          bits = package.rsplit('.', level - 1)
+          base = bits[0]
+          return f'{base}.{name}' if name else base
+        """
         if level == 0:
             return module
 
-        # Split current module into parts
-        parts = self.current_module.split(".")
+        pkg = self.package_context
+        bits = pkg.rsplit(".", level - 1)
 
-        # Go up 'level' times
-        if level > len(parts):
-            # Would go above package root - invalid
+        if len(bits) < level:
+            # Would go above package root
             return None
 
-        base_parts = parts[:-level] if level <= len(parts) else []
+        base = bits[0]
+        if not base:
+            return None
 
         if module:
-            # from .module import x or from ..pkg import y
-            return ".".join(base_parts + [module])
-        else:
-            # from . import x or from .. import y
-            # This case is for 'from . import something' which imports from current package
-            if not base_parts:
-                return None
-            return ".".join(base_parts)
+            return f"{base}.{module}"
+        return base
 
     def _add_import(self, full_name: str) -> None:
         """Add an import, classifying it appropriately."""
-        # Only track module-level imports, not individual symbols
-        # Get the top-level module or package
         if self._is_internal(full_name):
             self.internal_imports.add(full_name)
         elif self._is_stdlib(full_name):
@@ -78,40 +105,55 @@ class ImportVisitor(ast.NodeVisitor):
         self.generic_visit(node)
 
     def visit_ImportFrom(self, node: ast.ImportFrom) -> None:  # noqa: N802
-        """Handle 'from x import y' statements with relative import resolution."""
+        """Handle 'from x import y' with Python-correct relative resolution.
+
+        Key rules:
+        - 'from .module import Symbol': record dep on module, NOT Symbol.
+        - 'from . import leaf': record dep on current_package.leaf (submodule).
+        - 'from pkg import sub': record dep on pkg.sub (potential submodule).
+        - 'from pkg.module import Class': record dep on pkg.module only.
+        Post-processing in build_dependency_graph validates against known modules.
+        """
         if node.level > 0:
-            # Relative import - resolve to absolute
+            # Relative import
             base_module = self._resolve_relative(node.level, node.module)
             if base_module is None:
                 self.generic_visit(node)
                 return
 
-            # Add the base module
-            self._add_import(base_module)
+            if node.module is not None:
+                # 'from .module import X' — dep is on base_module (which
+                # already includes .module).  X is a symbol, not a module dep.
+                # Skip self-imports (package importing from itself).
+                if base_module != self.current_module:
+                    self._add_import(base_module)
+            # else: 'from . import x' — x is the actual dep;
+            # base_module.x is added below.  If x turns out to be a
+            # symbol rather than a submodule, post-processing collapses
+            # it to the longest matching module (which IS base_module).
 
-            # Also track specific imports like 'from . import x'
             for alias in node.names:
                 if alias.name == "*":
                     continue
                 if node.module is None:
-                    # from . import x -> imports x from current package
+                    # 'from . import x' — x is a submodule of the current package
                     full_name = f"{base_module}.{alias.name}"
                     self._add_import(full_name)
-                else:
-                    # from .module import x
-                    full_name = f"{base_module}.{alias.name}"
-                    self._add_import(full_name)
+                # else: 'from .module import X' — X is a symbol, not a module dep.
+                # The base_module already includes '.module' so the dep is captured.
         else:
             # Absolute import
             if node.module:
-                # Add the module itself
-                self._add_import(node.module)
+                # Skip self-import (e.g. from pkg import submodules)
+                if node.module != self.current_module:
+                    self._add_import(node.module)
 
-                # For 'from module import name', we might import submodules
                 for alias in node.names:
                     if alias.name == "*":
                         continue
-                    # Could be importing from a submodule
+                    # 'from pkg import x' could be a submodule import;
+                    # 'from pkg.module import Class' — Class is a symbol.
+                    # Record as potential; post-processing validates.
                     full_name = f"{node.module}.{alias.name}"
                     self._add_import(full_name)
 
@@ -161,7 +203,8 @@ def analyze_file(
     if module_name is None:
         return None
 
-    visitor = ImportVisitor(package_name, module_name)
+    is_package = file_path.name == "__init__.py"
+    visitor = ImportVisitor(package_name, module_name, is_package=is_package)
     visitor.visit(tree)
 
     lines_of_code = len(source.splitlines())
@@ -180,6 +223,24 @@ def analyze_file(
         stdlib_imports=visitor.stdlib_imports,
         lines_of_code=lines_of_code,
     )
+
+
+def _validate_imports(modules: dict[str, ModuleInfo]) -> None:
+    """Validate and collapse imports against known module list.
+
+    For each module's imports:
+    1. Replace symbol-level imports with the longest matching actual module.
+    2. Remove self-imports (a module listing itself as a dep).
+    """
+    known = set(modules.keys())
+
+    for mod_name, mod_info in modules.items():
+        validated: set[str] = set()
+        for imp in mod_info.imports:
+            match = find_matching_module(imp, known)
+            if match and match != mod_name:
+                validated.add(match)
+        mod_info.imports = validated
 
 
 def build_dependency_graph(
@@ -202,21 +263,14 @@ def build_dependency_graph(
         if info and info.name:
             modules[info.name] = info
 
+    # Validate imports: collapse symbol-level to longest module match
+    _validate_imports(modules)
+
     # Build reverse dependencies (imported_by) using longest-module matching
     for mod_name, mod_info in modules.items():
         for imp in mod_info.imports:
-            # Find the longest matching module (most specific)
-            best_match = None
-            best_len = 0
-
-            for target_name in modules:
-                if imp == target_name or imp.startswith(f"{target_name}."):
-                    # This import matches this module
-                    if len(target_name) > best_len:
-                        best_match = target_name
-                        best_len = len(target_name)
-
-            if best_match:
-                modules[best_match].imported_by.add(mod_name)
+            match = find_matching_module(imp, set(modules.keys()))
+            if match and match != mod_name:
+                modules[match].imported_by.add(mod_name)
 
     return modules

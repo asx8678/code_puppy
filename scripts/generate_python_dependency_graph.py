@@ -127,5 +127,26 @@ def main() -> int:
     return 0
 
 
+def generate_both(
+    package_path: Path,
+    package_name: str = "code_puppy",
+    md_path: Path | None = None,
+    json_path: Path | None = None,
+    stable: bool = False,
+) -> int:
+    """Generate both markdown and JSON reports in a single analysis pass."""
+    modules = build_dependency_graph(package_path, package_name)
+    cycles = find_cycles(modules)
+    porting_order = compute_porting_order(modules)
+
+    if md_path:
+        generate_markdown_report(modules, cycles, porting_order, md_path, stable)
+    if json_path:
+        generate_json_report(modules, cycles, porting_order, json_path, stable)
+
+    print(f"Analyzed {len(modules)} modules, {len(cycles)} cycles")
+    return 0
+
+
 if __name__ == "__main__":
     sys.exit(main())
