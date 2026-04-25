@@ -1,0 +1,341 @@
+defmodule CodePuppyControl.CLI.Smoke do
+  @moduledoc """
+  No-network local dogfood smoke runner for the Elixir CLI.
+
+  Exercises the CLI's most fragile junctions — argv parsing, run-mode
+  routing, sandboxed config/session, and the one-shot prompt path with
+  a mock LLM — without making real API calls or touching the operator's
+  real `~/.code_puppy_ex/` (or legacy `~/.code_puppy/`) home.
+
+  Designed to be the thing a developer runs before claiming the Elixir
+  CLI is dogfood-ready for the day.  Cheap.  Deterministic.  Loud
+  about the source of every check.
+
+  ## Usage
+
+      iex> CodePuppyControl.CLI.Smoke.run([])
+      %{status: :pass, phases: [...], sandbox_dir: "/tmp/pup_smoke_..."}
+
+  The Mix task `mix pup_ex.smoke` is the supported entry point — this
+  module returns a plain map so callers (Mix task, tests, plugins) can
+  format and exit on their own terms.
+
+  ## Phases
+
+  Each phase returns a `t:phase_result/0` map with `:phase`, `:status`,
+  `:detail`, `:metrics`.  Status is one of `:pass`, `:fail`, `:skip`.
+
+  - `:parser` — `Parser.parse/1` returns expected tags for `--help`,
+    `--version`, valid args, and invalid args.
+  - `:run_mode` — `CLI.resolve_run_mode/1` routes correctly without
+    side effects.
+  - `:sandbox` — `Paths.home_dir/0` resolves under the sandbox tmp,
+    not the real home; legacy home untouched.
+  - `:one_shot` — `OneShot.run/1` succeeds end-to-end with the mock
+    LLM, persists user+assistant messages into the sandbox, and the
+    mock LLM was invoked exactly once.
+  - `:escript` — *opt-in via `escript: true`*; spawns the built
+    `pup` escript with `--version` and asserts exit 0 + version
+    marker.  Skipped automatically when the escript is missing.
+
+  Phase implementations live in `CodePuppyControl.CLI.Smoke.Phases`
+  to keep this module under the 600-line cap.
+
+  ## Options
+
+    * `:phases` — `[atom()]` subset to run; defaults to `default_phases/0`.
+    * `:escript` — `boolean()`; if `true`, also run the `:escript` phase
+      (off by default — base smoke is pure-Elixir and fast).
+
+  ## Determinism guarantees
+
+  The Smoke runner:
+
+    1. Sets `PUP_EX_HOME` to a unique tmp directory before any
+       `Paths.*` call.
+    2. Sets `PUP_TEST_SESSION_ROOT` and `PUP_SESSION_DIR` and flips
+       the `:allow_test_session_root` Application env so
+       `SessionStorage.validate_storage_dir!/1` accepts the sandbox.
+    3. Injects `CodePuppyControl.CLI.Smoke.MockLLM` via the
+       `:repl_llm_module` Application env for the duration of the
+       one-shot phase.
+    4. On teardown, restores every snapshotted env value and rm_rf's
+       the sandbox.  Real `~/.code_puppy_ex/` is left untouched.
+
+  Refs: code_puppy-baa
+  """
+
+  alias CodePuppyControl.CLI.Smoke.Phases
+
+  require Logger
+
+  @type status :: :pass | :fail | :skip
+  @type phase_name :: :parser | :run_mode | :sandbox | :one_shot | :escript
+  @type phase_result :: %{
+          phase: phase_name,
+          status: status,
+          detail: String.t(),
+          metrics: map()
+        }
+
+  @type result :: %{
+          status: status,
+          phases: [phase_result()],
+          sandbox_dir: String.t() | nil,
+          duration_ms: non_neg_integer()
+        }
+
+  @default_phases [:parser, :run_mode, :sandbox, :one_shot]
+  @optional_phases [:escript]
+  @all_phases @default_phases ++ @optional_phases
+
+  @doc "Phases run when no `:phases` option is given."
+  @spec default_phases() :: [phase_name()]
+  def default_phases, do: @default_phases
+
+  @doc "Every recognised phase, including opt-in ones."
+  @spec all_phases() :: [phase_name()]
+  def all_phases, do: @all_phases
+
+  # ── Public entry points ───────────────────────────────────────────────
+
+  @doc """
+  Run the smoke suite (full lifecycle: setup → phases → teardown).
+
+  Returns a result map.  Never calls `System.halt/1`.  Tests use this
+  entry point because the application is already started for them.
+  """
+  @spec run(keyword()) :: result()
+  def run(opts \\ []) do
+    {sandbox, snapshot} = setup_sandbox()
+
+    try do
+      run_phases(opts, sandbox)
+    after
+      teardown_sandbox(sandbox, snapshot)
+    end
+  end
+
+  @doc """
+  Run the smoke phases against an **already-prepared** sandbox.
+
+  The Mix task uses this so it can `setup_sandbox/0` first, start the
+  OTP application, run the phases, and only then `teardown_sandbox/2`.
+  Tests should call `run/1` instead, which handles the full lifecycle.
+
+  Returns the same shape as `run/1`.
+  """
+  @spec run_phases(keyword(), map()) :: result()
+  def run_phases(opts, sandbox) when is_map(sandbox) do
+    started_at = System.monotonic_time(:millisecond)
+
+    requested_phases = resolve_phases(opts)
+
+    results = Enum.map(requested_phases, &run_phase(&1, sandbox))
+
+    duration = System.monotonic_time(:millisecond) - started_at
+
+    %{
+      status: aggregate_status(results),
+      phases: results,
+      sandbox_dir: sandbox.dir,
+      duration_ms: duration
+    }
+  end
+
+  defp resolve_phases(opts) do
+    requested = Keyword.get(opts, :phases) || @default_phases
+
+    if Keyword.get(opts, :escript, false) and :escript not in requested do
+      requested ++ [:escript]
+    else
+      requested
+    end
+  end
+
+  defp run_phase(:parser, _sandbox), do: Phases.parser()
+  defp run_phase(:run_mode, _sandbox), do: Phases.run_mode()
+  defp run_phase(:sandbox, sandbox), do: Phases.sandbox(sandbox)
+  defp run_phase(:one_shot, sandbox), do: Phases.one_shot(sandbox)
+  defp run_phase(:escript, _sandbox), do: Phases.escript()
+
+  defp run_phase(other, _sandbox) do
+    %{
+      phase: other,
+      status: :fail,
+      detail: "unknown phase: #{inspect(other)}",
+      metrics: %{}
+    }
+  end
+
+  defp aggregate_status(phases) do
+    statuses = Enum.map(phases, & &1.status)
+
+    cond do
+      Enum.any?(statuses, &(&1 == :fail)) -> :fail
+      Enum.all?(statuses, &(&1 == :skip)) -> :skip
+      true -> :pass
+    end
+  end
+
+  # ── Formatters and exit code ──────────────────────────────────────────
+
+  @doc """
+  Format a result map as a human-readable report (with ANSI-free
+  status icons so output stays grep-friendly).
+
+  Stable markers used by the smoke harness:
+
+    * `[ok]`, `[fail]`, `[skip]` — per-phase status
+    * `SMOKE PASS`, `SMOKE FAIL` — overall verdict line
+  """
+  @spec format_human(result()) :: String.t()
+  def format_human(%{status: status, phases: phases, sandbox_dir: dir, duration_ms: ms}) do
+    header = "🐶 pup-ex smoke — no-network dogfood (#{ms} ms)"
+
+    sandbox_line =
+      if dir, do: "  sandbox: #{dir} (cleaned up)", else: "  sandbox: (none)"
+
+    phase_lines = Enum.map(phases, &format_phase_human/1)
+
+    summary =
+      case status do
+        :pass -> "SMOKE PASS — all phases ok"
+        :fail -> "SMOKE FAIL — at least one phase failed"
+        :skip -> "SMOKE SKIP — every phase skipped"
+      end
+
+    Enum.join([header, sandbox_line, "" | phase_lines] ++ ["", summary], "\n")
+  end
+
+  @doc """
+  Format a result map as a JSON object.
+
+  Stable schema:
+
+      {
+        "status": "pass" | "fail" | "skip",
+        "duration_ms": integer,
+        "sandbox_dir": "...",   // never the real ~/.code_puppy_ex
+        "phases": [
+          {"phase": "parser", "status": "pass", "detail": "...", "metrics": {...}},
+          ...
+        ]
+      }
+  """
+  @spec format_json(result()) :: String.t()
+  def format_json(result) do
+    Jason.encode!(
+      %{
+        status: result.status,
+        duration_ms: result.duration_ms,
+        sandbox_dir: result.sandbox_dir,
+        phases:
+          Enum.map(result.phases, fn phase ->
+            %{
+              phase: phase.phase,
+              status: phase.status,
+              detail: phase.detail,
+              metrics: phase.metrics
+            }
+          end)
+      },
+      pretty: true
+    )
+  end
+
+  @doc """
+  Maps a result to a process exit code.
+
+  - `0` — every phase passed (or was deliberately skipped)
+  - `1` — at least one phase failed
+  """
+  @spec exit_code(result()) :: 0 | 1
+  def exit_code(%{status: :pass}), do: 0
+  def exit_code(%{status: :skip}), do: 0
+  def exit_code(%{status: :fail}), do: 1
+
+  defp format_phase_human(%{phase: phase, status: status, detail: detail}) do
+    tag =
+      case status do
+        :pass -> "[ok]"
+        :fail -> "[fail]"
+        :skip -> "[skip]"
+      end
+
+    "  #{tag} #{phase} — #{detail}"
+  end
+
+  # ── Sandbox setup / teardown ──────────────────────────────────────────
+
+  @doc """
+  Create a unique tmp sandbox and switch the relevant env vars + the
+  `:allow_test_session_root` Application env over to it.
+
+  Returns `{sandbox_handle, snapshot}` — pass both back to
+  `teardown_sandbox/2` to restore the prior environment.
+  """
+  @spec setup_sandbox() :: {map(), map()}
+  def setup_sandbox do
+    uniq = :crypto.strong_rand_bytes(6) |> Base.encode16(case: :lower)
+    tmp_root = Path.join(System.tmp_dir!(), "pup_smoke_#{uniq}")
+    sandbox_ex = Path.join(tmp_root, ".code_puppy_ex")
+    sandbox_sessions = Path.join(sandbox_ex, "sessions")
+    File.mkdir_p!(sandbox_sessions)
+
+    snapshot = %{
+      pup_ex_home: System.get_env("PUP_EX_HOME"),
+      pup_test_session_root: System.get_env("PUP_TEST_SESSION_ROOT"),
+      pup_session_dir: System.get_env("PUP_SESSION_DIR"),
+      allow_test_session_root:
+        Application.get_env(:code_puppy_control, :allow_test_session_root, false),
+      repl_llm_module: Application.get_env(:code_puppy_control, :repl_llm_module)
+    }
+
+    System.put_env("PUP_EX_HOME", sandbox_ex)
+    System.put_env("PUP_TEST_SESSION_ROOT", sandbox_ex)
+    System.put_env("PUP_SESSION_DIR", sandbox_sessions)
+    Application.put_env(:code_puppy_control, :allow_test_session_root, true)
+
+    {%{dir: sandbox_ex, root: tmp_root, sessions: sandbox_sessions}, snapshot}
+  end
+
+  @doc """
+  Restore the env / Application env values captured at `setup_sandbox/0`
+  time and `rm_rf` the sandbox tmp tree.
+  """
+  @spec teardown_sandbox(map(), map()) :: :ok
+  def teardown_sandbox(sandbox, snapshot) do
+    # 1. Drain pending async session saves so they don't write to a
+    #    deleted directory or read stale env vars.
+    Process.sleep(200)
+
+    # 2. Restore env vars in the order opposite of setup.
+    restore_env("PUP_SESSION_DIR", snapshot.pup_session_dir)
+    restore_env("PUP_TEST_SESSION_ROOT", snapshot.pup_test_session_root)
+    restore_env("PUP_EX_HOME", snapshot.pup_ex_home)
+
+    # 3. Restore Application env values.
+    Application.put_env(
+      :code_puppy_control,
+      :allow_test_session_root,
+      snapshot.allow_test_session_root
+    )
+
+    case snapshot.repl_llm_module do
+      nil -> Application.delete_env(:code_puppy_control, :repl_llm_module)
+      mod -> Application.put_env(:code_puppy_control, :repl_llm_module, mod)
+    end
+
+    # 4. Best-effort cleanup of the sandbox directory.
+    case File.rm_rf(sandbox.root) do
+      {:ok, _} -> :ok
+      {:error, reason, _} -> Logger.debug("smoke teardown rm_rf: #{inspect(reason)}")
+    end
+
+    :ok
+  end
+
+  defp restore_env(key, nil), do: System.delete_env(key)
+  defp restore_env(key, value), do: System.put_env(key, value)
+end
