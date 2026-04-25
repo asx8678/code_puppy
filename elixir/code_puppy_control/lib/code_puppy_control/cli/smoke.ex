@@ -35,8 +35,14 @@ defmodule CodePuppyControl.CLI.Smoke do
     LLM, persists user+assistant messages into the sandbox, and the
     mock LLM was invoked exactly once.
   - `:escript` — *opt-in via `escript: true`*; spawns the built
-    `pup` escript with `--version` and asserts exit 0 + version
-    marker.  Skipped automatically when the escript is missing.
+    `pup` escript with `--version` and `--help` and asserts exit 0 +
+    stable markers.  Skipped automatically when the escript is missing.
+  - `:burrito` — *opt-in via `burrito: true`*; locates a host-built
+    Burrito binary under `burrito_out/` and runs the same
+    `--version` + `--help` probes.  Skipped automatically when no
+    artifact is present (Burrito requires Zig and is not built by
+    default — see `scripts/build-burrito.sh --host-only` and
+    `scripts/smoke-packaged.sh --with-burrito`).
 
   Phase implementations live in `CodePuppyControl.CLI.Smoke.Phases`
   to keep this module under the 600-line cap.
@@ -46,6 +52,9 @@ defmodule CodePuppyControl.CLI.Smoke do
     * `:phases` — `[atom()]` subset to run; defaults to `default_phases/0`.
     * `:escript` — `boolean()`; if `true`, also run the `:escript` phase
       (off by default — base smoke is pure-Elixir and fast).
+    * `:burrito` — `boolean()`; if `true`, also run the `:burrito` phase
+      (off by default; deterministically skips when no artifact is
+      available so CI without a Zig toolchain stays green).
 
   ## Determinism guarantees
 
@@ -62,7 +71,7 @@ defmodule CodePuppyControl.CLI.Smoke do
     4. On teardown, restores every snapshotted env value and rm_rf's
        the sandbox.  Real `~/.code_puppy_ex/` is left untouched.
 
-  Refs: code_puppy-baa
+  Refs: code_puppy-baa, code_puppy-d7m
   """
 
   alias CodePuppyControl.CLI.Smoke.Phases
@@ -70,7 +79,7 @@ defmodule CodePuppyControl.CLI.Smoke do
   require Logger
 
   @type status :: :pass | :fail | :skip
-  @type phase_name :: :parser | :run_mode | :sandbox | :one_shot | :escript
+  @type phase_name :: :parser | :run_mode | :sandbox | :one_shot | :escript | :burrito
   @type phase_result :: %{
           phase: phase_name,
           status: status,
@@ -86,7 +95,7 @@ defmodule CodePuppyControl.CLI.Smoke do
         }
 
   @default_phases [:parser, :run_mode, :sandbox, :one_shot]
-  @optional_phases [:escript]
+  @optional_phases [:escript, :burrito]
   @all_phases @default_phases ++ @optional_phases
 
   @doc "Phases run when no `:phases` option is given."
@@ -146,11 +155,15 @@ defmodule CodePuppyControl.CLI.Smoke do
   defp resolve_phases(opts) do
     requested = Keyword.get(opts, :phases) || @default_phases
 
-    if Keyword.get(opts, :escript, false) and :escript not in requested do
-      requested ++ [:escript]
-    else
-      requested
-    end
+    requested
+    |> maybe_append(:escript, Keyword.get(opts, :escript, false))
+    |> maybe_append(:burrito, Keyword.get(opts, :burrito, false))
+  end
+
+  defp maybe_append(list, _phase, false), do: list
+
+  defp maybe_append(list, phase, true) do
+    if phase in list, do: list, else: list ++ [phase]
   end
 
   defp run_phase(:parser, _sandbox), do: Phases.parser()
@@ -158,6 +171,7 @@ defmodule CodePuppyControl.CLI.Smoke do
   defp run_phase(:sandbox, sandbox), do: Phases.sandbox(sandbox)
   defp run_phase(:one_shot, sandbox), do: Phases.one_shot(sandbox)
   defp run_phase(:escript, _sandbox), do: Phases.escript()
+  defp run_phase(:burrito, _sandbox), do: Phases.burrito()
 
   defp run_phase(other, _sandbox) do
     %{

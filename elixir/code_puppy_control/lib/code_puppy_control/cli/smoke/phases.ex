@@ -12,6 +12,7 @@ defmodule CodePuppyControl.CLI.Smoke.Phases do
 
   alias CodePuppyControl.CLI
   alias CodePuppyControl.CLI.Parser
+  alias CodePuppyControl.CLI.Smoke.BurritoArtifact
   alias CodePuppyControl.CLI.Smoke.MockLLM
   alias CodePuppyControl.Config.Paths
   alias CodePuppyControl.REPL.OneShot
@@ -303,55 +304,135 @@ defmodule CodePuppyControl.CLI.Smoke.Phases do
         }
 
       path ->
-        run_escript_probe(path)
+        probe_packaged_cli(:escript, path)
     end
   end
 
-  defp run_escript_probe(path) do
-    case System.cmd(path, ["--version"],
-           stderr_to_stdout: true,
-           env: [
-             {"PUP_EX_HOME", System.get_env("PUP_EX_HOME") || ""},
-             {"PUP_SMOKE_PROBE", "1"}
-           ]
-         ) do
-      {output, 0} ->
-        if output =~ "code-puppy" do
-          %{
-            phase: :escript,
-            status: :pass,
-            detail: "escript --version exited 0; output mentions code-puppy",
-            metrics: %{path: path, bytes: byte_size(output)}
-          }
-        else
-          %{
-            phase: :escript,
-            status: :fail,
-            detail:
-              "escript --version exited 0 but output missing 'code-puppy' marker " <>
-                "(got #{inspect(String.slice(output, 0, 80))})",
-            metrics: %{path: path}
-          }
-        end
+  # ── Phase: burrito (opt-in) ───────────────────────────────────────────
 
-      {output, exit_status} ->
+  # Burrito drops binaries under `burrito_out/<release_name>_<target>` after
+  # `MIX_ENV=prod mix release`.  Building Burrito artifacts requires Zig and
+  # is expensive; this phase is opt-in and skips deterministically when no
+  # artifact is present, so CI without a Zig toolchain stays green.
+  #
+  # Refs: code_puppy-d7m
+  @doc false
+  @spec burrito() :: phase_result()
+  def burrito do
+    case BurritoArtifact.find_burrito_artifact() do
+      {:ok, path} ->
+        probe_packaged_cli(:burrito, path)
+
+      {:skip, reason, metrics} ->
         %{
-          phase: :escript,
+          phase: :burrito,
+          status: :skip,
+          detail: reason,
+          metrics: metrics
+        }
+    end
+  end
+
+  # The Burrito artifact-selection helpers live in
+  # `CodePuppyControl.CLI.Smoke.BurritoArtifact` so this module stays
+  # under the 600-line cap.  We re-export the public-but-undocumented
+  # entry points used by the regression test in
+  # `test/code_puppy_control/cli/smoke/burrito_artifact_test.exs` so the
+  # test surface is unchanged.  Behaviour (including Windows `.exe`
+  # handling and the strict host-compat contract) is preserved exactly.
+  #
+  # Refs: code_puppy-d7m
+  @doc false
+  defdelegate probe_burrito_dir(burrito_dir, candidate_targets), to: BurritoArtifact
+
+  @doc false
+  defdelegate candidate_filenames(target), to: BurritoArtifact
+
+  @doc false
+  defdelegate host_compatible_targets(), to: BurritoArtifact
+
+  # ── Shared probe helper ───────────────────────────────────────────────
+
+  # Run the canonical no-network smoke probes against a packaged CLI
+  # binary (escript or Burrito).  Both probes are deterministic and
+  # touch zero network/auth state:
+  #
+  #   1. `--version`  must exit 0 and contain the marker `code-puppy`.
+  #   2. `--help`     must exit 0 and contain the markers
+  #                   `Usage: pup [OPTIONS] [PROMPT]` and `--prompt`.
+  #
+  # Always invokes the binary with the active `PUP_EX_HOME` (so any
+  # accidental config touch lands in the smoke sandbox, NEVER
+  # `~/.code_puppy_ex/`) and `PUP_SMOKE_PROBE=1` so callees can
+  # detect-and-shortcircuit if they ever need to.
+  defp probe_packaged_cli(phase, path) do
+    env = packaged_cli_env()
+
+    with {:version, {ver_out, 0}} <-
+           {:version, System.cmd(path, ["--version"], stderr_to_stdout: true, env: env)},
+         true <- ver_out =~ "code-puppy" || {:fail, :version_marker_missing, ver_out},
+         {:help, {help_out, 0}} <-
+           {:help, System.cmd(path, ["--help"], stderr_to_stdout: true, env: env)},
+         true <-
+           help_out =~ "Usage: pup [OPTIONS] [PROMPT]" ||
+             {:fail, :help_usage_missing, help_out},
+         true <- help_out =~ "--prompt" || {:fail, :help_prompt_flag_missing, help_out} do
+      %{
+        phase: phase,
+        status: :pass,
+        detail: "#{phase} --version and --help exited 0 with stable markers",
+        metrics: %{
+          path: path,
+          version_bytes: byte_size(ver_out),
+          help_bytes: byte_size(help_out)
+        }
+      }
+    else
+      {:version, {output, exit_status}} ->
+        %{
+          phase: phase,
           status: :fail,
           detail:
-            "escript --version exited #{exit_status}: " <>
+            "#{phase} --version exited #{exit_status}: " <>
               inspect(String.slice(output, 0, 120)),
-          metrics: %{path: path, exit_status: exit_status}
+          metrics: %{path: path, exit_status: exit_status, probe: "--version"}
+        }
+
+      {:help, {output, exit_status}} ->
+        %{
+          phase: phase,
+          status: :fail,
+          detail:
+            "#{phase} --help exited #{exit_status}: " <>
+              inspect(String.slice(output, 0, 120)),
+          metrics: %{path: path, exit_status: exit_status, probe: "--help"}
+        }
+
+      {:fail, reason, output} ->
+        %{
+          phase: phase,
+          status: :fail,
+          detail:
+            "#{phase} probe missing marker (#{reason}); first 120 bytes: " <>
+              inspect(String.slice(output, 0, 120)),
+          metrics: %{path: path, reason: reason}
         }
     end
   rescue
     err ->
       %{
-        phase: :escript,
+        phase: phase,
         status: :fail,
-        detail: "escript probe raised #{inspect(err.__struct__)}: #{Exception.message(err)}",
+        detail: "#{phase} probe raised #{inspect(err.__struct__)}: #{Exception.message(err)}",
         metrics: %{path: path}
       }
+  end
+
+  defp packaged_cli_env do
+    [
+      {"PUP_EX_HOME", System.get_env("PUP_EX_HOME") || ""},
+      {"PUP_SMOKE_PROBE", "1"}
+    ]
   end
 
   # ── Helpers ───────────────────────────────────────────────────────────

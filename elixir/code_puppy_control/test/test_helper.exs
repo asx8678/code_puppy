@@ -40,11 +40,21 @@ CodePuppyControl.Parsing.Parsers.register_all()
 # Configure ExUnit with integration and E2E tests excluded by default.
 # `:eval` tests are ALSO excluded unless RUN_EVALS=1 is set, mirroring the
 # Python `evals/conftest.py` gate.
+#
+# `:packaged_cli` tests build the escript and probe the shipped artifact;
+# they are deterministic and no-network but pay a `mix escript.build` cost
+# (~5–10s) so they are excluded from the default fast suite.  Run via:
+#
+#     mix test --include packaged_cli
+#     mix test --only packaged_cli
+#     scripts/smoke-packaged.sh        # builds + runs the full packaged smoke
+#
+# Refs: code_puppy-d7m
 exclude_tags =
   if System.get_env("RUN_EVALS") == "1" do
-    [:integration, :e2e, :skip, :triage_pending]
+    [:integration, :e2e, :skip, :triage_pending, :packaged_cli]
   else
-    [:integration, :e2e, :skip, :eval, :triage_pending]
+    [:integration, :e2e, :skip, :eval, :triage_pending, :packaged_cli]
   end
 
 # ---------------------------------------------------------------------------

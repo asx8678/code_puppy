@@ -21,6 +21,8 @@ defmodule Mix.Tasks.PupEx.Smoke do
       mix pup_ex.smoke --phase parser # run only the parser phase
       mix pup_ex.smoke --phase parser --phase run_mode
       mix pup_ex.smoke --escript      # also probe the built escript
+      mix pup_ex.smoke --burrito      # also probe the built Burrito binary
+      mix pup_ex.smoke --escript --burrito --json
 
   ## Phases
 
@@ -28,7 +30,11 @@ defmodule Mix.Tasks.PupEx.Smoke do
   - `run_mode`  — `CLI.resolve_run_mode/1` routes deterministically
   - `sandbox`   — `Paths.home_dir/0` resolves under the tmp sandbox
   - `one_shot`  — `OneShot.run/1` end-to-end with `Smoke.MockLLM`
-  - `escript`   — opt-in via `--escript`; spawns `pup --version`
+  - `escript`   — opt-in via `--escript`; spawns `pup --version` and
+                  `pup --help` against the built escript
+  - `burrito`   — opt-in via `--burrito`; spawns the host-built
+                  Burrito binary with `--version` and `--help`
+                  (auto-skips if `burrito_out/<host>` is missing)
 
   ## Exit codes
 
@@ -43,14 +49,14 @@ defmodule Mix.Tasks.PupEx.Smoke do
   before the OTP application starts, which is something only a Mix
   task wrapping the boot sequence can do reliably.
 
-  Refs: code_puppy-baa
+  Refs: code_puppy-baa, code_puppy-d7m
   """
 
   use Mix.Task
 
   alias CodePuppyControl.CLI.Smoke
 
-  @switches [json: :boolean, phase: :keep, escript: :boolean]
+  @switches [json: :boolean, phase: :keep, escript: :boolean, burrito: :boolean]
 
   @impl Mix.Task
   def run(argv) do
@@ -135,6 +141,11 @@ defmodule Mix.Tasks.PupEx.Smoke do
         do: Keyword.put(runner_opts, :escript, true),
         else: runner_opts
 
+    runner_opts =
+      if Keyword.get(opts, :burrito, false),
+        do: Keyword.put(runner_opts, :burrito, true),
+        else: runner_opts
+
     runner_opts
   end
 
@@ -147,6 +158,7 @@ defmodule Mix.Tasks.PupEx.Smoke do
       "one_shot" -> :one_shot
       "one-shot" -> :one_shot
       "escript" -> :escript
+      "burrito" -> :burrito
       other -> raise_invalid_phase(other)
     end
   end
@@ -173,7 +185,7 @@ defmodule Mix.Tasks.PupEx.Smoke do
     Mix.shell().info("""
 
     Usage:
-      mix pup_ex.smoke [--json] [--phase NAME ...] [--escript]
+      mix pup_ex.smoke [--json] [--phase NAME ...] [--escript] [--burrito]
 
     Phases (default if none given): #{Enum.map_join(Smoke.default_phases(), ", ", &Atom.to_string/1)}
     All phases:                     #{Enum.map_join(Smoke.all_phases(), ", ", &Atom.to_string/1)}
