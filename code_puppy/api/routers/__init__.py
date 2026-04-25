@@ -5,8 +5,9 @@ This package contains the FastAPI router modules for different API domains:
     - commands: Command execution endpoints
     - sessions: Session management endpoints
     - agents: Agent-related endpoints
+    - runtime: Dashboard runtime orchestration and approvals
 """
 
-from code_puppy.api.routers import agents, commands, config, sessions
+from code_puppy.api.routers import agents, commands, config, runtime, sessions
 
-__all__ = ["config", "commands", "sessions", "agents"]
+__all__ = ["config", "commands", "sessions", "agents", "runtime"]
