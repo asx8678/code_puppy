@@ -5,6 +5,47 @@ defmodule CodePuppyControl.ModelFactory.CredentialsTest do
 
   # We use System.put_env/delete_env in tests, so not async
 
+  # ── Module-level sandbox ──────────────────────────────────────────────
+  # Because resolve_api_key/2 and resolve_headers/1 now fall through to
+  # env_or_store/1 → credential_store_get/1 → Crypto.derive_key/0 when
+  # env vars are absent, ANY test that deletes an env var can accidentally
+  # read or CREATE the real ~/.code_puppy_ex/ credential store and
+  # .machine_secret.  Redirect both paths to a temp dir so no test can
+  # touch the real files.  (Newer describe blocks override PUP_EX_HOME
+  # to their own temp dirs, which is fine — on_exit restores in LIFO
+  # order, so the real env is always restored last.)
+  setup_all do
+    tmp =
+      Path.join(
+        System.tmp_dir!(),
+        "mf_cred_sandbox_#{:erlang.unique_integer([:positive, :monotonic])}"
+      )
+
+    File.mkdir_p!(tmp)
+    secret_path = Path.join(tmp, ".machine_secret")
+
+    prev_ex_home = System.get_env("PUP_EX_HOME")
+    prev_secret = System.get_env("PUP_MACHINE_SECRET_PATH")
+    System.put_env("PUP_EX_HOME", tmp)
+    System.put_env("PUP_MACHINE_SECRET_PATH", secret_path)
+
+    on_exit(fn ->
+      case prev_ex_home do
+        nil -> System.delete_env("PUP_EX_HOME")
+        v -> System.put_env("PUP_EX_HOME", v)
+      end
+
+      case prev_secret do
+        nil -> System.delete_env("PUP_MACHINE_SECRET_PATH")
+        v -> System.put_env("PUP_MACHINE_SECRET_PATH", v)
+      end
+
+      File.rm_rf(tmp)
+    end)
+
+    :ok
+  end
+
   describe "resolve_api_key/2" do
     test "resolves from model config api_key_env" do
       System.put_env("MY_CUSTOM_KEY", "sk-custom-123")

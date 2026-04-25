@@ -33,6 +33,45 @@ defmodule CodePuppyControl.LLM.CredentialsTest do
     end
   end
 
+  # ── Module-level sandbox ──────────────────────────────────────────────
+  # resolve_api_key/2 and resolve_headers/1 now fall through to
+  # env_or_store/1 → credential_store_get/1 → Crypto.derive_key/0 when
+  # env vars are absent.  Without this sandbox, any test that deletes an
+  # env var (e.g. with_env [{"OPENAI_API_KEY", nil}, …]) would read or
+  # CREATE the real ~/.code_puppy_ex/ credential store and .machine_secret.
+  # Redirect both paths to a throwaway temp dir.
+  setup_all do
+    tmp =
+      Path.join(
+        System.tmp_dir!(),
+        "llm_cred_sandbox_#{:erlang.unique_integer([:positive, :monotonic])}"
+      )
+
+    File.mkdir_p!(tmp)
+    secret_path = Path.join(tmp, ".machine_secret")
+
+    prev_ex_home = System.get_env("PUP_EX_HOME")
+    prev_secret = System.get_env("PUP_MACHINE_SECRET_PATH")
+    System.put_env("PUP_EX_HOME", tmp)
+    System.put_env("PUP_MACHINE_SECRET_PATH", secret_path)
+
+    on_exit(fn ->
+      case prev_ex_home do
+        nil -> System.delete_env("PUP_EX_HOME")
+        v -> System.put_env("PUP_EX_HOME", v)
+      end
+
+      case prev_secret do
+        nil -> System.delete_env("PUP_MACHINE_SECRET_PATH")
+        v -> System.put_env("PUP_MACHINE_SECRET_PATH", v)
+      end
+
+      File.rm_rf(tmp)
+    end)
+
+    :ok
+  end
+
   # ── API Key Resolution ─────────────────────────────────────────────────
 
   describe "resolve_api_key/2" do
