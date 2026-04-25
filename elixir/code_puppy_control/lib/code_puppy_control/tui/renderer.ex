@@ -630,6 +630,16 @@ defmodule CodePuppyControl.TUI.Renderer do
   # ── Helpers ────────────────────────────────────────────────────────────────
 
   defp owl_puts(data) do
-    Owl.IO.puts(data)
+    try do
+      Owl.IO.puts(data)
+    catch
+      # :io.put_chars throws :terminated when the IO device is
+      # closed/captured (e.g., ExUnit.CaptureIO released the group
+      # leader).  A terminal write failure must never crash the
+      # Renderer GenServer — silently skip, matching the defensive
+      # pattern already used for finalize in Dispatch.
+      :error, :terminated -> :ok
+      :exit, :terminated -> :ok
+    end
   end
 end
