@@ -1,26 +1,5 @@
 #!/usr/bin/env python3
-"""
-Generate a dependency graph of Python modules for Elixir migration planning.
-
-This script statically analyzes the code_puppy package to identify:
-- High-fan-in hub modules (port last)
-- Low-dependency leaf modules (port first)
-- Import cycles (break before porting)
-- Recommended porting order
-
-Usage:
-    python scripts/generate_python_dependency_graph.py
-    python scripts/generate_python_dependency_graph.py --format json
-    python scripts/generate_python_dependency_graph.py --output docs/python_dependency_graph.md
-    python scripts/generate_python_dependency_graph.py --self-test
-
-Limitations:
-    - Static analysis only; dynamic imports (importlib, __import__) are missed
-    - Conditional imports (try/except) are treated equally with regular imports
-    - Type-only imports (TYPE_CHECKING blocks) are included
-    - External package imports are tracked but not resolved
-    - Relative imports within packages are resolved to absolute paths
-"""
+"""CLI entry point for dependency graph generator."""
 
 from __future__ import annotations
 
@@ -28,28 +7,15 @@ import argparse
 import sys
 from pathlib import Path
 
-# Add the scripts directory to path for imports
-sys.path.insert(0, str(Path(__file__).parent))
-
-try:
-    from depgraph import (
-        build_dependency_graph,
-        find_cycles,
-        compute_porting_order,
-        generate_markdown_report,
-        generate_json_report,
-    )
-    from depgraph.tests import run_self_tests
-except ImportError as e:
-    print(f"Error importing depgraph module: {e}", file=sys.stderr)
-    print(
-        "Make sure the depgraph/ directory is in the same location as this script.",
-        file=sys.stderr,
-    )
-    sys.exit(1)
+from .analyzer import build_dependency_graph
+from .cycles import find_cycles
+from .porting import compute_porting_order
+from .reports import generate_json_report, generate_markdown_report
+from .tests import run_self_tests
 
 
 def main() -> int:
+    """Main entry point."""
     parser = argparse.ArgumentParser(
         description="Generate Python dependency graph for migration planning"
     )
