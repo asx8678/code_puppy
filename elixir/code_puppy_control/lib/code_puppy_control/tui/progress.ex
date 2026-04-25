@@ -142,15 +142,12 @@ defmodule CodePuppyControl.TUI.Progress do
       width = Keyword.get(opts, :width, @default_bar_width)
       color = Keyword.get(opts, :color, :cyan)
 
-      raw_ratio = if total > 0, do: current / total, else: 1.0
-      ratio = raw_ratio |> max(0.0) |> min(1.0)
-      filled = trunc(ratio * width)
-      empty = width - filled
+      %{ratio: _ratio, filled: filled, empty: empty, percentage: pct} =
+        compute_bar_segments(current, total, width)
 
       bar_inner =
         [Data.tag(String.duplicate("\u2588", filled), color), String.duplicate("\u2591", empty)]
 
-      pct = Float.round(ratio * 100, 1)
       pct_str = "#{pct}%"
       count_str = "(#{current}/#{total})"
 
@@ -168,6 +165,23 @@ defmodule CodePuppyControl.TUI.Progress do
     else
       {:error, :no_tty}
     end
+  end
+
+  @doc false
+  @spec compute_bar_segments(integer(), integer(), non_neg_integer()) :: %{
+          ratio: float(),
+          filled: non_neg_integer(),
+          empty: non_neg_integer(),
+          percentage: float()
+        }
+  def compute_bar_segments(current, total, width) do
+    raw_ratio = if total > 0, do: current / total, else: 1.0
+    ratio = raw_ratio |> max(0.0) |> min(1.0)
+    filled = trunc(ratio * width)
+    empty = width - filled
+    percentage = Float.round(ratio * 100.0, 1)
+
+    %{ratio: ratio, filled: filled, empty: empty, percentage: percentage}
   end
 
   # ── Helpers ────────────────────────────────────────────────────────────────
