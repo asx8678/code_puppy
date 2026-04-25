@@ -38,7 +38,7 @@ Prerequisites before launching the Python-to-Elixir port.
 
 ### Phase B: Elixir LLM client
 
-- [ ] Port `code_puppy/model_factory.py` — provider registry
+- [x] Port `code_puppy/model_factory.py` — provider registry (e0a481dc ProviderRegistry core merge + c2a5738f ModelFactory integration merge; `CodePuppyControl.ModelFactory.ProviderRegistry` backed by Agent; `ModelFactory.provider_module_for_type/1` delegates to `ProviderRegistry.lookup/1`; tests: runtime register/override, `reset_for_test/0`, `list_available/0`, `resolve/1`, malformed non-binary type rejection, provider-map parity — 110 model_factory tests + 29 LLM/parity tests pass)
 - [ ] Port `code_puppy/messaging/*` — message types and serialization (partially done in Elixir already)
 - [ ] Elixir-native streaming HTTP client for OpenAI / Anthropic / local models
 - [ ] Tool-call dispatch plumbing
