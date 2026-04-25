@@ -99,7 +99,6 @@ class ApprovalManager:
             self._pending[approval.approval_id] = approval
 
         try:
-            from code_puppy.api.redactor import redact_approval_dict
             from code_puppy.plugins.frontend_emitter.emitter import emit_event
 
             emit_event("approval_request", redact_approval_dict(approval.to_dict()))
