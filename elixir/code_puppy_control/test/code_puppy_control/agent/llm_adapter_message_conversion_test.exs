@@ -508,6 +508,222 @@ defmodule CodePuppyControl.Agent.LLMAdapterMessageConversionTest do
   end
 
   # ===========================================================================
+  # 3. Assistant tool_calls conversion for provider replay
+  # ===========================================================================
+
+  describe "assistant tool_calls conversion for provider replay" do
+    test "atom-keyed assistant message with tool_calls converts to provider shape" do
+      # This is the shape produced by Agent.Loop.finalize_turn after fix:
+      # %{role: "assistant", content: nil, tool_calls: [%{id, name, arguments}]}
+      msgs = [
+        %{role: "user", content: "run tool"},
+        %{
+          role: "assistant",
+          content: nil,
+          tool_calls: [%{id: "tc-1", name: :echo_tool, arguments: %{"input" => "hi"}}]
+        },
+        %{role: "tool", content: "ok", tool_call_id: "tc-1"}
+      ]
+
+      ProviderMock.set_response(%{id: "r1", content: "done", tool_calls: []})
+
+      assert {:ok, _} = LLMAdapter.stream_chat(msgs, [], [model: "test"], fn _ -> :ok end)
+
+      captured = ProviderMock.captured_messages()
+      assert length(captured) == 3
+
+      # User message unchanged
+      assert Enum.at(captured, 0) == %{role: "user", content: "run tool"}
+
+      # Assistant message must have tool_calls in provider shape
+      assistant_msg = Enum.at(captured, 1)
+      assert assistant_msg.role == "assistant"
+      assert assistant_msg.content == nil
+      assert is_list(assistant_msg.tool_calls)
+
+      [provider_tc] = assistant_msg.tool_calls
+      assert provider_tc.id == "tc-1"
+      assert provider_tc.type == "function"
+      assert provider_tc.function.name == "echo_tool"
+      # Arguments must be a JSON string
+      assert is_binary(provider_tc.function.arguments)
+      assert Jason.decode!(provider_tc.function.arguments) == %{"input" => "hi"}
+
+      # Tool result message unchanged
+      tool_msg = Enum.at(captured, 2)
+      assert tool_msg.role == "tool"
+      assert tool_msg.content == "ok"
+      assert tool_msg.tool_call_id == "tc-1"
+    end
+
+    test "string-keyed assistant message with tool_calls converts to provider shape" do
+      msgs = [
+        %{
+          "role" => "assistant",
+          "content" => nil,
+          "tool_calls" => [%{"id" => "tc-s1", "name" => "my_tool", "arguments" => %{"x" => 1}}]
+        }
+      ]
+
+      ProviderMock.set_response(%{id: "r1", content: "ok", tool_calls: []})
+
+      assert {:ok, _} = LLMAdapter.stream_chat(msgs, [], [model: "test"], fn _ -> :ok end)
+
+      [captured] = ProviderMock.captured_messages()
+
+      assert captured.role == "assistant"
+      assert captured.content == nil
+
+      [provider_tc] = captured.tool_calls
+      assert provider_tc.id == "tc-s1"
+      assert provider_tc.type == "function"
+      assert provider_tc.function.name == "my_tool"
+      assert is_binary(provider_tc.function.arguments)
+      assert Jason.decode!(provider_tc.function.arguments) == %{"x" => 1}
+    end
+
+    test "assistant message with text and tool_calls preserves both" do
+      msgs = [
+        %{
+          role: "assistant",
+          content: "Let me check.",
+          tool_calls: [%{id: "tc-2", name: :echo_tool, arguments: %{}}]
+        }
+      ]
+
+      ProviderMock.set_response(%{id: "r1", content: "ok", tool_calls: []})
+
+      assert {:ok, _} = LLMAdapter.stream_chat(msgs, [], [model: "test"], fn _ -> :ok end)
+
+      [captured] = ProviderMock.captured_messages()
+
+      assert captured.role == "assistant"
+      assert captured.content == "Let me check."
+      assert is_list(captured.tool_calls)
+
+      [provider_tc] = captured.tool_calls
+      assert provider_tc.id == "tc-2"
+      assert provider_tc.type == "function"
+    end
+
+    test "multiple tool calls in assistant message all convert" do
+      msgs = [
+        %{
+          role: "assistant",
+          content: nil,
+          tool_calls: [
+            %{id: "tc-a", name: :tool_one, arguments: %{"a" => 1}},
+            %{id: "tc-b", name: :tool_two, arguments: %{"b" => 2}}
+          ]
+        }
+      ]
+
+      ProviderMock.set_response(%{id: "r1", content: "ok", tool_calls: []})
+
+      assert {:ok, _} = LLMAdapter.stream_chat(msgs, [], [model: "test"], fn _ -> :ok end)
+
+      [captured] = ProviderMock.captured_messages()
+      assert length(captured.tool_calls) == 2
+
+      [tc1, tc2] = captured.tool_calls
+      assert tc1.function.name == "tool_one"
+      assert tc2.function.name == "tool_two"
+    end
+
+    test "tool_call name as string is kept as string (no atom creation)" do
+      # Name comes through as a string from Loop (e.g., when resolve_tool_name
+      # couldn't match it). Provider API expects string names anyway.
+      msgs = [
+        %{
+          role: "assistant",
+          content: nil,
+          tool_calls: [%{id: "tc-str", name: "some_string_name", arguments: %{}}]
+        }
+      ]
+
+      ProviderMock.set_response(%{id: "r1", content: "ok", tool_calls: []})
+
+      assert {:ok, _} = LLMAdapter.stream_chat(msgs, [], [model: "test"], fn _ -> :ok end)
+
+      [captured] = ProviderMock.captured_messages()
+      [provider_tc] = captured.tool_calls
+
+      # to_string/1 on a string is a no-op — safe, no atom creation
+      assert provider_tc.function.name == "some_string_name"
+    end
+
+    test "arguments as binary (JSON string) passes through as-is" do
+      # Some paths may already have arguments as a JSON string
+      msgs = [
+        %{
+          role: "assistant",
+          content: nil,
+          tool_calls: [%{id: "tc-bin", name: :my_tool, arguments: "{\"already\": \"json\"}"}]
+        }
+      ]
+
+      ProviderMock.set_response(%{id: "r1", content: "ok", tool_calls: []})
+
+      assert {:ok, _} = LLMAdapter.stream_chat(msgs, [], [model: "test"], fn _ -> :ok end)
+
+      [captured] = ProviderMock.captured_messages()
+      [provider_tc] = captured.tool_calls
+
+      # Already a JSON string — passed through directly
+      assert provider_tc.function.arguments == "{\"already\": \"json\"}"
+    end
+
+    test "assistant message without tool_calls goes through content-only path" do
+      # Ensure the content-only clause still works — no regression
+      msgs = [%{role: "assistant", content: "Just text, no tools"}]
+      ProviderMock.set_response(%{id: "r1", content: "ok", tool_calls: []})
+
+      assert {:ok, _} = LLMAdapter.stream_chat(msgs, [], [model: "test"], fn _ -> :ok end)
+
+      assert [%{role: "assistant", content: "Just text, no tools"}] =
+               ProviderMock.captured_messages()
+    end
+
+    test "malformed tool_call maps produce safe placeholder, no crash" do
+      # When message history contains a corrupt tool_call entry (e.g., a bare
+      # string or a map missing required keys), to_provider_tool_call/1's
+      # catch-all clause must return a safe placeholder instead of crashing.
+      msgs = [
+        %{
+          role: "assistant",
+          content: nil,
+          tool_calls: [
+            %{id: "tc-good", name: :good_tool, arguments: %{}},
+            "totally_wrong_shape",
+            %{"missing" => "keys"},
+            42
+          ]
+        }
+      ]
+
+      ProviderMock.set_response(%{id: "r1", content: "ok", tool_calls: []})
+
+      # Must not raise
+      assert {:ok, _} = LLMAdapter.stream_chat(msgs, [], [model: "test"], fn _ -> :ok end)
+
+      [captured] = ProviderMock.captured_messages()
+      assert length(captured.tool_calls) == 4
+
+      # First is the well-formed tool call
+      [tc_good, tc_bogus1, tc_bogus2, tc_bogus3] = captured.tool_calls
+      assert tc_good.function.name == "good_tool"
+
+      # Each malformed entry becomes the safe placeholder
+      for tc <- [tc_bogus1, tc_bogus2, tc_bogus3] do
+        assert tc.id == ""
+        assert tc.type == "function"
+        assert tc.function.name == "unknown"
+        assert tc.function.arguments == "{}"
+      end
+    end
+  end
+
+  # ===========================================================================
   # 2. Message conversion: atom-keyed → string-keyed
   # ===========================================================================
 

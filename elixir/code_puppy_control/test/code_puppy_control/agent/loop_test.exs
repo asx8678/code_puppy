@@ -292,6 +292,116 @@ defmodule CodePuppyControl.Agent.LoopTest do
     end
   end
 
+  # ===========================================================================
+  # Tool-call-only turn: assistant(tool_calls) must precede tool results
+  # ===========================================================================
+
+  describe "tool-call-only turn message history" do
+    test "assistant message with tool_calls appears before tool result messages" do
+      # LLM returns tool-call-only response (no text)
+      MockLLM.set_response(%{
+        text: nil,
+        tool_calls: [%{id: "tc-history-1", name: :echo_tool, arguments: %{"input" => "test"}}]
+      })
+
+      {:ok, pid} =
+        Loop.start_link(TestAgent, [%{role: "user", content: "run tool"}],
+          llm_module: MockLLM,
+          run_id: "test-tool-history-1",
+          max_turns: 2,
+          compaction_enabled: false
+        )
+
+      :ok = Loop.run_turn(pid)
+
+      messages = Loop.get_messages(pid)
+
+      # Expected: user → assistant(tool_calls) → tool(result)
+      assert length(messages) == 3
+
+      # First message is the original user message
+      user_msg = Enum.at(messages, 0)
+      assert user_msg[:role] == "user"
+
+      # Second message MUST be assistant with tool_calls
+      assistant_msg = Enum.at(messages, 1)
+      assert assistant_msg[:role] == "assistant"
+      assert is_list(assistant_msg[:tool_calls])
+      assert length(assistant_msg[:tool_calls]) == 1
+
+      [tc] = assistant_msg[:tool_calls]
+      assert tc.id == "tc-history-1"
+      assert tc.name == :echo_tool
+
+      # Third message is the tool result
+      tool_msg = Enum.at(messages, 2)
+      assert tool_msg[:role] == "tool"
+      assert tool_msg[:tool_call_id] == "tc-history-1"
+
+      GenServer.stop(pid)
+    end
+
+    test "assistant message with both text and tool_calls preserves both" do
+      MockLLM.set_response(%{
+        text: "Let me check that.",
+        tool_calls: [%{id: "tc-mixed-1", name: :echo_tool, arguments: %{"input" => "mixed"}}]
+      })
+
+      {:ok, pid} =
+        Loop.start_link(TestAgent, [%{role: "user", content: "run tool"}],
+          llm_module: MockLLM,
+          run_id: "test-tool-history-mixed",
+          max_turns: 2,
+          compaction_enabled: false
+        )
+
+      :ok = Loop.run_turn(pid)
+
+      messages = Loop.get_messages(pid)
+
+      # Expected: user → assistant(text+tool_calls) → tool(result)
+      assert length(messages) == 3
+
+      assistant_msg = Enum.at(messages, 1)
+      assert assistant_msg[:role] == "assistant"
+      assert assistant_msg[:content] == "Let me check that."
+      assert is_list(assistant_msg[:tool_calls])
+      assert length(assistant_msg[:tool_calls]) == 1
+
+      tool_msg = Enum.at(messages, 2)
+      assert tool_msg[:role] == "tool"
+      assert tool_msg[:tool_call_id] == "tc-mixed-1"
+
+      GenServer.stop(pid)
+    end
+
+    test "tool-call-only turn: content is nil when no accumulated text" do
+      MockLLM.set_response(%{
+        text: nil,
+        tool_calls: [%{id: "tc-nil-content", name: :echo_tool, arguments: %{"input" => "nil"}}]
+      })
+
+      {:ok, pid} =
+        Loop.start_link(TestAgent, [%{role: "user", content: "run tool"}],
+          llm_module: MockLLM,
+          run_id: "test-tool-nil-content",
+          max_turns: 2,
+          compaction_enabled: false
+        )
+
+      :ok = Loop.run_turn(pid)
+
+      messages = Loop.get_messages(pid)
+      assistant_msg = Enum.at(messages, 1)
+
+      # When LLM emits tool calls with no text, content should be nil
+      assert assistant_msg[:content] == nil
+      assert is_list(assistant_msg[:tool_calls])
+
+      GenServer.stop(pid)
+    end
+  end
+
   # ---------------------------------------------------------------------------
   # Helpers
   # ---------------------------------------------------------------------------

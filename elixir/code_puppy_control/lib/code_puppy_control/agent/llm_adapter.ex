@@ -182,6 +182,36 @@ defmodule CodePuppyControl.Agent.LLMAdapter do
     text_msg ++ tool_return_msgs
   end
 
+  # ── Assistant messages with tool_calls ──────────────────────────────
+  #
+  # Agent.Loop.finalize_turn stores assistant messages with tool_calls
+  # as `%{role: "assistant", content: text | nil, tool_calls: [...]}`.
+  # The internal tool_call shape is `%{id, name, arguments}` where name
+  # is an atom or string and arguments is a map.  The provider API
+  # expects `%{id, type: "function", function: %{name, arguments: json_string}}`.
+  # These clauses must appear BEFORE the generic content-only clauses so
+  # they take priority when tool_calls are present.
+
+  # String-keyed assistant message with tool_calls
+  defp to_provider_message(%{"role" => role, "tool_calls" => tool_calls} = msg)
+       when is_list(tool_calls) and tool_calls != [] do
+    provider_tcs = Enum.map(tool_calls, &to_provider_tool_call/1)
+
+    base = %{role: role, content: msg["content"]}
+
+    [Map.put(base, :tool_calls, provider_tcs)]
+  end
+
+  # Atom-keyed assistant message with tool_calls
+  defp to_provider_message(%{role: role, tool_calls: tool_calls} = msg)
+       when is_list(tool_calls) and tool_calls != [] do
+    provider_tcs = Enum.map(tool_calls, &to_provider_tool_call/1)
+
+    base = %{role: to_string(role), content: msg[:content]}
+
+    [Map.put(base, :tool_calls, provider_tcs)]
+  end
+
   # String-keyed content (already in provider shape or close to it)
   defp to_provider_message(%{"role" => role, "content" => content} = msg) do
     base = %{role: role, content: content}
@@ -199,6 +229,55 @@ defmodule CodePuppyControl.Agent.LLMAdapter do
     Logger.warning("LLMAdapter: unknown message shape, passing through: #{inspect(msg)}")
     [msg]
   end
+
+  # ── Tool call shape conversion ────────────────────────────────────────
+  #
+  # Internal shape (from Turn/Loop): %{id, name, arguments}
+  #   where name is atom | string, arguments is map | string
+  # Provider shape (from LLM.Provider types): %{id, type: "function",
+  #   function: %{name: string, arguments: json_string}}
+  #
+  # We convert name to string via to_string/1 (atoms → strings safely)
+  # and arguments to JSON string.  We NEVER call String.to_atom/1 on
+  # provider-controlled names here — that only happens in
+  # safe_atomize/1 during inbound response normalization.
+
+  defp to_provider_tool_call(%{id: id, name: name, arguments: args}) do
+    %{
+      id: id || "",
+      type: "function",
+      function: %{name: to_string(name), arguments: encode_arguments(args)}
+    }
+  end
+
+  defp to_provider_tool_call(%{"id" => id, "name" => name, "arguments" => args}) do
+    %{
+      id: id || "",
+      type: "function",
+      function: %{name: to_string(name), arguments: encode_arguments(args)}
+    }
+  end
+
+  # Catch-all for malformed tool calls — return a safe placeholder
+  defp to_provider_tool_call(other) do
+    Logger.warning("LLMAdapter: malformed tool_call in message history: #{inspect(other)}")
+
+    %{id: "", type: "function", function: %{name: "unknown", arguments: "{}"}}
+  end
+
+  defp encode_arguments(args) when is_binary(args), do: args
+
+  # Defensive: use Jason.encode/1 (returns {:ok, _} | {:error, _}) instead of
+  # Jason.encode!/1 which raises on non-encodable values.  Fallback to "{}"
+  # prevents a single bad map from crashing the entire stream.
+  defp encode_arguments(args) when is_map(args) do
+    case Jason.encode(args) do
+      {:ok, json} -> json
+      {:error, _} -> "{}"
+    end
+  end
+
+  defp encode_arguments(_), do: "{}"
 
   defp maybe_put(map, _key, nil), do: map
   defp maybe_put(map, key, value), do: Map.put(map, key, value)
