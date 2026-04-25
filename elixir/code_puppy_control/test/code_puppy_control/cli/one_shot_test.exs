@@ -277,10 +277,17 @@ defmodule CodePuppyControl.CLI.OneShotTest do
 
   describe "API boundary" do
     test "send_to_agent/2 is private in Loop" do
+      # Ensure module is loaded before checking exports; function_exported?/3
+      # returns false for unloaded modules regardless of actual exports.
+      Code.ensure_loaded(CodePuppyControl.REPL.Loop)
       refute function_exported?(CodePuppyControl.REPL.Loop, :send_to_agent, 2)
     end
 
     test "OneShot.run/1 is exported" do
+      # Ensure module is loaded before checking exports; function_exported?/3
+      # returns false for unloaded modules regardless of actual exports.
+      # (code_puppy-8ah: seed-dependent failure before this fix)
+      Code.ensure_loaded(OneShot)
       assert function_exported?(OneShot, :run, 1)
     end
   end
