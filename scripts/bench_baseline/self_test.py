@@ -12,6 +12,9 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 from scripts.bench_baseline.models import BenchmarkResult, BenchmarkSuite, LatencyStats
+from scripts.bench_baseline.streaming_probes_self_test import (
+    load_streaming_probes_tests as _load_streaming_probes_tests,
+)
 from scripts.bench_baseline.streaming_self_test import (
     load_streaming_tests as _load_streaming_tests,
 )
@@ -580,6 +583,8 @@ def run_tests() -> int:
     suite = loader.loadTestsFromModule(sys.modules[__name__])
     # Include streaming fixtures/metrics tests from the split module
     suite.addTest(_load_streaming_tests())
+    # Include streaming probe extraction/TBT/credential tests
+    suite.addTest(_load_streaming_probes_tests())
     runner = unittest.TextTestRunner(verbosity=2)
     result = runner.run(suite)
     return 0 if result.wasSuccessful() else 1
