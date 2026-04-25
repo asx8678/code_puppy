@@ -591,7 +591,7 @@ def handle_api_command(command: str) -> bool:
     from pathlib import Path
 
     from code_puppy.config import STATE_DIR
-    from code_puppy.messaging import emit_error, emit_info, emit_success
+    from code_puppy.messaging import emit_info, emit_success
 
     parts = command.split()
     subcommand = parts[1] if len(parts) > 1 else "status"
@@ -620,6 +620,8 @@ def handle_api_command(command: str) -> bool:
         pid_file.parent.mkdir(parents=True, exist_ok=True)
         pid_file.write_text(str(proc.pid))
         emit_success(f"API server started (PID {proc.pid})")
+        emit_info("Dashboard available at http://127.0.0.1:8765/dashboard")
+        emit_info("Terminal available at http://127.0.0.1:8765/terminal")
         emit_info("Docs available at http://127.0.0.1:8765/docs")
         return True
 
@@ -647,7 +649,8 @@ def handle_api_command(command: str) -> bool:
             pid = int(pid_file.read_text().strip())
             os.kill(pid, 0)  # Check if process exists
             emit_success(f"API server is running (PID {pid})")
-            emit_info("URL: http://127.0.0.1:8765")
+            emit_info("Dashboard: http://127.0.0.1:8765/dashboard")
+            emit_info("Terminal: http://127.0.0.1:8765/terminal")
             emit_info("Docs: http://127.0.0.1:8765/docs")
         except (OSError, ValueError):
             pid_file.unlink(missing_ok=True)
@@ -761,4 +764,63 @@ def handle_wiggum_stop_command(command: str) -> bool:
     else:
         emit_info("Wiggum mode is not active.")
 
+    return True
+
+
+@register_command(
+    name="dashboard",
+    description="Open the integrated web dashboard in your browser",
+    usage="/dashboard",
+    aliases=["dash"],
+    category="core",
+    detailed_help=(
+        "Starts the API server (if not already running) and opens the web "
+        "dashboard in your default browser. The dashboard provides a GUI for "
+        "agent interactions, terminal access, and session management."
+    ),
+)
+def handle_dashboard_command(command: str) -> bool:
+    """Open the integrated web dashboard."""
+    import subprocess
+    import sys
+    import threading
+    import webbrowser
+    from pathlib import Path
+
+    from code_puppy.config import STATE_DIR
+    from code_puppy.messaging import emit_info, emit_success
+
+    pid_file = Path(STATE_DIR) / "api_server.pid"
+    host = "127.0.0.1"
+    port = 8765
+    dashboard_url = f"http://{host}:{port}/dashboard"
+
+    # Check if API server is already running
+    server_running = False
+    if pid_file.exists():
+        try:
+            pid = int(pid_file.read_text().strip())
+            os.kill(pid, 0)
+            server_running = True
+        except (OSError, ValueError):
+            pid_file.unlink(missing_ok=True)
+
+    if not server_running:
+        emit_info("Starting API server for dashboard...")
+        proc = subprocess.Popen(
+            [sys.executable, "-m", "code_puppy.api.main"],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            start_new_session=True,
+        )
+        pid_file.parent.mkdir(parents=True, exist_ok=True)
+        pid_file.write_text(str(proc.pid))
+        emit_success(f"API server started (PID {proc.pid})")
+        # Give the server a moment to start before opening browser
+        threading.Timer(1.5, lambda: webbrowser.open(dashboard_url)).start()
+    else:
+        webbrowser.open(dashboard_url)
+
+    emit_info(f"Opening dashboard: {dashboard_url}")
+    emit_info("Terminal: http://127.0.0.1:8765/terminal")
     return True
