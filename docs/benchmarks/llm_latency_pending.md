@@ -52,18 +52,18 @@ python scripts/bench_baseline_harness.py
 The current probe measures only TTFB for single-shot, non-streaming
 requests. Planned improvements (tracked in ROADMAP.md):
 
-### Time-to-First-Token (TTFT) ✅ Schema implemented
+### Time-to-First-Token (TTFT) ✅ Live probes implemented
 - **Definition:** Time from request dispatch to first token received (ms)
 - **Why it matters:** User-perceived latency, streaming responsiveness
-- **Status:** Schema + helpers in `scripts/bench_baseline/streaming.py`
-- **Live probes:** Pending (code_puppy-axx)
+- **Status:** Schema + helpers in `streaming.py`; live probes in `streaming_probes.py`
+- **Live probes:** Implemented (code_puppy-axx) — empty-delta filtered
 
-### Time-Between-Tokens (TBT) ✅ Schema implemented
+### Time-Between-Tokens (TBT) ✅ Live probes implemented
 - **Definition:** Inter-token latency during streaming (ms)
 - **Why it matters:** Smoothness of streaming experience
 - **Measurement:** LatencyStats (mean, median, p95, p99) of inter-token gaps
 - **Status:** Computed by `compute_inter_token_gaps()` / `compute_streaming_metrics()`
-- **Live probes:** Pending (code_puppy-axx)
+- **Live probes:** Implemented (code_puppy-axx) — aggregated across iterations
 
 ### Cached vs Non-Cached
 - **Definition:** Comparison of cache hit vs miss latencies

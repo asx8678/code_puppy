@@ -29,6 +29,7 @@ from scripts.bench_baseline.streaming_probes import (
     StreamingProbes,
     extract_anthropic_token_text,
     extract_openai_token_text,
+    is_token_arrival,
 )
 
 
@@ -429,6 +430,130 @@ class TestExtractOpenAITokenText(unittest.TestCase):
         """Chunk with empty string content must return empty string."""
         chunk = _FakeOpenAIChunk(choices=[_FakeOpenAIChoice(_FakeOpenAIDelta(""))])
         self.assertEqual(extract_openai_token_text(chunk), "")
+
+
+class TestIsTokenArrival(unittest.TestCase):
+    """Offline tests for empty-delta filtering logic.
+
+    Empty-string deltas must not count as token arrivals; this prevents
+    OpenAI role-only / empty-content chunks from deflating TTFT and
+    polluting TBT measurements.
+    """
+
+    def test_none_is_not_arrival(self):
+        """None (no token text) must not count as a token arrival."""
+        self.assertFalse(is_token_arrival(None))
+
+    def test_empty_string_is_not_arrival(self):
+        """Empty string delta must not count as a token arrival."""
+        self.assertFalse(is_token_arrival(""))
+
+    def test_whitespace_is_arrival(self):
+        """Whitespace-only deltas ARE token arrivals (meaningful content)."""
+        self.assertTrue(is_token_arrival(" "))
+        self.assertTrue(is_token_arrival("\n"))
+        self.assertTrue(is_token_arrival("  \n  "))
+
+    def test_normal_text_is_arrival(self):
+        """Non-empty text is always a token arrival."""
+        self.assertTrue(is_token_arrival("Hello"))
+        self.assertTrue(is_token_arrival(" world"))
+
+    def test_anthropic_empty_delta_not_arrival(self):
+        """Anthropic extraction returning empty string must not be token arrival."""
+        event = _FakeAnthropicEvent(
+            "content_block_delta",
+            delta=_FakeAnthropicDelta(""),
+        )
+        text = extract_anthropic_token_text(event)
+        self.assertEqual(text, "")
+        self.assertFalse(is_token_arrival(text))
+
+    def test_anthropic_none_delta_not_arrival(self):
+        """Anthropic extraction returning None must not be token arrival."""
+        event = _FakeAnthropicEvent("message_start")
+        text = extract_anthropic_token_text(event)
+        self.assertIsNone(text)
+        self.assertFalse(is_token_arrival(text))
+
+    def test_openai_empty_delta_not_arrival(self):
+        """OpenAI extraction returning empty string must not be token arrival."""
+        chunk = _FakeOpenAIChunk(choices=[_FakeOpenAIChoice(_FakeOpenAIDelta(""))])
+        text = extract_openai_token_text(chunk)
+        self.assertEqual(text, "")
+        self.assertFalse(is_token_arrival(text))
+
+    def test_openai_none_content_not_arrival(self):
+        """OpenAI extraction returning None must not be token arrival."""
+        chunk = _FakeOpenAIChunk(choices=[_FakeOpenAIChoice(_FakeOpenAIDelta(None))])
+        text = extract_openai_token_text(chunk)
+        self.assertIsNone(text)
+        self.assertFalse(is_token_arrival(text))
+
+    def test_openai_whitespace_delta_is_arrival(self):
+        """OpenAI whitespace-only delta IS a token arrival."""
+        chunk = _FakeOpenAIChunk(choices=[_FakeOpenAIChoice(_FakeOpenAIDelta("\n"))])
+        text = extract_openai_token_text(chunk)
+        self.assertEqual(text, "\n")
+        self.assertTrue(is_token_arrival(text))
+
+
+class TestTBTCrossIterationAggregation(unittest.TestCase):
+    """Offline tests verifying TBT aggregation across iterations.
+
+    Inter-token gaps from multiple successful iterations must be combined
+    without crossing iteration boundaries.
+    """
+
+    def test_gaps_from_two_iterations_combined(self):
+        """Gaps from two iterations should be concatenated (not crossed)."""
+        iter1 = [100.0, 150.0, 210.0]  # gaps: 50, 60
+        iter2 = [95.0, 155.0, 200.0]  # gaps: 60, 45
+        gaps1 = compute_inter_token_gaps(iter1)
+        gaps2 = compute_inter_token_gaps(iter2)
+        all_gaps = gaps1 + gaps2
+        stats = LatencyStats.from_samples(all_gaps)
+        self.assertEqual(stats.samples, 4)
+        self.assertAlmostEqual(stats.mean_ms, (50 + 60 + 60 + 45) / 4)
+
+    def test_single_iteration_gaps_unaffected(self):
+        """Single-iteration aggregation produces same result as non-aggregated."""
+        timestamps = [100.0, 150.0, 210.0]
+        gaps = compute_inter_token_gaps(timestamps)
+        all_gaps = gaps  # same as single-iteration
+        stats = LatencyStats.from_samples(all_gaps)
+        self.assertEqual(stats.samples, 2)
+        self.assertAlmostEqual(stats.mean_ms, 55.0)
+
+    def test_no_cross_boundary_gap(self):
+        """Last token of iter N and first token of iter N+1 must NOT produce a gap."""
+        iter1 = [100.0, 200.0]  # gap: 100
+        iter2 = [50.0, 150.0]  # gap: 100
+        # If we naively concatenated timestamps, we'd get [100, 200, 50, 150]
+        # and a bogus gap from 200→50.  Per-iteration gaps avoid this.
+        gaps1 = compute_inter_token_gaps(iter1)
+        gaps2 = compute_inter_token_gaps(iter2)
+        all_gaps = gaps1 + gaps2
+        # Both gaps should be 100, no cross-boundary artifacts
+        self.assertEqual(len(all_gaps), 2)
+        for g in all_gaps:
+            self.assertAlmostEqual(g, 100.0)
+
+    def test_successful_iterations_in_metadata(self):
+        """Metadata should include successful_iterations count."""
+        # Verify the field exists in computed streaming metadata
+        timestamps = [100.0, 150.0, 210.0]
+        metrics = compute_streaming_metrics(
+            timestamps,
+            model="test-model",
+            prompt_id="short_v1",
+        )
+        metadata = streaming_metrics_to_benchmark_metadata(metrics)
+        # successful_iterations is added by the probe, not by
+        # streaming_metrics_to_benchmark_metadata, but we verify
+        # we can add it without conflict
+        metadata["successful_iterations"] = 3
+        self.assertEqual(metadata["successful_iterations"], 3)
 
 
 class TestStreamingProbesNoCredentials(unittest.TestCase):

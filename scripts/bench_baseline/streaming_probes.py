@@ -23,6 +23,7 @@ from typing import Any
 
 from .models import BenchmarkResult, LatencyStats
 from .streaming import (
+    compute_inter_token_gaps,
     compute_streaming_metrics,
     streaming_metrics_to_benchmark_metadata,
 )
@@ -69,6 +70,18 @@ def extract_openai_token_text(chunk: Any) -> str | None:
                 if content is not None:
                     return content
     return None
+
+
+def is_token_arrival(text: str | None) -> bool:
+    """Return True if *text* represents an actual token arrival.
+
+    Empty-string deltas (e.g. initial role-only chunks from OpenAI)
+    are **not** token arrivals — they would make TTFT too low and pollute
+    inter-token gap (TBT) measurements.  Whitespace-only deltas (``" "``,
+    ``"\n"``) **are** token arrivals; they carry meaningful content and
+    must not be stripped.
+    """
+    return text is not None and text != ""
 
 
 # ---------------------------------------------------------------------------
@@ -140,7 +153,7 @@ class StreamingProbes:
                     for event in stream:
                         chunk_count += 1
                         text = extract_anthropic_token_text(event)
-                        if text is not None:
+                        if is_token_arrival(text):
                             ts = (time.perf_counter() - start) * 1000
                             timestamps.append(ts)
                             token_count += 1
@@ -162,7 +175,14 @@ class StreamingProbes:
         ttfts_ms = [ts[0] for ts in all_timestamps if ts]
         stats = LatencyStats.from_samples(ttfts_ms)
 
-        # Use last successful iteration for detailed TBT metrics
+        # Aggregate inter-token gaps across all successful iterations
+        # (never cross iteration boundaries)
+        all_gaps: list[float] = []
+        for ts_list in all_timestamps:
+            all_gaps.extend(compute_inter_token_gaps(ts_list))
+        combined_tbt_stats = LatencyStats.from_samples(all_gaps)
+
+        # Build metadata from last iteration, override TBT with combined stats
         last_metrics = compute_streaming_metrics(
             all_timestamps[-1],
             model=_STREAMING_MODELS["anthropic"],
@@ -171,6 +191,17 @@ class StreamingProbes:
             chunk_count=all_chunk_counts[-1],
             failures=len(failures),
         )
+        metadata = streaming_metrics_to_benchmark_metadata(last_metrics)
+        metadata.update(
+            {
+                "tbt_mean_ms": combined_tbt_stats.mean_ms,
+                "tbt_median_ms": combined_tbt_stats.median_ms,
+                "tbt_p95_ms": combined_tbt_stats.p95_ms,
+                "tbt_p99_ms": combined_tbt_stats.p99_ms,
+                "successful_iterations": len(all_timestamps),
+            }
+        )
+        successful = len(all_timestamps)
 
         return BenchmarkResult(
             category="llm_streaming",
@@ -178,10 +209,11 @@ class StreamingProbes:
             approach="live_api",
             latency_stats=stats,
             throughput_ops_per_sec=0,
-            metadata=streaming_metrics_to_benchmark_metadata(last_metrics),
+            metadata=metadata,
             notes=(
-                f"TTFT/TBT from {len(all_timestamps)} successful streaming "
-                f"iteration(s)." + (f" {len(failures)} failure(s)." if failures else "")
+                f"TTFT from last iteration; TBT aggregated across "
+                f"{successful} successful iteration(s)."
+                + (f" {len(failures)} failure(s)." if failures else "")
             ),
         )
 
@@ -224,7 +256,7 @@ class StreamingProbes:
                     for chunk in stream:
                         chunk_count += 1
                         text = extract_openai_token_text(chunk)
-                        if text is not None:
+                        if is_token_arrival(text):
                             ts = (time.perf_counter() - start) * 1000
                             timestamps.append(ts)
                             token_count += 1
@@ -247,6 +279,13 @@ class StreamingProbes:
         ttfts_ms = [ts[0] for ts in all_timestamps if ts]
         stats = LatencyStats.from_samples(ttfts_ms)
 
+        # Aggregate inter-token gaps across all successful iterations
+        all_gaps: list[float] = []
+        for ts_list in all_timestamps:
+            all_gaps.extend(compute_inter_token_gaps(ts_list))
+        combined_tbt_stats = LatencyStats.from_samples(all_gaps)
+
+        # Build metadata from last iteration, override TBT with combined stats
         last_metrics = compute_streaming_metrics(
             all_timestamps[-1],
             model=_STREAMING_MODELS["openai"],
@@ -255,6 +294,17 @@ class StreamingProbes:
             chunk_count=all_chunk_counts[-1],
             failures=len(failures),
         )
+        metadata = streaming_metrics_to_benchmark_metadata(last_metrics)
+        metadata.update(
+            {
+                "tbt_mean_ms": combined_tbt_stats.mean_ms,
+                "tbt_median_ms": combined_tbt_stats.median_ms,
+                "tbt_p95_ms": combined_tbt_stats.p95_ms,
+                "tbt_p99_ms": combined_tbt_stats.p99_ms,
+                "successful_iterations": len(all_timestamps),
+            }
+        )
+        successful = len(all_timestamps)
 
         return BenchmarkResult(
             category="llm_streaming",
@@ -262,10 +312,11 @@ class StreamingProbes:
             approach="live_api",
             latency_stats=stats,
             throughput_ops_per_sec=0,
-            metadata=streaming_metrics_to_benchmark_metadata(last_metrics),
+            metadata=metadata,
             notes=(
-                f"TTFT/TBT from {len(all_timestamps)} successful streaming "
-                f"iteration(s)." + (f" {len(failures)} failure(s)." if failures else "")
+                f"TTFT from last iteration; TBT aggregated across "
+                f"{successful} successful iteration(s)."
+                + (f" {len(failures)} failure(s)." if failures else "")
             ),
         )
 
