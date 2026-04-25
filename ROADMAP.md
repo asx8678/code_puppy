@@ -24,7 +24,7 @@ Prerequisites before launching the Python-to-Elixir port.
 - [x] Remove bd tracker (done — commit `b94b6222`)
 - [x] Add local test gates to lefthook (this commit)
 - [x] Create ROADMAP.md (this commit)
-- [ ] Triage 121 pre-existing Elixir test failures (delete / fix / skip-with-reason)
+- [x] Triage 121 pre-existing Elixir test failures (delete / fix / skip-with-reason) — baseline now passes: 5184 tests, 0 failures
 - [x] Triage pre-existing ruff errors on Python side (code_puppy-230 — all 44 errors fixed)
 - [ ] Choose final naming for the Elixir umbrella app (currently `code_puppy_control`)
 
