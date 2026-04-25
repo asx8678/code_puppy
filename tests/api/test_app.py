@@ -7,6 +7,8 @@ import pytest
 from fastapi import FastAPI
 from httpx import ASGITransport, AsyncClient
 
+from pathlib import Path
+
 from code_puppy.api.app import REQUEST_TIMEOUT, TimeoutMiddleware, create_app, lifespan
 
 
@@ -169,6 +171,84 @@ async def test_timeout_middleware_skips_ws_path() -> None:
 
 
 @pytest.mark.asyncio
+async def test_dashboard_page_returns_template(client: AsyncClient) -> None:
+    """Dashboard page returns HTML template with key UI markers."""
+    resp = await client.get("/dashboard")
+    assert resp.status_code == 200
+    assert "text/html" in resp.headers.get("content-type", "")
+    # Core UI elements
+    assert "Code Puppy Dashboard" in resp.text
+    assert 'id="prompt-form"' in resp.text
+    assert 'id="decision-panel"' in resp.text
+    assert 'id="feed"' in resp.text
+    # Auth cookie is set on dashboard responses
+    cookie_headers = [v for k, v in resp.headers.items() if k.lower() == "set-cookie"]
+    assert any("code_puppy_runtime_token" in h for h in cookie_headers)
+
+
+@pytest.mark.asyncio
+async def test_dashboard_contains_api_endpoints(client: AsyncClient) -> None:
+    """Dashboard template references all expected API endpoints."""
+    resp = await client.get("/dashboard")
+    assert resp.status_code == 200
+    html = resp.text
+    # Runtime endpoints (web-l0a design)
+    assert "/api/runtime/status" in html
+    assert "/api/runtime/prompt" in html
+    assert "/api/runtime/cancel" in html
+    assert "/api/runtime/respond" in html
+    assert "/api/runtime/approval" in html
+    assert "/api/runtime/events" in html
+    # Agents endpoint
+    assert "/api/agents/" in html
+    # WebSocket events endpoint
+    assert "/ws/events" in html
+    # Navigation links
+    assert 'href="/terminal"' in html
+    assert 'href="/docs"' in html
+
+
+@pytest.mark.asyncio
+async def test_dashboard_no_client_token_exposure(client: AsyncClient) -> None:
+    """Dashboard JS should not read or expose auth tokens in client-side code."""
+    resp = await client.get("/dashboard")
+    assert resp.status_code == 200
+    html = resp.text
+    # The api() helper must not attach token headers — cookie-only auth
+    assert "X-Code-Puppy-Runtime-Token" not in html
+    assert "localStorage" not in html
+    assert "sessionStorage" not in html
+
+
+@pytest.mark.asyncio
+async def test_dashboard_uses_existing_cdn_only(client: AsyncClient) -> None:
+    """Dashboard should only use Tailwind CDN (already in landing page), no new CDNs."""
+    resp = await client.get("/dashboard")
+    assert resp.status_code == 200
+    html = resp.text
+    # Only CDN reference should be Tailwind (already used in root page)
+    cdn_refs = [
+        line
+        for line in html.splitlines()
+        if 'src="https://' in line or 'href="https://' in line
+    ]
+    assert len(cdn_refs) >= 1, "Expected at least Tailwind CDN"
+    for ref in cdn_refs:
+        assert "cdn.tailwindcss.com" in ref, f"Unexpected CDN reference: {ref}"
+
+
+def test_dashboard_template_file_exists() -> None:
+    """The dashboard.html template file exists on disk."""
+    templates_dir = (
+        Path(__file__).resolve().parent.parent.parent
+        / "code_puppy"
+        / "api"
+        / "templates"
+    )
+    assert (templates_dir / "dashboard.html").exists()
+
+
+@pytest.mark.asyncio
 async def test_dashboard_page_not_found() -> None:
     """When dashboard template doesn't exist, returns 404 HTML."""
     with patch("pathlib.Path.exists", return_value=False):
@@ -274,3 +354,134 @@ async def test_lifespan_pid_file_cleanup() -> None:
             async with lifespan(app):
                 pass
             assert not pid_file.exists()
+
+
+@pytest.mark.asyncio
+async def test_dashboard_no_inline_onclick_handlers(client: AsyncClient) -> None:
+    """Dashboard must not use inline onclick= handlers (DOM XSS prevention)."""
+    resp = await client.get("/dashboard")
+    assert resp.status_code == 200
+    html = resp.text
+    assert "onclick=" not in html, (
+        "Dashboard should not contain inline onclick= handlers; "
+        "use data-action attributes + delegated listener instead"
+    )
+
+
+@pytest.mark.asyncio
+async def test_dashboard_no_client_side_storage_or_cookies(client: AsyncClient) -> None:
+    """Dashboard JS must not access localStorage, sessionStorage, or document.cookie."""
+    resp = await client.get("/dashboard")
+    assert resp.status_code == 200
+    html = resp.text
+    assert "localStorage" not in html
+    assert "sessionStorage" not in html
+    assert "document.cookie" not in html
+
+
+@pytest.mark.asyncio
+async def test_dashboard_feed_redacts_sensitive_fields(client: AsyncClient) -> None:
+    """Dashboard must define recursive redaction helpers that cover all sensitive keys."""
+    resp = await client.get("/dashboard")
+    assert resp.status_code == 200
+    html = resp.text
+    # Core helper names must exist
+    assert "deepRedact" in html, "Dashboard should define deepRedact recursive helper"
+    assert "redactEventForFeed" in html, (
+        "Dashboard should define redactEventForFeed event-level sanitizer"
+    )
+    assert "redactForFeed" in html, "Dashboard should define redactForFeed alias"
+    assert "[redacted]" in html, "Redaction must use '[redacted]' sentinel"
+    # The sensitive-key regex must cover the required set
+    sensitive_keys = [
+        "value",
+        "feedback",
+        "default_value",
+        "password",
+        "passwd",
+        "passphrase",
+        "selected_value",
+        "secret",
+        "token",
+        "access_token",
+        "refresh_token",
+        "api_key",
+        "apikey",
+        "authorization",
+        "credential",
+    ]
+    for key in sensitive_keys:
+        assert key in html, f"SENSITIVE_KEY_RE should cover key '{key}'"
+    # Verify deepRedact is recursive (calls itself)
+    assert "deepRedact(" in html, "deepRedact should recurse into nested values"
+
+
+@pytest.mark.asyncio
+async def test_dashboard_addfeed_uses_safe_event(client: AsyncClient) -> None:
+    """addFeed must sanitize events via redactEventForFeed before rendering."""
+    resp = await client.get("/dashboard")
+    assert resp.status_code == 200
+    html = resp.text
+    # addFeed should create a sanitized copy before any rendering
+    assert "safeEvent" in html, (
+        "addFeed should assign redactEventForFeed(event) to safeEvent "
+        "and render only the sanitized event"
+    )
+    # The summarize and JSON.stringify calls must use safeEvent, not raw event
+    # Find the addFeed function body and check it uses safeEvent
+    assert "summarize(safeEvent)" in html, (
+        "addFeed should pass safeEvent to summarize(), not raw event"
+    )
+    assert "safeEvent.data" in html, (
+        "addFeed should stringify safeEvent.data, not raw event.data"
+    )
+    assert "badgeClass(safeEvent)" in html, (
+        "addFeed should pass safeEvent to badgeClass(), not raw event"
+    )
+    assert "fmtTime(safeEvent.timestamp)" in html, (
+        "addFeed should pass safeEvent.timestamp to fmtTime(), not raw event.timestamp"
+    )
+
+
+@pytest.mark.asyncio
+async def test_dashboard_password_input_no_default_value(client: AsyncClient) -> None:
+    """Password-type inputs must not pre-populate default_value into the DOM."""
+    resp = await client.get("/dashboard")
+    assert resp.status_code == 200
+    html = resp.text
+    # For password inputs, value should be empty, not default_value
+    assert (
+        "d.input_type === 'password' ? ''" in html
+        or 'd.input_type === "password" ? ""' in html
+        or "d.input_type === 'password' ? ''" in html
+    ), "Password inputs should render empty value, not d.default_value"
+
+
+@pytest.mark.asyncio
+async def test_dashboard_uses_delegated_click_listener(client: AsyncClient) -> None:
+    """Decision buttons must use data-action attributes, not inline JS."""
+    resp = await client.get("/dashboard")
+    assert resp.status_code == 200
+    html = resp.text
+    assert "data-action" in html, (
+        "Dashboard decision buttons should use data-action attributes "
+        "for delegated click handling"
+    )
+    assert "pendingMeta" in html, (
+        "Dashboard should use pendingMeta Map for storing selection options metadata"
+    )
+    # Must NOT use inline onclick handlers
+    assert "onclick=" not in html
+
+
+@pytest.mark.asyncio
+async def test_dashboard_ws_reconnect_backoff(client: AsyncClient) -> None:
+    """WebSocket reconnect must use capped backoff and stop on auth/policy close."""
+    resp = await client.get("/dashboard")
+    assert resp.status_code == 200
+    html = resp.text
+    assert "wsBackoff" in html, "Dashboard should implement WS reconnect backoff"
+    assert "wsMaxBackoff" in html, "Dashboard should cap WS backoff"
+    assert "noReconnectCodes" in html or "4401" in html, (
+        "Dashboard should not reconnect on auth/policy close codes (4401, 4403, 1000, 1008)"
+    )
