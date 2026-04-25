@@ -26,7 +26,7 @@ Prerequisites before launching the Python-to-Elixir port.
 - [x] Create ROADMAP.md (this commit)
 - [x] Triage 121 pre-existing Elixir test failures (delete / fix / skip-with-reason) — baseline now passes: 5184 tests, 0 failures
 - [x] Triage pre-existing ruff errors on Python side (code_puppy-230 — all 44 errors fixed)
-- [ ] Choose final naming for the Elixir umbrella app (currently `code_puppy_control`)
+- [x] Choose final naming for the Elixir umbrella app (currently `code_puppy_control`) — see [docs/adr/ELIXIR-APP-NAMING.md](docs/adr/ELIXIR-APP-NAMING.md)
 
 ### Phase A: Port planning formalization
 
