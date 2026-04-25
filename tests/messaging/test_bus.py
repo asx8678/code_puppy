@@ -551,9 +551,7 @@ def test_serialize_message_for_frontend_non_pydantic(bus):
 def test_mirror_message_to_frontend_calls_emit_event(bus):
     """_mirror_message_to_frontend delegates to emit_event."""
     msg = TextMessage(level=MessageLevel.INFO, text="mirror-me")
-    with patch(
-        "code_puppy.plugins.frontend_emitter.emitter.emit_event"
-    ) as mock_emit:
+    with patch("code_puppy.plugins.frontend_emitter.emitter.emit_event") as mock_emit:
         _mirror_message_to_frontend(msg)
         mock_emit.assert_called_once()
         assert mock_emit.call_args[0][0] == "message"
@@ -573,9 +571,7 @@ def test_emit_mirrors_even_when_buffering(bus):
     """emit() calls _mirror_message_to_frontend even for buffered messages (web-19y)."""
     # No active renderer, message should be buffered AND mirrored
     assert not bus.has_active_renderer
-    with patch(
-        "code_puppy.messaging.bus._mirror_message_to_frontend"
-    ) as mock_mirror:
+    with patch("code_puppy.messaging.bus._mirror_message_to_frontend") as mock_mirror:
         bus.emit(TextMessage(level=MessageLevel.INFO, text="buf"))
         # Message was buffered
         assert len(bus._startup_buffer) == 1
@@ -586,9 +582,7 @@ def test_emit_mirrors_even_when_buffering(bus):
 def test_emit_mirrors_when_renderer_active(bus):
     """emit() also mirrors when renderer is active (web-19y)."""
     bus.mark_renderer_active()
-    with patch(
-        "code_puppy.messaging.bus._mirror_message_to_frontend"
-    ) as mock_mirror:
+    with patch("code_puppy.messaging.bus._mirror_message_to_frontend") as mock_mirror:
         bus.emit(TextMessage(level=MessageLevel.INFO, text="q"))
         assert bus.outgoing_qsize == 1
         mock_mirror.assert_called_once()

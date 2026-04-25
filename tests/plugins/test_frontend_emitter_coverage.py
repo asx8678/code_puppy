@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import asyncio
-import threading
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -660,9 +659,7 @@ class TestAgentRunEndCallback:
         with patch(
             "code_puppy.plugins.frontend_emitter.register_callbacks.emit_event"
         ) as mock_emit:
-            await on_agent_run_end(
-                "my_agent", "gpt-4", session_id="s1", success=True
-            )
+            await on_agent_run_end("my_agent", "gpt-4", session_id="s1", success=True)
             mock_emit.assert_called_once()
             assert mock_emit.call_args[0][0] == "agent_run_end"
             data = mock_emit.call_args[0][1]
@@ -805,6 +802,9 @@ class TestEmitterThreadSafety:
         ):
             emit_event("lock_test")
         assert len(_recent_events) == 1
+        # Verify the lock was acquired and properly released
+        assert _lock.acquire(blocking=False), "Lock still held after emit_event"
+        _lock.release()
         _recent_events.clear()
 
     def test_subscriber_loops_tracked(self):

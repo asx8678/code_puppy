@@ -248,7 +248,6 @@ def _truncate_string(value: Any, max_length: int = 100) -> Optional[str]:
     return s
 
 
-
 async def on_agent_run_start(
     agent_name: str, model_name: str, session_id: Optional[str] = None
 ) -> None:
@@ -328,6 +327,7 @@ async def on_agent_exception(exception: Exception, *args: Any, **kwargs: Any) ->
         )
     except Exception as e:
         logger.error(f"Failed to emit agent_exception event: {e}")
+
 
 def register() -> None:
     """Register all frontend emitter callbacks."""
