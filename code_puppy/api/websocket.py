@@ -1,7 +1,7 @@
 """WebSocket endpoints for Code Puppy API.
 
 Provides real-time communication channels:
-- /ws/events - Server-sent events stream
+- /ws/events - Server-sent events stream (auth-protected)
 - /ws/terminal - Interactive PTY terminal sessions
 - /ws/health - Simple health check endpoint
 """
@@ -13,6 +13,13 @@ import uuid
 
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 
+from code_puppy.api.auth import (
+    _HEADER_NAME,
+    extract_ws_token,
+    validate_ws_origin,
+    verify_token,
+)
+
 logger = logging.getLogger(__name__)
 
 
@@ -21,9 +28,36 @@ def setup_websocket(app: FastAPI) -> None:
 
     @app.websocket("/ws/events")
     async def websocket_events(websocket: WebSocket) -> None:
-        """Stream real-time events to connected clients."""
+        """Stream real-time events to connected clients.
+
+        Requires a valid runtime token via cookie or custom header,
+        and rejects cross-origin connections.
+        """
+        # Origin check before accepting
+        origin = websocket.headers.get("origin", "")
+        if not validate_ws_origin(origin):
+            logger.warning("Rejected WS /ws/events from cross-site Origin: %s", origin)
+            await websocket.close(code=4403, reason="Cross-origin not allowed")
+            return
+
+        # Auth check: extract token from cookie or custom header
+        cookie_header = websocket.headers.get("cookie", "")
+        # Also check the custom header for non-browser clients
+        custom_headers = [
+            (k, v)
+            for k, v in websocket.headers.items()
+            if k.lower() == _HEADER_NAME.lower()
+        ]
+        token = extract_ws_token(
+            cookie_header=cookie_header, protocol_headers=custom_headers
+        )
+        if not verify_token(token):
+            logger.warning("Rejected unauthenticated WS /ws/events connection")
+            await websocket.close(code=4401, reason="Authentication required")
+            return
+
         await websocket.accept()
-        logger.info("Events WebSocket client connected")
+        logger.info("Events WebSocket client connected (authenticated)")
 
         from code_puppy.plugins.frontend_emitter.emitter import (
             get_recent_events,
@@ -31,17 +65,25 @@ def setup_websocket(app: FastAPI) -> None:
             unsubscribe,
         )
 
+        from code_puppy.api.redactor import redact_event_data
+
         event_queue = subscribe()
 
         try:
             recent_events = get_recent_events()
             for event in recent_events:
-                await websocket.send_json(event)
+                redacted = (
+                    redact_event_data(event) if isinstance(event, dict) else event
+                )
+                await websocket.send_json(redacted)
 
             while True:
                 try:
                     event = await asyncio.wait_for(event_queue.get(), timeout=30.0)
-                    await websocket.send_json(event)
+                    redacted = (
+                        redact_event_data(event) if isinstance(event, dict) else event
+                    )
+                    await websocket.send_json(redacted)
                 except asyncio.TimeoutError:
                     try:
                         await websocket.send_json({"type": "ping"})

@@ -5,12 +5,17 @@ from __future__ import annotations
 import asyncio
 import os
 import threading
-import traceback
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 from uuid import uuid4
 
 from code_puppy.api.approvals import get_approval_manager
+from code_puppy.api.redactor import (
+    redact,
+    redact_event_data,
+    redact_run_dict,
+    sanitize_traceback,
+)
 from code_puppy.plugins.frontend_emitter.emitter import emit_event
 
 
@@ -77,14 +82,16 @@ class RuntimeManager:
 
         emit_event(
             "prompt_submitted",
-            {
-                "run_id": run["run_id"],
-                "prompt_preview": run["prompt_preview"],
-                "agent_name": agent,
-                "model_name": model,
-            },
+            redact_event_data(
+                {
+                    "run_id": run["run_id"],
+                    "prompt_preview": redact(run["prompt_preview"], max_length=300),
+                    "agent_name": agent,
+                    "model_name": model,
+                }
+            ),
         )
-        return dict(run)
+        return redact_run_dict(dict(run))
 
     async def cancel_current_run(self, reason: Optional[str] = None) -> Dict[str, Any]:
         """Request cancellation for the active run."""
@@ -113,12 +120,16 @@ class RuntimeManager:
 
         emit_event(
             "prompt_cancel_requested",
-            {"run_id": run["run_id"], "reason": reason},
+            redact_event_data({"run_id": run["run_id"], "reason": reason}),
         )
         return {"cancelled": True, "run_id": run["run_id"], "reason": reason}
 
     def get_status(self) -> Dict[str, Any]:
-        """Return runtime status for the dashboard."""
+        """Return runtime status for the dashboard (unredacted internally).
+
+        Callers at the HTTP/WS boundary should apply
+        :func:`code_puppy.api.redactor.redact_status_payload`.
+        """
         with self._lock:
             run = dict(self._current_run) if self._current_run else None
             running = bool(
@@ -302,12 +313,14 @@ class RuntimeManager:
 
             emit_event(
                 "prompt_started",
-                {
-                    "run_id": run["run_id"],
-                    "agent_name": run["agent_name"],
-                    "model_name": run["model_name"],
-                    "prompt_preview": run["prompt_preview"],
-                },
+                redact_event_data(
+                    {
+                        "run_id": run["run_id"],
+                        "agent_name": run["agent_name"],
+                        "model_name": run["model_name"],
+                        "prompt_preview": redact(run["prompt_preview"], max_length=300),
+                    }
+                ),
             )
 
             def on_task_created(task: asyncio.Task[Any]) -> None:
@@ -355,12 +368,14 @@ class RuntimeManager:
 
             emit_event(
                 "prompt_completed",
-                {
-                    "run_id": run["run_id"],
-                    "agent_name": run.get("agent_name"),
-                    "model_name": run.get("model_name"),
-                    "output_preview": run["output_preview"],
-                },
+                redact_event_data(
+                    {
+                        "run_id": run["run_id"],
+                        "agent_name": run.get("agent_name"),
+                        "model_name": run.get("model_name"),
+                        "output_preview": redact(run["output_preview"], max_length=500),
+                    }
+                ),
             )
         except asyncio.CancelledError:
             self._mark_run_cancelled(run, "Agent task cancelled")
@@ -376,18 +391,22 @@ class RuntimeManager:
         emit_event("prompt_cancelled", {"run_id": run["run_id"], "reason": reason})
 
     def _mark_run_failed(self, run: Dict[str, Any], exc: BaseException) -> None:
+        import traceback as _tb
+
         error = str(exc) or exc.__class__.__name__
         with self._lock:
             run["status"] = "failed"
             run["ended_at"] = _now()
-            run["error"] = error
+            run["error"] = redact(error, max_length=500)
         emit_event(
             "prompt_failed",
-            {
-                "run_id": run["run_id"],
-                "error": error,
-                "traceback": traceback.format_exc(),
-            },
+            redact_event_data(
+                {
+                    "run_id": run["run_id"],
+                    "error": redact(error, max_length=500),
+                    "traceback": sanitize_traceback(_tb.format_exc()),
+                }
+            ),
         )
 
 

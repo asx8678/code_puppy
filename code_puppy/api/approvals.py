@@ -14,6 +14,9 @@ from typing import Any, Dict, List, Optional
 from uuid import uuid4
 
 
+from code_puppy.api.redactor import redact_approval_dict
+
+
 @dataclass
 class PendingApproval:
     """A single approval request waiting for a browser response."""
@@ -31,9 +34,13 @@ class PendingApproval:
     feedback: Optional[str] = None
     event: threading.Event = field(default_factory=threading.Event, repr=False)
 
-    def to_dict(self) -> Dict[str, Any]:
-        """Return a JSON-safe representation for API responses/events."""
-        return {
+    def to_dict(self, *, redact_sensitive: bool = True) -> Dict[str, Any]:
+        """Return a JSON-safe representation for API responses/events.
+
+        When *redact_sensitive* is True (default), content, preview, and
+        feedback fields are truncated and secret-patterns are masked.
+        """
+        d = {
             "approval_id": self.approval_id,
             "title": self.title,
             "content": self.content,
@@ -44,6 +51,9 @@ class PendingApproval:
             "approved": self.approved,
             "feedback": self.feedback,
         }
+        if redact_sensitive:
+            d = redact_approval_dict(d)
+        return d
 
 
 class ApprovalManager:
@@ -89,9 +99,10 @@ class ApprovalManager:
             self._pending[approval.approval_id] = approval
 
         try:
+            from code_puppy.api.redactor import redact_approval_dict
             from code_puppy.plugins.frontend_emitter.emitter import emit_event
 
-            emit_event("approval_request", approval.to_dict())
+            emit_event("approval_request", redact_approval_dict(approval.to_dict()))
         except Exception:
             # Never crash file tools because the optional web event emitter failed.
             pass
@@ -163,9 +174,12 @@ class ApprovalManager:
         return len(approvals)
 
     def list_pending(self) -> List[Dict[str, Any]]:
-        """Return all pending approval requests."""
+        """Return all pending approval requests (redacted for boundary)."""
         with self._lock:
-            return [approval.to_dict() for approval in self._pending.values()]
+            return [
+                approval.to_dict(redact_sensitive=True)
+                for approval in self._pending.values()
+            ]
 
 
 _manager = ApprovalManager()

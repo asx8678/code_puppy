@@ -8,7 +8,13 @@ from typing import AsyncGenerator
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse
+from fastapi.responses import (
+    FileResponse,
+    HTMLResponse,
+    JSONResponse,
+    RedirectResponse,
+    Response,
+)
 from starlette.types import ASGIApp, Receive, Scope, Send
 
 logger = logging.getLogger(__name__)
@@ -125,10 +131,16 @@ def create_app() -> FastAPI:
     # Timeout middleware - added first so it wraps everything
     app.add_middleware(TimeoutMiddleware, timeout=REQUEST_TIMEOUT)
 
-    # CORS middleware for frontend access
+    # CORS middleware — restricted to localhost dashboard origins.
+    # allow_credentials=True with allow_origins=["*"] is a security
+    # violation; we only allow same-origin / localhost origins.
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=["*"],  # Local/trusted
+        allow_origins=[
+            "http://127.0.0.1",
+            "http://localhost",
+            "http://[::1]",
+        ],
         allow_credentials=True,
         allow_methods=["*"],
         allow_headers=["*"],
@@ -152,10 +164,11 @@ def create_app() -> FastAPI:
     templates_dir = Path(__file__).parent / "templates"
 
     @app.get("/")
-    async def root():
+    async def root() -> Response:
         """Landing page with links to terminal and docs."""
-        return HTMLResponse(
-            content="""
+        from code_puppy.api.auth import attach_token_cookie_to_response
+
+        html = """
 <!DOCTYPE html>
 <html>
 <head>
@@ -184,23 +197,31 @@ def create_app() -> FastAPI:
 </body>
 </html>
         """
-        )
+        response = HTMLResponse(content=html)
+        return attach_token_cookie_to_response(response)
 
     @app.get("/dashboard")
-    async def dashboard_page():
+    async def dashboard_page() -> Response:
         """Serve the integrated Code Puppy dashboard."""
+        from code_puppy.api.auth import attach_token_cookie_to_response
+
         html_file = templates_dir / "dashboard.html"
         if html_file.exists():
-            return FileResponse(html_file, media_type="text/html")
-        return HTMLResponse(
-            content="<h1>Dashboard template not found</h1>",
-            status_code=404,
-        )
+            response = FileResponse(html_file, media_type="text/html")
+        else:
+            response = HTMLResponse(
+                content="<h1>Dashboard template not found</h1>",
+                status_code=404,
+            )
+        return attach_token_cookie_to_response(response)
 
     @app.get("/app")
-    async def app_page():
+    async def app_page() -> Response:
         """Backward-friendly alias for the dashboard."""
-        return RedirectResponse(url="/dashboard")
+        from code_puppy.api.auth import attach_token_cookie_to_response
+
+        response = RedirectResponse(url="/dashboard")
+        return attach_token_cookie_to_response(response)
 
     @app.get("/terminal")
     async def terminal_page():
