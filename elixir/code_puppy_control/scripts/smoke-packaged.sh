@@ -86,7 +86,21 @@ fi
 cd "${PROJECT_ROOT}"
 info "project root: ${PROJECT_ROOT}"
 
-# ── Prerequisite checks ───────────────────────────────────────────────────
+# ── Per-run log directory (refs: code_puppy-d7m) ───────────────────────────
+# Build logs land in a private mktemp dir, NEVER fixed `/tmp/pup_*.log`
+# paths.  The previous behaviour was clobber-prone (two concurrent CI
+# runs racing on the same path) and exposed a symlink-attack surface
+# (a pre-existing /tmp/pup_escript_build.log symlinked to /etc/passwd
+# would have been silently truncated by `>` redirection).  `mktemp -d`
+# uses `mkdir` semantics (atomic, owner-only by default) and the trap
+# guarantees cleanup even on Ctrl-C / unexpected exit.
+LOG_DIR="$(mktemp -d -t pup_smoke.XXXXXX 2>/dev/null || mktemp -d "${TMPDIR:-/tmp}/pup_smoke.XXXXXX")"
+trap 'rm -rf -- "${LOG_DIR}"' EXIT INT TERM
+ESCRIPT_BUILD_LOG="${LOG_DIR}/escript_build.log"
+BURRITO_BUILD_LOG="${LOG_DIR}/burrito_build.log"
+info "per-run log dir: ${LOG_DIR}"
+
+# ── Prerequisite checks ───────────────────────────────────────────────
 if ! command -v mix >/dev/null 2>&1; then
   error "Elixir/Mix not found on PATH. Install Elixir first."
   exit 1
@@ -97,9 +111,9 @@ ESCRIPT_PATH="${PROJECT_ROOT}/pup"
 
 if [[ "${SKIP_BUILD}" != "true" ]]; then
   info "building escript (mix escript.build)..."
-  mix escript.build >/tmp/pup_escript_build.log 2>&1 || {
-    error "mix escript.build failed; see /tmp/pup_escript_build.log"
-    tail -40 /tmp/pup_escript_build.log >&2 || true
+  mix escript.build >"${ESCRIPT_BUILD_LOG}" 2>&1 || {
+    error "mix escript.build failed; see ${ESCRIPT_BUILD_LOG}"
+    tail -40 "${ESCRIPT_BUILD_LOG}" >&2 || true
     exit 1
   }
   ok "escript built: ${ESCRIPT_PATH}"
@@ -123,9 +137,9 @@ if [[ "${WITH_BURRITO}" == "true" ]]; then
       exit 1
     fi
 
-    "${SCRIPT_DIR}/build-burrito.sh" --host-only >/tmp/pup_burrito_build.log 2>&1 || {
-      error "Burrito host-only build failed; see /tmp/pup_burrito_build.log"
-      tail -40 /tmp/pup_burrito_build.log >&2 || true
+    "${SCRIPT_DIR}/build-burrito.sh" --host-only >"${BURRITO_BUILD_LOG}" 2>&1 || {
+      error "Burrito host-only build failed; see ${BURRITO_BUILD_LOG}"
+      tail -40 "${BURRITO_BUILD_LOG}" >&2 || true
       exit 1
     }
     ok "Burrito host-only build complete"
