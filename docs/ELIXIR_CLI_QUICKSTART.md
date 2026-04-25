@@ -325,7 +325,7 @@ Start a REPL with slash commands, model/agent switching, and session management:
 | Symptom | Fix |
 |---------|-----|
 | `mix pup_ex.doctor` shows failures | Re-run `mix pup_ex.import --confirm` to rebuild `~/.code_puppy_ex/` |
-| `IsolationViolation` at runtime | Code using `Isolation.safe_*` wrappers attempted to write outside `PUP_EX_HOME`. Guarded write paths must target the Elixir home. |
+| `IsolationViolation` at runtime | Code using `Isolation.safe_*` wrappers attempted to write to the legacy home directory (`~/.code_puppy/`). The wrappers block legacy-home writes to prevent cross-runtime collision; they do not enforce a general filesystem sandbox (writes to other non-legacy paths are allowed). |
 | `database is locked` in smoke | Harmless — multiple SQLite pool connections race during the short-lived smoke app start. Does not affect smoke results. |
 | Escript `--version` shows wrong version | Rebuild: `MIX_ENV=prod mix escript.build` |
 | `PUP_HOME` deprecation warnings | Switch to `PUP_EX_HOME`. `PUP_HOME`/`PUPPY_HOME` are deprecated fallbacks used by both Python and Elixir; they will be removed in a future release. |

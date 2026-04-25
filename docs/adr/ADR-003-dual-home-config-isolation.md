@@ -86,9 +86,12 @@ Isolation is enforced at the code level via a dedicated module: `CodePuppyContro
 raise ConfigIsolationViolation, path: resolved_path, stacktrace: __STACKTRACE__
 ```
 
-Every attempted write to the legacy home (or any path outside the Elixir home) raises this
-exception with the full resolved path and stacktrace. There is no warning-level bypass.
-There is no config flag to disable it. The guard is always active.
+Every attempted write to the **legacy home** (`~/.code_puppy/`) via the `safe_*` wrappers
+raises this exception with the full resolved path and stacktrace. Writes to paths
+outside the Elixir home that are *not* under the legacy home (e.g., `/tmp`) are **not
+blocked** — the guard protects against legacy-home collision, not general filesystem
+sandboxing. There is no warning-level bypass. There is no config flag to disable it.
+The guard is always active.
 
 ### Safe Wrappers
 
@@ -96,10 +99,10 @@ New and guarded config write paths in Elixir pup-ex MUST go through these wrappe
 
 | Wrapper | Purpose |
 |---------|---------|
-| `safe_write!(path, content)` | Write a file; validates target is under Elixir home |
-| `safe_mkdir_p!(path)` | Create directory tree; validates target is under Elixir home |
-| `safe_rm!(path)` | Remove a file; validates target is under Elixir home |
-| `safe_rm_rf!(path)` | Recursive delete; validates target is under Elixir home |
+| `safe_write!(path, content)` | Write a file; raises `IsolationViolation` if target is under legacy home |
+| `safe_mkdir_p!(path)` | Create directory tree; raises `IsolationViolation` if target is under legacy home |
+| `safe_rm!(path)` | Remove a file; raises `IsolationViolation` if target is under legacy home |
+| `safe_rm_rf!(path)` | Recursive delete; raises `IsolationViolation` if target is under legacy home |
 
 Direct use of `File.write!/2`, `File.mkdir_p!/1`, `File.rm!/1`, or `File.rm_rf!/1` on
 config paths is a **violation of this ADR** and will be caught in code review. **Caveat:**
