@@ -93,7 +93,8 @@ defmodule CodePuppyControl.REPL.Loop do
   """
   @spec run(map()) :: :ok
   def run(opts) when is_map(opts) do
-    agent = Map.get(opts, :agent, "code-puppy")
+    # Use || so that explicit nil from CLI parser falls back to default.
+    agent = opts[:agent] || "code-puppy"
     model = Map.get(opts, :model) || Models.global_model_name()
     session_id = Map.get(opts, :session_id) || generate_session_id()
 
@@ -459,7 +460,9 @@ defmodule CodePuppyControl.REPL.Loop do
     end
   end
 
-  defp resolve_agent_module(agent_name) when is_binary(agent_name) do
+  @doc false
+  # Public for REPL.OneShot dispatch; also used internally by resolve_agent_key/1.
+  def resolve_agent_module(agent_name) when is_binary(agent_name) do
     # Try the name as-given, then kebab↔snake variants. AgentCatalogue keys
     # are typically snake_case internally even when the UI shows kebab-case.
     candidates =
@@ -503,7 +506,9 @@ defmodule CodePuppyControl.REPL.Loop do
     _ -> :not_found
   end
 
-  defp ensure_agent_state_for(session_id, agent_key) do
+  @doc false
+  # Public for REPL.OneShot dispatch; also used internally by send_to_agent/2.
+  def ensure_agent_state_for(session_id, agent_key) do
     case State.start_agent_state(session_id, agent_key) do
       {:ok, _pid} -> :ok
       {:error, reason} -> {:error, reason}
