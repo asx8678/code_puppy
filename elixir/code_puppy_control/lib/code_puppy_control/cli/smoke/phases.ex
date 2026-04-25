@@ -393,12 +393,47 @@ defmodule CodePuppyControl.CLI.Smoke.Phases do
   defp probe_candidates(_burrito_dir, []), do: :none
 
   defp probe_candidates(burrito_dir, [target | rest]) do
-    path = Path.join(burrito_dir, "code_puppy_control_#{target}")
+    case probe_target(burrito_dir, target) do
+      {:ok, _path} = ok -> ok
+      :none -> probe_candidates(burrito_dir, rest)
+    end
+  end
 
-    if File.regular?(path) do
-      {:ok, path}
+  # Probe the on-disk filename(s) Burrito actually produces for `target`
+  # under `burrito_dir`.  Returns the first matching regular file or
+  # `:none`.
+  #
+  # Refs: code_puppy-d7m
+  defp probe_target(burrito_dir, target) do
+    target
+    |> candidate_filenames()
+    |> Enum.find_value(:none, fn name ->
+      path = Path.join(burrito_dir, name)
+      if File.regular?(path), do: {:ok, path}, else: nil
+    end)
+  end
+
+  # Burrito names the produced binary `<release>_<target>` on Unix and
+  # appends a `.exe` suffix for Windows targets — see
+  # `docs/burrito-release.md` ("Output Layout") and `mix.exs`.  We probe
+  # the `.exe` variant for `windows_*` targets so a host-Windows smoke
+  # run can actually find the artifact instead of silently skipping.
+  #
+  # We deliberately do NOT add a bare-name fallback for Windows targets:
+  # the strict host-compat contract (regression code_puppy-d7m) requires
+  # us to match only what Burrito actually emits, never an unrelated
+  # planted file with a colliding name.
+  #
+  # Refs: code_puppy-d7m
+  @doc false
+  @spec candidate_filenames(String.t()) :: [String.t()]
+  def candidate_filenames(target) when is_binary(target) do
+    base = "code_puppy_control_#{target}"
+
+    if String.starts_with?(target, "windows_") do
+      [base <> ".exe"]
     else
-      probe_candidates(burrito_dir, rest)
+      [base]
     end
   end
 

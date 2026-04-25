@@ -199,6 +199,103 @@ defmodule CodePuppyControl.CLI.Smoke.BurritoArtifactTest do
       assert {:skip, _reason, _metrics} =
                Phases.probe_burrito_dir(burrito_out, ["macos_arm64"])
     end
+
+    # Headline regression for the shepherd note on code_puppy-d7m:
+    # Burrito emits `code_puppy_control_windows_x86_64.exe` (with the
+    # `.exe` suffix) on Windows builds.  The OLD selector probed only
+    # the bare `code_puppy_control_windows_x86_64` path, which meant a
+    # host-Windows smoke runner could NEVER select the real artifact
+    # and would silently `:skip` the burrito phase.  This test plants
+    # the actual on-disk filename and asserts the selector finds it.
+    #
+    # NOTE: we never `System.cmd` the planted file — `probe_burrito_dir/2`
+    # only inspects via `File.regular?`, so a tiny non-executable payload
+    # is sufficient and there is no risk of executing an invalid binary.
+    test "selects the .exe artifact for a windows_* target (regression code_puppy-d7m)" do
+      burrito_out =
+        setup_burrito_out(["code_puppy_control_windows_x86_64.exe"], "windows_exe")
+
+      expected = Path.join(burrito_out, "code_puppy_control_windows_x86_64.exe")
+
+      assert {:ok, ^expected} =
+               Phases.probe_burrito_dir(burrito_out, ["windows_x86_64"]),
+             "probe_burrito_dir/2 must match the `.exe`-suffixed Burrito artifact " <>
+               "for windows_* targets so host-Windows smoke runs do not silently skip"
+    end
+
+    # Defensive lock-in: do NOT regress to a permissive bare-name
+    # fallback for Windows targets.  If a stray non-`.exe` file with the
+    # canonical prefix appears in `burrito_out/` (a stale rename, an
+    # editor swap file, anything), the selector must keep skipping rather
+    # than handing a non-Burrito payload to `probe_packaged_cli/2`.
+    test "does NOT match a bare-name file when probing a windows_* target (regression code_puppy-d7m)" do
+      burrito_out =
+        setup_burrito_out(["code_puppy_control_windows_x86_64"], "windows_bare_only")
+
+      assert {:skip, reason, metrics} =
+               Phases.probe_burrito_dir(burrito_out, ["windows_x86_64"])
+
+      assert reason =~ "no host-compatible",
+             "skip reason should explain why no `.exe` artifact was found; got: #{reason}"
+
+      assert reason =~ "windows_x86_64",
+             "skip reason should list the requested target; got: #{reason}"
+
+      assert metrics.candidates == ["windows_x86_64"]
+    end
+
+    # Cohabitation case: when both the real `.exe` and a stray bare-name
+    # file are present, the selector picks the `.exe` (the actual Burrito
+    # output), not whichever one happens to sort first on disk.
+    test "prefers the .exe artifact over a bare-name sibling for a windows_* target" do
+      burrito_out =
+        setup_burrito_out(
+          [
+            "code_puppy_control_windows_x86_64",
+            "code_puppy_control_windows_x86_64.exe"
+          ],
+          "windows_both"
+        )
+
+      expected = Path.join(burrito_out, "code_puppy_control_windows_x86_64.exe")
+
+      assert {:ok, ^expected} =
+               Phases.probe_burrito_dir(burrito_out, ["windows_x86_64"])
+    end
+
+    # Negative parity: non-Windows targets must NOT match a `.exe`-
+    # suffixed file even if one is planted.  This guards against an
+    # over-permissive selector that probes `.exe` for every target.
+    test "does NOT match a .exe sibling when probing a non-windows target" do
+      burrito_out =
+        setup_burrito_out(["code_puppy_control_macos_arm64.exe"], "macos_exe_only")
+
+      assert {:skip, _reason, metrics} =
+               Phases.probe_burrito_dir(burrito_out, ["macos_arm64"])
+
+      assert metrics.candidates == ["macos_arm64"]
+    end
+  end
+
+  describe "candidate_filenames/1" do
+    test "appends `.exe` for windows_* targets" do
+      assert Phases.candidate_filenames("windows_x86_64") ==
+               ["code_puppy_control_windows_x86_64.exe"]
+    end
+
+    test "returns the bare name for non-windows targets" do
+      for target <- [
+            "macos_arm64",
+            "macos_x86_64",
+            "linux_arm64",
+            "linux_x86_64",
+            "linux_musl_arm64",
+            "linux_musl_x86_64"
+          ] do
+        assert Phases.candidate_filenames(target) == ["code_puppy_control_#{target}"],
+               "non-windows target #{inspect(target)} must NOT receive a .exe suffix"
+      end
+    end
   end
 
   describe "host_compatible_targets/0" do
