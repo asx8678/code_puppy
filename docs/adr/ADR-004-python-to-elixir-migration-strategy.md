@@ -90,11 +90,17 @@ Port the model layer to Elixir-native implementation.
   - `ModelFactory.provider_module_for_type/1` now delegates to `ProviderRegistry.lookup/1`
   - `lookup_provider/1` preserves `:error` fallback for non-binary types
   - Tests cover: runtime register/override, `reset_for_test/0`, `list_available/0`, `resolve/1`, malformed non-binary type rejection, provider-map parity (110 model_factory tests + 29 LLM/parity tests pass)
-- Port `code_puppy/messaging/*` — message types and serialization
+- ✅ Port `code_puppy/messaging/*` — message types and serialization
+  - `073335a1` — structured message schema foundation
+  - `366101ca` — UI command schema serialization
+  - `45cbe34e` — Agent UI message families
+  - `3e67001e` — EventBus wire events
+  - Post-merge smoke: 521 tests / 0 failures (EventBus structured, EventsChannel, messaging, message_core, serializer)
+  - Completed modules: `CodePuppyControl.Messaging.Types`, `Messaging.Messages` facade + split families, `Messaging.WireEvent`, `Messaging.Commands`, EventBus wire-envelope helpers, EventStore legacy `type` + structured `event_type` filtering
 - Elixir-native streaming HTTP client (OpenAI, Anthropic, local models)
 - Tool-call dispatch plumbing
 
-**Exit criteria**: Elixir can make LLM requests without Python proxy; unit tests pass. Provider registry subitem is complete; remaining items still open.
+**Exit criteria**: Elixir can make LLM requests without Python proxy; unit tests pass. Provider registry and messaging serialization subitems are complete; streaming HTTP client and tool-call dispatch plumbing remain open.
 
 ### Phase C: Base Agent Port
 
