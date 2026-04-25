@@ -61,15 +61,14 @@ When `PUP_ANTHROPIC_API_KEY` or `PUP_OPENAI_API_KEY` is set, runs a minimal prob
 
 Without credentials, reports `not_implemented` in JSON output.
 
-### 3. Streaming LLM Metrics
+### 3. Streaming LLM Metrics (Schema & Fixtures)
 
-Credential-gated streaming TTFT/TBT probes for Anthropic and OpenAI.
-Live probes measure true time-to-first-token and inter-token gaps.
+Offline-safe schema and helpers for streaming TTFT/TBT metrics.
+**No live provider probes yet** — those are planned in code_puppy-axx.
 
-**What exists:**
+**What exists now:**
 - `scripts/bench_baseline/streaming_fixtures.py` — Deterministic prompt definitions (`short_v1`, `medium_v1`)
 - `scripts/bench_baseline/streaming.py` — `StreamingMetrics` dataclass, `compute_streaming_metrics()`, inter-token gap computation
-- `scripts/bench_baseline/streaming_probes.py` — Live streaming probes with empty-delta filtering and cross-iteration TBT aggregation
 - `scripts/bench_baseline/streaming_self_test.py` — Offline self-test coverage
 
 **Key distinction:**
