@@ -14,13 +14,17 @@
 #   2. --with-burrito    add a host-only Burrito build + Burrito smoke
 #                        -> `scripts/build-burrito.sh --host-only` +
 #                          `mix pup_ex.smoke --escript --burrito`
-#                        Requires Zig on PATH; without Zig, prints a
-#                        clear skip notice and exits 0 (this is the
-#                        documented opt-in behaviour for code_puppy-d7m).
+#                        Requires Zig on PATH **AND** a Burrito-
+#                        compatible Zig version (0.13.x – 0.15.x for
+#                        Burrito 1.3 – 1.5).  Without a compatible Zig,
+#                        prints a clear skip notice and exits 0 (this
+#                        is the documented opt-in behaviour for
+#                        code_puppy-d7m).
 #
-#   3. --strict          do NOT skip on missing toolchain;
-#                        exit non-zero if Zig is requested but missing.
-#                        Useful for CI images that should always have
+#   3. --strict          do NOT skip on missing or incompatible
+#                        toolchain; exit non-zero if Zig is requested
+#                        but missing or unusable.  Useful for CI
+#                        images that should always have a known-good
 #                        Zig pre-installed.
 #
 # Usage:
@@ -50,6 +54,46 @@ info()  { echo -e "${BLUE}[smoke-packaged]${NC} $*"; }
 ok()    { echo -e "${GREEN}[smoke-packaged]${NC} $*"; }
 warn()  { echo -e "${YELLOW}[smoke-packaged]${NC} $*"; }
 error() { echo -e "${RED}[smoke-packaged]${NC} $*" >&2; }
+
+# Determine whether the Zig version on PATH is compatible with the
+# Burrito version pinned in mix.lock.  Burrito 1.3 – 1.5 supports the
+# Zig 0.13.x – 0.15.x line; 0.16+ ships breaking changes Burrito has
+# not adopted yet, and every 0.x.y bump in Zig has historically broken
+# at least one Burrito codepath, so we hard-pin the major.minor here.
+#
+# Echoes (to stdout, single line):
+#   compatible:<version>          — Zig is usable for the Burrito build
+#   incompatible:<version>:<why>  — Zig is on PATH but unusable
+#   missing                       — Zig is not on PATH
+#
+# Exit code is always 0; callers branch on the prefix.  This keeps
+# the function deterministic and trivially shimmable in tests via a
+# fake `zig` on PATH.
+#
+# Refs: code_puppy-d7m
+zig_compat_status() {
+  if ! command -v zig >/dev/null 2>&1; then
+    echo "missing"
+    return 0
+  fi
+
+  local zver
+  zver="$(zig version 2>/dev/null || true)"
+
+  if [[ -z "${zver}" ]]; then
+    echo "incompatible::zig on PATH but \`zig version\` produced no output"
+    return 0
+  fi
+
+  case "${zver}" in
+    0.13.*|0.14.*|0.15.*)
+      echo "compatible:${zver}"
+      ;;
+    *)
+      echo "incompatible:${zver}:Zig ${zver} is outside the Burrito-supported range (0.13.x – 0.15.x); Burrito 1.3–1.5 has not adopted later Zig releases"
+      ;;
+  esac
+}
 
 # ── Parse arguments ───────────────────────────────────────────────────────
 WITH_BURRITO=false
@@ -129,31 +173,62 @@ fi
 BURRITO_FLAG=""
 
 if [[ "${WITH_BURRITO}" == "true" ]]; then
-  if command -v zig >/dev/null 2>&1; then
-    info "Zig detected ($(zig version 2>/dev/null || echo "unknown")); building host-only Burrito..."
+  ZIG_STATUS="$(zig_compat_status)"
 
-    if [[ ! -x "${SCRIPT_DIR}/build-burrito.sh" ]]; then
-      error "scripts/build-burrito.sh missing or not executable"
-      exit 1
-    fi
+  case "${ZIG_STATUS}" in
+    compatible:*)
+      ZIG_VERSION="${ZIG_STATUS#compatible:}"
+      info "Zig ${ZIG_VERSION} detected (Burrito-compatible); building host-only Burrito..."
 
-    "${SCRIPT_DIR}/build-burrito.sh" --host-only >"${BURRITO_BUILD_LOG}" 2>&1 || {
-      error "Burrito host-only build failed; see ${BURRITO_BUILD_LOG}"
-      tail -40 "${BURRITO_BUILD_LOG}" >&2 || true
+      if [[ ! -x "${SCRIPT_DIR}/build-burrito.sh" ]]; then
+        error "scripts/build-burrito.sh missing or not executable"
+        exit 1
+      fi
+
+      "${SCRIPT_DIR}/build-burrito.sh" --host-only >"${BURRITO_BUILD_LOG}" 2>&1 || {
+        error "Burrito host-only build failed; see ${BURRITO_BUILD_LOG}"
+        tail -40 "${BURRITO_BUILD_LOG}" >&2 || true
+        exit 1
+      }
+      ok "Burrito host-only build complete"
+      BURRITO_FLAG="--burrito"
+      ;;
+
+    incompatible:*)
+      # Format: incompatible:<version>:<reason>
+      ZIG_REST="${ZIG_STATUS#incompatible:}"
+      ZIG_VERSION="${ZIG_REST%%:*}"
+      ZIG_REASON="${ZIG_REST#*:}"
+
+      if [[ "${STRICT}" == "true" ]]; then
+        error "--with-burrito --strict requested but Zig is incompatible: ${ZIG_REASON}"
+        error "Install a Burrito-compatible Zig (0.13.x – 0.15.x)"
+        exit 1
+      else
+        warn "Zig ${ZIG_VERSION} on PATH is incompatible with Burrito -- skipping Burrito layer (use --strict to fail)"
+        warn "reason: ${ZIG_REASON}"
+        warn "install a Burrito-compatible Zig (0.13.x – 0.15.x) and re-run with --with-burrito to exercise this layer"
+      fi
+      ;;
+
+    missing)
+      if [[ "${STRICT}" == "true" ]]; then
+        error "--with-burrito --strict requested but Zig is not on PATH"
+        error "Install Zig (brew install zig / apt install zig / choco install zig)"
+        exit 1
+      else
+        warn "Zig not on PATH -- skipping Burrito layer (use --strict to fail)"
+        warn "Install Zig and re-run with --with-burrito to exercise this layer"
+      fi
+      ;;
+
+    *)
+      # Defensive: should never happen unless zig_compat_status grows a
+      # new return prefix without updating this case statement.
+      error "internal error: zig_compat_status returned unexpected value: ${ZIG_STATUS}"
       exit 1
-    }
-    ok "Burrito host-only build complete"
-    BURRITO_FLAG="--burrito"
-  else
-    if [[ "${STRICT}" == "true" ]]; then
-      error "--with-burrito --strict requested but Zig is not on PATH"
-      error "Install Zig (brew install zig / apt install zig / choco install zig)"
-      exit 1
-    else
-      warn "Zig not on PATH -- skipping Burrito layer (use --strict to fail)"
-      warn "Install Zig and re-run with --with-burrito to exercise this layer"
-    fi
-  fi
+      ;;
+  esac
 fi
 
 # ── Run the smoke ─────────────────────────────────────────────────────────

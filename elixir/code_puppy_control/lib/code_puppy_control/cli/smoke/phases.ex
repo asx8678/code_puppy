@@ -12,6 +12,7 @@ defmodule CodePuppyControl.CLI.Smoke.Phases do
 
   alias CodePuppyControl.CLI
   alias CodePuppyControl.CLI.Parser
+  alias CodePuppyControl.CLI.Smoke.BurritoArtifact
   alias CodePuppyControl.CLI.Smoke.MockLLM
   alias CodePuppyControl.Config.Paths
   alias CodePuppyControl.REPL.OneShot
@@ -318,7 +319,7 @@ defmodule CodePuppyControl.CLI.Smoke.Phases do
   @doc false
   @spec burrito() :: phase_result()
   def burrito do
-    case find_burrito_artifact() do
+    case BurritoArtifact.find_burrito_artifact() do
       {:ok, path} ->
         probe_packaged_cli(:burrito, path)
 
@@ -332,151 +333,23 @@ defmodule CodePuppyControl.CLI.Smoke.Phases do
     end
   end
 
-  # Locate a Burrito-built binary that is **runnable on the smoke host**.
-  # Returns:
-  #
-  #   * `{:ok, path}`           — verified host-compatible regular file
-  #   * `{:skip, reason, m}`    — no compatible artifact; phase should skip
-  #
-  # IMPORTANT (regression code_puppy-d7m): we MUST NOT fall back to an
-  # arbitrary `burrito_out/code_puppy_control_*` regular file.  Probing a
-  # cross-compiled sibling that cannot exec on this host produces a
-  # confusing `:fail` (or a hang on Linux trying to exec a Mach-O) when
-  # the correct outcome is `:skip` with a build hint.  Only artifacts in
-  # `host_compatible_targets/0` are probed.
-  defp find_burrito_artifact do
-    burrito_dir = Path.join(File.cwd!(), "burrito_out")
-    probe_burrito_dir(burrito_dir, host_compatible_targets())
-  end
-
-  # Public-but-undocumented entry point so the regression test can drive
-  # the artifact-selection logic with a synthetic `burrito_out/` and a
-  # fixed candidate list, without changing the working directory or
-  # assuming anything about the test runner's host.
+  # The Burrito artifact-selection helpers live in
+  # `CodePuppyControl.CLI.Smoke.BurritoArtifact` so this module stays
+  # under the 600-line cap.  We re-export the public-but-undocumented
+  # entry points used by the regression test in
+  # `test/code_puppy_control/cli/smoke/burrito_artifact_test.exs` so the
+  # test surface is unchanged.  Behaviour (including Windows `.exe`
+  # handling and the strict host-compat contract) is preserved exactly.
   #
   # Refs: code_puppy-d7m
   @doc false
-  @spec probe_burrito_dir(String.t(), [String.t()]) ::
-          {:ok, String.t()} | {:skip, String.t(), map()}
-  def probe_burrito_dir(burrito_dir, candidate_targets)
-      when is_binary(burrito_dir) and is_list(candidate_targets) do
-    cond do
-      not File.dir?(burrito_dir) ->
-        {:skip,
-         "no `burrito_out/` directory — build host-only with " <>
-           "`scripts/build-burrito.sh --host-only` (requires Zig)", %{burrito_dir: burrito_dir}}
+  defdelegate probe_burrito_dir(burrito_dir, candidate_targets), to: BurritoArtifact
 
-      candidate_targets == [] ->
-        {:skip,
-         "could not detect a host-compatible Burrito target for #{host_id()} — " <>
-           "phase requires one of the targets configured in mix.exs; " <>
-           "build host-only with `scripts/build-burrito.sh --host-only`",
-         %{burrito_dir: burrito_dir, candidates: candidate_targets}}
-
-      true ->
-        case probe_candidates(burrito_dir, candidate_targets) do
-          {:ok, path} ->
-            {:ok, path}
-
-          :none ->
-            {:skip,
-             "no host-compatible `code_puppy_control_*` artifact in #{burrito_dir} " <>
-               "(looked for: #{Enum.join(candidate_targets, ", ")}) — " <>
-               "build host-only with `scripts/build-burrito.sh --host-only`",
-             %{burrito_dir: burrito_dir, candidates: candidate_targets}}
-        end
-    end
-  end
-
-  # Walk `candidate_targets` in priority order; return the first path that
-  # exists as a regular file under `burrito_dir`.
-  defp probe_candidates(_burrito_dir, []), do: :none
-
-  defp probe_candidates(burrito_dir, [target | rest]) do
-    case probe_target(burrito_dir, target) do
-      {:ok, _path} = ok -> ok
-      :none -> probe_candidates(burrito_dir, rest)
-    end
-  end
-
-  # Probe the on-disk filename(s) Burrito actually produces for `target`
-  # under `burrito_dir`.  Returns the first matching regular file or
-  # `:none`.
-  #
-  # Refs: code_puppy-d7m
-  defp probe_target(burrito_dir, target) do
-    target
-    |> candidate_filenames()
-    |> Enum.find_value(:none, fn name ->
-      path = Path.join(burrito_dir, name)
-      if File.regular?(path), do: {:ok, path}, else: nil
-    end)
-  end
-
-  # Burrito names the produced binary `<release>_<target>` on Unix and
-  # appends a `.exe` suffix for Windows targets — see
-  # `docs/burrito-release.md` ("Output Layout") and `mix.exs`.  We probe
-  # the `.exe` variant for `windows_*` targets so a host-Windows smoke
-  # run can actually find the artifact instead of silently skipping.
-  #
-  # We deliberately do NOT add a bare-name fallback for Windows targets:
-  # the strict host-compat contract (regression code_puppy-d7m) requires
-  # us to match only what Burrito actually emits, never an unrelated
-  # planted file with a colliding name.
-  #
-  # Refs: code_puppy-d7m
   @doc false
-  @spec candidate_filenames(String.t()) :: [String.t()]
-  def candidate_filenames(target) when is_binary(target) do
-    base = "code_puppy_control_#{target}"
+  defdelegate candidate_filenames(target), to: BurritoArtifact
 
-    if String.starts_with?(target, "windows_") do
-      [base <> ".exe"]
-    else
-      [base]
-    end
-  end
-
-  # Map the running BEAM host to an ordered list of Burrito target names
-  # (as configured in `mix.exs`) that are **runnable on this host**.
-  # First entry is the preferred match; later entries are acceptable
-  # fallbacks.  An empty list means we do not recognise the host and the
-  # phase MUST skip rather than guess.
-  #
-  # Linux musl handling: a glibc Linux host can typically execute a
-  # statically-linked musl Burrito binary, so we list the musl artifact
-  # as a secondary candidate after the matching glibc artifact.  A pure
-  # musl host (e.g. Alpine) cannot run glibc binaries, so we list ONLY
-  # the musl artifact for that case.
-  #
-  # Refs: code_puppy-d7m
   @doc false
-  @spec host_compatible_targets() :: [String.t()]
-  def host_compatible_targets do
-    {os_family, _os_name} = :os.type()
-    arch = :erlang.system_info(:system_architecture) |> List.to_string()
-    musl? = String.contains?(arch, "-musl")
-
-    case {os_family, arch, musl?} do
-      {:win32, _, _} -> ["windows_x86_64"]
-      {:unix, "aarch64-apple" <> _, _} -> ["macos_arm64"]
-      {:unix, "arm64-apple" <> _, _} -> ["macos_arm64"]
-      {:unix, "x86_64-apple" <> _, _} -> ["macos_x86_64"]
-      {:unix, "aarch64" <> _, true} -> ["linux_musl_arm64"]
-      {:unix, "x86_64" <> _, true} -> ["linux_musl_x86_64"]
-      {:unix, "aarch64" <> _, false} -> ["linux_arm64", "linux_musl_arm64"]
-      {:unix, "x86_64" <> _, false} -> ["linux_x86_64", "linux_musl_x86_64"]
-      _ -> []
-    end
-  end
-
-  # Short, log-friendly identifier for the current host, used only in
-  # skip reasons so operators know why detection failed.
-  defp host_id do
-    {os_family, _} = :os.type()
-    arch = :erlang.system_info(:system_architecture) |> List.to_string()
-    "#{os_family}/#{arch}"
-  end
+  defdelegate host_compatible_targets(), to: BurritoArtifact
 
   # ── Shared probe helper ───────────────────────────────────────────────
 
