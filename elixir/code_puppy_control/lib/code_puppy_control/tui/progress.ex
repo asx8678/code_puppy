@@ -19,8 +19,10 @@ defmodule CodePuppyControl.TUI.Progress do
 
   ## Design notes
 
-  * `spinner/1` returns `{:ok, ref}` — callers should **not** store the
-    ref across async boundaries without monitoring. For GenServer-managed
+  * `spinner/1` returns `{:ok, ref}` where `ref` is an opaque reference
+    generated via `make_ref/0`. This ref is used as the Owl.Spinner `:id`
+    for subsequent `stop/2` calls. Callers should **not** store the ref
+    across async boundaries without monitoring. For GenServer-managed
     spinners (e.g. the Renderer's tool-call spinners), use the internal
     `Owl.Spinner` API directly with reference tracking.
   * `bar/3` is fire-and-forget — it renders inline and returns `:ok`.
@@ -40,13 +42,13 @@ defmodule CodePuppyControl.TUI.Progress do
   @doc """
   Starts a labelled spinner in the terminal.
 
-  Returns `{:ok, pid}` on success, `{:error, reason}` on failure.
+  Returns `{:ok, ref}` on success (where `ref` is an opaque reference for
+  use with `stop/2`), `{:error, reason}` on failure.
   When no TTY is available, returns `{:error, :no_tty}`.
 
   ## Options
 
     * `:refresh_every` — frame interval in ms (default 80)
-    * `:frames` — list of frame strings (defaults to Owl's braille dots)
 
   ## Examples
 
@@ -140,7 +142,8 @@ defmodule CodePuppyControl.TUI.Progress do
       width = Keyword.get(opts, :width, @default_bar_width)
       color = Keyword.get(opts, :color, :cyan)
 
-      ratio = if total > 0, do: current / total, else: 1.0
+      raw_ratio = if total > 0, do: current / total, else: 1.0
+      ratio = raw_ratio |> max(0.0) |> min(1.0)
       filled = trunc(ratio * width)
       empty = width - filled
 
