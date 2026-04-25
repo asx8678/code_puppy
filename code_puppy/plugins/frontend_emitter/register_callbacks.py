@@ -248,12 +248,97 @@ def _truncate_string(value: Any, max_length: int = 100) -> Optional[str]:
     return s
 
 
+
+async def on_agent_run_start(
+    agent_name: str, model_name: str, session_id: Optional[str] = None
+) -> None:
+    """Emit an event when an agent run starts."""
+    try:
+        emit_event(
+            "agent_run_start",
+            {
+                "agent_name": agent_name,
+                "model_name": model_name,
+                "session_id": session_id,
+                "start_time": time.time(),
+            },
+        )
+    except Exception as e:
+        logger.error(f"Failed to emit agent_run_start event: {e}")
+
+
+async def on_agent_run_end(
+    agent_name: str,
+    model_name: str,
+    session_id: Optional[str] = None,
+    success: bool = True,
+    error: Optional[Exception] = None,
+    response_text: Optional[str] = None,
+    metadata: Optional[Dict[str, Any]] = None,
+) -> None:
+    """Emit an event when an agent run ends."""
+    try:
+        emit_event(
+            "agent_run_end",
+            {
+                "agent_name": agent_name,
+                "model_name": model_name,
+                "session_id": session_id,
+                "success": success,
+                "error": str(error) if error else None,
+                "response_preview": _truncate_string(response_text, max_length=500),
+                "metadata": _sanitize_event_data(metadata or {}),
+                "end_time": time.time(),
+            },
+        )
+    except Exception as e:
+        logger.error(f"Failed to emit agent_run_end event: {e}")
+
+
+async def on_agent_run_result(result: Any, agent_name: str, model_name: str) -> None:
+    """Emit a compact event when the raw model run result is available."""
+    try:
+        response_text = None
+        if hasattr(result, "output"):
+            response_text = getattr(result, "output")
+        elif hasattr(result, "data"):
+            response_text = getattr(result, "data")
+        emit_event(
+            "agent_run_result",
+            {
+                "agent_name": agent_name,
+                "model_name": model_name,
+                "response_preview": _truncate_string(response_text, max_length=500),
+            },
+        )
+    except Exception as e:
+        logger.error(f"Failed to emit agent_run_result event: {e}")
+
+
+async def on_agent_exception(exception: Exception, *args: Any, **kwargs: Any) -> None:
+    """Emit a compact exception event for the dashboard."""
+    try:
+        emit_event(
+            "agent_exception",
+            {
+                "exception_type": type(exception).__name__,
+                "message": _truncate_string(str(exception), max_length=1000),
+                "context": _sanitize_event_data(kwargs),
+            },
+        )
+    except Exception as e:
+        logger.error(f"Failed to emit agent_exception event: {e}")
+
 def register() -> None:
     """Register all frontend emitter callbacks."""
     register_callback("pre_tool_call", on_pre_tool_call)
     register_callback("post_tool_call", on_post_tool_call)
     register_callback("stream_event", on_stream_event)
     register_callback("invoke_agent", on_invoke_agent)
+    register_callback("agent_run_start", on_agent_run_start)
+    register_callback("agent_run_end", on_agent_run_end)
+    register_callback("agent_run_result", on_agent_run_result)
+    register_callback("agent_exception", on_agent_exception)
     logger.debug("Frontend emitter callbacks registered")
 
 

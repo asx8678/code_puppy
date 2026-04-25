@@ -55,6 +55,40 @@ from .messages import (
 )
 
 
+def _serialize_message_for_frontend(message: AnyMessage) -> Dict[str, Any]:
+    """Convert a structured message to a JSON-safe frontend payload."""
+    try:
+        if hasattr(message, "model_dump"):
+            payload = message.model_dump(mode="json")
+        elif hasattr(message, "dict"):
+            payload = message.dict()
+        else:
+            payload = {"value": str(message)}
+    except Exception:
+        payload = {"value": str(message)}
+
+    if not isinstance(payload, dict):
+        payload = {"value": str(payload)}
+
+    payload.setdefault("message_type", type(message).__name__)
+    return payload
+
+
+def _mirror_message_to_frontend(message: AnyMessage) -> None:
+    """Mirror MessageBus output to the frontend event stream.
+
+    This lets the web dashboard observe structured output even when no Rich
+    renderer is attached, which is the normal API-server case.
+    """
+    try:
+        from code_puppy.plugins.frontend_emitter.emitter import emit_event
+
+        emit_event("message", _serialize_message_for_frontend(message))
+    except Exception:
+        # Frontend mirroring is optional; never let it affect CLI/tool behavior.
+        pass
+
+
 class MessageBus:
     """Central coordinator for bidirectional Agent <-> UI communication.
 
@@ -103,6 +137,8 @@ class MessageBus:
         Args:
             message: The message to emit.
         """
+        should_mirror = True
+
         # Auto-tag message with current session if not already set
         with self._lock:
             if message.session_id is None and self._current_session_id is not None:
@@ -113,18 +149,20 @@ class MessageBus:
                 # Prevent unbounded buffer growth in headless mode
                 if len(self._startup_buffer) > self._maxsize:
                     self._startup_buffer = self._startup_buffer[-self._maxsize :]
-                return
-
-            # Direct put into thread-safe queue - inside lock to prevent race
-            try:
-                self._outgoing.put_nowait(message)
-            except queue.Full:
-                # Drop oldest and retry
+            else:
+                # Direct put into thread-safe queue - inside lock to prevent race
                 try:
-                    self._outgoing.get_nowait()
                     self._outgoing.put_nowait(message)
-                except queue.Empty:
-                    pass
+                except queue.Full:
+                    # Drop oldest and retry
+                    try:
+                        self._outgoing.get_nowait()
+                        self._outgoing.put_nowait(message)
+                    except queue.Empty:
+                        pass
+
+        if should_mirror:
+            _mirror_message_to_frontend(message)
 
     def emit_text(
         self,
