@@ -16,10 +16,10 @@ Key decisions already resolved:
 - **Python-to-Elixir event protocol**: Generic `event` method with `event_type` discrimination ([ADR-002](ADR-002-python-elixir-event-protocol.md))
 - **Test baseline**: 5184 Elixir tests pass with 0 failures (triage completed)
 
-Open items (truthful to current state):
+Previously open items (resolved during Phase A):
 
-- **Baseline performance benchmarks**: Not yet established (latency, throughput)
-- **Python dependency graph**: Not yet mapped for porting priority
+- **Baseline performance benchmarks**: ✅ Established — offline filesystem primitives + credential-gated LLM latency probes; no live baseline numbers committed
+- **Python dependency graph**: ✅ Mapped — see `docs/python_dependency_graph.md`; SCC-based topological ordering, reproducible
 
 ## Decision
 
@@ -33,7 +33,7 @@ The migration proceeds in 8 phases (0 → H), with Python remaining functional t
 |-----------|-------------|
 | **Dual-run by default** | Both Python and Elixir runtimes are operational during migration; no "maintenance mode" outages |
 | **Rollback at any checkpoint** | Each phase can be reverted without data loss; rollback is a first-class operation |
-| **Truthful status** | ADR does not claim work is done before it is; benchmarks and dependency graph are pending |
+| **Truthful status** | ADR does not claim work is done before it is; resolved items are updated in-place as phases complete |
 | **Feature-flag driven** | New Elixir capabilities are guarded by runtime flags; gradual rollout per environment |
 | **No user disruption** | Users continue running `pup` without knowing which runtime executes their request |
 
@@ -50,7 +50,7 @@ The migration proceeds in 8 phases (0 → H), with Python remaining functional t
 
 ### Explicit Non-Goals
 
-- **Performance parity as a blocker**: Baseline benchmarks are pending; migration proceeds on feature completeness, not speed
+- **Performance parity as a blocker**: Baseline benchmarks are established (harness + offline primitives); however, migration proceeds on feature completeness, not speed parity — live credentialed LLM latency is operator-local and not committed
 - **Plugin API stability**: Plugin authors may need to adapt during migration; no frozen API guarantee until Phase G
 - **Remote/distributed workers**: Out of scope; migration assumes local subprocess architecture
 - **Python runtime improvements**: Python code is frozen; no new features or refactors during migration
@@ -236,8 +236,8 @@ Each flag will enable a phase's capabilities. Flags are independent; partial ena
 
 ### Neutral
 
-- **Benchmarks pending**: Performance comparisons cannot guide porting priority until established
-- **Dependency graph pending**: Porting order is by intuition, not data, until mapped
+- **Benchmarks established, not comprehensive**: Offline harness and dependency graph are in place (Phase A); live credentialed LLM latency remains operator-local and is not committed to the repo
+- **Porting order is data-informed**: Dependency graph (SCC-based) guides priority; refinements may occur as new modules are ported
 
 ## Risks and Mitigations
 
@@ -276,8 +276,9 @@ These gates must pass before each phase advances:
 
 The following items are tracked but do not block migration progress:
 
-- **Baseline performance benchmarks**: Will be established during Phase A/B to inform Phase H go/no-go
-- **Python dependency graph**: Will be mapped to validate porting priority; intuition-based order is acceptable meanwhile
+- **Live credentialed LLM baseline numbers**: Operator-local only; not committed to repo; may inform Phase H go/no-go when shared
+- **Elixir performance regression benchmarking**: Formal Phase H go/no-go gate depends on comparative numbers; deferred until feature parity is near
+- **Community plugin migration guide**: Needed before Phase G; does not block current porting work
 
 ---
 
