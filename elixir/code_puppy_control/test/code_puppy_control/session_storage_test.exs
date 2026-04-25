@@ -5,7 +5,7 @@ defmodule CodePuppyControl.SessionStorageTest do
   All tests use System.tmp_dir!/0 for isolation — never touches ~/.code_puppy/.
   """
 
-  use ExUnit.Case, async: true
+  use ExUnit.Case, async: false
 
   alias CodePuppyControl.SessionStorage
 
@@ -499,6 +499,135 @@ defmodule CodePuppyControl.SessionStorageTest do
 
       SessionStorage.save_session("count-2", [], base_dir: dir)
       assert SessionStorage.count_sessions(base_dir: dir) == 2
+    end
+  end
+
+  # ---------------------------------------------------------------------------
+  # Lazy base_dir default regression (code_puppy-dku)
+  # ---------------------------------------------------------------------------
+
+  describe "lazy base_dir default — explicit :base_dir skips base_dir/0" do
+    # (code_puppy-dku) Regression tests for the eager-default bug:
+    # Keyword.get(opts, :base_dir, base_dir()) evaluates base_dir()/0
+    # even when :base_dir is present, causing synchronous raises when
+    # env is invalid.  With the fix (resolve_base_dir/1 using
+    # Keyword.fetch/2), explicit :base_dir never calls base_dir()/0.
+
+    test "save_session/3 with explicit base_dir skips base_dir/0" do
+      # Set an invalid PUP_SESSION_DIR so base_dir()/0 would raise.
+      # With the lazy fix, passing base_dir: explicitly should NOT
+      # call base_dir()/0 at all.
+      tmp =
+        Path.join(
+          System.tmp_dir!(),
+          "lazy_default_save_#{System.unique_integer([:positive])}"
+        )
+
+      File.mkdir_p!(tmp)
+      on_exit(fn -> File.rm_rf!(tmp) end)
+
+      original = System.get_env("PUP_SESSION_DIR")
+      # Point to a path that would fail validate_storage_dir! if called
+      System.put_env("PUP_SESSION_DIR", "/etc/forbidden_sessions")
+
+      on_exit(fn ->
+        if original,
+          do: System.put_env("PUP_SESSION_DIR", original),
+          else: System.delete_env("PUP_SESSION_DIR")
+      end)
+
+      # Should NOT raise — base_dir()/0 is never called
+      messages = [%{"role" => "user", "content" => "lazy default test"}]
+      assert {:ok, _} = SessionStorage.save_session("lazy-test", messages, base_dir: tmp)
+    end
+
+    test "load_session/2 with explicit base_dir skips base_dir/0" do
+      tmp =
+        Path.join(
+          System.tmp_dir!(),
+          "lazy_default_load_#{System.unique_integer([:positive])}"
+        )
+
+      File.mkdir_p!(tmp)
+      on_exit(fn -> File.rm_rf!(tmp) end)
+
+      original = System.get_env("PUP_SESSION_DIR")
+      System.put_env("PUP_SESSION_DIR", "/etc/forbidden_sessions")
+
+      on_exit(fn ->
+        if original,
+          do: System.put_env("PUP_SESSION_DIR", original),
+          else: System.delete_env("PUP_SESSION_DIR")
+      end)
+
+      # Should NOT raise — base_dir()/0 is never called
+      assert {:error, :not_found} = SessionStorage.load_session("nope", base_dir: tmp)
+    end
+
+    test "delete_session/2 with explicit base_dir skips base_dir/0" do
+      tmp =
+        Path.join(
+          System.tmp_dir!(),
+          "lazy_default_delete_#{System.unique_integer([:positive])}"
+        )
+
+      File.mkdir_p!(tmp)
+      on_exit(fn -> File.rm_rf!(tmp) end)
+
+      original = System.get_env("PUP_SESSION_DIR")
+      System.put_env("PUP_SESSION_DIR", "/etc/forbidden_sessions")
+
+      on_exit(fn ->
+        if original,
+          do: System.put_env("PUP_SESSION_DIR", original),
+          else: System.delete_env("PUP_SESSION_DIR")
+      end)
+
+      assert :ok = SessionStorage.delete_session("nope", base_dir: tmp)
+    end
+
+    test "session_exists?/2 with explicit base_dir skips base_dir/0" do
+      tmp =
+        Path.join(
+          System.tmp_dir!(),
+          "lazy_default_exists_#{System.unique_integer([:positive])}"
+        )
+
+      File.mkdir_p!(tmp)
+      on_exit(fn -> File.rm_rf!(tmp) end)
+
+      original = System.get_env("PUP_SESSION_DIR")
+      System.put_env("PUP_SESSION_DIR", "/etc/forbidden_sessions")
+
+      on_exit(fn ->
+        if original,
+          do: System.put_env("PUP_SESSION_DIR", original),
+          else: System.delete_env("PUP_SESSION_DIR")
+      end)
+
+      refute SessionStorage.session_exists?("nope", base_dir: tmp)
+    end
+
+    test "list_sessions/1 with explicit base_dir skips base_dir/0" do
+      tmp =
+        Path.join(
+          System.tmp_dir!(),
+          "lazy_default_list_#{System.unique_integer([:positive])}"
+        )
+
+      File.mkdir_p!(tmp)
+      on_exit(fn -> File.rm_rf!(tmp) end)
+
+      original = System.get_env("PUP_SESSION_DIR")
+      System.put_env("PUP_SESSION_DIR", "/etc/forbidden_sessions")
+
+      on_exit(fn ->
+        if original,
+          do: System.put_env("PUP_SESSION_DIR", original),
+          else: System.delete_env("PUP_SESSION_DIR")
+      end)
+
+      assert {:ok, []} = SessionStorage.list_sessions(base_dir: tmp)
     end
   end
 
