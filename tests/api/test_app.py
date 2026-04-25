@@ -7,6 +7,8 @@ import pytest
 from fastapi import FastAPI
 from httpx import ASGITransport, AsyncClient
 
+from pathlib import Path
+
 from code_puppy.api.app import REQUEST_TIMEOUT, TimeoutMiddleware, create_app, lifespan
 
 
@@ -166,6 +168,75 @@ async def test_timeout_middleware_skips_ws_path() -> None:
         resp = await c.get("/ws/nonexistent")
         # Will 404 but won't 504
         assert resp.status_code != 504
+
+
+@pytest.mark.asyncio
+async def test_dashboard_page_returns_template(client: AsyncClient) -> None:
+    """Dashboard page returns HTML template with key UI markers."""
+    resp = await client.get("/dashboard")
+    assert resp.status_code == 200
+    assert "text/html" in resp.headers.get("content-type", "")
+    # Core UI elements
+    assert "Code Puppy Dashboard" in resp.text
+    assert 'id="prompt-form"' in resp.text
+    assert 'id="decision-panel"' in resp.text
+    assert 'id="feed"' in resp.text
+    # Auth cookie is set on dashboard responses
+    cookie_headers = [v for k, v in resp.headers.items() if k.lower() == "set-cookie"]
+    assert any("code_puppy_runtime_token" in h for h in cookie_headers)
+
+
+@pytest.mark.asyncio
+async def test_dashboard_contains_api_endpoints(client: AsyncClient) -> None:
+    """Dashboard template references all expected API endpoints."""
+    resp = await client.get("/dashboard")
+    assert resp.status_code == 200
+    html = resp.text
+    # Runtime endpoints (web-l0a design)
+    assert "/api/runtime/status" in html
+    assert "/api/runtime/prompt" in html
+    assert "/api/runtime/cancel" in html
+    assert "/api/runtime/respond" in html
+    assert "/api/runtime/approval" in html
+    assert "/api/runtime/events" in html
+    # Agents endpoint
+    assert "/api/agents/" in html
+    # WebSocket events endpoint
+    assert "/ws/events" in html
+    # Navigation links
+    assert 'href="/terminal"' in html
+    assert 'href="/docs"' in html
+
+
+@pytest.mark.asyncio
+async def test_dashboard_no_client_token_exposure(client: AsyncClient) -> None:
+    """Dashboard JS should not read or expose auth tokens in client-side code."""
+    resp = await client.get("/dashboard")
+    assert resp.status_code == 200
+    html = resp.text
+    # The api() helper must not attach token headers — cookie-only auth
+    assert "X-Code-Puppy-Runtime-Token" not in html
+    assert "localStorage" not in html
+    assert "sessionStorage" not in html
+
+
+@pytest.mark.asyncio
+async def test_dashboard_uses_existing_cdn_only(client: AsyncClient) -> None:
+    """Dashboard should only use Tailwind CDN (already in landing page), no new CDNs."""
+    resp = await client.get("/dashboard")
+    assert resp.status_code == 200
+    html = resp.text
+    # Only CDN reference should be Tailwind (already used in root page)
+    cdn_refs = [line for line in html.splitlines() if 'src="https://' in line or 'href="https://' in line]
+    assert len(cdn_refs) >= 1, "Expected at least Tailwind CDN"
+    for ref in cdn_refs:
+        assert "cdn.tailwindcss.com" in ref, f"Unexpected CDN reference: {ref}"
+
+
+def test_dashboard_template_file_exists() -> None:
+    """The dashboard.html template file exists on disk."""
+    templates_dir = Path(__file__).resolve().parent.parent.parent / "code_puppy" / "api" / "templates"
+    assert (templates_dir / "dashboard.html").exists()
 
 
 @pytest.mark.asyncio
