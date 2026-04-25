@@ -29,6 +29,69 @@ defmodule CodePuppyControl.Config.ModelsTest do
 
       assert Models.global_model_name() == Models.default_model()
     end
+
+    test "puppy.cfg model wins over registry model" do
+      # Even if registry is running, explicit config should win
+      assert Models.global_model_name() == "test-model"
+    end
+  end
+
+  describe "default_model/0" do
+    test "returns gpt-5 when ModelRegistry is not running" do
+      # Stop the registry temporarily to verify graceful fallback
+      original_pid = GenServer.whereis(CodePuppyControl.ModelRegistry)
+
+      if original_pid do
+        # Stop it — ETS table gets destroyed with the owner process
+        GenServer.stop(CodePuppyControl.ModelRegistry, :shutdown)
+        assert Models.default_model() == "gpt-5"
+        # Restart for other tests
+        ensure_registry_started()
+      else
+        # No registry running — should still return gpt-5 safely
+        assert Models.default_model() == "gpt-5"
+      end
+    end
+
+    test "returns first model from ModelRegistry when available" do
+      ensure_registry_started()
+
+      model = Models.default_model()
+      assert is_binary(model)
+      assert model != ""
+
+      names = CodePuppyControl.ModelRegistry.list_model_names()
+
+      if names != [] do
+        assert model == List.first(names)
+      end
+    end
+  end
+
+  describe "first_registry_model/0" do
+    test "returns nil when ModelRegistry is not running" do
+      original_pid = GenServer.whereis(CodePuppyControl.ModelRegistry)
+
+      if original_pid do
+        GenServer.stop(CodePuppyControl.ModelRegistry, :shutdown)
+        assert Models.first_registry_model() == nil
+        ensure_registry_started()
+      else
+        assert Models.first_registry_model() == nil
+      end
+    end
+
+    test "returns first model name when registry is populated" do
+      ensure_registry_started()
+
+      names = CodePuppyControl.ModelRegistry.list_model_names()
+
+      if names != [] do
+        assert Models.first_registry_model() == List.first(names)
+      else
+        assert Models.first_registry_model() == nil
+      end
+    end
   end
 
   describe "set_global_model/1" do
@@ -175,6 +238,17 @@ defmodule CodePuppyControl.Config.ModelsTest do
     case GenServer.whereis(Writer) do
       nil ->
         {:ok, _} = Writer.start_link()
+        :ok
+
+      _pid ->
+        :ok
+    end
+  end
+
+  defp ensure_registry_started do
+    case GenServer.whereis(CodePuppyControl.ModelRegistry) do
+      nil ->
+        {:ok, _} = CodePuppyControl.ModelRegistry.start_link([])
         :ok
 
       _pid ->
