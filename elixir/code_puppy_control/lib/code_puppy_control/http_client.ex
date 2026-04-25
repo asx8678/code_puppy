@@ -232,18 +232,31 @@ defmodule CodePuppyControl.HttpClient do
   @doc """
   Streams an HTTP request, yielding chunks as they arrive.
 
-  Returns a `Stream` that yields `{:data, chunk}` tuples. The caller must
-  consume the stream to completion to ensure the connection is properly closed.
+  Returns a `Stream` that yields elements according to this contract:
+
+  - `{:data, chunk}` — Data chunk received from the server (**2xx only**)
+  - `{:done, %{status: status, headers: headers}}` — Stream completed successfully (**2xx only**)
+  - `{:error, reason}` — Transport error or non-2xx status
+
+  For non-2xx responses, the stream yields a single `{:error, %{status: s, body: b, headers: h}}`
+  element. No `{:data, ...}` or `{:done, ...}` elements are emitted for non-2xx.
+
+  For transport errors (connection refused, timeout, etc.), the stream yields
+  `{:error, "descriptive message"}`.
 
   ## Example
 
-      stream = HttpClient.stream(:get, "https://api.example.com/large-file")
-      Enum.reduce(stream, "", fn {:data, chunk}, acc -> acc <> chunk end)
+      stream = HttpClient.stream(:get, "https://api.example.com/sse")
+      Enum.reduce(stream, "", fn
+        {:data, chunk}, acc -> acc <> chunk
+        {:done, _meta}, acc -> acc
+        {:error, reason}, _acc -> raise "stream error: \#{inspect(reason)}"
+      end)
 
   ## Options
 
-  Same as `request/3`, plus:
-  - `:on_response` - Callback function called with response metadata when headers arrive
+  Same as `request/3` (minus `:retries`, `:retry_status_codes`, `:model_name`,
+  and `:ignore_retry_headers` which are request-only).
   """
   @spec stream(method(), String.t(), keyword()) :: Enumerable.t()
   def stream(method, url, opts \\ []) do
@@ -251,39 +264,141 @@ defmodule CodePuppyControl.HttpClient do
     body = Keyword.get(opts, :body, nil)
     timeout = Keyword.get(opts, :timeout, 180_000)
     pool_timeout = Keyword.get(opts, :pool_timeout, 5_000)
-    pool_name = Config.default_pool_name()
-
-    req = build_finch_request(method, url, headers, body)
 
     Stream.resource(
-      fn -> {req, pool_timeout, timeout, nil} end,
-      fn {req, pool_timeout, timeout, acc} ->
-        case Finch.stream(
-               req,
-               pool_name,
-               acc,
-               fn
-                 {:status, status}, acc -> {:cont, Map.put(acc || %{}, :status, status)}
-                 {:headers, headers}, acc -> {:cont, Map.put(acc, :headers, headers)}
-                 {:data, data}, acc -> {[{:data, data}], acc}
-               end,
-               pool_timeout: pool_timeout,
-               receive_timeout: timeout
-             ) do
-          {:ok, %{status: status, headers: headers}} ->
-            {[{:done, %{status: status, headers: headers}}], :halt}
-
-          {:ok, nil} ->
-            # No accumulator - likely no data received
-            {[{:done, %{status: 200, headers: []}}], :halt}
-
-          {:error, reason} ->
-            {[{:error, format_error(reason)}], :halt}
-        end
-      end,
-      fn _ -> :ok end
+      fn -> start_stream(method, url, headers, body, pool_timeout, timeout) end,
+      &next_stream_element/1,
+      &close_stream/1
     )
   end
+
+  # ── Stream internals ─────────────────────────────────────────────────────
+
+  # Spawns a process that runs Finch.stream and sends chunks to the caller.
+  # This avoids the broken pattern of returning Stream-resource tuples from
+  # inside the Finch callback — Finch callbacks must return {:cont, acc}.
+  defp start_stream(method, url, headers, body, pool_timeout, timeout) do
+    parent = self()
+    ref = make_ref()
+
+    pid =
+      spawn(fn ->
+        run_finch_stream(parent, ref, method, url, headers, body, pool_timeout, timeout)
+      end)
+
+    mon_ref = Process.monitor(pid)
+    {pid, mon_ref, ref, timeout}
+  end
+
+  # Runs Finch.stream in a separate process, sending data chunks to the parent
+  # via message passing. For 2xx responses, chunks are sent immediately.
+  # For non-2xx, the body is accumulated and sent as a single error element.
+  defp run_finch_stream(parent, ref, method, url, headers, body, pool_timeout, timeout) do
+    pool_name = Config.default_pool_name()
+    req = build_finch_request(method, url, headers, body)
+
+    initial_acc = %{status: nil, headers: [], body_parts: []}
+
+    result =
+      Finch.stream(
+        req,
+        pool_name,
+        initial_acc,
+        fn
+          {:status, status}, acc ->
+            {:cont, %{acc | status: status}}
+
+          {:headers, resp_headers}, acc ->
+            {:cont, %{acc | headers: resp_headers}}
+
+          {:data, data}, acc ->
+            if acc.status in 200..299 do
+              send(parent, {ref, {:data, data}})
+              {:cont, acc}
+            else
+              # Non-2xx: accumulate body instead of streaming to parent
+              {:cont, %{acc | body_parts: [data | acc.body_parts]}}
+            end
+        end,
+        pool_timeout: pool_timeout,
+        receive_timeout: timeout
+      )
+
+    case result do
+      {:ok, %{status: status, headers: resp_headers}} when status in 200..299 ->
+        send(parent, {ref, {:done, %{status: status, headers: resp_headers}}})
+
+      {:ok, %{status: status, headers: resp_headers, body_parts: body_parts}} ->
+        body = body_parts |> Enum.reverse() |> Enum.join()
+        send(parent, {ref, {:error, %{status: status, headers: resp_headers, body: body}}})
+
+      {:error, reason} ->
+        send(parent, {ref, {:transport_error, reason}})
+    end
+  rescue
+    e ->
+      send(parent, {ref, {:transport_error, Exception.message(e)}})
+  end
+
+  # Receives the next element from the spawned stream process.
+  defp next_stream_element({pid, mon_ref, ref, timeout} = state) do
+    receive do
+      {^ref, {:data, chunk}} ->
+        {[{:data, chunk}], state}
+
+      {^ref, {:done, metadata}} ->
+        Process.demonitor(mon_ref, [:flush])
+        {[{:done, metadata}], :done}
+
+      {^ref, {:error, details}} ->
+        Process.demonitor(mon_ref, [:flush])
+        {[{:error, details}], :done}
+
+      {^ref, {:transport_error, reason}} ->
+        Process.demonitor(mon_ref, [:flush])
+        {[{:error, format_error(reason)}], :done}
+
+      {:DOWN, ^mon_ref, :process, ^pid, :normal} ->
+        # Process exited normally; drain any final message
+        drain_stream_completion(ref)
+
+      {:DOWN, ^mon_ref, :process, ^pid, reason} ->
+        {[{:error, "Stream process exited: #{inspect(reason)}"}], :done}
+    after
+      timeout ->
+        Process.exit(pid, :kill)
+        Process.demonitor(mon_ref, [:flush])
+        {[{:error, "Stream receive timeout"}], :done}
+    end
+  end
+
+  defp next_stream_element(:done), do: {:halt, :done}
+
+  # After the stream process exits normally, give it a brief window to
+  # deliver the final :done / :error / :transport_error message.
+  defp drain_stream_completion(ref) do
+    receive do
+      {^ref, {:done, metadata}} ->
+        {[{:done, metadata}], :done}
+
+      {^ref, {:error, details}} ->
+        {[{:error, details}], :done}
+
+      {^ref, {:transport_error, reason}} ->
+        {[{:error, format_error(reason)}], :done}
+    after
+      100 ->
+        {[{:error, "Stream process exited without completion signal"}], :done}
+    end
+  end
+
+  defp close_stream({pid, mon_ref, _ref, _timeout}) do
+    Process.exit(pid, :kill)
+    Process.demonitor(mon_ref, [:flush])
+    :ok
+  end
+
+  defp close_stream(:done), do: :ok
 
   # ============================================================================
   # Request Building
