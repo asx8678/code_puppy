@@ -69,7 +69,7 @@ class TestSummarizeListFiles:
     def test_list_content_no_crash(self):
         data = {"content": ["src/main.py", "README.md"]}
         result = _summarize_list_files(data)
-        assert chr(128193) in result
+        assert chr(128194) in result  # 📂 open folder emoji
         assert "2 files" in result
 
     def test_string_content_preserved(self):
@@ -222,9 +222,7 @@ class TestRegisterCallbacksFallback:
 
         from code_puppy.plugins.turbo_executor.register_callbacks import (
             _register_turbo_execute_tool,
-            _get_orchestrator,
         )
-        from code_puppy.plugins.turbo_executor.summarizer import summarize_plan_result
         from code_puppy.plugins.turbo_executor.models import (
             OperationResult,
             OperationType,

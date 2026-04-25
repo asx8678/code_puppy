@@ -25,7 +25,7 @@ Prerequisites before launching the Python-to-Elixir port.
 - [x] Add local test gates to lefthook (this commit)
 - [x] Create ROADMAP.md (this commit)
 - [ ] Triage 121 pre-existing Elixir test failures (delete / fix / skip-with-reason)
-- [ ] Triage pre-existing ruff errors on Python side
+- [x] Triage pre-existing ruff errors on Python side (code_puppy-230 — all 44 errors fixed)
 - [ ] Choose final naming for the Elixir umbrella app (currently `code_puppy_control`)
 
 ### Phase A: Port planning formalization

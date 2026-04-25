@@ -102,7 +102,6 @@ def main():
         except json.JSONDecodeError:
             continue
 
-        jsonrpc = message.get("jsonrpc", "")
         method = message.get("method", "")
         msg_id = message.get("id")
         params = message.get("params", {})

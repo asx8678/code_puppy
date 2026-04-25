@@ -32,8 +32,6 @@ from typing import Literal
 # blocks, preventing bypass vectors where shell commands read sensitive files.
 from code_puppy.sensitive_paths import (
     SENSITIVE_PATH_REGEX_PATTERN,
-    SENSITIVE_PATH_PATTERNS,
-    get_sensitive_path_regex_pattern,
 )
 
 # SECURITY: Maximum command length to prevent regex DoS

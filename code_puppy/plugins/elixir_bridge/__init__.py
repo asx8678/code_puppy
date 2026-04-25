@@ -198,7 +198,7 @@ def call_method(
 
     try:
         # Send the request
-        _send_request_to_elixir(request)
+        send_request_to_elixir(request)
 
         # Wait using threading.Event instead of polling
         result, error = slot.wait(timeout)
@@ -671,19 +671,19 @@ def notify_elixir_event(
         # This is fire-and-forget, we don't wait for response
         if BRIDGE_ENABLED:
             # In bridge mode, write directly to stdout with Content-Length framing
-            _send_request_to_elixir(message)
+            send_request_to_elixir(message)
         elif is_connected():
             # Client mode - send async if we can, otherwise sync
             try:
                 loop = asyncio.get_running_loop()
                 # We're in async context, use call_soon_threadsafe if on different thread
                 if threading.current_thread().ident != loop._thread_id: # type: ignore[attr-defined]
-                    loop.call_soon_threadsafe(_send_request_to_elixir, message)
+                    loop.call_soon_threadsafe(send_request_to_elixir, message)
                 else:
-                    _send_request_to_elixir(message)
+                    send_request_to_elixir(message)
             except RuntimeError:
                 # No running loop, call directly (sync context)
-                _send_request_to_elixir(message)
+                send_request_to_elixir(message)
         # else: not connected, silently drop
 
     except Exception:

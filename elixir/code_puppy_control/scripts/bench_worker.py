@@ -16,7 +16,6 @@ import sys
 import json
 import time
 import os
-import signal
 
 
 def read_message():

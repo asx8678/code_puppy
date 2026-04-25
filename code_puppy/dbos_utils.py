@@ -55,7 +55,7 @@ def initialize_dbos() -> bool:
         bool: True if DBOS was successfully initialized, False otherwise
     """
     try:
-        from dbos import DBOS, DBOSConfig
+        from dbos import DBOS
     except ImportError:
         emit_warning("DBOS not available - skipping initialization")
         return False

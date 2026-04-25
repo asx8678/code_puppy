@@ -7,6 +7,9 @@ is better than complex, nested side effects are worse than deliberate helpers.
 
 Migrated to Elixir/Ecto with SQLite backend. File-based storage is
 retained as fallback when Elixir transport is unavailable.
+
+SECURITY FIX #zvx9: Pickle has been completely removed to prevent RCE attacks.
+Session files now use only secure JSON serialization with HMAC integrity.
 """
 
 from __future__ import annotations
@@ -19,17 +22,14 @@ import json
 import os
 import logging
 from concurrent.futures import ThreadPoolExecutor
-
-# Import Elixir bridge (lazy-loaded)
-_use_elixir_storage: bool = os.environ.get("PUP_SESSION_USE_SQLITE", "1") == "1"
-
-# SECURITY FIX #zvx9: Pickle has been completely removed to prevent RCE attacks.
-# Session files now use only secure JSON serialization with HMAC integrity.
-import warnings
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 from typing import Any
+import warnings
+
+# Import Elixir bridge (lazy-loaded)
+_use_elixir_storage: bool = os.environ.get("PUP_SESSION_USE_SQLITE", "1") == "1"
 
 # ----- ThreadPoolExecutor for async autosave -----
 # Single-threaded executor for background session saves to avoid blocking the main thread.

@@ -6,7 +6,6 @@ Provides commands:
 - /convergence - Alias for /concurrency
 """
 
-from pathlib import Path
 
 from code_puppy.command_line.command_registry import register_command
 from code_puppy.config_paths import resolve_path
