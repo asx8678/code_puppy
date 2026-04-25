@@ -1,6 +1,7 @@
 import asyncio
 import fnmatch
 import hashlib
+import logging
 import os
 import sys
 import time
@@ -17,6 +18,8 @@ from rich.console import Console
 from rich.panel import Panel
 from rich.prompt import Prompt
 from rich.text import Text
+
+logger = logging.getLogger(__name__)
 
 # Syntax highlighting imports for "syntax" diff mode
 try:
@@ -1025,6 +1028,71 @@ def arrow_select(message: str, choices: list[str]) -> str:
     return result[0]
 
 
+def web_approvals_enabled() -> bool:
+    """Check whether web (browser-backed) approvals are currently active.
+
+    Returns True when the CODE_PUPPY_WEB_APPROVALS env var is set to "1".
+    This is the single source of truth so command_runner and common agree
+    on the approval routing mode.
+    """
+    return os.getenv("CODE_PUPPY_WEB_APPROVALS") == "1"
+
+
+def _try_web_approval(
+    title: str,
+    content: Text | str,
+    preview: str | None = None,
+    border_style: str = "dim white",
+    puppy_name: str | None = None,
+    *,
+    fail_closed: bool = False,
+) -> tuple[bool, str | None] | None:
+    """Attempt to route an approval through the web dashboard.
+
+    Returns ``(approved, feedback)`` if web approvals are enabled and the
+    backend succeeds, or ``None`` if web approvals are not active so the
+    caller should fall through to the CLI path.
+
+    When *fail_closed* is True and the web backend raises, the function
+    returns ``(False, reason)`` instead of falling through to CLI.  This
+    is the correct behaviour for non-TTY sessions where there is no
+    interactive fallback.
+    """
+    if not web_approvals_enabled():
+        return None  # Not in web-approval mode; caller should use CLI path
+
+    try:
+        from code_puppy.api.approvals import request_approval_sync
+
+        content_text = getattr(content, "plain", None)
+        if content_text is None:
+            content_text = str(content)
+
+        if preview:
+            try:
+                from code_puppy.plugins.file_permission_handler.register_callbacks import (
+                    set_diff_already_shown,
+                )
+
+                set_diff_already_shown(True)
+            except ImportError:
+                logger.debug("set_diff_already_shown not available (ImportError)")
+
+        return request_approval_sync(
+            title=title,
+            content=content_text,
+            preview=preview,
+            border_style=border_style,
+            puppy_name=puppy_name,
+        )
+    except Exception as exc:
+        logger.warning("Web approval backend failed: %s", exc)
+        if fail_closed:
+            return False, f"Web approval backend error: {exc}"
+        # Interactive CLI fallback is available – fall through
+        return None
+
+
 def get_user_approval(
     title: str,
     content: Text | str,
@@ -1055,37 +1123,17 @@ def get_user_approval(
 
         puppy_name = get_puppy_name().title()
 
-    # When the integrated web UI is running, route approvals through the
-    # browser instead of blocking on a terminal prompt.  This branch is
-    # intentionally best-effort; if anything goes wrong we fall back to the
-    # original CLI approval flow below.
-    if os.getenv("CODE_PUPPY_WEB_APPROVALS") == "1":
-        try:
-            from code_puppy.api.approvals import request_approval_sync
-
-            content_text = getattr(content, "plain", None)
-            if content_text is None:
-                content_text = str(content)
-
-            if preview:
-                try:
-                    from code_puppy.plugins.file_permission_handler.register_callbacks import (
-                        set_diff_already_shown,
-                    )
-
-                    set_diff_already_shown(True)
-                except ImportError:
-                    pass
-
-            return request_approval_sync(
-                title=title,
-                content=content_text,
-                preview=preview,
-                border_style=border_style,
-                puppy_name=puppy_name,
-            )
-        except Exception:
-            pass
+    # Try web-approval path first; falls through to CLI if not applicable
+    web_result = _try_web_approval(
+        title=title,
+        content=content,
+        preview=preview,
+        border_style=border_style,
+        puppy_name=puppy_name,
+        fail_closed=not sys.stdin.isatty(),
+    )
+    if web_result is not None:
+        return web_result
 
     # Build panel content
     if isinstance(content, str):
@@ -1254,37 +1302,21 @@ async def get_user_approval_async(
 
         puppy_name = get_puppy_name().title()
 
-    # When the integrated web UI is running, route approvals through the
-    # browser instead of blocking on a terminal prompt.  This branch is
-    # intentionally best-effort; if anything goes wrong we fall back to the
-    # original CLI approval flow below.
-    if os.getenv("CODE_PUPPY_WEB_APPROVALS") == "1":
-        try:
-            from code_puppy.api.approvals import request_approval_sync
-
-            content_text = getattr(content, "plain", None)
-            if content_text is None:
-                content_text = str(content)
-
-            if preview:
-                try:
-                    from code_puppy.plugins.file_permission_handler.register_callbacks import (
-                        set_diff_already_shown,
-                    )
-
-                    set_diff_already_shown(True)
-                except ImportError:
-                    pass
-
-            return request_approval_sync(
-                title=title,
-                content=content_text,
-                preview=preview,
-                border_style=border_style,
-                puppy_name=puppy_name,
-            )
-        except Exception:
-            pass
+    # Try web-approval path first; falls through to CLI if not applicable.
+    # Use asyncio.to_thread so the blocking request_approval_sync call
+    # does not stall the event loop.
+    if web_approvals_enabled():
+        result = await asyncio.to_thread(
+            _try_web_approval,
+            title=title,
+            content=content,
+            preview=preview,
+            border_style=border_style,
+            puppy_name=puppy_name,
+            fail_closed=not sys.stdin.isatty(),
+        )
+        if result is not None:
+            return result
 
     # Build panel content
     if isinstance(content, str):

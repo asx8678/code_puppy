@@ -1,8 +1,9 @@
 """Tests for tools/common.py web-approval routing (web-gjs).
 
 Validates that get_user_approval and get_user_approval_async:
-- Route through request_approval_sync when CODE_PUPPY_WEB_APPROVALS=1.
+- Route through _try_web_approval when CODE_PUPPY_WEB_APPROVALS=1.
 - Fall back to CLI flow when the env var is unset or the import fails.
+- Fail closed in non-TTY mode when web backend throws.
 """
 
 from __future__ import annotations
@@ -11,6 +12,122 @@ import os
 from unittest.mock import MagicMock, patch
 
 import pytest
+
+from code_puppy.tools.common import (
+    _try_web_approval,
+    web_approvals_enabled,
+)
+
+
+# ---------------------------------------------------------------------------
+# Unit tests for the new helpers
+# ---------------------------------------------------------------------------
+
+
+class TestWebApprovalsEnabled:
+    """Tests for the web_approvals_enabled() helper."""
+
+    def test_returns_true_when_env_set(self) -> None:
+        with patch.dict(os.environ, {"CODE_PUPPY_WEB_APPROVALS": "1"}):
+            assert web_approvals_enabled() is True
+
+    def test_returns_false_when_env_unset(self) -> None:
+        env = dict(os.environ)
+        env.pop("CODE_PUPPY_WEB_APPROVALS", None)
+        with patch.dict(os.environ, env, clear=True):
+            assert web_approvals_enabled() is False
+
+    def test_returns_false_when_env_not_one(self) -> None:
+        with patch.dict(os.environ, {"CODE_PUPPY_WEB_APPROVALS": "0"}):
+            assert web_approvals_enabled() is False
+
+    def test_returns_false_when_env_garbage(self) -> None:
+        with patch.dict(os.environ, {"CODE_PUPPY_WEB_APPROVALS": "yes"}):
+            assert web_approvals_enabled() is False
+
+
+class TestTryWebApproval:
+    """Tests for the _try_web_approval() helper."""
+
+    def test_returns_none_when_web_approvals_disabled(self) -> None:
+        env = dict(os.environ)
+        env.pop("CODE_PUPPY_WEB_APPROVALS", None)
+        with patch.dict(os.environ, env, clear=True):
+            result = _try_web_approval(title="t", content="c")
+            assert result is None
+
+    def test_routes_to_browser_when_enabled(self) -> None:
+        with patch.dict(os.environ, {"CODE_PUPPY_WEB_APPROVALS": "1"}):
+            mock_request = MagicMock(return_value=(True, "ok from browser"))
+            with patch(
+                "code_puppy.api.approvals.request_approval_sync",
+                mock_request,
+            ):
+                result = _try_web_approval(
+                    title="Edit file?",
+                    content="Replace foo.py content",
+                    preview="--- a/foo.py\n+++ b/foo.py",
+                )
+
+            assert result == (True, "ok from browser")
+
+    def test_extracts_plain_text_from_rich_content(self) -> None:
+        from rich.text import Text
+
+        with patch.dict(os.environ, {"CODE_PUPPY_WEB_APPROVALS": "1"}):
+            mock_request = MagicMock(return_value=(True, None))
+            with patch(
+                "code_puppy.api.approvals.request_approval_sync",
+                mock_request,
+            ):
+                _try_web_approval(
+                    title="Edit?",
+                    content=Text("Edit this file"),
+                    puppy_name="Rex",
+                )
+
+            call_kwargs = mock_request.call_args[1]
+            assert call_kwargs["content"] == "Edit this file"
+            assert call_kwargs["puppy_name"] == "Rex"
+
+    def test_falls_through_on_exception_fail_open(self) -> None:
+        """When fail_closed=False (default) and backend throws, return None."""
+        with patch.dict(os.environ, {"CODE_PUPPY_WEB_APPROVALS": "1"}):
+            with patch(
+                "code_puppy.api.approvals.request_approval_sync",
+                side_effect=RuntimeError("backend boom"),
+            ):
+                result = _try_web_approval(title="t", content="c")
+                # Falls through to CLI
+                assert result is None
+
+    def test_fail_closed_on_exception_in_non_tty(self) -> None:
+        """When fail_closed=True and backend throws, return (False, reason)."""
+        with patch.dict(os.environ, {"CODE_PUPPY_WEB_APPROVALS": "1"}):
+            with patch(
+                "code_puppy.api.approvals.request_approval_sync",
+                side_effect=RuntimeError("backend boom"),
+            ):
+                result = _try_web_approval(title="t", content="c", fail_closed=True)
+                assert result is not None
+                approved, feedback = result
+                assert approved is False
+                assert "backend boom" in feedback
+
+    def test_fail_open_on_exception_in_tty(self) -> None:
+        """When fail_closed=False (TTY mode), exception falls through."""
+        with patch.dict(os.environ, {"CODE_PUPPY_WEB_APPROVALS": "1"}):
+            with patch(
+                "code_puppy.api.approvals.request_approval_sync",
+                side_effect=ImportError("nope"),
+            ):
+                result = _try_web_approval(title="t", content="c", fail_closed=False)
+                assert result is None
+
+
+# ---------------------------------------------------------------------------
+# Integration tests for get_user_approval (sync)
+# ---------------------------------------------------------------------------
 
 
 class TestGetUserApprovalWebRouting:
@@ -124,6 +241,11 @@ class TestGetUserApprovalWebRouting:
             assert approved is True
 
 
+# ---------------------------------------------------------------------------
+# Integration tests for get_user_approval_async
+# ---------------------------------------------------------------------------
+
+
 class TestGetUserApprovalAsyncWebRouting:
     """Tests for the async get_user_approval_async web-approval gate."""
 
@@ -192,6 +314,26 @@ class TestGetUserApprovalAsyncWebRouting:
 
             call_kwargs = mock_request.call_args[1]
             assert call_kwargs["content"] == "Async edit this file"
+
+    @pytest.mark.asyncio
+    async def test_fail_closed_non_tty_on_backend_error(self) -> None:
+        """In non-TTY web mode, backend error fails closed."""
+        with patch.dict(os.environ, {"CODE_PUPPY_WEB_APPROVALS": "1"}):
+            with patch(
+                "code_puppy.api.approvals.request_approval_sync",
+                side_effect=RuntimeError("oops"),
+            ):
+                with patch("sys.stdin") as mock_stdin:
+                    mock_stdin.isatty.return_value = False
+                    from code_puppy.tools.common import get_user_approval_async
+
+                    approved, feedback = await get_user_approval_async(
+                        title="t",
+                        content="c",
+                        puppy_name="Max",
+                    )
+                    assert approved is False
+                    assert "oops" in feedback
 
 
 class TestWebApprovalDoesNotLeakSecrets:
