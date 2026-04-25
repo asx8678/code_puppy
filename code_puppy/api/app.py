@@ -134,6 +134,7 @@ def create_app() -> FastAPI:
     # CORS middleware — restricted to localhost dashboard origins.
     # allow_credentials=True with allow_origins=["*"] is a security
     # violation; we only allow same-origin / localhost origins.
+    # Methods and headers are explicit — no wildcards.
     app.add_middleware(
         CORSMiddleware,
         allow_origins=[
@@ -142,8 +143,11 @@ def create_app() -> FastAPI:
             "http://[::1]",
         ],
         allow_credentials=True,
-        allow_methods=["*"],
-        allow_headers=["*"],
+        allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+        allow_headers=[
+            "Content-Type",
+            "X-Code-Puppy-Runtime-Token",
+        ],
     )
 
     # Include routers
@@ -224,15 +228,23 @@ def create_app() -> FastAPI:
         return attach_token_cookie_to_response(response)
 
     @app.get("/terminal")
-    async def terminal_page():
-        """Serve the interactive terminal page."""
+    async def terminal_page() -> Response:
+        """Serve the interactive terminal page.
+
+        Sets the runtime auth cookie so the terminal WebSocket
+        (now auth-protected) can authenticate same-origin browser clients.
+        """
+        from code_puppy.api.auth import attach_token_cookie_to_response
+
         html_file = templates_dir / "terminal.html"
         if html_file.exists():
-            return FileResponse(html_file, media_type="text/html")
-        return HTMLResponse(
-            content="<h1>Terminal template not found</h1>",
-            status_code=404,
-        )
+            response = FileResponse(html_file, media_type="text/html")
+        else:
+            response = HTMLResponse(
+                content="<h1>Terminal template not found</h1>",
+                status_code=404,
+            )
+        return attach_token_cookie_to_response(response)
 
     @app.get("/health")
     async def health():

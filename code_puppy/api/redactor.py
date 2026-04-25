@@ -39,6 +39,24 @@ _SECRET_PATTERNS: list[tuple[re.Pattern[str], str]] = [
         re.compile(r"(?i)(?:bearer|authorization)\s+[a-zA-Z0-9\-._~+/]+=*"),
         "Bearer ***REDACTED***",
     ),
+    # JWT tokens — three base64url segments separated by dots
+    (
+        re.compile(r"\beyJ[A-Za-z0-9_-]+\.eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\b"),
+        "***JWT_REDACTED***",
+    ),
+    # PEM-encoded private keys (RSA, EC, DSA, etc.)
+    (
+        re.compile(
+            r"-----BEGIN\s+(?:RSA\s+)?(?:PRIVATE\s+KEY|EC\s+PRIVATE\s+KEY|DSA\s+PRIVATE\s+KEY|OPENSSH\s+PRIVATE\s+KEY)-----"
+        ),
+        "-----BEGIN ***REDACTED*** KEY-----",
+    ),
+    (
+        re.compile(
+            r"-----END\s+(?:RSA\s+)?(?:PRIVATE\s+KEY|EC\s+PRIVATE\s+KEY|DSA\s+PRIVATE\s+KEY|OPENSSH\s+PRIVATE\s+KEY)-----"
+        ),
+        "-----END ***REDACTED*** KEY-----",
+    ),
     # Generic "api_key=XXX" or "api-key: XXX" patterns
     (
         re.compile(
@@ -121,38 +139,48 @@ def sanitize_traceback(tb_str: str) -> str:
 # Event/status/approval boundary helpers
 # ---------------------------------------------------------------------------
 
+# Structural keys that are identifiers / metadata — never redacted.
+_ID_KEYS = frozenset(
+    {
+        "run_id",
+        "approval_id",
+        "prompt_id",
+        "id",
+        "type",
+        "status",
+        "agent_name",
+        "model_name",
+        "created_at",
+        "started_at",
+        "ended_at",
+        "border_style",
+        "puppy_name",
+    }
+)
+
 
 def redact_event_data(data: Any) -> Any:
     """Redact event data before emitting over WebSocket / HTTP.
 
-    Walks dicts and applies :func:`redact` to string values in known
-    sensitive fields.  Non-sensitive structural keys (run_id, type,
-    timestamps) are left untouched.
+    Applies :func:`redact` to **all** string leaf values traversed in
+    nested dicts and lists, except for structural identifier keys in
+    ``_ID_KEYS`` (UUIDs, timestamps, type tags, etc.) which are left
+    untouched.  This ensures that secret-like content in *any* field —
+    not just a small allowlist — is masked at the boundary.
     """
+    if isinstance(data, str):
+        return redact(data)
     if not isinstance(data, dict):
-        if isinstance(data, str):
-            return redact(data)
+        if isinstance(data, list):
+            return [redact_event_data(item) for item in data]
         return data
-
-    # Fields that contain potentially sensitive text content
-    _SENSITIVE_FIELDS = frozenset(
-        {
-            "prompt_preview",
-            "output_preview",
-            "error",
-            "traceback",
-            "content",
-            "preview",
-            "feedback",
-            "value",
-            "reason",
-            "data",
-        }
-    )
 
     result = {}
     for key, val in data.items():
-        if key in _SENSITIVE_FIELDS and isinstance(val, str):
+        if key in _ID_KEYS:
+            # Identifier / metadata keys are structural — keep as-is.
+            result[key] = val
+        elif isinstance(val, str):
             result[key] = redact(val)
         elif isinstance(val, dict):
             result[key] = redact_event_data(val)

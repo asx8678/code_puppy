@@ -20,7 +20,7 @@ import secrets
 from pathlib import Path
 from typing import Optional
 
-from fastapi import Cookie, Header, HTTPException, Request, status
+from fastapi import Cookie, Header, HTTPException, Request, WebSocket, status
 from fastapi.responses import Response
 
 logger = logging.getLogger(__name__)
@@ -29,7 +29,11 @@ _TOKEN_FILE_NAME = "runtime_token"
 _COOKIE_NAME = "code_puppy_runtime_token"
 _HEADER_NAME = "X-Code-Puppy-Runtime-Token"
 
-# Allowed localhost origins for same-origin dashboard (CORS + origin check).
+# Localhost host values used as fallback when no Host header is present.
+_LOCALHOST_HOSTS = frozenset({"127.0.0.1", "localhost", "::1"})
+
+# Localhost origin prefixes used by CORS middleware and as a last-resort
+# fallback for origin validation when the Host header is absent.
 _LOCALHOST_ORIGINS = frozenset(
     {
         "http://127.0.0.1",
@@ -98,9 +102,8 @@ def verify_token(provided: Optional[str]) -> bool:
 def is_localhost_origin(origin: Optional[str]) -> bool:
     """Return True if *origin* is a localhost origin or absent.
 
-    An absent Origin header means same-origin (typical for direct API
-    calls from the dashboard).  Only cross-site browser requests with a
-    non-localhost Origin are rejected.
+    .. deprecated:: Use :func:`validate_origin_against_host` for strict
+       host-matching origin validation instead.
     """
     if not origin:
         return True
@@ -115,11 +118,68 @@ def is_localhost_origin(origin: Optional[str]) -> bool:
     return False
 
 
+def _parse_origin_host(origin: str) -> Optional[str]:
+    """Extract the host:port portion from an origin URL."""
+    origin_clean = origin.rstrip("/")
+    # Try to strip scheme
+    for scheme in ("http://", "https://"):
+        if origin_clean.startswith(scheme):
+            host_part = origin_clean[len(scheme) :]
+            # Strip bracket notation for IPv6 comparison
+            if host_part.startswith("["):
+                # IPv6: [::1]:port or [::1]
+                bracket_end = host_part.find("]")
+                if bracket_end != -1:
+                    return host_part  # keep brackets for comparison
+            return host_part
+    return None
+
+
+def validate_origin_against_host(
+    origin: Optional[str],
+    host: Optional[str],
+) -> bool:
+    """Validate Origin against the request Host header.
+
+    When an Origin header is present (browser requests), its host:port
+    must match the request Host header exactly.  This prevents same-site /
+    cross-port localhost CSRF/WS abuse where a different service on another
+    port could ride on "any-localhost-origin" acceptance.
+
+    When Origin is absent (non-browser clients like curl, or same-origin
+    navigation), the request is allowed — token auth still gates access.
+    When Host is absent, falls back to :func:`is_localhost_origin`.
+    """
+    if not origin:
+        # Absent Origin means non-browser client or same-origin navigation.
+        return True
+    if not host:
+        # No Host header — fall back to basic localhost check.
+        return is_localhost_origin(origin)
+
+    origin_host = _parse_origin_host(origin)
+    if origin_host is None:
+        return False
+
+    # Normalise for comparison: strip brackets from IPv6 hosts.
+    def _norm(h: str) -> str:
+        return h.lower().strip("[]")
+
+    return _norm(origin_host) == _norm(host)
+
+
 def check_origin(request: Request) -> None:
-    """Raise 403 if the request has a cross-site Origin header."""
+    """Raise 403 if the request has a cross-site Origin header.
+
+    Compares the Origin host against the request Host header when both
+    are present, preventing cross-port localhost abuse.
+    """
     origin = request.headers.get("origin")
-    if not is_localhost_origin(origin):
-        logger.warning("Rejected cross-site request from Origin: %s", origin)
+    host = request.headers.get("host")
+    if not validate_origin_against_host(origin, host):
+        logger.warning(
+            "Rejected cross-site request from Origin: %s (Host: %s)", origin, host
+        )
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Cross-site requests are not allowed",
@@ -228,6 +288,47 @@ def extract_ws_token(
     return None
 
 
-def validate_ws_origin(origin: Optional[str]) -> bool:
-    """Validate a WebSocket Origin header for same-origin policy."""
-    return is_localhost_origin(origin)
+def validate_ws_origin(
+    origin: Optional[str],
+    host: Optional[str] = None,
+) -> bool:
+    """Validate a WebSocket Origin header for same-origin policy.
+
+    When *host* is provided, the Origin host must match exactly, preventing
+    cross-port localhost abuse.  Falls back to basic localhost check when
+    *host* is None.
+    """
+    return validate_origin_against_host(origin, host)
+
+
+def validate_ws_auth(websocket: WebSocket) -> Optional[str]:
+    """Validate a WebSocket connection's origin and auth token.
+
+    Returns an error reason string if validation fails, or ``None`` on
+    success.  Use *before* ``websocket.accept()`` — on failure the caller
+    should close with the appropriate code.
+    """
+    # Origin check
+    origin = websocket.headers.get("origin", "")
+    host = websocket.headers.get("host")
+    if not validate_ws_origin(origin if origin else None, host):
+        logger.warning(
+            "Rejected WS from cross-site Origin: %s (Host: %s)", origin, host
+        )
+        return "Cross-origin not allowed"
+
+    # Token check
+    cookie_header = websocket.headers.get("cookie", "")
+    custom_headers = [
+        (k, v)
+        for k, v in websocket.headers.items()
+        if k.lower() == _HEADER_NAME.lower()
+    ]
+    token = extract_ws_token(
+        cookie_header=cookie_header, protocol_headers=custom_headers
+    )
+    if not verify_token(token):
+        logger.warning("Rejected unauthenticated WS connection")
+        return "Authentication required"
+
+    return None

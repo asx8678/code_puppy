@@ -2,7 +2,7 @@
 
 Provides real-time communication channels:
 - /ws/events - Server-sent events stream (auth-protected)
-- /ws/terminal - Interactive PTY terminal sessions
+- /ws/terminal - Interactive PTY terminal sessions (auth-protected)
 - /ws/health - Simple health check endpoint
 """
 
@@ -13,14 +13,30 @@ import uuid
 
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 
-from code_puppy.api.auth import (
-    _HEADER_NAME,
-    extract_ws_token,
-    validate_ws_origin,
-    verify_token,
-)
+from code_puppy.api.auth import validate_ws_auth
 
 logger = logging.getLogger(__name__)
+
+# ---------------------------------------------------------------------------
+# Terminal input hardening constants
+# ---------------------------------------------------------------------------
+
+# Maximum bytes for a single terminal input message (64 KiB).
+_MAX_INPUT_BYTES = 65_536
+
+# Sane bounds for terminal resize.
+_MIN_COLS = 1
+_MAX_COLS = 1000
+_MIN_ROWS = 1
+_MAX_ROWS = 500
+
+
+def _clamp_resize(cols: int, rows: int) -> tuple[int, int]:
+    """Clamp terminal resize values to sane positive bounds."""
+    return (
+        max(_MIN_COLS, min(_MAX_COLS, int(cols))),
+        max(_MIN_ROWS, min(_MAX_ROWS, int(rows))),
+    )
 
 
 def setup_websocket(app: FastAPI) -> None:
@@ -33,27 +49,11 @@ def setup_websocket(app: FastAPI) -> None:
         Requires a valid runtime token via cookie or custom header,
         and rejects cross-origin connections.
         """
-        # Origin check before accepting
-        origin = websocket.headers.get("origin", "")
-        if not validate_ws_origin(origin):
-            logger.warning("Rejected WS /ws/events from cross-site Origin: %s", origin)
-            await websocket.close(code=4403, reason="Cross-origin not allowed")
-            return
-
-        # Auth check: extract token from cookie or custom header
-        cookie_header = websocket.headers.get("cookie", "")
-        # Also check the custom header for non-browser clients
-        custom_headers = [
-            (k, v)
-            for k, v in websocket.headers.items()
-            if k.lower() == _HEADER_NAME.lower()
-        ]
-        token = extract_ws_token(
-            cookie_header=cookie_header, protocol_headers=custom_headers
-        )
-        if not verify_token(token):
-            logger.warning("Rejected unauthenticated WS /ws/events connection")
-            await websocket.close(code=4401, reason="Authentication required")
+        # Auth + origin check before accepting
+        err = validate_ws_auth(websocket)
+        if err:
+            code = 4403 if "origin" in err.lower() or "cross" in err.lower() else 4401
+            await websocket.close(code=code, reason=err)
             return
 
         await websocket.accept()
@@ -98,9 +98,20 @@ def setup_websocket(app: FastAPI) -> None:
 
     @app.websocket("/ws/terminal")
     async def websocket_terminal(websocket: WebSocket) -> None:
-        """Interactive terminal WebSocket endpoint."""
+        """Interactive terminal WebSocket endpoint.
+
+        Requires a valid runtime token and same-origin validation,
+        matching the same security posture as /ws/events.
+        """
+        # Auth + origin check before accepting
+        err = validate_ws_auth(websocket)
+        if err:
+            code = 4403 if "origin" in err.lower() or "cross" in err.lower() else 4401
+            await websocket.close(code=code, reason=err)
+            return
+
         await websocket.accept()
-        logger.info("Terminal WebSocket client connected")
+        logger.info("Terminal WebSocket client connected (authenticated)")
 
         from code_puppy.api.pty_manager import get_pty_manager
 
@@ -161,10 +172,18 @@ def setup_websocket(app: FastAPI) -> None:
                         data = msg.get("data", "")
                         if isinstance(data, str):
                             data = data.encode("utf-8")
+                        # Cap input bytes to prevent abuse
+                        if len(data) > _MAX_INPUT_BYTES:
+                            logger.warning(
+                                "Terminal input exceeded %d bytes, truncating",
+                                _MAX_INPUT_BYTES,
+                            )
+                            data = data[:_MAX_INPUT_BYTES]
                         await manager.write(session_id, data)
                     elif msg.get("type") == "resize":
                         cols = msg.get("cols", 80)
                         rows = msg.get("rows", 24)
+                        cols, rows = _clamp_resize(cols, rows)
                         await manager.resize(session_id, cols, rows)
                 except WebSocketDisconnect:
                     break

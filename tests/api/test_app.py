@@ -50,6 +50,9 @@ async def test_terminal_page_exists(client: AsyncClient) -> None:
     resp = await client.get("/terminal")
     # Template file exists in the source tree
     assert resp.status_code == 200
+    # Terminal page should set the auth cookie (same as /, /dashboard, /app)
+    cookie_headers = [v for k, v in resp.headers.items() if k.lower() == "set-cookie"]
+    assert any("code_puppy_runtime_token" in h for h in cookie_headers)
 
 
 @pytest.mark.asyncio
@@ -211,7 +214,7 @@ async def test_cors_rejects_wildcard_origin() -> None:
 
 @pytest.mark.asyncio
 async def test_cors_no_wildcard_in_config() -> None:
-    """CORS allow_origins list should not contain wildcard."""
+    """CORS allow_origins, allow_methods, allow_headers should not contain wildcards."""
     app = create_app()
     # Check the middleware stack for CORS configuration
     from starlette.middleware.cors import CORSMiddleware
@@ -223,8 +226,23 @@ async def test_cors_no_wildcard_in_config() -> None:
                 and issubclass(layer.cls, CORSMiddleware)
             ):
                 origins = layer.kwargs.get("allow_origins", [])
+                methods = layer.kwargs.get("allow_methods", [])
+                headers = layer.kwargs.get("allow_headers", [])
                 assert "*" not in origins, (
                     f"CORS allow_origins should not contain '*': {origins}"
+                )
+                assert "*" not in methods, (
+                    f"CORS allow_methods should not contain '*': {methods}"
+                )
+                assert "*" not in headers, (
+                    f"CORS allow_headers should not contain '*': {headers}"
+                )
+                # Verify the runtime token header is explicitly allowed
+                assert "X-Code-Puppy-Runtime-Token" in headers, (
+                    f"CORS allow_headers should include 'X-Code-Puppy-Runtime-Token': {headers}"
+                )
+                assert "Content-Type" in headers, (
+                    f"CORS allow_headers should include 'Content-Type': {headers}"
                 )
     # At least verify the app builds
     assert isinstance(app, FastAPI)
