@@ -12,6 +12,7 @@ defmodule CodePuppyControl.Application do
   6. CodePuppyControl.RuntimeState - Global runtime state (autosave ID, session model)
   7. CodePuppyControl.PolicyEngine - Priority-based policy rule engine
   8. CodePuppyControl.AgentModelPinning - Agent-to-model pin configuration (ETS-backed)
+  8b. CodePuppyControl.ModelFactory.ProviderRegistry - Provider type -> module mapping (Agent-backed)
   9a. CodePuppyControl.ModelRegistry - Model configuration registry (ETS-backed)
   9b. CodePuppyControl.ModelAvailability - Model health circuit breaker (ETS-backed)
   9c. CodePuppyControl.ModelPacks - Role-based model packs
@@ -74,6 +75,8 @@ defmodule CodePuppyControl.Application do
       {CodePuppyControl.WorkflowState, name: CodePuppyControl.WorkflowState},
       CodePuppyControl.PolicyEngine,
       CodePuppyControl.AgentModelPinning,
+      # Provider registry (Agent-backed) for provider type → module mapping
+      CodePuppyControl.ModelFactory.ProviderRegistry,
       CodePuppyControl.ModelRegistry,
       CodePuppyControl.ModelAvailability,
       CodePuppyControl.ModelPacks,
