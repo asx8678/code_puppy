@@ -52,6 +52,7 @@ from bench_baseline.llm import LLMLatencyBenchmarks
 from bench_baseline.models import BenchmarkSuite
 from bench_baseline.self_test import run_tests
 from bench_baseline.tools import ToolOverheadBenchmarks
+from bench_baseline.utils import parse_env_bool, validate_env_choice
 # format_stats imported in tools.py for display output
 
 
@@ -138,9 +139,15 @@ def main() -> int:
         print("=" * 60)
         return run_tests()
 
-    # Environment overrides
-    mode = "quick" if (args.quick or os.environ.get("PUP_BENCH_QUICK")) else "full"
-    category = os.environ.get("PUP_BENCH_CATEGORY", args.category)
+    # Environment overrides (with strict parsing / validation)
+    env_quick = parse_env_bool("PUP_BENCH_QUICK", os.environ.get("PUP_BENCH_QUICK"))
+    mode = "quick" if (args.quick or env_quick) else "full"
+    env_category = validate_env_choice(
+        "PUP_BENCH_CATEGORY",
+        os.environ.get("PUP_BENCH_CATEGORY"),
+        ("all", "tools", "llm"),
+    )
+    category = env_category if env_category is not None else args.category
     output_path = os.environ.get("PUP_BENCH_OUTPUT", args.output)
 
     print("=" * 60)

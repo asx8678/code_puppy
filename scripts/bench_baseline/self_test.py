@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+import subprocess
 import sys
 import tempfile
 import unittest
@@ -13,7 +14,12 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 from scripts.bench_baseline.models import BenchmarkResult, BenchmarkSuite, LatencyStats
-from scripts.bench_baseline.utils import format_stats, time_function
+from scripts.bench_baseline.utils import (
+    format_stats,
+    parse_env_bool,
+    time_function,
+    validate_env_choice,
+)
 
 
 class TestLatencyStats(unittest.TestCase):
@@ -235,46 +241,136 @@ class TestFormatStats(unittest.TestCase):
         self.assertIn("median=2.0", formatted)
 
 
-class TestCLIEnv(unittest.TestCase):
-    """Test CLI and environment behavior."""
+class TestEnvBoolParsing(unittest.TestCase):
+    """Test strict boolean environment-variable parsing."""
 
-    def test_env_override(self):
-        """Environment variables should override defaults."""
-        # Save original
-        orig_quick = os.environ.get("PUP_BENCH_QUICK")
-        orig_category = os.environ.get("PUP_BENCH_CATEGORY")
+    # --- truthy values ---
 
-        try:
-            os.environ["PUP_BENCH_QUICK"] = "1"
-            os.environ["PUP_BENCH_CATEGORY"] = "tools"
+    def test_quick_1_is_truthy(self):
+        self.assertTrue(parse_env_bool("PUP_BENCH_QUICK", "1"))
 
-            # Simulate parsing
-            import argparse
+    def test_quick_true_is_truthy(self):
+        self.assertTrue(parse_env_bool("PUP_BENCH_QUICK", "true"))
 
-            parser = argparse.ArgumentParser()
-            parser.add_argument("--quick", action="store_true")
-            parser.add_argument("--category", default="all")
-            args = parser.parse_args([])
+    def test_quick_yes_is_truthy(self):
+        self.assertTrue(parse_env_bool("PUP_BENCH_QUICK", "yes"))
 
-            # Environment overrides
-            mode = (
-                "quick" if (args.quick or os.environ.get("PUP_BENCH_QUICK")) else "full"
+    def test_quick_on_is_truthy(self):
+        self.assertTrue(parse_env_bool("PUP_BENCH_QUICK", "on"))
+
+    # --- falsy values ---
+
+    def test_quick_0_is_falsy(self):
+        """PUP_BENCH_QUICK=0 must be parsed as false (not truthy)."""
+        self.assertFalse(parse_env_bool("PUP_BENCH_QUICK", "0"))
+
+    def test_quick_false_is_falsy(self):
+        self.assertFalse(parse_env_bool("PUP_BENCH_QUICK", "false"))
+
+    def test_quick_no_is_falsy(self):
+        self.assertFalse(parse_env_bool("PUP_BENCH_QUICK", "no"))
+
+    def test_quick_off_is_falsy(self):
+        self.assertFalse(parse_env_bool("PUP_BENCH_QUICK", "off"))
+
+    # --- None (unset) ---
+
+    def test_quick_none_returns_false(self):
+        self.assertFalse(parse_env_bool("PUP_BENCH_QUICK", None))
+
+    # --- case-insensitive ---
+
+    def test_quick_case_insensitive(self):
+        self.assertTrue(parse_env_bool("PUP_BENCH_QUICK", "TRUE"))
+        self.assertTrue(parse_env_bool("PUP_BENCH_QUICK", "Yes"))
+        self.assertFalse(parse_env_bool("PUP_BENCH_QUICK", "FALSE"))
+        self.assertFalse(parse_env_bool("PUP_BENCH_QUICK", "No"))
+
+    # --- invalid values exit non-zero ---
+
+    def test_invalid_quick_exits(self):
+        """Invalid PUP_BENCH_QUICK value must exit non-zero with clear message."""
+        with self.assertRaises(SystemExit) as ctx:
+            parse_env_bool("PUP_BENCH_QUICK", "maybe")
+        self.assertEqual(ctx.exception.code, 2)
+
+    def test_empty_string_quick_exits(self):
+        """Empty string is not a valid boolean and must exit."""
+        with self.assertRaises(SystemExit) as ctx:
+            parse_env_bool("PUP_BENCH_QUICK", "")
+        self.assertEqual(ctx.exception.code, 2)
+
+
+class TestEnvChoiceValidation(unittest.TestCase):
+    """Test environment-variable category validation."""
+
+    _CHOICES = ("all", "tools", "llm")
+
+    def test_valid_choices_pass(self):
+        for c in self._CHOICES:
+            self.assertEqual(
+                validate_env_choice("PUP_BENCH_CATEGORY", c, self._CHOICES), c
             )
-            category = os.environ.get("PUP_BENCH_CATEGORY", args.category)
 
-            self.assertEqual(mode, "quick")
-            self.assertEqual(category, "tools")
-        finally:
-            # Restore
-            if orig_quick is not None:
-                os.environ["PUP_BENCH_QUICK"] = orig_quick
-            elif "PUP_BENCH_QUICK" in os.environ:
-                del os.environ["PUP_BENCH_QUICK"]
+    def test_none_returns_none(self):
+        """Unset env var returns None so caller falls back to argparse default."""
+        self.assertIsNone(
+            validate_env_choice("PUP_BENCH_CATEGORY", None, self._CHOICES)
+        )
 
-            if orig_category is not None:
-                os.environ["PUP_BENCH_CATEGORY"] = orig_category
-            elif "PUP_BENCH_CATEGORY" in os.environ:
-                del os.environ["PUP_BENCH_CATEGORY"]
+    def test_invalid_category_exits(self):
+        """PUP_BENCH_CATEGORY=bogus must exit non-zero with clear message."""
+        with self.assertRaises(SystemExit) as ctx:
+            validate_env_choice("PUP_BENCH_CATEGORY", "bogus", self._CHOICES)
+        self.assertEqual(ctx.exception.code, 2)
+
+    def test_typo_category_exits(self):
+        """Near-miss category must also be rejected."""
+        with self.assertRaises(SystemExit) as ctx:
+            validate_env_choice("PUP_BENCH_CATEGORY", "tool", self._CHOICES)
+        self.assertEqual(ctx.exception.code, 2)
+
+
+class TestHarnessEnvIntegration(unittest.TestCase):
+    """Integration tests: exercise actual harness with env vars via subprocess."""
+
+    _HARNESS = str(Path(__file__).parent.parent / "bench_baseline_harness.py")
+
+    def _run_harness(
+        self, env_extra: dict[str, str], extra_args: list[str] | None = None
+    ) -> subprocess.CompletedProcess[str]:  # type: ignore[type-arg]
+        env = os.environ.copy()
+        env.update(env_extra)
+        cmd = [sys.executable, self._HARNESS]
+        if extra_args:
+            cmd.extend(extra_args)
+        return subprocess.run(
+            cmd,
+            capture_output=True,
+            text=True,
+            env=env,
+            timeout=60,
+        )
+
+    def test_quick_0_yields_full_mode(self):
+        """PUP_BENCH_QUICK=0 must NOT report Mode: quick."""
+        proc = self._run_harness({"PUP_BENCH_QUICK": "0"}, ["--category", "llm"])
+        self.assertNotIn(
+            "Mode: quick", proc.stdout, "PUP_BENCH_QUICK=0 must not enable quick mode"
+        )
+        self.assertIn("Mode: full", proc.stdout)
+
+    def test_invalid_quick_exits_nonzero(self):
+        """Invalid PUP_BENCH_QUICK must exit non-zero."""
+        proc = self._run_harness({"PUP_BENCH_QUICK": "maybe"}, ["--category", "llm"])
+        self.assertNotEqual(proc.returncode, 0, "Invalid PUP_BENCH_QUICK must fail")
+        self.assertIn("not a valid boolean", proc.stderr)
+
+    def test_invalid_category_exits_nonzero(self):
+        """PUP_BENCH_CATEGORY=bogus must exit non-zero."""
+        proc = self._run_harness({"PUP_BENCH_CATEGORY": "bogus"}, ["--quick"])
+        self.assertNotEqual(proc.returncode, 0, "Invalid PUP_BENCH_CATEGORY must fail")
+        self.assertIn("not a valid choice", proc.stderr)
 
     def test_json_output(self):
         """JSON output should be valid and readable."""

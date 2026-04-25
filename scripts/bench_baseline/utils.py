@@ -3,10 +3,78 @@
 from __future__ import annotations
 
 import signal
+import sys
 import time
-from typing import Any, Callable
+from typing import Any, Callable, Sequence
 
 from .models import LatencyStats
+
+# ---------------------------------------------------------------------------
+# Environment-variable helpers
+# ---------------------------------------------------------------------------
+
+_TRUTHY = frozenset({"1", "true", "yes", "on"})
+_FALSY = frozenset({"0", "false", "no", "off"})
+_VALID_BOOLS = _TRUTHY | _FALSY
+
+
+def parse_env_bool(name: str, raw: str | None) -> bool:
+    """Parse a boolean environment variable with strict truthy/falsy values.
+
+    Accepts (case-insensitive): 1/0, true/false, yes/no, on/off.
+    Returns *default_val* when *raw* is ``None``.
+    Exits with code 2 and a clear message for any other value.
+
+    Args:
+        name: Environment variable name (for error messages).
+        raw: Raw string value from ``os.environ.get``, or ``None``.
+
+    Returns:
+        Parsed boolean value.
+    """
+    if raw is None:
+        return False
+    normalized = raw.strip().lower()
+    if normalized in _TRUTHY:
+        return True
+    if normalized in _FALSY:
+        return False
+    print(
+        f"Error: {name}={raw!r} is not a valid boolean. "
+        f"Expected one of: {', '.join(sorted(_VALID_BOOLS))} (case-insensitive).",
+        file=sys.stderr,
+    )
+    sys.exit(2)
+
+
+def validate_env_choice(
+    name: str, raw: str | None, choices: Sequence[str]
+) -> str | None:
+    """Validate an env-provided choice against allowed values.
+
+    Returns *raw* unchanged when valid, ``None`` when *raw* is ``None``
+    (caller should fall back to argparse default), and exits with code 2
+    and a clear message for any value outside *choices*.
+
+    Args:
+        name: Environment variable name (for error messages).
+        raw: Raw string value from ``os.environ.get``, or ``None``.
+        choices: Allowed values.
+
+    Returns:
+        The validated string, or ``None``.
+    """
+    if raw is None:
+        return None
+    if raw not in choices:
+        print(
+            f"Error: {name}={raw!r} is not a valid choice. "
+            f"Expected one of: {', '.join(choices)}.",
+            file=sys.stderr,
+        )
+        sys.exit(2)
+    return raw
+
 
 # Signal-based timeout is only available on Unix (SIGALRM).
 _HAS_SIGALRM = hasattr(signal, "SIGALRM") and hasattr(signal, "setitimer")
