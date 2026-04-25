@@ -19,6 +19,7 @@ import pytest
 # cli_runner: --web flag wiring
 # ---------------------------------------------------------------------------
 
+
 class TestWebFlagParsing:
     """Test that --web flags are correctly parsed from argparse."""
 
@@ -98,6 +99,7 @@ class TestWebModeAllowExternalLogic:
 # ---------------------------------------------------------------------------
 # cli_runner: on_task_created callback
 # ---------------------------------------------------------------------------
+
 
 class TestOnTaskCreatedCallback:
     """Test the on_task_created parameter in run_prompt_with_attachments."""
@@ -215,6 +217,7 @@ class TestOnTaskCreatedCallback:
 # core_commands: /api start/status dashboard URLs
 # ---------------------------------------------------------------------------
 
+
 class TestApiCommandDashboardUrls:
     """Test that /api start and status mention dashboard/terminal URLs."""
 
@@ -229,7 +232,10 @@ class TestApiCommandDashboardUrls:
         info_messages = []
 
         with (
-            patch("code_puppy.messaging.emit_info", side_effect=lambda m: info_messages.append(m)),
+            patch(
+                "code_puppy.messaging.emit_info",
+                side_effect=lambda m: info_messages.append(m),
+            ),
             patch("code_puppy.messaging.emit_success"),
             patch("subprocess.Popen", return_value=mock_proc),
         ):
@@ -253,7 +259,10 @@ class TestApiCommandDashboardUrls:
         info_messages = []
 
         with (
-            patch("code_puppy.messaging.emit_info", side_effect=lambda m: info_messages.append(m)),
+            patch(
+                "code_puppy.messaging.emit_info",
+                side_effect=lambda m: info_messages.append(m),
+            ),
             patch("code_puppy.messaging.emit_success"),
             patch("os.kill"),  # Process exists
         ):
@@ -270,6 +279,7 @@ class TestApiCommandDashboardUrls:
 # ---------------------------------------------------------------------------
 # core_commands: /dashboard command
 # ---------------------------------------------------------------------------
+
 
 class TestDashboardCommand:
     """Test the /dashboard command handler."""
@@ -351,7 +361,10 @@ class TestDashboardCommand:
         with (
             patch("os.kill"),
             patch("webbrowser.open"),
-            patch("code_puppy.messaging.emit_info", side_effect=lambda m: info_messages.append(m)),
+            patch(
+                "code_puppy.messaging.emit_info",
+                side_effect=lambda m: info_messages.append(m),
+            ),
         ):
             handle_dashboard_command("/dashboard")
 
@@ -366,6 +379,7 @@ class TestDashboardCommand:
 # ---------------------------------------------------------------------------
 # api/main: allow_external security
 # ---------------------------------------------------------------------------
+
 
 class TestApiMainSecurity:
     """Test api/main.py allow_external security guard."""
