@@ -9,7 +9,7 @@ defmodule CodePuppyControl.SessionStorageAsyncTest do
   All tests use System.tmp_dir!/0 for isolation — never touches ~/.code_puppy/.
   """
 
-  use ExUnit.Case, async: true
+  use ExUnit.Case, async: false
 
   alias CodePuppyControl.SessionStorage
   alias CodePuppyControl.SessionStorage.AutosaveTracker
@@ -69,6 +69,53 @@ defmodule CodePuppyControl.SessionStorageAsyncTest do
       Process.sleep(100)
     end
 
+    # (code_puppy-dku) Regression: save_session_async/3 must return :ok
+    # even when base_dir()/0 would raise (e.g. invalid env). The
+    # fire-and-forget contract means errors resolving env/default
+    # base dir are logged, not raised synchronously.
+    test "returns :ok when base_dir/0 raises — fire-and-forget contract", %{base_dir: _dir} do
+      # Corrupt PUP_SESSION_DIR so base_dir()/0 would raise if called.
+      original = System.get_env("PUP_SESSION_DIR")
+      System.put_env("PUP_SESSION_DIR", "/etc/forbidden_sessions")
+
+      on_exit(fn ->
+        if original,
+          do: System.put_env("PUP_SESSION_DIR", original),
+          else: System.delete_env("PUP_SESSION_DIR")
+      end)
+
+      # Without explicit base_dir, base_dir()/0 would raise — but
+      # save_session_async must catch that and return :ok.
+      history = [%{"role" => "user", "content" => "fire-and-forget"}]
+      assert :ok = SessionStorage.save_session_async("ff-test", history, [])
+
+      # Give the Task time to (not) run
+      Process.sleep(100)
+    end
+
+    # (code_puppy-dku) Regression: explicit base_dir: should never
+    # evaluate base_dir()/0 — even when it would raise.
+    test "explicit base_dir: skips base_dir/0 (lazy default)", %{base_dir: dir} do
+      # Corrupt PUP_SESSION_DIR so base_dir()/0 would raise if called.
+      original = System.get_env("PUP_SESSION_DIR")
+      System.put_env("PUP_SESSION_DIR", "/etc/forbidden_sessions")
+
+      on_exit(fn ->
+        if original,
+          do: System.put_env("PUP_SESSION_DIR", original),
+          else: System.delete_env("PUP_SESSION_DIR")
+      end)
+
+      # With explicit base_dir, base_dir()/0 is never called
+      history = [%{"role" => "user", "content" => "lazy-async"}]
+      assert :ok = SessionStorage.save_session_async("lazy-async-test", history, base_dir: dir)
+
+      # Give the Task time to complete
+      Process.sleep(100)
+
+      assert SessionStorage.session_exists?("lazy-async-test", base_dir: dir)
+    end
+
     test "history snapshot is isolated from later mutations", %{base_dir: dir} do
       # In Elixir, lists are immutable — this test demonstrates intent
       # rather than guarding against a real mutation risk.
@@ -83,6 +130,45 @@ defmodule CodePuppyControl.SessionStorageAsyncTest do
                SessionStorage.load_session("snapshot-test", base_dir: dir)
 
       assert loaded == original_history
+    end
+
+    test "captures base_dir before Task spawn — immune to env teardown race", %{
+      base_dir: dir
+    } do
+      # (code_puppy-dku) save_session_async/3 must resolve base_dir
+      # BEFORE spawning the Task.  If it re-read PUP_SESSION_DIR inside
+      # the Task, test teardown that restores env vars before the Task
+      # starts would redirect the write to the real user session path.
+      history = [%{"role" => "user", "content" => "race-test"}]
+
+      # Set up env vars so base_dir/0 resolves to our temp dir.
+      prev_session_dir = System.get_env("PUP_SESSION_DIR")
+      prev_test_root = System.get_env("PUP_TEST_SESSION_ROOT")
+
+      # PUP_TEST_SESSION_ROOT needs to cover the parent of sessions
+      sandbox_ex = Path.join(dir, "..") |> Path.expand()
+      System.put_env("PUP_TEST_SESSION_ROOT", sandbox_ex)
+      System.put_env("PUP_SESSION_DIR", dir)
+
+      on_exit(fn ->
+        if prev_session_dir,
+          do: System.put_env("PUP_SESSION_DIR", prev_session_dir),
+          else: System.delete_env("PUP_SESSION_DIR")
+
+        if prev_test_root,
+          do: System.put_env("PUP_TEST_SESSION_ROOT", prev_test_root),
+          else: System.delete_env("PUP_TEST_SESSION_ROOT")
+      end)
+
+      # Call without explicit :base_dir — forces resolution via base_dir/0
+      :ok = SessionStorage.save_session_async("race-capture-test", history, [])
+
+      # Wait for the background Task to complete
+      Process.sleep(150)
+
+      # Verify the session landed in the expected dir (resolved from
+      # PUP_SESSION_DIR at call time, not at Task execution time)
+      assert SessionStorage.session_exists?("race-capture-test", base_dir: dir)
     end
   end
 

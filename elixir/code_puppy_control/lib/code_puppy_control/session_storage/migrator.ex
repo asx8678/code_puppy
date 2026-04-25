@@ -75,7 +75,12 @@ defmodule CodePuppyControl.SessionStorage.Migrator do
     source_autosave_dir =
       Keyword.get(opts, :source_autosave_dir, Path.expand(@default_autosave_dir))
 
-    dest_dir = Keyword.get(opts, :dest_dir, SessionStorage.base_dir())
+    dest_dir =
+      case Keyword.fetch(opts, :dest_dir) do
+        {:ok, dir} -> dir
+        :error -> SessionStorage.base_dir()
+      end
+
     dry_run = Keyword.get(opts, :dry_run, false)
     overwrite = Keyword.get(opts, :overwrite, false)
 

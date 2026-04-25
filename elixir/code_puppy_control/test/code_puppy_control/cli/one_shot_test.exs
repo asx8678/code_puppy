@@ -67,9 +67,15 @@ defmodule CodePuppyControl.CLI.OneShotTest do
   alias CodePuppyControl.CLI.OneShotMockLLM
   alias CodePuppyControl.CLI.Parser
   alias CodePuppyControl.REPL.OneShot
+  alias CodePuppyControl.TestSupport.OneShotSandbox
   alias CodePuppyControl.Tools.AgentCatalogue
 
-  defp setup_mock_llm(_context) do
+  defp setup_mock_llm(context) do
+    # Sandbox SessionStorage so successful OneShot.run never writes
+    # to the real ~/.code_puppy_ex/sessions/.  Overrides HOME so
+    # validate_storage_dir!/1 is satisfied within the temp dir.
+    OneShotSandbox.setup_sandbox(context)
+
     session_id = :crypto.strong_rand_bytes(4) |> Base.encode16(case: :lower)
 
     prev_llm = Application.get_env(:code_puppy_control, :repl_llm_module)

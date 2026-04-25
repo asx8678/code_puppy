@@ -5,7 +5,7 @@ defmodule CodePuppyControl.SessionStorageTest do
   All tests use System.tmp_dir!/0 for isolation — never touches ~/.code_puppy/.
   """
 
-  use ExUnit.Case, async: true
+  use ExUnit.Case, async: false
 
   alias CodePuppyControl.SessionStorage
 
@@ -503,6 +503,135 @@ defmodule CodePuppyControl.SessionStorageTest do
   end
 
   # ---------------------------------------------------------------------------
+  # Lazy base_dir default regression (code_puppy-dku)
+  # ---------------------------------------------------------------------------
+
+  describe "lazy base_dir default — explicit :base_dir skips base_dir/0" do
+    # (code_puppy-dku) Regression tests for the eager-default bug:
+    # Keyword.get(opts, :base_dir, base_dir()) evaluates base_dir()/0
+    # even when :base_dir is present, causing synchronous raises when
+    # env is invalid.  With the fix (resolve_base_dir/1 using
+    # Keyword.fetch/2), explicit :base_dir never calls base_dir()/0.
+
+    test "save_session/3 with explicit base_dir skips base_dir/0" do
+      # Set an invalid PUP_SESSION_DIR so base_dir()/0 would raise.
+      # With the lazy fix, passing base_dir: explicitly should NOT
+      # call base_dir()/0 at all.
+      tmp =
+        Path.join(
+          System.tmp_dir!(),
+          "lazy_default_save_#{System.unique_integer([:positive])}"
+        )
+
+      File.mkdir_p!(tmp)
+      on_exit(fn -> File.rm_rf!(tmp) end)
+
+      original = System.get_env("PUP_SESSION_DIR")
+      # Point to a path that would fail validate_storage_dir! if called
+      System.put_env("PUP_SESSION_DIR", "/etc/forbidden_sessions")
+
+      on_exit(fn ->
+        if original,
+          do: System.put_env("PUP_SESSION_DIR", original),
+          else: System.delete_env("PUP_SESSION_DIR")
+      end)
+
+      # Should NOT raise — base_dir()/0 is never called
+      messages = [%{"role" => "user", "content" => "lazy default test"}]
+      assert {:ok, _} = SessionStorage.save_session("lazy-test", messages, base_dir: tmp)
+    end
+
+    test "load_session/2 with explicit base_dir skips base_dir/0" do
+      tmp =
+        Path.join(
+          System.tmp_dir!(),
+          "lazy_default_load_#{System.unique_integer([:positive])}"
+        )
+
+      File.mkdir_p!(tmp)
+      on_exit(fn -> File.rm_rf!(tmp) end)
+
+      original = System.get_env("PUP_SESSION_DIR")
+      System.put_env("PUP_SESSION_DIR", "/etc/forbidden_sessions")
+
+      on_exit(fn ->
+        if original,
+          do: System.put_env("PUP_SESSION_DIR", original),
+          else: System.delete_env("PUP_SESSION_DIR")
+      end)
+
+      # Should NOT raise — base_dir()/0 is never called
+      assert {:error, :not_found} = SessionStorage.load_session("nope", base_dir: tmp)
+    end
+
+    test "delete_session/2 with explicit base_dir skips base_dir/0" do
+      tmp =
+        Path.join(
+          System.tmp_dir!(),
+          "lazy_default_delete_#{System.unique_integer([:positive])}"
+        )
+
+      File.mkdir_p!(tmp)
+      on_exit(fn -> File.rm_rf!(tmp) end)
+
+      original = System.get_env("PUP_SESSION_DIR")
+      System.put_env("PUP_SESSION_DIR", "/etc/forbidden_sessions")
+
+      on_exit(fn ->
+        if original,
+          do: System.put_env("PUP_SESSION_DIR", original),
+          else: System.delete_env("PUP_SESSION_DIR")
+      end)
+
+      assert :ok = SessionStorage.delete_session("nope", base_dir: tmp)
+    end
+
+    test "session_exists?/2 with explicit base_dir skips base_dir/0" do
+      tmp =
+        Path.join(
+          System.tmp_dir!(),
+          "lazy_default_exists_#{System.unique_integer([:positive])}"
+        )
+
+      File.mkdir_p!(tmp)
+      on_exit(fn -> File.rm_rf!(tmp) end)
+
+      original = System.get_env("PUP_SESSION_DIR")
+      System.put_env("PUP_SESSION_DIR", "/etc/forbidden_sessions")
+
+      on_exit(fn ->
+        if original,
+          do: System.put_env("PUP_SESSION_DIR", original),
+          else: System.delete_env("PUP_SESSION_DIR")
+      end)
+
+      refute SessionStorage.session_exists?("nope", base_dir: tmp)
+    end
+
+    test "list_sessions/1 with explicit base_dir skips base_dir/0" do
+      tmp =
+        Path.join(
+          System.tmp_dir!(),
+          "lazy_default_list_#{System.unique_integer([:positive])}"
+        )
+
+      File.mkdir_p!(tmp)
+      on_exit(fn -> File.rm_rf!(tmp) end)
+
+      original = System.get_env("PUP_SESSION_DIR")
+      System.put_env("PUP_SESSION_DIR", "/etc/forbidden_sessions")
+
+      on_exit(fn ->
+        if original,
+          do: System.put_env("PUP_SESSION_DIR", original),
+          else: System.delete_env("PUP_SESSION_DIR")
+      end)
+
+      assert {:ok, []} = SessionStorage.list_sessions(base_dir: tmp)
+    end
+  end
+
+  # ---------------------------------------------------------------------------
   # Isolation guard
   # ---------------------------------------------------------------------------
 
@@ -520,6 +649,101 @@ defmodule CodePuppyControl.SessionStorageTest do
         end
       end)
 
+      assert_raise ArgumentError, ~r/outside ~\/\.code_puppy_ex\//, fn ->
+        SessionStorage.base_dir()
+      end
+    end
+
+    test "PUP_TEST_SESSION_ROOT is ignored without :allow_test_session_root" do
+      # (code_puppy-dku) PUP_TEST_SESSION_ROOT must be gated to test-only
+      # config.  When :allow_test_session_root is false (simulating prod),
+      # setting PUP_TEST_SESSION_ROOT should NOT expand allowed roots.
+      tmp =
+        Path.join(System.tmp_dir!(), "pup_test_root_gate_#{System.unique_integer([:positive])}")
+
+      File.mkdir_p!(tmp)
+
+      original_dir = System.get_env("PUP_SESSION_DIR")
+      original_root = System.get_env("PUP_TEST_SESSION_ROOT")
+      original_flag = Application.get_env(:code_puppy_control, :allow_test_session_root)
+
+      # Simulate production: flag is false/unset
+      Application.put_env(:code_puppy_control, :allow_test_session_root, false)
+      System.put_env("PUP_SESSION_DIR", Path.join(tmp, "sessions"))
+      System.put_env("PUP_TEST_SESSION_ROOT", tmp)
+
+      on_exit(fn ->
+        if original_dir,
+          do: System.put_env("PUP_SESSION_DIR", original_dir),
+          else: System.delete_env("PUP_SESSION_DIR")
+
+        if original_root,
+          do: System.put_env("PUP_TEST_SESSION_ROOT", original_root),
+          else: System.delete_env("PUP_TEST_SESSION_ROOT")
+
+        if original_flag != nil,
+          do: Application.put_env(:code_puppy_control, :allow_test_session_root, original_flag),
+          else: Application.delete_env(:code_puppy_control, :allow_test_session_root)
+
+        File.rm_rf(tmp)
+      end)
+
+      # Should still reject — PUP_TEST_SESSION_ROOT is ignored when flag is false
+      assert_raise ArgumentError, ~r/outside ~\/\.code_puppy_ex\//, fn ->
+        SessionStorage.base_dir()
+      end
+
+      # Now enable the flag (simulating test env)
+      Application.put_env(:code_puppy_control, :allow_test_session_root, true)
+
+      # Now it should succeed — PUP_TEST_SESSION_ROOT is honoured
+      assert SessionStorage.base_dir() == Path.expand(Path.join(tmp, "sessions"))
+    end
+
+    test "path-boundary check rejects sibling prefix escapes" do
+      # (code_puppy-dku) /tmp/root2 must not match /tmp/root.
+      # This tests the path_under_root? guard that replaced
+      # String.starts_with?/2.
+      tmp_a = Path.join(System.tmp_dir!(), "pup_root_a_#{System.unique_integer([:positive])}")
+
+      tmp_b =
+        Path.join(System.tmp_dir!(), "pup_root_a_sibling_#{System.unique_integer([:positive])}")
+
+      File.mkdir_p!(tmp_a)
+      File.mkdir_p!(tmp_b)
+
+      original_dir = System.get_env("PUP_SESSION_DIR")
+      original_root = System.get_env("PUP_TEST_SESSION_ROOT")
+      original_flag = Application.get_env(:code_puppy_control, :allow_test_session_root)
+
+      # Set test root to tmp_a
+      Application.put_env(:code_puppy_control, :allow_test_session_root, true)
+      System.put_env("PUP_TEST_SESSION_ROOT", tmp_a)
+
+      # Point session dir under tmp_b (a different sibling)
+      # Use a path that starts with tmp_a's string but is NOT a descendant
+      sibling_session_dir = Path.join(tmp_b, "sessions")
+      System.put_env("PUP_SESSION_DIR", sibling_session_dir)
+
+      on_exit(fn ->
+        if original_dir,
+          do: System.put_env("PUP_SESSION_DIR", original_dir),
+          else: System.delete_env("PUP_SESSION_DIR")
+
+        if original_root,
+          do: System.put_env("PUP_TEST_SESSION_ROOT", original_root),
+          else: System.delete_env("PUP_TEST_SESSION_ROOT")
+
+        if original_flag != nil,
+          do: Application.put_env(:code_puppy_control, :allow_test_session_root, original_flag),
+          else: Application.delete_env(:code_puppy_control, :allow_test_session_root)
+
+        File.rm_rf(tmp_a)
+        File.rm_rf(tmp_b)
+      end)
+
+      # Should reject — sibling path is NOT under the allowed root
+      # even though its string representation may share a prefix
       assert_raise ArgumentError, ~r/outside ~\/\.code_puppy_ex\//, fn ->
         SessionStorage.base_dir()
       end

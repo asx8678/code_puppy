@@ -52,6 +52,39 @@ defmodule CodePuppyControl.CLI do
   end
 
   @doc """
+  Determine the run mode from parsed CLI opts.
+
+  Returns an atom tag describing which execution path `run/1` will
+  take, without starting the OTP supervision tree or calling
+  `System.halt/1`.  Extracted for testability — the routing
+  logic is pure and deterministic.
+
+  ## Returns
+
+    * `:one_shot`               — Non-interactive prompt (`-p TEXT` / positional)
+    * `:interactive_with_prompt` — Interactive mode with an initial prompt (`-p TEXT -i`)
+    * `:continue_session`       — Continue last session (`-c`)
+    * `:interactive_default`     — Plain interactive REPL (no prompt / empty prompt)
+  """
+  @spec resolve_run_mode(map()) ::
+          :one_shot | :interactive_with_prompt | :continue_session | :interactive_default
+  def resolve_run_mode(opts) do
+    case opts do
+      %{prompt: _, interactive: true} ->
+        :interactive_with_prompt
+
+      %{prompt: prompt} when is_binary(prompt) and prompt != "" ->
+        :one_shot
+
+      %{continue: true} ->
+        :continue_session
+
+      _ ->
+        :interactive_default
+    end
+  end
+
+  @doc """
   Run the application with parsed options.
 
   Starts the OTP supervision tree (unless --help/--version) and
@@ -62,21 +95,17 @@ defmodule CodePuppyControl.CLI do
     # Ensure the OTP app is started for full invocations
     Application.ensure_all_started(:code_puppy_control)
 
-    case opts do
-      %{prompt: _, interactive: true} ->
-        # Interactive mode with initial prompt
-        run_interactive(opts)
-
-      %{prompt: prompt} when is_binary(prompt) and prompt != "" ->
-        # Single prompt mode
+    case resolve_run_mode(opts) do
+      :one_shot ->
         run_single_prompt(opts)
 
-      %{continue: true} ->
-        # Continue last session
+      :interactive_with_prompt ->
         run_interactive(opts)
 
-      _ ->
-        # Default: interactive mode
+      :continue_session ->
+        run_interactive(opts)
+
+      :interactive_default ->
         run_interactive(opts)
     end
 
