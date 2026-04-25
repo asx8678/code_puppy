@@ -81,23 +81,42 @@ defmodule Mix.Tasks.PupEx.Smoke do
     # rather than against the real ~/.code_puppy_ex/.
     {sandbox, env_snapshot} = Smoke.setup_sandbox()
 
-    try do
-      ensure_application_started()
+    # IMPORTANT (code_puppy-baa): `System.halt/1` terminates the BEAM
+    # immediately and SKIPS `after` blocks.  Calling it inside the
+    # try body leaks the tmp sandbox (`pup_smoke_*/.code_puppy_ex/`).
+    #
+    # Pattern:
+    #   1. Compute exit_code inside try/rescue.
+    #   2. Always run teardown in the `after` block (BEAM still alive).
+    #   3. Halt OUTSIDE the try, once cleanup has guaranteed-run.
+    exit_code =
+      try do
+        ensure_application_started()
 
-      result = Smoke.run_phases(runner_opts, sandbox)
+        result = Smoke.run_phases(runner_opts, sandbox)
 
-      output =
-        if Keyword.get(opts, :json, false) do
-          Smoke.format_json(result)
-        else
-          Smoke.format_human(result)
-        end
+        output =
+          if Keyword.get(opts, :json, false) do
+            Smoke.format_json(result)
+          else
+            Smoke.format_human(result)
+          end
 
-      Mix.shell().info(output)
-      System.halt(Smoke.exit_code(result))
-    after
-      Smoke.teardown_sandbox(sandbox, env_snapshot)
-    end
+        Mix.shell().info(output)
+        Smoke.exit_code(result)
+      rescue
+        e ->
+          Mix.shell().error(
+            "mix pup_ex.smoke aborted: " <>
+              Exception.format(:error, e, __STACKTRACE__)
+          )
+
+          1
+      after
+        Smoke.teardown_sandbox(sandbox, env_snapshot)
+      end
+
+    System.halt(exit_code)
   end
 
   defp build_runner_opts(opts) do
