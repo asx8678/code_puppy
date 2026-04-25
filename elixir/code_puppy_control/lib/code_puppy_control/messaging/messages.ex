@@ -4,7 +4,8 @@ defmodule CodePuppyControl.Messaging.Messages do
 
   Provides `base_message/1` and `text_message/1` constructors that build
   validated internal maps, auto-generating `id` and `timestamp_unix_ms`
-  when absent.
+  when absent. Also serves as a facade delegating to family-specific modules
+  for the full message catalogue.
 
   These maps are consumed by `WireEvent.to_wire/1` to produce the JSON-safe
   wire envelope for transport.
@@ -19,6 +20,15 @@ defmodule CodePuppyControl.Messaging.Messages do
   | `TextMessage`    | `text_message/1`      |
   | `MessageLevel`   | `Types.validate_level/1` |
   | `MessageCategory`| `Types.validate_category/1` |
+
+  For the full message catalogue, see the family-specific modules:
+
+  - `CodePuppyControl.Messaging.ToolOutput` — file, grep, diff, shell, UC messages
+  - `CodePuppyControl.Messaging.Agent` — reasoning, response, sub-agent messages
+  - `CodePuppyControl.Messaging.UserInteraction` — input, confirmation, selection
+  - `CodePuppyControl.Messaging.Control` — spinner, divider, status, version
+  - `CodePuppyControl.Messaging.Skill` — skill list, skill activate
+  - `CodePuppyControl.Messaging.Entries` — FileEntry, GrepMatch, DiffLine, SkillEntry
 
   ## Design Notes
 
@@ -139,6 +149,118 @@ defmodule CodePuppyControl.Messaging.Messages do
   end
 
   def text_message(other), do: {:error, {:not_a_map, other}}
+
+  # ── Facade delegates ─────────────────────────────────────────────────────
+
+  # Tool output family
+  @doc false
+  defdelegate file_listing_message(fields),
+    to: CodePuppyControl.Messaging.ToolOutput
+
+  @doc false
+  defdelegate file_content_message(fields),
+    to: CodePuppyControl.Messaging.ToolOutput
+
+  @doc false
+  defdelegate grep_result_message(fields),
+    to: CodePuppyControl.Messaging.ToolOutput
+
+  @doc false
+  defdelegate diff_message(fields),
+    to: CodePuppyControl.Messaging.ToolOutput
+
+  @doc false
+  defdelegate shell_start_message(fields),
+    to: CodePuppyControl.Messaging.ToolOutput
+
+  @doc false
+  defdelegate shell_line_message(fields),
+    to: CodePuppyControl.Messaging.ToolOutput
+
+  @doc false
+  defdelegate shell_output_message(fields),
+    to: CodePuppyControl.Messaging.ToolOutput
+
+  @doc false
+  defdelegate universal_constructor_message(fields),
+    to: CodePuppyControl.Messaging.ToolOutput
+
+  # Agent family
+  @doc false
+  defdelegate agent_reasoning_message(fields),
+    to: CodePuppyControl.Messaging.Agent
+
+  @doc false
+  defdelegate agent_response_message(fields),
+    to: CodePuppyControl.Messaging.Agent
+
+  @doc false
+  defdelegate sub_agent_invocation_message(fields),
+    to: CodePuppyControl.Messaging.Agent
+
+  @doc false
+  defdelegate sub_agent_response_message(fields),
+    to: CodePuppyControl.Messaging.Agent
+
+  @doc false
+  defdelegate sub_agent_status_message(fields),
+    to: CodePuppyControl.Messaging.Agent
+
+  # User interaction family
+  @doc false
+  defdelegate user_input_request(fields),
+    to: CodePuppyControl.Messaging.UserInteraction
+
+  @doc false
+  defdelegate confirmation_request(fields),
+    to: CodePuppyControl.Messaging.UserInteraction
+
+  @doc false
+  defdelegate selection_request(fields),
+    to: CodePuppyControl.Messaging.UserInteraction
+
+  # Control family
+  @doc false
+  defdelegate spinner_control(fields),
+    to: CodePuppyControl.Messaging.Control
+
+  @doc false
+  defdelegate divider_message(fields),
+    to: CodePuppyControl.Messaging.Control
+
+  @doc false
+  defdelegate status_panel_message(fields),
+    to: CodePuppyControl.Messaging.Control
+
+  @doc false
+  defdelegate version_check_message(fields),
+    to: CodePuppyControl.Messaging.Control
+
+  # Skill family
+  @doc false
+  defdelegate skill_list_message(fields),
+    to: CodePuppyControl.Messaging.Skill
+
+  @doc false
+  defdelegate skill_activate_message(fields),
+    to: CodePuppyControl.Messaging.Skill
+
+  # Entry models
+  @doc false
+  defdelegate file_entry(fields),
+    to: CodePuppyControl.Messaging.Entries
+
+  @doc false
+  defdelegate grep_match(fields),
+    to: CodePuppyControl.Messaging.Entries
+
+  @doc false
+  defdelegate diff_line(fields),
+    to: CodePuppyControl.Messaging.Entries
+
+  @doc false
+  defdelegate skill_entry(fields),
+    to: CodePuppyControl.Messaging.Entries
 
   # ── Private helpers ────────────────────────────────────────────────────────
 
