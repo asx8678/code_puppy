@@ -435,6 +435,12 @@ async def test_dashboard_addfeed_uses_safe_event(client: AsyncClient) -> None:
     assert "safeEvent.data" in html, (
         "addFeed should stringify safeEvent.data, not raw event.data"
     )
+    assert "badgeClass(safeEvent)" in html, (
+        "addFeed should pass safeEvent to badgeClass(), not raw event"
+    )
+    assert "fmtTime(safeEvent.timestamp)" in html, (
+        "addFeed should pass safeEvent.timestamp to fmtTime(), not raw event.timestamp"
+    )
 
 
 @pytest.mark.asyncio
