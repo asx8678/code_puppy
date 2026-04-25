@@ -18,7 +18,11 @@ def app() -> FastAPI:
 @pytest.fixture
 async def client(app: FastAPI):
     transport = ASGITransport(app=app)
-    async with AsyncClient(transport=transport, base_url="http://test") as c:
+    async with AsyncClient(
+        transport=transport,
+        base_url="http://test",
+        headers={"origin": "http://127.0.0.1"},
+    ) as c:
         yield c
 
 
@@ -34,6 +38,10 @@ async def test_root(client: AsyncClient) -> None:
     resp = await client.get("/")
     assert resp.status_code == 200
     assert "Code Puppy" in resp.text
+    assert "Open Dashboard" in resp.text
+    # Root page should set the auth cookie
+    cookie_headers = [v for k, v in resp.headers.items() if k.lower() == "set-cookie"]
+    assert any("code_puppy_runtime_token" in h for h in cookie_headers)
     assert "Open Terminal" in resp.text
 
 
@@ -42,6 +50,9 @@ async def test_terminal_page_exists(client: AsyncClient) -> None:
     resp = await client.get("/terminal")
     # Template file exists in the source tree
     assert resp.status_code == 200
+    # Terminal page should set the auth cookie (same as /, /dashboard, /app)
+    cookie_headers = [v for k, v in resp.headers.items() if k.lower() == "set-cookie"]
+    assert any("code_puppy_runtime_token" in h for h in cookie_headers)
 
 
 @pytest.mark.asyncio
@@ -146,8 +157,8 @@ async def test_timeout_middleware_returns_504() -> None:
 
 
 @pytest.mark.asyncio
-async def test_timeout_middleware_skips_websocket_upgrade() -> None:
-    """Requests with upgrade:websocket header skip timeout."""
+async def test_timeout_middleware_skips_ws_path() -> None:
+    """Requests to /ws/ path skip timeout middleware (ASGI-level check)."""
     app = create_app()
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as c:
@@ -155,6 +166,86 @@ async def test_timeout_middleware_skips_websocket_upgrade() -> None:
         resp = await c.get("/ws/nonexistent")
         # Will 404 but won't 504
         assert resp.status_code != 504
+
+
+@pytest.mark.asyncio
+async def test_dashboard_page_not_found() -> None:
+    """When dashboard template doesn't exist, returns 404 HTML."""
+    with patch("pathlib.Path.exists", return_value=False):
+        transport = ASGITransport(app=create_app())
+        async with AsyncClient(transport=transport, base_url="http://test") as c:
+            resp = await c.get("/dashboard")
+            assert resp.status_code == 404
+            assert "not found" in resp.text.lower()
+
+
+@pytest.mark.asyncio
+async def test_app_page_redirects_to_dashboard() -> None:
+    """The /app route redirects to /dashboard."""
+    transport = ASGITransport(app=create_app())
+    async with AsyncClient(
+        transport=transport,
+        base_url="http://test",
+        follow_redirects=False,
+        headers={"origin": "http://127.0.0.1"},
+    ) as c:
+        resp = await c.get("/app")
+        assert resp.status_code in (307, 308)
+
+
+@pytest.mark.asyncio
+async def test_cors_rejects_wildcard_origin() -> None:
+    """CORS should NOT allow wildcard / cross-site origins."""
+    transport = ASGITransport(app=create_app())
+    async with AsyncClient(
+        transport=transport,
+        base_url="http://test",
+    ) as c:
+        # A cross-site origin should not get CORS access
+        resp = await c.get(
+            "/health",
+            headers={"origin": "https://evil.com"},
+        )
+        # The response should NOT have a wildcard or evil.com CORS header
+        allow_origin = resp.headers.get("access-control-allow-origin", "")
+        assert allow_origin != "*"
+        assert "evil.com" not in allow_origin
+
+
+@pytest.mark.asyncio
+async def test_cors_no_wildcard_in_config() -> None:
+    """CORS allow_origins, allow_methods, allow_headers should not contain wildcards."""
+    app = create_app()
+    # Check the middleware stack for CORS configuration
+    from starlette.middleware.cors import CORSMiddleware
+
+    for layer in app.user_middleware:
+        if hasattr(layer, "kwargs") and hasattr(layer, "cls"):
+            if layer.cls is CORSMiddleware or (
+                isinstance(getattr(layer, "cls", None), type)
+                and issubclass(layer.cls, CORSMiddleware)
+            ):
+                origins = layer.kwargs.get("allow_origins", [])
+                methods = layer.kwargs.get("allow_methods", [])
+                headers = layer.kwargs.get("allow_headers", [])
+                assert "*" not in origins, (
+                    f"CORS allow_origins should not contain '*': {origins}"
+                )
+                assert "*" not in methods, (
+                    f"CORS allow_methods should not contain '*': {methods}"
+                )
+                assert "*" not in headers, (
+                    f"CORS allow_headers should not contain '*': {headers}"
+                )
+                # Verify the runtime token header is explicitly allowed
+                assert "X-Code-Puppy-Runtime-Token" in headers, (
+                    f"CORS allow_headers should include 'X-Code-Puppy-Runtime-Token': {headers}"
+                )
+                assert "Content-Type" in headers, (
+                    f"CORS allow_headers should include 'Content-Type': {headers}"
+                )
+    # At least verify the app builds
+    assert isinstance(app, FastAPI)
 
 
 @pytest.mark.asyncio

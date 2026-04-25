@@ -1,8 +1,8 @@
 """WebSocket endpoints for Code Puppy API.
 
 Provides real-time communication channels:
-- /ws/events - Server-sent events stream
-- /ws/terminal - Interactive PTY terminal sessions
+- /ws/events - Server-sent events stream (auth-protected)
+- /ws/terminal - Interactive PTY terminal sessions (auth-protected)
 - /ws/health - Simple health check endpoint
 """
 
@@ -13,7 +13,30 @@ import uuid
 
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 
+from code_puppy.api.auth import validate_ws_auth
+
 logger = logging.getLogger(__name__)
+
+# ---------------------------------------------------------------------------
+# Terminal input hardening constants
+# ---------------------------------------------------------------------------
+
+# Maximum bytes for a single terminal input message (64 KiB).
+_MAX_INPUT_BYTES = 65_536
+
+# Sane bounds for terminal resize.
+_MIN_COLS = 1
+_MAX_COLS = 1000
+_MIN_ROWS = 1
+_MAX_ROWS = 500
+
+
+def _clamp_resize(cols: int, rows: int) -> tuple[int, int]:
+    """Clamp terminal resize values to sane positive bounds."""
+    return (
+        max(_MIN_COLS, min(_MAX_COLS, int(cols))),
+        max(_MIN_ROWS, min(_MAX_ROWS, int(rows))),
+    )
 
 
 def setup_websocket(app: FastAPI) -> None:
@@ -21,9 +44,20 @@ def setup_websocket(app: FastAPI) -> None:
 
     @app.websocket("/ws/events")
     async def websocket_events(websocket: WebSocket) -> None:
-        """Stream real-time events to connected clients."""
+        """Stream real-time events to connected clients.
+
+        Requires a valid runtime token via cookie or custom header,
+        and rejects cross-origin connections.
+        """
+        # Auth + origin check before accepting
+        err = validate_ws_auth(websocket)
+        if err:
+            code = 4403 if "origin" in err.lower() or "cross" in err.lower() else 4401
+            await websocket.close(code=code, reason=err)
+            return
+
         await websocket.accept()
-        logger.info("Events WebSocket client connected")
+        logger.info("Events WebSocket client connected (authenticated)")
 
         from code_puppy.plugins.frontend_emitter.emitter import (
             get_recent_events,
@@ -31,17 +65,25 @@ def setup_websocket(app: FastAPI) -> None:
             unsubscribe,
         )
 
+        from code_puppy.api.redactor import redact_event_data
+
         event_queue = subscribe()
 
         try:
             recent_events = get_recent_events()
             for event in recent_events:
-                await websocket.send_json(event)
+                redacted = (
+                    redact_event_data(event) if isinstance(event, dict) else event
+                )
+                await websocket.send_json(redacted)
 
             while True:
                 try:
                     event = await asyncio.wait_for(event_queue.get(), timeout=30.0)
-                    await websocket.send_json(event)
+                    redacted = (
+                        redact_event_data(event) if isinstance(event, dict) else event
+                    )
+                    await websocket.send_json(redacted)
                 except asyncio.TimeoutError:
                     try:
                         await websocket.send_json({"type": "ping"})
@@ -56,9 +98,20 @@ def setup_websocket(app: FastAPI) -> None:
 
     @app.websocket("/ws/terminal")
     async def websocket_terminal(websocket: WebSocket) -> None:
-        """Interactive terminal WebSocket endpoint."""
+        """Interactive terminal WebSocket endpoint.
+
+        Requires a valid runtime token and same-origin validation,
+        matching the same security posture as /ws/events.
+        """
+        # Auth + origin check before accepting
+        err = validate_ws_auth(websocket)
+        if err:
+            code = 4403 if "origin" in err.lower() or "cross" in err.lower() else 4401
+            await websocket.close(code=code, reason=err)
+            return
+
         await websocket.accept()
-        logger.info("Terminal WebSocket client connected")
+        logger.info("Terminal WebSocket client connected (authenticated)")
 
         from code_puppy.api.pty_manager import get_pty_manager
 
@@ -119,10 +172,18 @@ def setup_websocket(app: FastAPI) -> None:
                         data = msg.get("data", "")
                         if isinstance(data, str):
                             data = data.encode("utf-8")
+                        # Cap input bytes to prevent abuse
+                        if len(data) > _MAX_INPUT_BYTES:
+                            logger.warning(
+                                "Terminal input exceeded %d bytes, truncating",
+                                _MAX_INPUT_BYTES,
+                            )
+                            data = data[:_MAX_INPUT_BYTES]
                         await manager.write(session_id, data)
                     elif msg.get("type") == "resize":
                         cols = msg.get("cols", 80)
                         rows = msg.get("rows", 24)
+                        cols, rows = _clamp_resize(cols, rows)
                         await manager.resize(session_id, cols, rows)
                 except WebSocketDisconnect:
                     break
