@@ -157,12 +157,24 @@ Benchmark results are stored as JSON. Each entry in `results[]` has:
   "category": "llm_latency",
   "operation": "anthropic_ttfb",
   "approach": "live_api",
-  "latency_stats": { "mean_ms": 0, "samples": 0, "..."": "..." },
+  "latency_stats": {
+    "mean_ms": 0, "median_ms": 0, "min_ms": 0, "max_ms": 0,
+    "p95_ms": 0, "p99_ms": 0, "stdev_ms": 0, "samples": 0
+  },
   "throughput_ops_per_sec": 0,
-  "metadata": {"model": "claude-sonnet-4-20250514", "max_tokens": 50, "prompt_chars": 57, "failures": 0},
+  "metadata": {
+    "model": "claude-sonnet-4-20250514",
+    "max_tokens": 50,
+    "prompt_chars": 55,
+    "failures": 0
+  },
   "notes": "Time to first block (approximates TTFT). Paid API call."
 }
 ```
+
+> **Note:** All numeric values are zero placeholders; live runs produce measured
+> values. The `prompt_chars` value of 55 corresponds to the non-streaming
+> probe's default prompt (`"Write a one-line Python function that adds two numbers."`).
 
 ### Streaming LLM result (`llm_streaming`)
 
@@ -183,13 +195,18 @@ Benchmark results are stored as JSON. Each entry in `results[]` has:
 | `prompt_id` | Fixture prompt id (e.g. `short_v1`) |
 | `failures` | Error count during streaming |
 | `successful_iterations` | Iterations that collected token timestamps |
+| `timeout` | Whether the streaming response hit a timeout before completing (bool) |
+| `metric_names` | Ordered list of metric field names included in metadata, for schema discoverability |
 
 ```json
 {
   "category": "llm_streaming",
   "operation": "anthropic_streaming_ttft_tbt",
   "approach": "live_api",
-  "latency_stats": { "mean_ms": 0, "samples": 0, "..."": "..." },
+  "latency_stats": {
+    "mean_ms": 0, "median_ms": 0, "min_ms": 0, "max_ms": 0,
+    "p95_ms": 0, "p99_ms": 0, "stdev_ms": 0, "samples": 0
+  },
   "throughput_ops_per_sec": 0,
   "metadata": {
     "ttft_ms": 0, "tbt_mean_ms": 0, "tbt_median_ms": 0,
@@ -197,11 +214,20 @@ Benchmark results are stored as JSON. Each entry in `results[]` has:
     "total_duration_ms": 0, "token_count": 0, "chunk_count": 0,
     "model": "claude-sonnet-4-20250514",
     "prompt_id": "short_v1",
-    "failures": 0, "successful_iterations": 1
+    "failures": 0, "successful_iterations": 1,
+    "timeout": false,
+    "metric_names": [
+      "ttft_ms", "tbt_mean_ms", "tbt_median_ms",
+      "tbt_p95_ms", "tbt_p99_ms", "total_duration_ms",
+      "token_count", "chunk_count"
+    ]
   },
   "notes": "TTFT from last iteration; TBT aggregated across 1 successful iteration(s)."
 }
 ```
+
+> **Note:** All numeric values are zero placeholders; live runs produce measured
+> values.
 
 ### Top-level suite fields
 

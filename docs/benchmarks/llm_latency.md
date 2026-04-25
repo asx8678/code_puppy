@@ -140,6 +140,8 @@ env -u PUP_ANTHROPIC_API_KEY -u PUP_OPENAI_API_KEY \
 | `prompt_id` | Fixture prompt id (e.g. `short_v1`) |
 | `failures` | Error count during streaming |
 | `successful_iterations` | Iterations that collected token timestamps |
+| `timeout` | Whether the streaming response hit a timeout before completing (bool) |
+| `metric_names` | Ordered list of metric field names included in metadata, for schema discoverability |
 
 ### Without credentials
 
