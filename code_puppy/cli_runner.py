@@ -86,9 +86,56 @@ async def main():
         help="Specify which model to use (e.g., --model gpt-5)",
     )
     parser.add_argument(
+        "--web",
+        action="store_true",
+        help="Launch the integrated web dashboard instead of the terminal UI",
+    )
+    parser.add_argument(
+        "--web-host",
+        default="127.0.0.1",
+        help="Host for --web mode (default: 127.0.0.1)",
+    )
+    parser.add_argument(
+        "--web-port",
+        type=int,
+        default=8765,
+        help="Port for --web mode (default: 8765)",
+    )
+    parser.add_argument(
+        "--no-browser",
+        action="store_true",
+        help="Do not open a browser automatically in --web mode",
+    )
+    parser.add_argument(
         "command", nargs="*", help="Run a single command (deprecated, use -p instead)"
     )
     args = parser.parse_args()
+
+    # --web mode: launch the integrated dashboard and return
+    if args.web:
+        ensure_config_exists()
+        if args.model:
+            from code_puppy.config import set_model_name
+
+            set_model_name(args.model.strip())
+        if args.agent:
+            from code_puppy.agents.agent_manager import set_current_agent
+
+            set_current_agent(args.agent.lower())
+        from code_puppy.config import load_api_keys_to_environment
+
+        load_api_keys_to_environment()
+        from code_puppy.api.main import main as run_api_server
+
+        # Security: only pass allow_external=True when host is non-localhost
+        _LOCALHOST = {"127.0.0.1", "::1", "localhost"}
+        run_api_server(
+            host=args.web_host,
+            port=args.web_port,
+            open_browser=not args.no_browser,
+            allow_external=args.web_host not in _LOCALHOST,
+        )
+        return
 
     from code_puppy.messaging import (
         RichConsoleRenderer,
@@ -911,6 +958,7 @@ async def run_prompt_with_attachments(
     *,
     spinner_console=None,
     use_spinner: bool = True,
+    on_task_created=None,
 ):
     """Run the agent after parsing CLI attachments for image/document support.
 
@@ -979,6 +1027,12 @@ async def run_prompt_with_attachments(
             link_attachments=link_attachments,
         )
     )
+
+    if on_task_created is not None:
+        try:
+            on_task_created(agent_task)
+        except Exception:
+            pass
 
     if use_spinner and spinner_console is not None:
         from code_puppy.messaging.spinner import ConsoleSpinner
