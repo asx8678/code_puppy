@@ -43,6 +43,8 @@ _unregister_process = command_runner_module._unregister_process
 _win32_pipe_has_data = command_runner_module._win32_pipe_has_data
 _truncate_line = command_runner_module._truncate_line
 _shell_command_keyboard_context = command_runner_module._shell_command_keyboard_context
+_needs_shell_approval = command_runner_module._needs_shell_approval
+_request_shell_approval = command_runner_module._request_shell_approval
 _spawn_ctrl_x_key_listener = command_runner_module._spawn_ctrl_x_key_listener
 _listen_for_ctrl_x_windows = command_runner_module._listen_for_ctrl_x_windows
 _listen_for_ctrl_x_posix = command_runner_module._listen_for_ctrl_x_posix
@@ -713,3 +715,306 @@ class TestRegisterAgentRunShellCommand:
 
         # Verify tool was registered
         mock_agent.tool.assert_called_once()
+
+
+class TestNeedsShellApproval:
+    """Tests for _needs_shell_approval() security gate."""
+
+    def test_yolo_mode_skips_approval(self) -> None:
+        with patch("code_puppy.config.get_yolo_mode", return_value=True):
+            with patch.object(command_runner_module, "is_subagent", return_value=False):
+                with patch.dict(os.environ, {"CODE_PUPPY_WEB_APPROVALS": "1"}):
+                    assert _needs_shell_approval() is False
+
+    def test_subagent_skips_approval(self) -> None:
+        with patch("code_puppy.config.get_yolo_mode", return_value=False):
+            with patch.object(command_runner_module, "is_subagent", return_value=True):
+                with patch.dict(os.environ, {"CODE_PUPPY_WEB_APPROVALS": "1"}):
+                    assert _needs_shell_approval() is False
+
+    def test_tty_requires_approval(self) -> None:
+        with patch("code_puppy.config.get_yolo_mode", return_value=False):
+            with patch.object(command_runner_module, "is_subagent", return_value=False):
+                with patch("sys.stdin") as mock_stdin:
+                    mock_stdin.isatty.return_value = True
+                    env = dict(os.environ)
+                    env.pop("CODE_PUPPY_WEB_APPROVALS", None)
+                    with patch.dict(os.environ, env, clear=True):
+                        assert _needs_shell_approval() is True
+
+    def test_non_tty_without_web_approvals_skips(self) -> None:
+        """Non-TTY without web approvals = no approval gate (original behaviour)."""
+        with patch("code_puppy.config.get_yolo_mode", return_value=False):
+            with patch.object(command_runner_module, "is_subagent", return_value=False):
+                with patch("sys.stdin") as mock_stdin:
+                    mock_stdin.isatty.return_value = False
+                    env = dict(os.environ)
+                    env.pop("CODE_PUPPY_WEB_APPROVALS", None)
+                    with patch.dict(os.environ, env, clear=True):
+                        assert _needs_shell_approval() is False
+
+    def test_non_tty_with_web_approvals_requires_approval(self) -> None:
+        """KEY SECURITY FIX: non-TTY + web approvals enabled = approval required."""
+        with patch("code_puppy.config.get_yolo_mode", return_value=False):
+            with patch.object(command_runner_module, "is_subagent", return_value=False):
+                with patch("sys.stdin") as mock_stdin:
+                    mock_stdin.isatty.return_value = False
+                    with patch.dict(os.environ, {"CODE_PUPPY_WEB_APPROVALS": "1"}):
+                        assert _needs_shell_approval() is True
+
+
+class TestShellApprovalBeforeBackgroundExecution:
+    """Tests that approval happens BEFORE subprocess.Popen for background cmds.
+
+    This is the critical security fix: previously background=True would
+    spawn the process before checking approval.
+    """
+
+    @pytest.fixture(autouse=True)
+    def reset_state(self):
+        """Reset global state."""
+        with _RUNNING_PROCESSES_LOCK:
+            _RUNNING_PROCESSES.clear()
+        _USER_KILLED_PROCESSES.clear()
+        yield
+        with _RUNNING_PROCESSES_LOCK:
+            _RUNNING_PROCESSES.clear()
+        _USER_KILLED_PROCESSES.clear()
+
+    @pytest.mark.asyncio
+    async def test_background_web_approval_approved_popen_called(self) -> None:
+        """background=True + web approvals enabled + approved -> Popen called."""
+        mock_context = MagicMock()
+
+        mock_proc = MagicMock()
+        mock_proc.pid = 99999
+
+        with patch.dict(os.environ, {"CODE_PUPPY_WEB_APPROVALS": "1"}):
+            with patch.object(command_runner_module, "is_subagent", return_value=False):
+                with patch("sys.stdin") as mock_stdin:
+                    mock_stdin.isatty.return_value = False
+                    with patch(
+                        "code_puppy.config.get_yolo_mode",
+                        return_value=False,
+                    ):
+                        with patch(
+                            "code_puppy.api.approvals.request_approval_sync",
+                            return_value=(True, None),
+                        ):
+                            with patch.object(
+                                command_runner_module.subprocess,
+                                "Popen",
+                                return_value=mock_proc,
+                            ) as mock_popen:
+                                result = await run_shell_command(
+                                    mock_context,
+                                    command="sleep 999 &",
+                                    background=True,
+                                )
+
+        # Popen should have been called after approval
+        assert mock_popen.called
+        assert result.background is True
+
+    @pytest.mark.asyncio
+    async def test_background_web_approval_rejected_popen_not_called(
+        self,
+    ) -> None:
+        """background=True + web approvals enabled + rejected -> Popen NOT called."""
+        mock_context = MagicMock()
+
+        with patch.dict(os.environ, {"CODE_PUPPY_WEB_APPROVALS": "1"}):
+            with patch.object(command_runner_module, "is_subagent", return_value=False):
+                with patch("sys.stdin") as mock_stdin:
+                    mock_stdin.isatty.return_value = False
+                    with patch(
+                        "code_puppy.config.get_yolo_mode",
+                        return_value=False,
+                    ):
+                        with patch(
+                            "code_puppy.api.approvals.request_approval_sync",
+                            return_value=(False, "No way"),
+                        ):
+                            with patch.object(
+                                command_runner_module.subprocess, "Popen"
+                            ) as mock_popen:
+                                result = await run_shell_command(
+                                    mock_context,
+                                    command="rm -rf / &",
+                                    background=True,
+                                )
+
+        # Popen should NOT have been called
+        mock_popen.assert_not_called()
+        assert result.success is False
+        assert "REJECTED" in result.error
+
+    @pytest.mark.asyncio
+    async def test_foreground_non_tty_web_approval_approved(self) -> None:
+        """background=False + non-TTY + web approvals enabled + approved."""
+        mock_context = MagicMock()
+
+        with patch.dict(os.environ, {"CODE_PUPPY_WEB_APPROVALS": "1"}):
+            with patch.object(command_runner_module, "is_subagent", return_value=False):
+                with patch("sys.stdin") as mock_stdin:
+                    mock_stdin.isatty.return_value = False
+                    with patch(
+                        "code_puppy.config.get_yolo_mode",
+                        return_value=False,
+                    ):
+                        with patch(
+                            "code_puppy.api.approvals.request_approval_sync",
+                            return_value=(True, None),
+                        ):
+                            with patch.object(
+                                command_runner_module,
+                                "_execute_shell_command",
+                                new_callable=AsyncMock,
+                            ) as mock_exec:
+                                mock_exec.return_value = ShellCommandOutput(
+                                    success=True,
+                                    command="echo hi",
+                                    stdout="hi",
+                                    stderr="",
+                                    exit_code=0,
+                                    execution_time=0.1,
+                                )
+                                result = await run_shell_command(
+                                    mock_context,
+                                    command="echo hi",
+                                )
+
+        # _execute_shell_command should have been called after approval
+        mock_exec.assert_called_once()
+        assert result.success is True
+
+    @pytest.mark.asyncio
+    async def test_foreground_non_tty_web_approval_rejected(self) -> None:
+        """background=False + non-TTY + web approvals enabled + rejected."""
+        mock_context = MagicMock()
+
+        with patch.dict(os.environ, {"CODE_PUPPY_WEB_APPROVALS": "1"}):
+            with patch.object(command_runner_module, "is_subagent", return_value=False):
+                with patch("sys.stdin") as mock_stdin:
+                    mock_stdin.isatty.return_value = False
+                    with patch(
+                        "code_puppy.config.get_yolo_mode",
+                        return_value=False,
+                    ):
+                        with patch(
+                            "code_puppy.api.approvals.request_approval_sync",
+                            return_value=(False, "Nope"),
+                        ):
+                            with patch.object(
+                                command_runner_module,
+                                "_execute_shell_command",
+                                new_callable=AsyncMock,
+                            ) as mock_exec:
+                                result = await run_shell_command(
+                                    mock_context,
+                                    command="echo hi",
+                                )
+
+        # _execute_shell_command should NOT have been called
+        mock_exec.assert_not_called()
+        assert result.success is False
+
+    @pytest.mark.asyncio
+    async def test_web_backend_exception_non_tty_fails_closed(self) -> None:
+        """Web approval backend exception in non-TTY web mode fails closed."""
+        mock_context = MagicMock()
+
+        with patch.dict(os.environ, {"CODE_PUPPY_WEB_APPROVALS": "1"}):
+            with patch.object(command_runner_module, "is_subagent", return_value=False):
+                with patch("sys.stdin") as mock_stdin:
+                    mock_stdin.isatty.return_value = False
+                    with patch(
+                        "code_puppy.config.get_yolo_mode",
+                        return_value=False,
+                    ):
+                        with patch(
+                            "code_puppy.api.approvals.request_approval_sync",
+                            side_effect=RuntimeError("Backend down"),
+                        ):
+                            with patch.object(
+                                command_runner_module,
+                                "_execute_shell_command",
+                                new_callable=AsyncMock,
+                            ) as mock_exec:
+                                result = await run_shell_command(
+                                    mock_context,
+                                    command="dangerous_cmd",
+                                )
+
+        # Must NOT execute the command
+        mock_exec.assert_not_called()
+        assert result.success is False
+        assert "Backend down" in result.error
+
+    @pytest.mark.asyncio
+    async def test_yolo_mode_background_skips_approval(self) -> None:
+        """Yolo mode + background should skip approval and spawn directly."""
+        mock_context = MagicMock()
+
+        mock_proc = MagicMock()
+        mock_proc.pid = 12345
+
+        with patch.dict(os.environ, {"CODE_PUPPY_WEB_APPROVALS": "1"}):
+            with patch(
+                "code_puppy.config.get_yolo_mode",
+                return_value=True,
+            ):
+                with patch.object(
+                    command_runner_module, "is_subagent", return_value=False
+                ):
+                    with patch(
+                        "code_puppy.api.approvals.request_approval_sync",
+                    ) as mock_approval:
+                        with patch.object(
+                            command_runner_module.subprocess, "Popen"
+                        ) as mock_popen:
+                            mock_popen.return_value = mock_proc
+                            await run_shell_command(
+                                mock_context,
+                                command="sleep 10 &",
+                                background=True,
+                            )
+
+        # Approval should NOT be called in yolo mode
+        mock_approval.assert_not_called()
+        # Popen should have been called directly
+        mock_popen.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_subagent_background_skips_approval(self) -> None:
+        """Subagent + background should skip approval and spawn directly."""
+        mock_context = MagicMock()
+
+        mock_proc = MagicMock()
+        mock_proc.pid = 12345
+
+        with patch.dict(os.environ, {"CODE_PUPPY_WEB_APPROVALS": "1"}):
+            with patch(
+                "code_puppy.config.get_yolo_mode",
+                return_value=False,
+            ):
+                with patch.object(
+                    command_runner_module, "is_subagent", return_value=True
+                ):
+                    with patch(
+                        "code_puppy.api.approvals.request_approval_sync",
+                    ) as mock_approval:
+                        with patch.object(
+                            command_runner_module.subprocess, "Popen"
+                        ) as mock_popen:
+                            mock_popen.return_value = mock_proc
+                            await run_shell_command(
+                                mock_context,
+                                command="sleep 10 &",
+                                background=True,
+                            )
+
+        # Approval should NOT be called for subagents
+        mock_approval.assert_not_called()
+        # Popen should have been called directly
+        mock_popen.assert_called_once()
