@@ -4,8 +4,11 @@ Provides a global event queue that WebSocket handlers can subscribe to.
 Events are JSON-serializable dicts with type, timestamp, and data.
 """
 
+from __future__ import annotations
+
 import asyncio
 import logging
+import threading
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Set
 from uuid import uuid4
@@ -18,9 +21,24 @@ from code_puppy.config import (
 
 logger = logging.getLogger(__name__)
 
-# Global state for event distribution
+# Global state for event distribution.  Events can be emitted from worker
+# threads while subscribers live on the FastAPI event loop, so all shared state
+# is protected by a lock and queue writes are scheduled with call_soon_threadsafe
+# when possible.
+_lock = threading.RLock()
 _subscribers: Set[asyncio.Queue[Dict[str, Any]]] = set()
+_subscriber_loops: Dict[asyncio.Queue[Dict[str, Any]], asyncio.AbstractEventLoop] = {}
 _recent_events: List[Dict[str, Any]] = []  # Keep last N events for new subscribers
+
+
+def _put_event(queue: asyncio.Queue[Dict[str, Any]], event: Dict[str, Any]) -> None:
+    """Put an event into a subscriber queue, dropping if the queue is full."""
+    try:
+        queue.put_nowait(event)
+    except asyncio.QueueFull:
+        logger.warning(f"Subscriber queue full, dropping event: {event.get('type')}")
+    except Exception as e:
+        logger.error(f"Failed to emit event to subscriber: {e}")
 
 
 def emit_event(event_type: str, data: Any = None) -> None:
@@ -44,20 +62,26 @@ def emit_event(event_type: str, data: Any = None) -> None:
         "data": data or {},
     }
 
-    # Store in recent events for replay to new subscribers
-    max_recent = get_frontend_emitter_max_recent_events()
-    _recent_events.append(event)
-    if len(_recent_events) > max_recent:
-        _recent_events.pop(0)
+    with _lock:
+        # Store in recent events for replay to new subscribers
+        max_recent = get_frontend_emitter_max_recent_events()
+        _recent_events.append(event)
+        if len(_recent_events) > max_recent:
+            del _recent_events[: len(_recent_events) - max_recent]
 
-    # Broadcast to all active subscribers
-    for subscriber_queue in _subscribers.copy():
+        subscribers = list(_subscribers)
+        loops = {queue: _subscriber_loops.get(queue) for queue in subscribers}
+
+    # Broadcast outside the lock so slow queues don't block other emitters.
+    for subscriber_queue in subscribers:
+        loop = loops.get(subscriber_queue)
         try:
-            subscriber_queue.put_nowait(event)
-        except asyncio.QueueFull:
-            logger.warning(f"Subscriber queue full, dropping event: {event_type}")
-        except Exception as e:
-            logger.error(f"Failed to emit event to subscriber: {e}")
+            if loop is not None and loop.is_running():
+                loop.call_soon_threadsafe(_put_event, subscriber_queue, event)
+            else:
+                _put_event(subscriber_queue, event)
+        except RuntimeError:
+            _put_event(subscriber_queue, event)
 
 
 def subscribe() -> asyncio.Queue[Dict[str, Any]]:
@@ -72,8 +96,18 @@ def subscribe() -> asyncio.Queue[Dict[str, Any]]:
     """
     queue_size = get_frontend_emitter_queue_size()
     queue: asyncio.Queue[Dict[str, Any]] = asyncio.Queue(maxsize=queue_size)
-    _subscribers.add(queue)
-    logger.debug(f"New subscriber added, total subscribers: {len(_subscribers)}")
+    try:
+        loop = asyncio.get_running_loop()
+    except RuntimeError:
+        loop = None
+
+    with _lock:
+        _subscribers.add(queue)
+        if loop is not None:
+            _subscriber_loops[queue] = loop
+        count = len(_subscribers)
+
+    logger.debug(f"New subscriber added, total subscribers: {count}")
     return queue
 
 
@@ -86,8 +120,11 @@ def unsubscribe(queue: asyncio.Queue[Dict[str, Any]]) -> None:
     Args:
         queue: The queue returned from subscribe()
     """
-    _subscribers.discard(queue)
-    logger.debug(f"Subscriber removed, remaining subscribers: {len(_subscribers)}")
+    with _lock:
+        _subscribers.discard(queue)
+        _subscriber_loops.pop(queue, None)
+        count = len(_subscribers)
+    logger.debug(f"Subscriber removed, remaining subscribers: {count}")
 
 
 def get_recent_events() -> List[Dict[str, Any]]:
@@ -100,7 +137,8 @@ def get_recent_events() -> List[Dict[str, Any]]:
     Returns:
         A list of recent event dictionaries.
     """
-    return _recent_events.copy()
+    with _lock:
+        return _recent_events.copy()
 
 
 def get_subscriber_count() -> int:
@@ -109,7 +147,8 @@ def get_subscriber_count() -> int:
     Returns:
         Number of active subscriber queues.
     """
-    return len(_subscribers)
+    with _lock:
+        return len(_subscribers)
 
 
 def clear_recent_events() -> None:
@@ -117,5 +156,6 @@ def clear_recent_events() -> None:
 
     Useful for testing or resetting state.
     """
-    _recent_events.clear()
+    with _lock:
+        _recent_events.clear()
     logger.debug("Recent events cleared")

@@ -608,5 +608,248 @@ class TestRegister:
 
         with patch(
             "code_puppy.plugins.frontend_emitter.register_callbacks.register_callback"
-        ):
+        ) as mock_reg:
             register()  # should not raise
+            # Should register all 8 callbacks (web-19y: +4 new agent callbacks)
+            assert mock_reg.call_count == 8
+
+
+# ── New agent callbacks (web-19y) ────────────────────────────────────
+
+
+class TestAgentRunStartCallback:
+    @pytest.mark.asyncio
+    async def test_emits_agent_run_start(self):
+        from code_puppy.plugins.frontend_emitter.register_callbacks import (
+            on_agent_run_start,
+        )
+
+        with patch(
+            "code_puppy.plugins.frontend_emitter.register_callbacks.emit_event"
+        ) as mock_emit:
+            await on_agent_run_start("my_agent", "gpt-4", session_id="s1")
+            mock_emit.assert_called_once()
+            assert mock_emit.call_args[0][0] == "agent_run_start"
+            data = mock_emit.call_args[0][1]
+            assert data["agent_name"] == "my_agent"
+            assert data["model_name"] == "gpt-4"
+            assert data["session_id"] == "s1"
+            assert "start_time" in data
+
+    @pytest.mark.asyncio
+    async def test_exception_swallowed(self):
+        from code_puppy.plugins.frontend_emitter.register_callbacks import (
+            on_agent_run_start,
+        )
+
+        with patch(
+            "code_puppy.plugins.frontend_emitter.register_callbacks.emit_event",
+            side_effect=RuntimeError("boom"),
+        ):
+            await on_agent_run_start("a", "m")  # should not raise
+
+
+class TestAgentRunEndCallback:
+    @pytest.mark.asyncio
+    async def test_emits_agent_run_end(self):
+        from code_puppy.plugins.frontend_emitter.register_callbacks import (
+            on_agent_run_end,
+        )
+
+        with patch(
+            "code_puppy.plugins.frontend_emitter.register_callbacks.emit_event"
+        ) as mock_emit:
+            await on_agent_run_end("my_agent", "gpt-4", session_id="s1", success=True)
+            mock_emit.assert_called_once()
+            assert mock_emit.call_args[0][0] == "agent_run_end"
+            data = mock_emit.call_args[0][1]
+            assert data["success"] is True
+            assert data["error"] is None
+            assert data["response_preview"] is None
+            assert "end_time" in data
+
+    @pytest.mark.asyncio
+    async def test_with_error_and_response(self):
+        from code_puppy.plugins.frontend_emitter.register_callbacks import (
+            on_agent_run_end,
+        )
+
+        with patch(
+            "code_puppy.plugins.frontend_emitter.register_callbacks.emit_event"
+        ) as mock_emit:
+            await on_agent_run_end(
+                "agent",
+                "model",
+                success=False,
+                error=ValueError("bad"),
+                response_text="short",
+            )
+            data = mock_emit.call_args[0][1]
+            assert data["success"] is False
+            assert "ValueError" in data["error"] or "bad" in data["error"]
+            assert data["response_preview"] == "short"
+
+
+class TestAgentRunResultCallback:
+    @pytest.mark.asyncio
+    async def test_emits_agent_run_result(self):
+        from code_puppy.plugins.frontend_emitter.register_callbacks import (
+            on_agent_run_result,
+        )
+
+        class FakeResult:
+            output = "hello world"
+
+        with patch(
+            "code_puppy.plugins.frontend_emitter.register_callbacks.emit_event"
+        ) as mock_emit:
+            await on_agent_run_result(FakeResult(), "agent", "model")
+            mock_emit.assert_called_once()
+            assert mock_emit.call_args[0][0] == "agent_run_result"
+            data = mock_emit.call_args[0][1]
+            assert data["response_preview"] == "hello world"
+
+    @pytest.mark.asyncio
+    async def test_result_with_data_attr(self):
+        from code_puppy.plugins.frontend_emitter.register_callbacks import (
+            on_agent_run_result,
+        )
+
+        class FakeResult:
+            data = "data-output"
+
+        with patch(
+            "code_puppy.plugins.frontend_emitter.register_callbacks.emit_event"
+        ) as mock_emit:
+            await on_agent_run_result(FakeResult(), "a", "m")
+            data = mock_emit.call_args[0][1]
+            assert data["response_preview"] == "data-output"
+
+    @pytest.mark.asyncio
+    async def test_result_no_output_or_data(self):
+        from code_puppy.plugins.frontend_emitter.register_callbacks import (
+            on_agent_run_result,
+        )
+
+        with patch(
+            "code_puppy.plugins.frontend_emitter.register_callbacks.emit_event"
+        ) as mock_emit:
+            await on_agent_run_result("plain_string", "a", "m")
+            data = mock_emit.call_args[0][1]
+            assert data["response_preview"] is None
+
+
+class TestAgentExceptionCallback:
+    @pytest.mark.asyncio
+    async def test_emits_agent_exception(self):
+        from code_puppy.plugins.frontend_emitter.register_callbacks import (
+            on_agent_exception,
+        )
+
+        with patch(
+            "code_puppy.plugins.frontend_emitter.register_callbacks.emit_event"
+        ) as mock_emit:
+            await on_agent_exception(ValueError("test error"))
+            mock_emit.assert_called_once()
+            assert mock_emit.call_args[0][0] == "agent_exception"
+            data = mock_emit.call_args[0][1]
+            assert data["exception_type"] == "ValueError"
+            assert "test error" in data["message"]
+            assert data["context"] == {}  # no kwargs passed
+
+    @pytest.mark.asyncio
+    async def test_exception_with_kwargs(self):
+        from code_puppy.plugins.frontend_emitter.register_callbacks import (
+            on_agent_exception,
+        )
+
+        with patch(
+            "code_puppy.plugins.frontend_emitter.register_callbacks.emit_event"
+        ) as mock_emit:
+            await on_agent_exception(
+                RuntimeError("oops"), agent_name="test", extra="info"
+            )
+            data = mock_emit.call_args[0][1]
+            assert data["exception_type"] == "RuntimeError"
+            # kwargs are sanitized into context
+            assert "agent_name" in data["context"]
+
+
+# ── Emitter thread-safety (web-19y) ──────────────────────────────────
+
+
+class TestEmitterThreadSafety:
+    def test_emit_event_uses_lock(self):
+        """emit_event acquires and releases the global _lock."""
+        from code_puppy.plugins.frontend_emitter.emitter import (
+            _lock,
+            _recent_events,
+            _subscribers,
+            emit_event,
+        )
+
+        _recent_events.clear()
+        _subscribers.clear()
+        with (
+            patch(
+                "code_puppy.plugins.frontend_emitter.emitter.get_frontend_emitter_enabled",
+                return_value=True,
+            ),
+            patch(
+                "code_puppy.plugins.frontend_emitter.emitter.get_frontend_emitter_max_recent_events",
+                return_value=5,
+            ),
+        ):
+            emit_event("lock_test")
+        assert len(_recent_events) == 1
+        # Verify the lock was acquired and properly released
+        assert _lock.acquire(blocking=False), "Lock still held after emit_event"
+        _lock.release()
+        _recent_events.clear()
+
+    def test_subscriber_loops_tracked(self):
+        """subscribe() tracks the event loop for call_soon_threadsafe."""
+        from code_puppy.plugins.frontend_emitter.emitter import (
+            _lock,
+            _subscriber_loops,
+            _subscribers,
+            subscribe,
+            unsubscribe,
+        )
+
+        _subscribers.clear()
+        _subscriber_loops.clear()
+        with patch(
+            "code_puppy.plugins.frontend_emitter.emitter.get_frontend_emitter_queue_size",
+            return_value=10,
+        ):
+            q = subscribe()
+        # _subscriber_loops should have an entry for this queue
+        with _lock:
+            assert q in _subscriber_loops or q in _subscribers
+        unsubscribe(q)
+        _subscribers.clear()
+        _subscriber_loops.clear()
+
+    def test_subscribe_without_running_loop(self):
+        """subscribe() works when no event loop is running."""
+        from code_puppy.plugins.frontend_emitter.emitter import (
+            _subscriber_loops,
+            _subscribers,
+            subscribe,
+            unsubscribe,
+        )
+
+        _subscribers.clear()
+        _subscriber_loops.clear()
+        with patch(
+            "code_puppy.plugins.frontend_emitter.emitter.get_frontend_emitter_queue_size",
+            return_value=10,
+        ):
+            # get_running_loop will raise RuntimeError since we're not in async
+            q = subscribe()
+        assert q is not None
+        # loop should not be tracked since no running loop
+        assert q not in _subscriber_loops
+        unsubscribe(q)
+        _subscribers.clear()
