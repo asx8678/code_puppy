@@ -40,8 +40,8 @@ defmodule CodePuppyControl.HttpClient do
       ...> )
 
   Streaming response:
-      iex> HttpClient.stream(:get, "https://api.example.com/large-file")
-      {:ok, stream}  # Returns a Stream that yields data chunks
+      iex> stream = HttpClient.stream(:get, "https://api.example.com/large-file")
+      iex> Enum.reduce(stream, "", fn {:data, chunk}, acc -> acc <> chunk; _, acc -> acc end)
 
   ## Configuration
 
@@ -232,18 +232,31 @@ defmodule CodePuppyControl.HttpClient do
   @doc """
   Streams an HTTP request, yielding chunks as they arrive.
 
-  Returns a `Stream` that yields `{:data, chunk}` tuples. The caller must
-  consume the stream to completion to ensure the connection is properly closed.
+  Returns a `Stream` that yields elements according to this contract:
+
+  - `{:data, chunk}` — Data chunk received from the server (**2xx only**)
+  - `{:done, %{status: status, headers: headers}}` — Stream completed successfully (**2xx only**)
+  - `{:error, reason}` — Transport error or non-2xx status
+
+  For non-2xx responses, the stream yields a single `{:error, %{status: s, body: b, headers: h}}`
+  element. No `{:data, ...}` or `{:done, ...}` elements are emitted for non-2xx.
+
+  For transport errors (connection refused, timeout, etc.), the stream yields
+  `{:error, "descriptive message"}`.
 
   ## Example
 
-      stream = HttpClient.stream(:get, "https://api.example.com/large-file")
-      Enum.reduce(stream, "", fn {:data, chunk}, acc -> acc <> chunk end)
+      stream = HttpClient.stream(:get, "https://api.example.com/sse")
+      Enum.reduce(stream, "", fn
+        {:data, chunk}, acc -> acc <> chunk
+        {:done, _meta}, acc -> acc
+        {:error, reason}, _acc -> raise "stream error: \#{inspect(reason)}"
+      end)
 
   ## Options
 
-  Same as `request/3`, plus:
-  - `:on_response` - Callback function called with response metadata when headers arrive
+  Same as `request/3` (minus `:retries`, `:retry_status_codes`, `:model_name`,
+  and `:ignore_retry_headers` which are request-only).
   """
   @spec stream(method(), String.t(), keyword()) :: Enumerable.t()
   def stream(method, url, opts \\ []) do
@@ -251,37 +264,14 @@ defmodule CodePuppyControl.HttpClient do
     body = Keyword.get(opts, :body, nil)
     timeout = Keyword.get(opts, :timeout, 180_000)
     pool_timeout = Keyword.get(opts, :pool_timeout, 5_000)
-    pool_name = Config.default_pool_name()
 
-    req = build_finch_request(method, url, headers, body)
-
-    Stream.resource(
-      fn -> {req, pool_timeout, timeout, nil} end,
-      fn {req, pool_timeout, timeout, acc} ->
-        case Finch.stream(
-               req,
-               pool_name,
-               acc,
-               fn
-                 {:status, status}, acc -> {:cont, Map.put(acc || %{}, :status, status)}
-                 {:headers, headers}, acc -> {:cont, Map.put(acc, :headers, headers)}
-                 {:data, data}, acc -> {[{:data, data}], acc}
-               end,
-               pool_timeout: pool_timeout,
-               receive_timeout: timeout
-             ) do
-          {:ok, %{status: status, headers: headers}} ->
-            {[{:done, %{status: status, headers: headers}}], :halt}
-
-          {:ok, nil} ->
-            # No accumulator - likely no data received
-            {[{:done, %{status: 200, headers: []}}], :halt}
-
-          {:error, reason} ->
-            {[{:error, format_error(reason)}], :halt}
-        end
-      end,
-      fn _ -> :ok end
+    CodePuppyControl.HttpClient.Streaming.build_stream(
+      method,
+      url,
+      headers,
+      body,
+      pool_timeout,
+      timeout
     )
   end
 
@@ -553,18 +543,21 @@ defmodule CodePuppyControl.HttpClient do
     }
   end
 
+  @doc false
   # format_error returns plain strings, not wrapped tuples.
   # Callers wrap with {:error, format_error(reason)}.
-  defp format_error(%{reason: reason}), do: format_error(reason)
-  defp format_error(:timeout), do: "Request timeout"
-  defp format_error(:pool_timeout), do: "Pool checkout timeout"
-  defp format_error(:nxdomain), do: "Domain not found"
-  defp format_error(:econnrefused), do: "Connection refused"
-  defp format_error(:enetunreach), do: "Network unreachable"
-  defp format_error(:closed), do: "Connection closed"
-  defp format_error(reason) when is_atom(reason), do: Atom.to_string(reason)
-  defp format_error(reason) when is_binary(reason), do: reason
-  defp format_error(reason), do: inspect(reason)
+  # Made public (doc: false) so HttpClient.Streaming can call it.
+  @spec format_error(any()) :: String.t()
+  def format_error(%{reason: reason}), do: format_error(reason)
+  def format_error(:timeout), do: "Request timeout"
+  def format_error(:pool_timeout), do: "Pool checkout timeout"
+  def format_error(:nxdomain), do: "Domain not found"
+  def format_error(:econnrefused), do: "Connection refused"
+  def format_error(:enetunreach), do: "Network unreachable"
+  def format_error(:closed), do: "Connection closed"
+  def format_error(reason) when is_atom(reason), do: Atom.to_string(reason)
+  def format_error(reason) when is_binary(reason), do: reason
+  def format_error(reason), do: inspect(reason)
 
   defp cerebras?(model_name) do
     model_name |> String.downcase() |> String.contains?("cerebras")

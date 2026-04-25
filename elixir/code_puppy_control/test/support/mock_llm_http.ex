@@ -60,15 +60,22 @@ defmodule CodePuppyControl.Test.MockLLMHTTP do
 
   @doc false
   def stream(method, url, opts) do
-    # Mimics HttpClient.stream: lazy Stream yielding {:data, chunk} then {:done, metadata}
+    # Mimics the hardened HttpClient.stream contract:
+    #   2xx  → {:data, chunk}, then {:done, %{status, headers}}
+    #   non-2xx → {:error, %{status, body, headers}}  (no fake {:done, ...})
+    #   transport error → {:error, reason}
     Stream.resource(
-      fn -> {request(method, url, Keyword.put(opts, :stream_request, true)), false} end,
+      fn -> {request(method, url, Keyword.put(opts, :stream_request, true)), :init} end,
       fn
-        {{:ok, %{status: status, body: body, headers: headers}}, false} ->
-          {[{:data, body}], {{:ok, %{status: status, headers: headers}}, true}}
+        {{:ok, %{status: status, body: body, headers: headers}}, :init} when status in 200..299 ->
+          {[{:data, body}], {{:ok, %{status: status, headers: headers}}, :data_sent}}
 
-        {{:ok, %{status: status, headers: headers}}, true} ->
+        {{:ok, %{status: status, headers: headers}}, :data_sent} when status in 200..299 ->
           {[{:done, %{status: status, headers: headers}}], :done}
+
+        {{:ok, %{status: status, body: body, headers: headers}}, :init} ->
+          # Non-2xx: emit error with status/body/headers, no fake success
+          {[{:error, %{status: status, body: body, headers: headers}}], :done}
 
         {{:error, reason}, _} ->
           {[{:error, reason}], :done}

@@ -256,6 +256,52 @@ defmodule CodePuppyControl.LLM.Providers.AnthropicTest do
       assert tc.name == "get_weather"
       assert tc.arguments == %{"location" => "Boston"}
     end
+
+    test "stream_chat returns {:error, _} for HTTP 500" do
+      MockLLMHTTP.register(fn :post, url, _opts ->
+        if url =~ "/messages" do
+          {:ok, %{status: 500, body: "Internal Server Error", headers: []}}
+        else
+          {:passthrough}
+        end
+      end)
+
+      assert {:error, %{status: 500}} =
+               Anthropic.stream_chat(@messages, [], @opts, fn _ -> :ok end)
+    end
+
+    test "stream_chat returns {:error, _} for HTTP 401" do
+      MockLLMHTTP.register(fn :post, url, _opts ->
+        if url =~ "/messages" do
+          {:ok,
+           %{
+             status: 401,
+             body:
+               Jason.encode!(%{
+                 "error" => %{"type" => "authentication_error", "message" => "Invalid API key"}
+               }),
+             headers: []
+           }}
+        else
+          {:passthrough}
+        end
+      end)
+
+      assert {:error, %{status: 401}} =
+               Anthropic.stream_chat(@messages, [], @opts, fn _ -> :ok end)
+    end
+
+    test "stream_chat returns {:error, _} for transport error" do
+      MockLLMHTTP.register(fn :post, url, _opts ->
+        if url =~ "/messages" do
+          {:error, "Connection refused"}
+        else
+          {:passthrough}
+        end
+      end)
+
+      assert {:error, _} = Anthropic.stream_chat(@messages, [], @opts, fn _ -> :ok end)
+    end
   end
 
   # ── Helpers ───────────────────────────────────────────────────────────────
