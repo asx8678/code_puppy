@@ -33,7 +33,7 @@ Prerequisites before launching the Python-to-Elixir port.
 - [x] Write ADR-004: Python-to-Elixir migration strategy (scope, phases, rollback) — see [docs/adr/ADR-004-python-to-elixir-migration-strategy.md](docs/adr/ADR-004-python-to-elixir-migration-strategy.md)
 - [x] Baseline performance harness (tools) — see [docs/benchmarks/README.md](docs/benchmarks/README.md); offline filesystem primitives measured
 - [x] Baseline performance harness (LLM latency probe) — credential-gated TTFB probe implemented; requires PUP_ANTHROPIC_API_KEY or PUP_OPENAI_API_KEY; no live baseline numbers committed
-- [ ] Baseline performance (LLM latency — streaming TTFT/TBT) — streaming benchmarks, inter-token metrics, and reproducible fixtures pending
+- [x] Baseline performance (LLM latency — streaming TTFT/TBT) — streaming probes implemented (credential-gated); live numbers remain operator-local and are not committed; see [docs/benchmarks/llm_latency.md](docs/benchmarks/llm_latency.md)
 - [x] Dependency graph of Python modules — see [docs/python_dependency_graph.md](docs/python_dependency_graph.md) — complete: SCC-based topological ordering (dependency-before-importer guaranteed for acyclic edges), relative import semantics fixed, symbol-level deps excluded, self-tests 14/14, reproducible artifacts, semantic sanity verified
 
 ### Phase B: Elixir LLM client
