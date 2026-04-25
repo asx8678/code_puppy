@@ -227,7 +227,11 @@ async def test_dashboard_uses_existing_cdn_only(client: AsyncClient) -> None:
     assert resp.status_code == 200
     html = resp.text
     # Only CDN reference should be Tailwind (already used in root page)
-    cdn_refs = [line for line in html.splitlines() if 'src="https://' in line or 'href="https://' in line]
+    cdn_refs = [
+        line
+        for line in html.splitlines()
+        if 'src="https://' in line or 'href="https://' in line
+    ]
     assert len(cdn_refs) >= 1, "Expected at least Tailwind CDN"
     for ref in cdn_refs:
         assert "cdn.tailwindcss.com" in ref, f"Unexpected CDN reference: {ref}"
@@ -235,7 +239,12 @@ async def test_dashboard_uses_existing_cdn_only(client: AsyncClient) -> None:
 
 def test_dashboard_template_file_exists() -> None:
     """The dashboard.html template file exists on disk."""
-    templates_dir = Path(__file__).resolve().parent.parent.parent / "code_puppy" / "api" / "templates"
+    templates_dir = (
+        Path(__file__).resolve().parent.parent.parent
+        / "code_puppy"
+        / "api"
+        / "templates"
+    )
     assert (templates_dir / "dashboard.html").exists()
 
 
@@ -345,3 +354,72 @@ async def test_lifespan_pid_file_cleanup() -> None:
             async with lifespan(app):
                 pass
             assert not pid_file.exists()
+
+
+@pytest.mark.asyncio
+async def test_dashboard_no_inline_onclick_handlers(client: AsyncClient) -> None:
+    """Dashboard must not use inline onclick= handlers (DOM XSS prevention)."""
+    resp = await client.get("/dashboard")
+    assert resp.status_code == 200
+    html = resp.text
+    assert "onclick=" not in html, (
+        "Dashboard should not contain inline onclick= handlers; "
+        "use data-action attributes + delegated listener instead"
+    )
+
+
+@pytest.mark.asyncio
+async def test_dashboard_no_client_side_storage_or_cookies(client: AsyncClient) -> None:
+    """Dashboard JS must not access localStorage, sessionStorage, or document.cookie."""
+    resp = await client.get("/dashboard")
+    assert resp.status_code == 200
+    html = resp.text
+    assert "localStorage" not in html
+    assert "sessionStorage" not in html
+    assert "document.cookie" not in html
+
+
+@pytest.mark.asyncio
+async def test_dashboard_feed_redacts_sensitive_fields(client: AsyncClient) -> None:
+    """Dashboard redactForFeed helper must replace value/feedback with [redacted]."""
+    resp = await client.get("/dashboard")
+    assert resp.status_code == 200
+    html = resp.text
+    assert "redactForFeed" in html, "Dashboard should define a redactForFeed helper"
+    assert "[redacted]" in html, (
+        "Dashboard should redact sensitive fields (value, feedback) with [redacted] "
+        "before logging to local feed"
+    )
+    # Verify the redaction targets the correct keys
+    assert "safe.value = '[redacted]'" in html or 'safe.value = "[redacted]"' in html
+    assert (
+        "safe.feedback = '[redacted]'" in html or 'safe.feedback = "[redacted]"' in html
+    )
+
+
+@pytest.mark.asyncio
+async def test_dashboard_uses_delegated_click_listener(client: AsyncClient) -> None:
+    """Decision buttons must use data-action attributes, not inline JS."""
+    resp = await client.get("/dashboard")
+    assert resp.status_code == 200
+    html = resp.text
+    assert "data-action" in html, (
+        "Dashboard decision buttons should use data-action attributes "
+        "for delegated click handling"
+    )
+    assert "pendingMeta" in html, (
+        "Dashboard should use pendingMeta Map for storing selection options metadata"
+    )
+
+
+@pytest.mark.asyncio
+async def test_dashboard_ws_reconnect_backoff(client: AsyncClient) -> None:
+    """WebSocket reconnect must use capped backoff and stop on auth/policy close."""
+    resp = await client.get("/dashboard")
+    assert resp.status_code == 200
+    html = resp.text
+    assert "wsBackoff" in html, "Dashboard should implement WS reconnect backoff"
+    assert "wsMaxBackoff" in html, "Dashboard should cap WS backoff"
+    assert "noReconnectCodes" in html or "4401" in html, (
+        "Dashboard should not reconnect on auth/policy close codes (4401, 4403, 1000, 1008)"
+    )

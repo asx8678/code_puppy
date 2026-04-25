@@ -139,8 +139,12 @@
       ws: null,
       paused: false,
       pending: new Map(),
+      pendingMeta: new Map(),
       lastStatus: null,
       maxFeedItems: 400,
+      wsBackoff: 1000,
+      wsMaxBackoff: 30000,
+      wsReconnectTimer: null,
     };
 
     const $ = (id) => document.getElementById(id);
@@ -176,7 +180,7 @@
     function badgeClass(event) {
       const t = event.type;
       if (t === 'prompt_failed' || t === 'agent_exception') return 'bg-rose-500/15 text-rose-200 border-rose-500/30';
-      if (t === 'approval_request' || t === 'message' && ['UserInputRequest','ConfirmationRequest','SelectionRequest'].includes(event.data?.message_type)) return 'bg-amber-500/15 text-amber-200 border-amber-500/30';
+      if (t === 'approval_request' || (t === 'message' && ['UserInputRequest','ConfirmationRequest','SelectionRequest'].includes(event.data?.message_type))) return 'bg-amber-500/15 text-amber-200 border-amber-500/30';
       if (t === 'prompt_completed' || t === 'tool_call_complete') return 'bg-emerald-500/15 text-emerald-200 border-emerald-500/30';
       if (t === 'tool_call_start' || t === 'prompt_started' || t === 'agent_run_start') return 'bg-sky-500/15 text-sky-200 border-sky-500/30';
       return 'bg-slate-700 text-slate-200 border-white/10';
@@ -235,13 +239,15 @@
       feed.scrollTop = feed.scrollHeight;
     }
 
-    function addDecision(id, html) {
+    function addDecision(id, html, meta = {}) {
       state.pending.set(id, html);
+      state.pendingMeta.set(id, meta);
       renderDecisions();
     }
 
     function removeDecision(id) {
       state.pending.delete(id);
+      state.pendingMeta.delete(id);
       renderDecisions();
     }
 
@@ -266,8 +272,8 @@
           ${d.preview ? `<div class="text-xs text-slate-400 mt-3">Preview</div><pre class="text-xs text-slate-300 mt-1 bg-black/40 rounded-lg p-3 max-h-64 overflow-auto scrollbar-thin">${escapeHtml(d.preview)}</pre>` : ''}
           <textarea id="feedback-${escapeHtml(id)}" rows="3" placeholder="Optional feedback when rejecting..." class="mt-3 w-full rounded-lg bg-slate-950 border border-white/10 px-3 py-2 text-sm"></textarea>
           <div class="flex gap-2 mt-3">
-            <button onclick="respondApproval('${escapeHtml(id)}', true)" class="flex-1 rounded-lg bg-emerald-600 hover:bg-emerald-500 px-3 py-2 font-semibold">Approve</button>
-            <button onclick="respondApproval('${escapeHtml(id)}', false)" class="flex-1 rounded-lg bg-rose-600 hover:bg-rose-500 px-3 py-2 font-semibold">Reject</button>
+            <button data-action="approve" data-id="${escapeHtml(id)}" class="flex-1 rounded-lg bg-emerald-600 hover:bg-emerald-500 px-3 py-2 font-semibold">Approve</button>
+            <button data-action="reject" data-id="${escapeHtml(id)}" class="flex-1 rounded-lg bg-rose-600 hover:bg-rose-500 px-3 py-2 font-semibold">Reject</button>
           </div>
         </div>`);
     }
@@ -283,30 +289,30 @@
             <div class="text-xs uppercase tracking-wide text-sky-200">Input request</div>
             <h3 class="font-semibold mt-1">${escapeHtml(d.prompt_text || 'Input required')}</h3>
             <input id="input-${escapeHtml(id)}" type="${d.input_type === 'password' ? 'password' : 'text'}" value="${escapeHtml(d.default_value || '')}" class="mt-3 w-full rounded-lg bg-slate-950 border border-white/10 px-3 py-2 text-sm" />
-            <button onclick="respondBus('${escapeHtml(id)}', 'input')" class="mt-3 w-full rounded-lg bg-sky-600 hover:bg-sky-500 px-3 py-2 font-semibold">Submit input</button>
-          </div>`);
+            <button data-action="bus-input" data-id="${escapeHtml(id)}" class="mt-3 w-full rounded-lg bg-sky-600 hover:bg-sky-500 px-3 py-2 font-semibold">Submit input</button>
+          </div>`, { sensitive: true });
       } else if (mt === 'ConfirmationRequest') {
-        const options = (d.options || ['Yes','No']).map((opt, idx) => `<button onclick="respondBus('${escapeHtml(id)}', 'confirmation', ${idx})" class="rounded-lg bg-slate-800 hover:bg-slate-700 border border-white/10 px-3 py-2 text-sm">${escapeHtml(opt)}</button>`).join('');
+        const opts = d.options || ['Yes','No'];
+        const buttons = opts.map((opt, idx) => `<button data-action="bus-confirmation" data-id="${escapeHtml(id)}" data-index="${idx}" class="rounded-lg bg-slate-800 hover:bg-slate-700 border border-white/10 px-3 py-2 text-sm">${escapeHtml(opt)}</button>`).join('');
         addDecision(id, `
           <div class="rounded-xl bg-amber-500/10 border border-amber-500/30 p-4" data-decision="${escapeHtml(id)}">
             <div class="text-xs uppercase tracking-wide text-amber-200">Confirmation</div>
             <h3 class="font-semibold mt-1">${escapeHtml(d.title || 'Confirmation')}</h3>
             <p class="text-sm text-slate-300 mt-2">${escapeHtml(d.description || '')}</p>
             ${d.allow_feedback ? `<textarea id="feedback-${escapeHtml(id)}" rows="2" placeholder="Optional feedback..." class="mt-3 w-full rounded-lg bg-slate-950 border border-white/10 px-3 py-2 text-sm"></textarea>` : ''}
-            <div class="flex flex-wrap gap-2 mt-3">${options}</div>
-          </div>`);
+            <div class="flex flex-wrap gap-2 mt-3">${buttons}</div>
+          </div>`, { options: opts });
       } else if (mt === 'SelectionRequest') {
-        const options = (d.options || []).map((opt, idx) => {
-          const encoded = encodeURIComponent(String(opt));
-          return `<button onclick="respondBus('${escapeHtml(id)}', 'selection', ${idx}, '${encoded}')" class="w-full text-left rounded-lg bg-slate-800 hover:bg-slate-700 border border-white/10 px-3 py-2 text-sm">${escapeHtml(opt)}</button>`;
-        }).join('');
+        const opts = d.options || [];
+        const buttons = opts.map((opt, idx) => `<button data-action="bus-selection" data-id="${escapeHtml(id)}" data-index="${idx}" class="w-full text-left rounded-lg bg-slate-800 hover:bg-slate-700 border border-white/10 px-3 py-2 text-sm">${escapeHtml(opt)}</button>`).join('');
+        const cancelBtn = d.allow_cancel ? `<button data-action="bus-selection" data-id="${escapeHtml(id)}" data-index="-1" class="mt-3 w-full rounded-lg bg-slate-900 hover:bg-slate-800 border border-white/10 px-3 py-2 text-sm">Cancel selection</button>` : '';
         addDecision(id, `
           <div class="rounded-xl bg-violet-500/10 border border-violet-500/30 p-4" data-decision="${escapeHtml(id)}">
             <div class="text-xs uppercase tracking-wide text-violet-200">Selection</div>
             <h3 class="font-semibold mt-1">${escapeHtml(d.prompt_text || 'Selection required')}</h3>
-            <div class="space-y-2 mt-3">${options}</div>
-            ${d.allow_cancel ? `<button onclick="respondBus('${escapeHtml(id)}', 'selection', -1)" class="mt-3 w-full rounded-lg bg-slate-900 hover:bg-slate-800 border border-white/10 px-3 py-2 text-sm">Cancel selection</button>` : ''}
-          </div>`);
+            <div class="space-y-2 mt-3">${buttons}</div>
+            ${cancelBtn}
+          </div>`, { options: opts });
       }
     }
 
@@ -322,16 +328,26 @@
       return data;
     }
 
-    window.respondApproval = async function(id, approved) {
+    /* --- Redaction helper for local feed logging --- */
+    function redactForFeed(data) {
+      const safe = Object.assign({}, data);
+      if ('value' in safe) safe.value = '[redacted]';
+      if ('feedback' in safe) safe.feedback = '[redacted]';
+      return safe;
+    }
+
+    /* --- Approval / Bus responders (no longer on window) --- */
+    async function respondApproval(id, approved) {
       const feedback = document.getElementById(`feedback-${id}`)?.value || null;
       try {
         await api('/api/runtime/approval', { method: 'POST', body: JSON.stringify({ approval_id: id, approved, feedback }) });
         removeDecision(id);
-        addFeed({ type: 'approval_response', timestamp: new Date().toISOString(), data: { approval_id: id, approved, feedback } });
+        const safeBody = redactForFeed({ approval_id: id, approved, feedback });
+        addFeed({ type: 'approval_response', timestamp: new Date().toISOString(), data: safeBody });
       } catch (err) { alert(err.message); }
-    };
+    }
 
-    window.respondBus = async function(id, kind, index = null, encodedValue = '') {
+    async function respondBus(id, kind, index = null) {
       const body = { prompt_id: id, response_type: kind };
       if (kind === 'input') body.value = document.getElementById(`input-${id}`)?.value || '';
       if (kind === 'confirmation') {
@@ -340,14 +356,30 @@
       }
       if (kind === 'selection') {
         body.selected_index = index;
-        body.selected_value = index >= 0 ? decodeURIComponent(encodedValue || '') : '';
+        const meta = state.pendingMeta.get(id) || {};
+        const opts = meta.options || [];
+        body.selected_value = (index >= 0 && index < opts.length) ? opts[index] : '';
       }
       try {
         await api('/api/runtime/respond', { method: 'POST', body: JSON.stringify(body) });
         removeDecision(id);
-        addFeed({ type: 'ui_response', timestamp: new Date().toISOString(), data: body });
+        const safeBody = redactForFeed(body);
+        addFeed({ type: 'ui_response', timestamp: new Date().toISOString(), data: safeBody });
       } catch (err) { alert(err.message); }
-    };
+    }
+
+    /* --- Delegated click listener on decision-panel --- */
+    decisions.addEventListener('click', (e) => {
+      const btn = e.target.closest('[data-action]');
+      if (!btn) return;
+      const action = btn.dataset.action;
+      const id = btn.dataset.id;
+      if (action === 'approve') respondApproval(id, true);
+      else if (action === 'reject') respondApproval(id, false);
+      else if (action === 'bus-input') respondBus(id, 'input');
+      else if (action === 'bus-confirmation') respondBus(id, 'confirmation', parseInt(btn.dataset.index, 10));
+      else if (action === 'bus-selection') respondBus(id, 'selection', parseInt(btn.dataset.index, 10));
+    });
 
     async function submitPrompt(evt) {
       evt.preventDefault();
@@ -418,6 +450,7 @@
       ws.onopen = () => {
         $('ws-pill').textContent = 'connected';
         $('ws-pill').className = 'px-3 py-1 rounded-full bg-emerald-500/15 text-emerald-200 border border-emerald-500/30';
+        state.wsBackoff = 1000;  // reset backoff on successful open
       };
       ws.onmessage = (msg) => {
         let event;
@@ -427,10 +460,20 @@
         if (event.type === 'message' && ['UserInputRequest','ConfirmationRequest','SelectionRequest'].includes(event.data?.message_type)) busDecision(event);
         if (['prompt_started','prompt_completed','prompt_failed','prompt_cancelled','prompt_cancel_requested'].includes(event.type)) refreshStatus();
       };
-      ws.onclose = () => {
+      ws.onclose = (ev) => {
         $('ws-pill').textContent = 'disconnected';
         $('ws-pill').className = 'px-3 py-1 rounded-full bg-rose-500/15 text-rose-200 border-rose-500/30';
-        setTimeout(connectWs, 1500);
+        const code = ev.code;
+        // Do not reconnect on auth failure (4401), policy violation (4403, 1008), or normal close (1000)
+        const noReconnectCodes = [4401, 4403, 1000, 1008];
+        if (noReconnectCodes.includes(code)) {
+          $('ws-pill').textContent = `closed (${code})`;
+          return;
+        }
+        // Capped exponential backoff with jitter
+        const delay = state.wsBackoff + Math.floor(Math.random() * 500);
+        state.wsBackoff = Math.min(state.wsBackoff * 2, state.wsMaxBackoff);
+        state.wsReconnectTimer = setTimeout(connectWs, delay);
       };
       ws.onerror = () => ws.close();
     }
