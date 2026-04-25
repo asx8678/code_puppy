@@ -147,6 +147,53 @@ class TestApprovalManager:
         # Already resolved
         assert mgr.respond(approval_id, True) is False
 
+    def test_respond_emits_redacted_feedback(self) -> None:
+        """approval_response event payload must have feedback redacted."""
+        mgr = ApprovalManager()
+        captured_events: list[tuple[str, dict]] = []
+
+        def fake_emit(event_type: str, payload: dict) -> None:
+            captured_events.append((event_type, payload))
+
+        # Start a pending request
+        results: list[tuple[bool, str | None]] = []
+
+        def waiter():
+            result = mgr.request_sync(title="t", content="c", timeout=5.0)
+            results.append(result)
+
+        t = threading.Thread(target=waiter)
+        t.start()
+
+        import time
+
+        for _ in range(50):
+            if mgr.list_pending():
+                break
+            time.sleep(0.02)
+
+        approval_id = mgr.list_pending()[0]["approval_id"]
+
+        # Respond with feedback containing a secret pattern
+        with patch(
+            "code_puppy.plugins.frontend_emitter.emitter.emit_event",
+            side_effect=fake_emit,
+        ):
+            mgr.respond(
+                approval_id,
+                True,
+                "Looks good, api_key=sk-abcdefghijklmnopqrstuvwxyz1234567890",
+            )
+
+        t.join(timeout=5.0)
+
+        # Find the approval_response event
+        response_events = [p for et, p in captured_events if et == "approval_response"]
+        assert len(response_events) == 1
+        payload = response_events[0]
+        assert "REDACTED" in payload["feedback"]
+        assert "sk-" not in payload["feedback"]
+
     def test_cancel_all(self) -> None:
         """cancel_all rejects every pending request."""
         mgr = ApprovalManager()

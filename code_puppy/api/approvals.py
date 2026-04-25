@@ -14,7 +14,7 @@ from typing import Any, Dict, List, Optional
 from uuid import uuid4
 
 
-from code_puppy.api.redactor import redact_approval_dict
+from code_puppy.api.redactor import redact_approval_dict, redact_event_data
 
 
 @dataclass
@@ -151,11 +151,13 @@ class ApprovalManager:
 
             emit_event(
                 "approval_response",
-                {
-                    "approval_id": approval_id,
-                    "approved": bool(approved),
-                    "feedback": approval.feedback,
-                },
+                redact_event_data(
+                    {
+                        "approval_id": approval_id,
+                        "approved": bool(approved),
+                        "feedback": approval.feedback,
+                    }
+                ),
             )
         except Exception:
             pass
