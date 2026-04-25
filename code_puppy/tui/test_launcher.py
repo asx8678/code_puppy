@@ -2,9 +2,10 @@
 
 from __future__ import annotations
 
+import asyncio
 import os
 import warnings
-from unittest.mock import patch
+from unittest.mock import AsyncMock, patch
 
 import pytest
 
@@ -12,6 +13,7 @@ from code_puppy.tui.launcher import (
     emit_tui_deprecation_warning,
     is_tui_deprecated,
     is_tui_enabled,
+    textual_interactive_mode,
 )
 
 
@@ -78,9 +80,10 @@ class TestEmitTuiDeprecationWarning:
     """The helper should write to stderr and issue a DeprecationWarning."""
 
     def test_prints_to_stderr(self, capsys: pytest.CaptureFixture[str]) -> None:
-        # Suppress the DeprecationWarning since we test it separately
-        with warnings.catch_warnings():
-            warnings.simplefilter("ignore", DeprecationWarning)
+        # pytest.warns captures the DeprecationWarning so it never leaks
+        # to the runner — this is the preferred hygiene pattern over
+        # manual warnings.catch_warnings(simplefilter="ignore").
+        with pytest.warns(DeprecationWarning, match="TUI"):
             emit_tui_deprecation_warning()
         captured = capsys.readouterr()
         assert captured.err  # something on stderr
@@ -89,12 +92,10 @@ class TestEmitTuiDeprecationWarning:
         assert captured.out == ""
 
     def test_issues_deprecation_warning(self) -> None:
-        with warnings.catch_warnings(record=True) as w:
-            warnings.simplefilter("always")
+        with pytest.warns(DeprecationWarning, match="TUI") as record:
             emit_tui_deprecation_warning()
-            deprecation = [x for x in w if issubclass(x.category, DeprecationWarning)]
-            assert len(deprecation) == 1
-            assert "TUI" in str(deprecation[0].message)
+        assert len(record) == 1
+        assert "TUI" in str(record[0].message)
 
 
 # ---------------------------------------------------------------------------
@@ -137,3 +138,71 @@ class TestInteractionGuard:
             has_prompt = True  # simulates args.prompt being truthy
             should_warn = is_tui_enabled() and not has_prompt and is_tui_deprecated()
             assert should_warn is False
+
+
+# ---------------------------------------------------------------------------
+# Direct coverage for textual_interactive_mode()
+# ---------------------------------------------------------------------------
+
+
+class TestTextualInteractiveMode:
+    """Verify the async entry point's warning + launch behaviour."""
+
+    @staticmethod
+    def _run(coro):
+        """Run an async coroutine in a sync test (no pytest-asyncio dependency)."""
+        return asyncio.run(coro)
+
+    def test_warns_before_launch_when_deprecated(
+        self, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        """When PUP_TUI_DEPRECATED=1, warning fires *before* app.run_async()."""
+        with patch.dict(os.environ, {"PUP_TUI_DEPRECATED": "1"}):
+            with patch("code_puppy.tui.app.CodePuppyApp") as MockApp:
+                mock_instance = MockApp.return_value
+                mock_instance.run_async = AsyncMock()
+
+                with pytest.warns(DeprecationWarning, match="TUI"):
+                    self._run(textual_interactive_mode())
+
+                # App was still launched despite deprecation
+                mock_instance.run_async.assert_awaited_once()
+
+        # Stderr got the user-facing message too
+        captured = capsys.readouterr()
+        assert "deprecated" in captured.err.lower()
+
+    def test_no_warning_when_not_deprecated(
+        self, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        """When PUP_TUI_DEPRECATED is unset, no warning is emitted."""
+        with patch.dict(os.environ, {}, clear=True):
+            os.environ.pop("PUP_TUI_DEPRECATED", None)
+            with patch("code_puppy.tui.app.CodePuppyApp") as MockApp:
+                mock_instance = MockApp.return_value
+                mock_instance.run_async = AsyncMock()
+
+                with warnings.catch_warnings(record=True) as w:
+                    warnings.simplefilter("always")
+                    self._run(textual_interactive_mode())
+                    dep = [x for x in w if issubclass(x.category, DeprecationWarning)]
+                    assert len(dep) == 0
+
+                # App still launches normally
+                mock_instance.run_async.assert_awaited_once()
+
+        captured = capsys.readouterr()
+        assert captured.err == ""
+
+    def test_initial_command_forwarded(self) -> None:
+        """initial_command is set on the app instance before run_async()."""
+        with patch.dict(os.environ, {}, clear=True):
+            os.environ.pop("PUP_TUI_DEPRECATED", None)
+            with patch("code_puppy.tui.app.CodePuppyApp") as MockApp:
+                mock_instance = MockApp.return_value
+                mock_instance.run_async = AsyncMock()
+
+                self._run(textual_interactive_mode(initial_command="/help"))
+
+                assert mock_instance._initial_command == "/help"
+                mock_instance.run_async.assert_awaited_once()
