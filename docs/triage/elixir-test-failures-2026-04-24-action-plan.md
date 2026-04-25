@@ -7,10 +7,12 @@
 
 ## Current validation status
 
+**Refreshed on 2026-04-25** on base branch `fix/security-regression-and-test-triage`.
+
 The fast Elixir suite is green with the former quarantine included:
 
 ```text
-9 doctests, 89 properties, 5075 tests, 0 failures (102 excluded)
+9 doctests, 89 properties, 5184 tests, 0 failures (105 excluded)
 ```
 
 There are currently **no active test-level or module-level `:triage_pending` quarantines** in `elixir/code_puppy_control/test`.
@@ -77,5 +79,5 @@ mix test --include triage_pending --exclude slow --exclude integration --max-fai
 Current result for the full fast-suite command with former quarantines included:
 
 ```text
-9 doctests, 89 properties, 5075 tests, 0 failures (102 excluded)
+9 doctests, 89 properties, 5184 tests, 0 failures (105 excluded)
 ```
