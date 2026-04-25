@@ -47,7 +47,7 @@ defmodule CodePuppyControl.E2ECase do
 
   use ExUnit.CaseTemplate
 
-  alias CodePuppyControl.{EventBus, EventStore}
+  alias CodePuppyControl.EventBus
 
   using do
     quote do
@@ -94,7 +94,7 @@ defmodule CodePuppyControl.E2ECase do
     Helper functions for E2E tests.
     """
 
-    alias CodePuppyControl.{EventBus, EventStore}
+    alias CodePuppyControl.EventBus
 
     @doc """
     Ensures the EventStore is running.

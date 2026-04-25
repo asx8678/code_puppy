@@ -12,9 +12,10 @@
 # SKIP_E2E=1 mix test # Skip E2E tests
 # E2E_TIMEOUT=60000 mix test.e2e # Override timeout (60s)
 
-# Ensure support files are loaded (non-.ex support files)
-Code.require_file("support/mock_python_worker.ex", __DIR__)
-Code.require_file("support/e2e_case.ex", __DIR__)
+# .ex files in test/support are compiled automatically via elixirc_paths.
+# Only use Code.require_file for .exs files that are not compiled.
+# (Previously, mock_python_worker.ex and e2e_case.ex were require_file'd
+# here, causing redefinition warnings since they're already in elixirc_paths.)
 
 # Support .ex files in test/support are automatically loaded via compilation
 # This includes: test_reset.ex, stateful_case.ex, stdio_test_helper.ex

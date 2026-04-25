@@ -74,10 +74,10 @@ defmodule CodePuppyControl.TUI.Widgets.ModelSelector do
         items = Enum.map(models, & &1.name)
 
         if default && default in items do
-          Owl.IO.puts(
-            Owl.Data.tag("\n  Default: ", [:faint]) <>
-              Owl.Data.tag(default, [:bright, :green])
-          )
+          Owl.IO.puts([
+            Owl.Data.tag("\n  Default: ", [:faint]),
+            Owl.Data.tag(default, [:bright, :green])
+          ])
         end
 
         case interactive_select(items, label) do

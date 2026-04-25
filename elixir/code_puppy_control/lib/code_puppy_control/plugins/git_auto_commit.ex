@@ -38,7 +38,6 @@ defmodule CodePuppyControl.Plugins.GitAutoCommit do
   def shutdown, do: :ok
 
   @spec handle_command(String.t(), String.t()) :: String.t() | true | nil
-  def handle_command(_command, "commit"), do: run_commit_default()
   def handle_command(command, "commit"), do: handle_commit(command)
   def handle_command(_command, _name), do: nil
 
@@ -50,16 +49,6 @@ defmodule CodePuppyControl.Plugins.GitAutoCommit do
       "GAC refused: #{reason}"
     else
       execute_commit_flow(args)
-    end
-  end
-
-  defp run_commit_default do
-    {is_safe, reason} = is_gac_safe()
-
-    if not is_safe do
-      "GAC refused: #{reason}"
-    else
-      execute_commit_flow(%{subcommand: "default", message: nil, dry_run: false})
     end
   end
 
@@ -75,8 +64,8 @@ defmodule CodePuppyControl.Plugins.GitAutoCommit do
         untracked = length(result.untracked_files)
         "No staged changes. #{unstaged} modified, #{untracked} untracked."
 
-      {:ok, %{has_staged: true}} ->
-        staged_count = length(args.staged_files)
+      {:ok, %{has_staged: true} = result} ->
+        staged_count = length(result.staged_files)
 
         if subcommand == "status" do
           "Found #{staged_count} staged file(s)"

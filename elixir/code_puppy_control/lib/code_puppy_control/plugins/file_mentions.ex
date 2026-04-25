@@ -26,8 +26,6 @@ defmodule CodePuppyControl.Plugins.FileMentions do
     })
   end
 
-  defp put_state(state), do: Process.put(@state_key, state)
-
   @doc false
   def reset_state do
     Process.delete(@state_key)

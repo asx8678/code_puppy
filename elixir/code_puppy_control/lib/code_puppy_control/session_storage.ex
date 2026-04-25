@@ -538,20 +538,6 @@ defmodule CodePuppyControl.SessionStorage do
     end
   end
 
-  defp atomic_write_json(path, data) do
-    json = Jason.encode!(data, pretty: true)
-    tmp_path = path <> ".tmp.#{:erlang.unique_integer([:positive])}"
-
-    with :ok <- File.write(tmp_path, json),
-         :ok <- File.rename(tmp_path, path) do
-      :ok
-    else
-      {:error, reason} ->
-        _ = File.rm(tmp_path)
-        {:error, reason}
-    end
-  end
-
   defp load_metadata_file(path) do
     case File.read(path) do
       {:ok, raw} ->

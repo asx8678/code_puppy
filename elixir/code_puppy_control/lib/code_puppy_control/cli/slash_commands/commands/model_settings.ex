@@ -99,9 +99,6 @@ defmodule CodePuppyControl.CLI.SlashCommands.Commands.ModelSettings do
       {:show, model_name} ->
         show_summary(model_name)
 
-      {:show, nil} ->
-        show_summary(nil)
-
       {:interactive, model_name} ->
         Interactive.run(model_name)
 

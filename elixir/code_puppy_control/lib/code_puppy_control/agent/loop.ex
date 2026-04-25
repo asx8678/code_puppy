@@ -415,14 +415,6 @@ defmodule CodePuppyControl.Agent.Loop do
         )
 
         %{state | messages: compacted}
-
-      {:error, reason} ->
-        Logger.warning(
-          "Agent.Loop compaction failed: run_id=#{state.run_id} reason=#{inspect(reason)}"
-        )
-
-        # Fail gracefully — continue with original messages
-        state
     end
   end
 
@@ -539,6 +531,17 @@ defmodule CodePuppyControl.Agent.Loop do
     end
   end
 
+  defp handle_turn_result(state, %{state: :error, error: reason} = turn, turn_number) do
+    state = finalize_turn(state, turn, turn_number)
+    Events.publish(Events.turn_ended(state.run_id, state.session_id, turn_number, :error))
+    {:error, reason, state}
+  end
+
+  defp handle_turn_result(state, turn, turn_number) do
+    state = finalize_turn(state, turn, turn_number)
+    {:ok, state}
+  end
+
   # Validates response against agent's response_schema if defined.
   # Returns {:ok, response} if no schema or validation passes.
   # Returns {:error, errors} if validation fails.
@@ -553,17 +556,6 @@ defmodule CodePuppyControl.Agent.Loop do
       end
 
     ResponseValidator.validate(response, schema)
-  end
-
-  defp handle_turn_result(state, %{state: :error, error: reason} = turn, turn_number) do
-    state = finalize_turn(state, turn, turn_number)
-    Events.publish(Events.turn_ended(state.run_id, state.session_id, turn_number, :error))
-    {:error, reason, state}
-  end
-
-  defp handle_turn_result(state, turn, turn_number) do
-    state = finalize_turn(state, turn, turn_number)
-    {:ok, state}
   end
 
   defp finalize_turn(state, turn, turn_number) do

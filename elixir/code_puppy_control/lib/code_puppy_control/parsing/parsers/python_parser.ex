@@ -196,8 +196,9 @@ defmodule CodePuppyControl.Parsing.Parsers.PythonParser do
     ]
   end
 
-  # Class without decorators: {class, line, name, params, nil}
-  defp node_to_symbol({:class, line, name, _params, nil}) do
+  # Class without decorators and without parents: {class, line, name, params, nil}
+  defp node_to_symbol({:class, line, name, params, nil})
+       when params in [nil, []] do
     [
       %{
         name: to_string(name),
