@@ -218,12 +218,13 @@
 
     function addFeed(event) {
       if (state.paused || event.type === 'ping') return;
+      const safeEvent = redactEventForFeed(event);
       if (feed.children.length === 1 && feed.textContent.includes('Waiting for events')) feed.innerHTML = '';
       const item = document.createElement('article');
       item.className = 'feed-item rounded-xl bg-slate-900/90 border border-white/10 p-4';
-      const label = escapeHtml(typeLabel(event));
-      const body = escapeHtml(clip(summarize(event), event.type === 'message' ? 3000 : 1200));
-      const details = escapeHtml(JSON.stringify(event.data || {}, null, 2));
+      const label = escapeHtml(typeLabel(safeEvent));
+      const body = escapeHtml(clip(summarize(safeEvent), safeEvent.type === 'message' ? 3000 : 1200));
+      const details = escapeHtml(JSON.stringify(safeEvent.data || {}, null, 2));
       item.innerHTML = `
         <div class="flex items-start justify-between gap-3">
           <span class="text-xs px-2 py-1 rounded-full border ${badgeClass(event)}">${label}</span>
@@ -288,7 +289,7 @@
           <div class="rounded-xl bg-sky-500/10 border border-sky-500/30 p-4" data-decision="${escapeHtml(id)}">
             <div class="text-xs uppercase tracking-wide text-sky-200">Input request</div>
             <h3 class="font-semibold mt-1">${escapeHtml(d.prompt_text || 'Input required')}</h3>
-            <input id="input-${escapeHtml(id)}" type="${d.input_type === 'password' ? 'password' : 'text'}" value="${escapeHtml(d.default_value || '')}" class="mt-3 w-full rounded-lg bg-slate-950 border border-white/10 px-3 py-2 text-sm" />
+            <input id="input-${escapeHtml(id)}" type="${d.input_type === 'password' ? 'password' : 'text'}" value="${d.input_type === 'password' ? '' : escapeHtml(d.default_value || '')}" class="mt-3 w-full rounded-lg bg-slate-950 border border-white/10 px-3 py-2 text-sm" />
             <button data-action="bus-input" data-id="${escapeHtml(id)}" class="mt-3 w-full rounded-lg bg-sky-600 hover:bg-sky-500 px-3 py-2 font-semibold">Submit input</button>
           </div>`, { sensitive: true });
       } else if (mt === 'ConfirmationRequest') {
@@ -328,12 +329,38 @@
       return data;
     }
 
-    /* --- Redaction helper for local feed logging --- */
-    function redactForFeed(data) {
-      const safe = Object.assign({}, data);
-      if ('value' in safe) safe.value = '[redacted]';
-      if ('feedback' in safe) safe.feedback = '[redacted]';
+    /* --- Recursive redaction for any event written to the feed --- */
+    const SENSITIVE_KEY_RE = /^(value|feedback|default_value|password|passwd|passphrase|input|selected_value|secret|token|access_token|refresh_token|api_key|apikey|authorization|credential)$/i;
+
+    function deepRedact(obj, depth) {
+      if (depth > 8) return '[max-depth]';
+      if (obj === null || obj === undefined) return obj;
+      if (typeof obj !== 'object') return obj;
+      if (Array.isArray(obj)) return obj.map((v) => deepRedact(v, depth + 1));
+      const safe = {};
+      for (const key of Object.keys(obj)) {
+        safe[key] = SENSITIVE_KEY_RE.test(key) ? '[redacted]' : deepRedact(obj[key], depth + 1);
+      }
       return safe;
+    }
+
+    function redactEventForFeed(event) {
+      const sanitized = {};
+      for (const key of Object.keys(event)) {
+        if (key === 'data') {
+          sanitized.data = deepRedact(event.data, 0);
+        } else if (SENSITIVE_KEY_RE.test(key)) {
+          sanitized[key] = '[redacted]';
+        } else {
+          sanitized[key] = event[key];
+        }
+      }
+      return sanitized;
+    }
+
+    /* Legacy alias used by local responders — now delegates to deepRedact */
+    function redactForFeed(data) {
+      return deepRedact(data, 0);
     }
 
     /* --- Approval / Bus responders (no longer on window) --- */

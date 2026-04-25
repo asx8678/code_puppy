@@ -381,20 +381,74 @@ async def test_dashboard_no_client_side_storage_or_cookies(client: AsyncClient) 
 
 @pytest.mark.asyncio
 async def test_dashboard_feed_redacts_sensitive_fields(client: AsyncClient) -> None:
-    """Dashboard redactForFeed helper must replace value/feedback with [redacted]."""
+    """Dashboard must define recursive redaction helpers that cover all sensitive keys."""
     resp = await client.get("/dashboard")
     assert resp.status_code == 200
     html = resp.text
-    assert "redactForFeed" in html, "Dashboard should define a redactForFeed helper"
-    assert "[redacted]" in html, (
-        "Dashboard should redact sensitive fields (value, feedback) with [redacted] "
-        "before logging to local feed"
+    # Core helper names must exist
+    assert "deepRedact" in html, "Dashboard should define deepRedact recursive helper"
+    assert "redactEventForFeed" in html, (
+        "Dashboard should define redactEventForFeed event-level sanitizer"
     )
-    # Verify the redaction targets the correct keys
-    assert "safe.value = '[redacted]'" in html or 'safe.value = "[redacted]"' in html
+    assert "redactForFeed" in html, "Dashboard should define redactForFeed alias"
+    assert "[redacted]" in html, "Redaction must use '[redacted]' sentinel"
+    # The sensitive-key regex must cover the required set
+    sensitive_keys = [
+        "value",
+        "feedback",
+        "default_value",
+        "password",
+        "passwd",
+        "passphrase",
+        "selected_value",
+        "secret",
+        "token",
+        "access_token",
+        "refresh_token",
+        "api_key",
+        "apikey",
+        "authorization",
+        "credential",
+    ]
+    for key in sensitive_keys:
+        assert key in html, f"SENSITIVE_KEY_RE should cover key '{key}'"
+    # Verify deepRedact is recursive (calls itself)
+    assert "deepRedact(" in html, "deepRedact should recurse into nested values"
+
+
+@pytest.mark.asyncio
+async def test_dashboard_addfeed_uses_safe_event(client: AsyncClient) -> None:
+    """addFeed must sanitize events via redactEventForFeed before rendering."""
+    resp = await client.get("/dashboard")
+    assert resp.status_code == 200
+    html = resp.text
+    # addFeed should create a sanitized copy before any rendering
+    assert "safeEvent" in html, (
+        "addFeed should assign redactEventForFeed(event) to safeEvent "
+        "and render only the sanitized event"
+    )
+    # The summarize and JSON.stringify calls must use safeEvent, not raw event
+    # Find the addFeed function body and check it uses safeEvent
+    assert "summarize(safeEvent)" in html, (
+        "addFeed should pass safeEvent to summarize(), not raw event"
+    )
+    assert "safeEvent.data" in html, (
+        "addFeed should stringify safeEvent.data, not raw event.data"
+    )
+
+
+@pytest.mark.asyncio
+async def test_dashboard_password_input_no_default_value(client: AsyncClient) -> None:
+    """Password-type inputs must not pre-populate default_value into the DOM."""
+    resp = await client.get("/dashboard")
+    assert resp.status_code == 200
+    html = resp.text
+    # For password inputs, value should be empty, not default_value
     assert (
-        "safe.feedback = '[redacted]'" in html or 'safe.feedback = "[redacted]"' in html
-    )
+        "d.input_type === 'password' ? ''" in html
+        or 'd.input_type === "password" ? ""' in html
+        or "d.input_type === 'password' ? ''" in html
+    ), "Password inputs should render empty value, not d.default_value"
 
 
 @pytest.mark.asyncio
@@ -410,6 +464,8 @@ async def test_dashboard_uses_delegated_click_listener(client: AsyncClient) -> N
     assert "pendingMeta" in html, (
         "Dashboard should use pendingMeta Map for storing selection options metadata"
     )
+    # Must NOT use inline onclick handlers
+    assert "onclick=" not in html
 
 
 @pytest.mark.asyncio
