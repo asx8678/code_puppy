@@ -19,7 +19,9 @@ defmodule CodePuppyControl.Auth.RuntimeConnection do
         }
 
   @spec resolve(map(), String.t() | nil) :: {:ok, resolved()} | {:error, term()}
-  def resolve(config, model_name \\ nil) when is_map(config) do
+  def resolve(config), do: resolve(config, nil)
+
+  def resolve(config, model_name) when is_map(config) do
     base = resolve_custom_endpoint(Map.get(config, "custom_endpoint"))
 
     case ModelRegistry.get_model_type(config) do

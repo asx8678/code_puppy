@@ -9,9 +9,9 @@ defmodule CodePuppyControl.TUI.Progress do
   ## Usage
 
       # Spinner
-      {:ok, pid} = Progress.spinner("Compiling...")
+      {:ok, ref} = Progress.spinner("Compiling...")
       :timer.sleep(2000)
-      Progress.stop(pid)
+      Progress.stop(ref)
 
       # Progress bar
       Progress.bar(50, 100, label: "Downloading")
@@ -19,8 +19,8 @@ defmodule CodePuppyControl.TUI.Progress do
 
   ## Design notes
 
-  * `spinner/1` returns `{:ok, pid}` — callers should **not** store the
-    pid across async boundaries without monitoring. For GenServer-managed
+  * `spinner/1` returns `{:ok, ref}` — callers should **not** store the
+    ref across async boundaries without monitoring. For GenServer-managed
     spinners (e.g. the Renderer's tool-call spinners), use the internal
     `Owl.Spinner` API directly with reference tracking.
   * `bar/3` is fire-and-forget — it renders inline and returns `:ok`.
@@ -31,9 +31,6 @@ defmodule CodePuppyControl.TUI.Progress do
   alias Owl.Data
 
   # ── Constants ─────────────────────────────────────────────────────────────
-
-  # Owl.Spinner refresh interval (ms)
-  @default_refresh_ms 80
 
   # Progress bar width in terminal columns
   @default_bar_width 40
@@ -53,23 +50,25 @@ defmodule CodePuppyControl.TUI.Progress do
 
   ## Examples
 
-      {:ok, pid} = Progress.spinner("Fetching results...")
-      Progress.stop(pid)
-  """
-  @spec spinner(String.t(), keyword()) :: {:ok, pid()} | {:error, term()}
+      {:ok, ref} = Progress.spinner("Fetching results...")
+      Progress.stop(ref)
+  ""
+  @spec spinner(String.t(), keyword()) :: {:ok, term()} | {:error, term()}
   def spinner(label, opts \\ []) do
     if tty_available?() do
-      refresh = Keyword.get(opts, :refresh_every, @default_refresh_ms)
+      refresh = Keyword.get(opts, :refresh_every, 80)
+      ref = make_ref()
 
       spinner_opts = [
+        id: ref,
         labels: [processing: Data.tag(label, :faint)],
         refresh_every: refresh
       ]
 
       case Owl.Spinner.start(spinner_opts) do
-        {:ok, pid} ->
-          Owl.Spinner.update(pid, labels: [processing: Data.tag(label, :faint)])
-          {:ok, pid}
+        {:ok, _pid} ->
+          Owl.Spinner.update_label(id: ref, label: Data.tag(label, :faint))
+          {:ok, ref}
 
         {:error, reason} ->
           {:error, reason}
@@ -79,10 +78,10 @@ defmodule CodePuppyControl.TUI.Progress do
     end
   end
 
-  @doc """
+  @doc \"""
   Stops a running spinner.
 
-  Accepts the pid returned by `spinner/1`. The spinner is removed from
+  Accepts the ref returned by `spinner/1`. The spinner is removed from
   the terminal and the line is cleared.
 
   ## Options
@@ -92,15 +91,15 @@ defmodule CodePuppyControl.TUI.Progress do
 
   ## Examples
 
-      Progress.stop(pid)
-      Progress.stop(pid, resolution: :error)
+      Progress.stop(ref)
+      Progress.stop(ref, resolution: :error)
   """
-  @spec stop(pid(), keyword()) :: :ok
-  def stop(pid, opts \\ []) do
+  @spec stop(term(), keyword()) :: :ok
+  def stop(ref, opts \\ []) do
     resolution = Keyword.get(opts, :resolution, :ok)
 
     try do
-      Owl.Spinner.stop(pid, resolution: resolution)
+      Owl.Spinner.stop(id: ref, resolution: resolution)
     catch
       :exit, _ -> :ok
     end
@@ -146,8 +145,7 @@ defmodule CodePuppyControl.TUI.Progress do
       empty = width - filled
 
       bar_inner =
-        Data.tag(String.duplicate("█", filled), color) <>
-          String.duplicate("░", empty)
+        [Data.tag(String.duplicate("\u2588", filled), color), String.duplicate("\u2591", empty)]
 
       pct = Float.round(ratio * 100, 1)
 

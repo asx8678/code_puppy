@@ -60,7 +60,9 @@ defmodule CodePuppyControl.Plugins.AgentTrace.Schema do
 
   @doc "Generate a unique event ID."
   @spec make_event_id() :: String.t()
-  def make_event_id, do: UUID.uuid4()
+  def make_event_id do
+    :crypto.strong_rand_bytes(16) |> Base.encode16(case: :lower)
+  end
 
   @doc "Get current UTC timestamp in ISO format."
   @spec now_iso() :: String.t()

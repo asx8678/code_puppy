@@ -9,8 +9,6 @@ defmodule CodePuppyControl.Sessions.ChatSession do
   use Ecto.Schema
   import Ecto.Changeset
 
-  alias CodePuppyControl.Repo
-
   @type t :: %__MODULE__{
           id: integer() | nil,
           name: String.t(),

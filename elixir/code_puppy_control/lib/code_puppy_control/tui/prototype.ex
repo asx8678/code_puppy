@@ -20,7 +20,6 @@ defmodule CodePuppyControl.TUI.Prototype do
   defp yellow, do: "\e[33m"
   defp magenta, do: "\e[35m"
   defp blue, do: "\e[34m"
-  defp red, do: "\e[31m"
   defp white, do: "\e[37m"
   defp bg_cyan, do: "\e[46m"
 

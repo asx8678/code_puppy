@@ -50,7 +50,6 @@ defmodule CodePuppyControl.Config do
     Models,
     Agents,
     TUI,
-    Cache,
     Limits,
     Debug,
     Migrator

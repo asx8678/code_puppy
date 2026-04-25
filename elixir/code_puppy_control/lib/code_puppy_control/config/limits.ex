@@ -251,7 +251,7 @@ defmodule CodePuppyControl.Config.Limits do
 
   @truthy_values MapSet.new(["1", "true", "yes", "on"])
 
-  defp truthy?(key, default \\ false) do
+  defp truthy?(key, default) do
     case Loader.get_value(key) do
       nil -> default
       val -> String.downcase(String.trim(val)) in @truthy_values

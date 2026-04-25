@@ -46,3 +46,6 @@ npm-debug.log
 
 # Burrito single-binary release output
 /burrito_out/
+# tmp and beam artifacts
+tmp/
+*.beam

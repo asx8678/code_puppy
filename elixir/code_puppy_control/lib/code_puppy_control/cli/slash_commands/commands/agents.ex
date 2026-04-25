@@ -136,21 +136,19 @@ defmodule CodePuppyControl.CLI.SlashCommands.Commands.Agents do
   end
 
   defp show_help do
-    Owl.IO.puts("""
-
-      #{Owl.Data.tag("/agents", [:bright, :cyan])} — Agent management
-
-      #{Owl.Data.tag("Usage:", :bright)}
-        /agents              List all agents with their pinned models
-        /agents list         Same as above
-        /agents pin <name>   Pin a model to an agent (interactive)
-        /agents unpin <name> Remove a model pin
-
-      #{Owl.Data.tag("Examples:", :bright)}
-        /agents pin code-puppy    Select a model to pin to code-puppy
-        /agents unpin code-scout  Remove code-scout's model pin
-
-    """)
+    Owl.IO.puts([
+      "\n      ",
+      Owl.Data.tag("/agents", [:bright, :cyan]),
+      " — Agent management\n\n      ",
+      Owl.Data.tag("Usage:", :bright),
+      "\n        /agents              List all agents with their pinned models\n" <>
+        "        /agents list         Same as above\n" <>
+        "        /agents pin <name>   Pin a model to an agent (interactive)\n" <>
+        "        /agents unpin <name> Remove a model pin\n\n      ",
+      Owl.Data.tag("Examples:", :bright),
+      "\n        /agents pin code-puppy    Select a model to pin to code-puppy\n" <>
+        "        /agents unpin code-scout  Remove code-scout's model pin\n\n    "
+    ])
   end
 
   # ── Helpers ──────────────────────────────────────────────────────────────

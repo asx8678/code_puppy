@@ -280,7 +280,7 @@ defmodule CodePuppyControl.TUI.App do
   # Heuristic: detect if we're on a real terminal
   defp tty? do
     if function_exported?(:file, :isatty, 1) do
-      :stdio |> :file.isatty()
+      apply(:file, :isatty, [:stdio])
     else
       false
     end
