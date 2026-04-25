@@ -132,8 +132,11 @@ def generate_markdown_report(
     lines.append("## Recommended Porting Order")
     lines.append("")
     lines.append(
-        "> Ordered by dependency depth (leaves first). "
-        "Within each depth, sorted by fan-in (lowest first)."
+        "> Ordered by topological level (dependencies first). "
+        "For acyclic dependencies, if A imports B, B appears before A. "
+        "Within an SCC (import cycle), members may be grouped/ordered "
+        "arbitrarily, but outside-cycle dependencies still come first. "
+        "Within each level, sorted by fan-in (lowest first)."
     )
     lines.append("")
     lines.append("| Phase | Modules | Criteria |")
