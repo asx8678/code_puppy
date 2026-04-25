@@ -65,17 +65,14 @@ defmodule CodePuppyControl.CLI do
     case opts do
       %{prompt: prompt, interactive: true} ->
         # Interactive mode with initial prompt
-        IO.puts("[cli] Starting interactive mode with prompt: #{prompt}")
         run_interactive(opts)
 
       %{prompt: prompt} when is_binary(prompt) and prompt != "" ->
         # Single prompt mode
-        IO.puts("[cli] Running single prompt: #{prompt}")
         run_single_prompt(opts)
 
       %{continue: true} ->
         # Continue last session
-        IO.puts("[cli] Continuing last session")
         run_interactive(opts)
 
       _ ->
@@ -95,13 +92,15 @@ defmodule CodePuppyControl.CLI do
   end
 
   defp run_single_prompt(opts) do
-    # TODO: Wire to CodePuppyControl prompt runner
-    model = Map.get(opts, :model)
-    prompt = opts[:prompt]
+    result = CodePuppyControl.REPL.Loop.run_one_shot(opts)
 
-    IO.puts("[cli] Single prompt: #{prompt}")
-    if model, do: IO.puts("[cli] Model override: #{model}")
-    IO.puts("[cli] Prompt runner not yet implemented - exiting")
+    case result do
+      :ok ->
+        :ok
+
+      :error ->
+        System.halt(1)
+    end
   end
 
   @doc """

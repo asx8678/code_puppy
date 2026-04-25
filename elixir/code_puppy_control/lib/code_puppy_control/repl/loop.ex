@@ -112,6 +112,54 @@ defmodule CodePuppyControl.REPL.Loop do
     do_loop(state)
   end
 
+  # ── One-Shot Runner ────────────────────────────────────────────────────
+
+  @doc """
+  Execute a single prompt in one-shot mode and return.
+
+  Constructs a REPL state from the given opts, dispatches the prompt
+  through the existing `send_to_agent/2` pipeline (which uses
+  `Dispatch.dispatch_after_append/4` for rendering, agent-loop execution,
+  message persistence, and autosave), then returns `:ok` or `:error`.
+
+  Unlike `run/1`, this does NOT start the interactive loop or print
+  a welcome banner.
+
+  ## Options
+
+    * `:prompt` — The user prompt text (required)
+    * `:model` — Model override (default: from config)
+    * `:agent` — Agent name (default: "code-puppy")
+    * `:session_id` — Session identifier (default: generated)
+
+  ## Returns
+
+    * `:ok` — Prompt dispatched and response persisted/autosaved
+    * `:error` — Dispatch failed (unknown agent, LLM error, etc.)
+  """
+  @spec run_one_shot(map()) :: :ok | :error
+  def run_one_shot(opts) when is_map(opts) do
+    agent = Map.get(opts, :agent, "code-puppy")
+    model = Map.get(opts, :model) || Models.global_model_name()
+    session_id = Map.get(opts, :session_id) || generate_session_id()
+    prompt = Map.fetch!(opts, :prompt)
+
+    state = %__MODULE__{
+      agent: agent,
+      model: model,
+      session_id: session_id,
+      running: true
+    }
+
+    # Reuse the full dispatch pipeline (resolve → ensure state →
+    # append → dispatch → persist → autosave) without starting
+    # the interactive loop.
+    case send_to_agent(prompt, state) do
+      :ok -> :ok
+      :error -> :error
+    end
+  end
+
   @doc """
   Process a single line of input through the REPL.
 
@@ -407,7 +455,9 @@ defmodule CodePuppyControl.REPL.Loop do
 
   # ── Agent Prompt Dispatch ─────────────────────────────────────────────────
 
-  defp send_to_agent(prompt, state) do
+  @doc false
+  # Public for one-shot runner; also called by handle_input/2.
+  def send_to_agent(prompt, state) do
     Logger.debug("REPL: send_to_agent agent=#{state.agent} model=#{state.model}")
 
     # Phase 1: resolve agent + ensure state — no state mutation, so no
