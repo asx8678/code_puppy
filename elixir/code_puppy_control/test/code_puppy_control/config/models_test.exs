@@ -5,18 +5,105 @@ defmodule CodePuppyControl.Config.ModelsTest do
 
   @tmp_dir System.tmp_dir!()
   @test_cfg Path.join(@tmp_dir, "models_test_#{:erlang.unique_integer([:positive])}.cfg")
+  @empty_models_json Path.join(
+                       @tmp_dir,
+                       "empty_models_#{:erlang.unique_integer([:positive])}.json"
+                     )
 
   setup do
     File.write!(@test_cfg, "[puppy]\nmodel = test-model\n")
     Loader.load(@test_cfg)
 
+    # Ensure ModelRegistry is alive under its supervisor before any test.
+    # We never stop the supervised registry — that destroys the :model_configs
+    # ETS table and causes nondeterministic failures in later tests.
+    ensure_registry_alive()
+
     on_exit(fn ->
       File.rm(@test_cfg)
+
+      # Always restore registry env + reload so :model_configs is available
+      # for subsequent tests (e.g. factory_test).
+      restore_registry_env()
       Loader.invalidate()
     end)
 
     :ok
   end
+
+  # ── helpers ──────────────────────────────────────────────────────────────
+
+  # Point registry at an empty JSON so list_model_names() returns [].
+  # This tests the same "no models available" code path as stopping
+  # the GenServer, but deterministically and without destroying ETS.
+  defp with_empty_registry(fun) do
+    File.write!(@empty_models_json, "{}")
+    original_env = System.get_env("PUP_BUNDLED_MODELS_PATH")
+
+    System.put_env("PUP_BUNDLED_MODELS_PATH", @empty_models_json)
+
+    try do
+      :ok = CodePuppyControl.ModelRegistry.reload()
+      fun.()
+    after
+      # Restore env var (saved for on_exit too, but restore immediately
+      # so subsequent tests in this module see the real models).
+      if original_env do
+        System.put_env("PUP_BUNDLED_MODELS_PATH", original_env)
+      else
+        System.delete_env("PUP_BUNDLED_MODELS_PATH")
+      end
+
+      :ok = CodePuppyControl.ModelRegistry.reload()
+      File.rm(@empty_models_json)
+    end
+  end
+
+  # Ensure the supervised ModelRegistry is alive; never stop it.
+  defp ensure_registry_alive do
+    case Process.whereis(CodePuppyControl.ModelRegistry) do
+      nil ->
+        # Supervisor should restart it, but give a moment
+        Process.sleep(50)
+
+        case Process.whereis(CodePuppyControl.ModelRegistry) do
+          nil ->
+            # Last resort: reload to re-populate ETS if GenServer came back
+            # but ETS was lost. Should not normally happen.
+            try do
+              CodePuppyControl.ModelRegistry.reload()
+            catch
+              :exit, _ -> :ok
+            end
+
+          _pid ->
+            :ok
+        end
+
+      _pid ->
+        :ok
+    end
+  end
+
+  # Idempotent env restore used by on_exit.
+  defp restore_registry_env do
+    System.delete_env("PUP_BUNDLED_MODELS_PATH")
+
+    try do
+      CodePuppyControl.ModelRegistry.reload()
+    catch
+      :exit, _ -> :ok
+    end
+  end
+
+  defp ensure_writer_started do
+    case Writer.start_link() do
+      {:ok, _} -> :ok
+      {:error, {:already_started, _}} -> :ok
+    end
+  end
+
+  # ── global_model_name/0 ─────────────────────────────────────────────────
 
   describe "global_model_name/0" do
     test "returns configured model" do
@@ -36,25 +123,21 @@ defmodule CodePuppyControl.Config.ModelsTest do
     end
   end
 
-  describe "default_model/0" do
-    test "returns gpt-5 when ModelRegistry is not running" do
-      # Stop the registry temporarily to verify graceful fallback
-      original_pid = GenServer.whereis(CodePuppyControl.ModelRegistry)
+  # ── default_model/0 ─────────────────────────────────────────────────────
 
-      if original_pid do
-        # Stop it — ETS table gets destroyed with the owner process
-        GenServer.stop(CodePuppyControl.ModelRegistry, :shutdown)
+  describe "default_model/0" do
+    test "returns gpt-5 when registry has no models (empty JSON)" do
+      # Instead of stopping the supervised GenServer (which destroys
+      # :model_configs ETS and races with the supervisor), we point
+      # the registry at an empty JSON and reload. This exercises the
+      # same nil → "gpt-5" fallback path deterministically.
+      with_empty_registry(fn ->
         assert Models.default_model() == "gpt-5"
-        # Restart for other tests
-        ensure_registry_started()
-      else
-        # No registry running — should still return gpt-5 safely
-        assert Models.default_model() == "gpt-5"
-      end
+      end)
     end
 
     test "returns first model from ModelRegistry when available" do
-      ensure_registry_started()
+      ensure_registry_alive()
 
       model = Models.default_model()
       assert is_binary(model)
@@ -68,21 +151,18 @@ defmodule CodePuppyControl.Config.ModelsTest do
     end
   end
 
-  describe "first_registry_model/0" do
-    test "returns nil when ModelRegistry is not running" do
-      original_pid = GenServer.whereis(CodePuppyControl.ModelRegistry)
+  # ── first_registry_model/0 ──────────────────────────────────────────────
 
-      if original_pid do
-        GenServer.stop(CodePuppyControl.ModelRegistry, :shutdown)
+  describe "first_registry_model/0" do
+    test "returns nil when registry has no models (empty JSON)" do
+      # Deterministic empty-registry test — no GenServer stopping.
+      with_empty_registry(fn ->
         assert Models.first_registry_model() == nil
-        ensure_registry_started()
-      else
-        assert Models.first_registry_model() == nil
-      end
+      end)
     end
 
     test "returns first model name when registry is populated" do
-      ensure_registry_started()
+      ensure_registry_alive()
 
       names = CodePuppyControl.ModelRegistry.list_model_names()
 
@@ -94,6 +174,8 @@ defmodule CodePuppyControl.Config.ModelsTest do
     end
   end
 
+  # ── set_global_model/1 ──────────────────────────────────────────────────
+
   describe "set_global_model/1" do
     test "persists model to config" do
       ensure_writer_started()
@@ -103,6 +185,8 @@ defmodule CodePuppyControl.Config.ModelsTest do
       assert Models.global_model_name() == "claude-sonnet"
     end
   end
+
+  # ── temperature/0 ───────────────────────────────────────────────────────
 
   describe "temperature/0" do
     test "returns nil when not set" do
@@ -124,6 +208,8 @@ defmodule CodePuppyControl.Config.ModelsTest do
     end
   end
 
+  # ── set_temperature/1 ───────────────────────────────────────────────────
+
   describe "set_temperature/1" do
     test "sets and clears temperature" do
       ensure_writer_started()
@@ -138,6 +224,8 @@ defmodule CodePuppyControl.Config.ModelsTest do
     end
   end
 
+  # ── agent_pinned_model/1 ────────────────────────────────────────────────
+
   describe "agent_pinned_model/1" do
     test "returns nil for unpinned agent" do
       assert Models.agent_pinned_model("my-agent") == nil
@@ -150,6 +238,8 @@ defmodule CodePuppyControl.Config.ModelsTest do
       assert Models.agent_pinned_model("my-agent") == "gpt-5"
     end
   end
+
+  # ── set_agent_pinned_model/2 and clear/1 ─────────────────────────────────
 
   describe "set_agent_pinned_model/2 and clear/1" do
     test "pins and clears agent model" do
@@ -165,6 +255,8 @@ defmodule CodePuppyControl.Config.ModelsTest do
     end
   end
 
+  # ── all_agent_pinned_models/0 ────────────────────────────────────────────
+
   describe "all_agent_pinned_models/0" do
     test "returns map of all pinnings" do
       File.write!(@test_cfg, "[puppy]\nagent_model_a = m1\nagent_model_b = m2\nother = val\n")
@@ -174,6 +266,8 @@ defmodule CodePuppyControl.Config.ModelsTest do
       assert result == %{"a" => "m1", "b" => "m2"}
     end
   end
+
+  # ── openai_reasoning_effort/0 ────────────────────────────────────────────
 
   describe "openai_reasoning_effort/0" do
     test "defaults to medium" do
@@ -188,6 +282,8 @@ defmodule CodePuppyControl.Config.ModelsTest do
     end
   end
 
+  # ── set_openai_reasoning_effort/1 ────────────────────────────────────────
+
   describe "set_openai_reasoning_effort/1" do
     test "validates input" do
       ensure_writer_started()
@@ -197,11 +293,15 @@ defmodule CodePuppyControl.Config.ModelsTest do
     end
   end
 
+  # ── openai_verbosity/0 ───────────────────────────────────────────────────
+
   describe "openai_verbosity/0" do
     test "defaults to medium" do
       assert Models.openai_verbosity() == "medium"
     end
   end
+
+  # ── get_model_setting/2 ─────────────────────────────────────────────────
 
   describe "get_model_setting/2" do
     test "returns nil for unset setting" do
@@ -215,6 +315,8 @@ defmodule CodePuppyControl.Config.ModelsTest do
       assert Models.get_model_setting("gpt-5", "temperature") == 0.8
     end
   end
+
+  # ── get_all_model_settings/1 ────────────────────────────────────────────
 
   describe "get_all_model_settings/1" do
     test "returns all settings for a model" do
@@ -231,20 +333,6 @@ defmodule CodePuppyControl.Config.ModelsTest do
       assert result["temperature"] == 0.8
       assert result["seed"] == 42
       refute Map.has_key?(result, "other_key")
-    end
-  end
-
-  defp ensure_writer_started do
-    case Writer.start_link() do
-      {:ok, _} -> :ok
-      {:error, {:already_started, _}} -> :ok
-    end
-  end
-
-  defp ensure_registry_started do
-    case CodePuppyControl.ModelRegistry.start_link([]) do
-      {:ok, _} -> :ok
-      {:error, {:already_started, _}} -> :ok
     end
   end
 end
