@@ -2,8 +2,14 @@ defmodule CodePuppyControl.ModelFactoryTest do
   use ExUnit.Case, async: false
 
   alias CodePuppyControl.ModelFactory
-  alias CodePuppyControl.ModelFactory.Handle
+  alias CodePuppyControl.ModelFactory.{Handle, ProviderRegistry}
   alias CodePuppyControl.LLM.Providers.{OpenAI, Anthropic}
+
+  setup do
+    ProviderRegistry.reset_for_test()
+    on_exit(fn -> ProviderRegistry.reset_for_test() end)
+    :ok
+  end
 
   # Note: These tests rely on the test_models.json fixture being loaded
   # by ModelRegistry during application startup.
@@ -119,6 +125,35 @@ defmodule CodePuppyControl.ModelFactoryTest do
         assert mod in [OpenAI, Anthropic]
       end)
     end
+
+    test "runtime-registered provider type appears in list_available" do
+      :ok = ProviderRegistry.register("temp_list_avail_provider", OpenAI)
+
+      :ets.insert(
+        :model_configs,
+        {"temp-list-avail-model",
+         %{"type" => "temp_list_avail_provider", "name" => "list-avail-fake"}}
+      )
+
+      available = ModelFactory.list_available()
+
+      # Runtime provider types without credential requirements have no
+      # required env vars, so Credentials.validate returns :ok and the
+      # model is listed.
+      assert {"temp-list-avail-model", "temp_list_avail_provider", OpenAI} =
+               Enum.find(available, fn {n, _, _} -> n == "temp-list-avail-model" end)
+
+      # After reset, the provider type is unregistered, so the model
+      # drops out of list_available.
+      :ok = ProviderRegistry.reset_for_test()
+
+      available_after = ModelFactory.list_available()
+
+      assert nil ==
+               Enum.find(available_after, fn {n, _, _} -> n == "temp-list-avail-model" end)
+    after
+      :ets.delete(:model_configs, "temp-list-avail-model")
+    end
   end
 
   describe "validate_credentials/1" do
@@ -163,6 +198,127 @@ defmodule CodePuppyControl.ModelFactoryTest do
 
     test "returns :error for unknown type" do
       assert :error = ModelFactory.provider_module_for_type("unknown_type")
+    end
+  end
+
+  # ── ProviderRegistry Integration ───────────────────────────────────────
+  #
+  # These tests prove ModelFactory delegates to ProviderRegistry
+  # rather than a static @provider_map, enabling runtime extensibility.
+
+  describe "provider_module_for_type/1 — ProviderRegistry integration" do
+    test "returns runtime-registered provider type" do
+      assert :error = ModelFactory.provider_module_for_type("my_runtime_provider")
+
+      :ok = ProviderRegistry.register("my_runtime_provider", FakeProvider)
+      assert {:ok, FakeProvider} = ModelFactory.provider_module_for_type("my_runtime_provider")
+    end
+
+    test "reset restores built-in behavior" do
+      :ok = ProviderRegistry.register("openai", FakeProvider)
+      assert {:ok, FakeProvider} = ModelFactory.provider_module_for_type("openai")
+
+      :ok = ProviderRegistry.reset_for_test()
+      assert {:ok, OpenAI} = ModelFactory.provider_module_for_type("openai")
+    end
+
+    test "unregistered type returns :error after reset" do
+      :ok = ProviderRegistry.register("ephemeral_type", EphemeralMod)
+      assert {:ok, EphemeralMod} = ModelFactory.provider_module_for_type("ephemeral_type")
+
+      :ok = ProviderRegistry.reset_for_test()
+      assert :error = ModelFactory.provider_module_for_type("ephemeral_type")
+    end
+  end
+
+  describe "resolve/1 — ProviderRegistry integration" do
+    test "runtime-registered provider type can resolve to a Handle" do
+      :ok = ProviderRegistry.register("my_test_provider", OpenAI)
+
+      :ets.insert(
+        :model_configs,
+        {"my-test-model", %{"type" => "my_test_provider", "name" => "fake-model"}}
+      )
+
+      # ProviderRegistry consult makes resolution succeed; nil API key is
+      # acceptable for non-OAuth types with no required env vars.
+      assert {:ok, %Handle{} = handle} = ModelFactory.resolve("my-test-model")
+      assert handle.provider_module == OpenAI
+      assert handle.model_name == "my-test-model"
+    after
+      :ets.delete(:model_configs, "my-test-model")
+    end
+
+    test "unregistered provider type returns unsupported_model_type" do
+      :ets.insert(
+        :model_configs,
+        {"unreg-model", %{"type" => "totally_unregistered", "name" => "x"}}
+      )
+
+      assert {:error, {:unsupported_model_type, "totally_unregistered", "unreg-model"}} =
+               ModelFactory.resolve("unreg-model")
+    after
+      :ets.delete(:model_configs, "unreg-model")
+    end
+
+    test "reset removes runtime provider from resolution" do
+      :ok = ProviderRegistry.register("temp_provider", OpenAI)
+
+      :ets.insert(
+        :model_configs,
+        {"temp-model", %{"type" => "temp_provider", "name" => "x"}}
+      )
+
+      # Before reset: type is resolvable
+      assert {:ok, OpenAI} = ModelFactory.provider_module_for_type("temp_provider")
+
+      :ok = ProviderRegistry.reset_for_test()
+
+      # After reset: type is gone, resolve returns unsupported
+      assert :error = ModelFactory.provider_module_for_type("temp_provider")
+
+      assert {:error, {:unsupported_model_type, "temp_provider", "temp-model"}} =
+               ModelFactory.resolve("temp-model")
+    after
+      :ets.delete(:model_configs, "temp-model")
+    end
+  end
+
+  # ── Non-binary Provider Type Regression ────────────────────────────────
+  #
+  # Previously Map.get(@provider_map, provider_type) returned nil for
+  # non-binary values like 123. After migrating to ProviderRegistry.lookup/1
+  # (which guards is_binary), a non-binary type crashed with
+  # FunctionClauseError. The lookup_provider/1 wrapper restores the old
+  # safe-fallback behaviour.
+
+  describe "resolve/1 — non-binary provider type regression" do
+    test "returns unsupported_model_type for non-binary type instead of crashing" do
+      :ets.insert(
+        :model_configs,
+        {"bad-type-model", %{"type" => 123, "name" => "x"}}
+      )
+
+      assert {:error, {:unsupported_model_type, 123, "bad-type-model"}} =
+               ModelFactory.resolve("bad-type-model")
+    after
+      :ets.delete(:model_configs, "bad-type-model")
+    end
+  end
+
+  describe "list_available/0 — non-binary provider type regression" do
+    test "skips model with non-binary type instead of raising" do
+      :ets.insert(
+        :model_configs,
+        {"bad-type-model", %{"type" => 123, "name" => "x"}}
+      )
+
+      # Must not raise — the model is silently skipped
+      available = ModelFactory.list_available()
+
+      refute Enum.any?(available, fn {n, _, _} -> n == "bad-type-model" end)
+    after
+      :ets.delete(:model_configs, "bad-type-model")
     end
   end
 end

@@ -43,31 +43,10 @@ defmodule CodePuppyControl.ModelFactory do
   """
 
   alias CodePuppyControl.Auth.RuntimeConnection
-  alias CodePuppyControl.ModelFactory.{Credentials, Handle}
+  alias CodePuppyControl.ModelFactory.{Credentials, Handle, ProviderRegistry}
   alias CodePuppyControl.ModelRegistry
-  alias CodePuppyControl.LLM.Providers.{OpenAI, Anthropic, Google, Azure, Groq, Together}
 
   require Logger
-
-  # Provider type → provider module mapping
-  @provider_map %{
-    "openai" => OpenAI,
-    "anthropic" => Anthropic,
-    "custom_openai" => OpenAI,
-    "custom_anthropic" => Anthropic,
-    "azure_openai" => Azure,
-    "cerebras" => OpenAI,
-    "zai_coding" => OpenAI,
-    "zai_api" => OpenAI,
-    "openrouter" => OpenAI,
-    "gemini" => Google,
-    "gemini_oauth" => Google,
-    "custom_gemini" => Google,
-    "claude_code" => Anthropic,
-    "chatgpt_oauth" => OpenAI,
-    "groq" => Groq,
-    "together" => Together
-  }
 
   # Default API base URLs per provider type
   @default_base_urls %{
@@ -162,17 +141,17 @@ defmodule CodePuppyControl.ModelFactory do
 
         provider_type in @oauth_types ->
           # OAuth models are "available" (validation deferred to Phase 4)
-          case Map.get(@provider_map, provider_type) do
-            nil -> []
-            mod -> [{name, provider_type, mod}]
+          case lookup_provider(provider_type) do
+            {:ok, mod} -> [{name, provider_type, mod}]
+            :error -> []
           end
 
         true ->
-          case Map.get(@provider_map, provider_type) do
-            nil ->
+          case lookup_provider(provider_type) do
+            :error ->
               []
 
-            mod ->
+            {:ok, mod} ->
               case Credentials.validate(provider_type, config) do
                 :ok -> [{name, provider_type, mod}]
                 {:missing, _} -> []
@@ -224,28 +203,36 @@ defmodule CodePuppyControl.ModelFactory do
   """
   @spec provider_module_for_type(String.t()) :: {:ok, module()} | :error
   def provider_module_for_type(provider_type) when is_binary(provider_type) do
-    case Map.get(@provider_map, provider_type) do
-      nil -> :error
-      mod -> {:ok, mod}
-    end
+    ProviderRegistry.lookup(provider_type)
   end
 
   # ============================================================================
   # Private: Provider Resolution
   # ============================================================================
 
+  # Safe wrapper around ProviderRegistry.lookup/1.
+  # Previously Map.get(@provider_map, provider_type) silently returned nil
+  # for non-binary keys (e.g. 123). ProviderRegistry.lookup/1 guards on
+  # is_binary, so passing a non-binary crashes with FunctionClauseError.
+  # This wrapper preserves the old "return :error for bad types" contract.
+  defp lookup_provider(provider_type) when is_binary(provider_type) do
+    ProviderRegistry.lookup(provider_type)
+  end
+
+  defp lookup_provider(_provider_type), do: :error
+
   # Round-robin → not handled here, delegates to routing
   defp do_resolve(_model_name, _config, "round_robin") do
     {:error, :round_robin_use_routing}
   end
 
-  # Unknown/unsupported type
+  # Unknown/unsupported type (including non-binary provider types)
   defp do_resolve(model_name, _config, provider_type) do
-    case Map.get(@provider_map, provider_type) do
-      nil ->
+    case lookup_provider(provider_type) do
+      :error ->
         {:error, {:unsupported_model_type, provider_type, model_name}}
 
-      provider_mod ->
+      {:ok, provider_mod} ->
         build_handle(model_name, provider_type, provider_mod)
     end
   end
