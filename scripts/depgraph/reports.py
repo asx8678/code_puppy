@@ -69,11 +69,15 @@ def generate_markdown_report(
     lines.append("")
 
     # High-fan-in hubs (top 15)
-    lines.append("## High-Fan-In Hub Modules (Port LAST)")
+    lines.append("## High-Fan-In Hub Modules (High Blast Radius)")
     lines.append("")
     lines.append(
         "> These modules are imported by many others. "
-        "Porting them early breaks dependents."
+        "Because dependents rely on their interface, they require "
+        "compatibility facades and extra review during migration. "
+        "Use the dependency-first porting order below rather than "
+        "a blanket \u201cport last\u201d rule \u2014 the generated order "
+        "already ensures dependencies precede their importers."
     )
     lines.append("")
     hubs = sorted(modules.values(), key=lambda m: (-m.fan_in, m.name))[:15]

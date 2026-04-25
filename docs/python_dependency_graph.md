@@ -15,9 +15,9 @@
 | Hub modules (≥10 importers) | 22 |
 | Import cycles detected | 106 |
 
-## High-Fan-In Hub Modules (Port LAST)
+## High-Fan-In Hub Modules (High Blast Radius)
 
-> These modules are imported by many others. Porting them early breaks dependents.
+> These modules are imported by many others. Because dependents rely on their interface, they require compatibility facades and extra review during migration. Use the dependency-first porting order below rather than a blanket “port last” rule — the generated order already ensures dependencies precede their importers.
 
 | Module | Fan-In | Fan-Out | LOC |
 |--------|--------|---------|-----|
