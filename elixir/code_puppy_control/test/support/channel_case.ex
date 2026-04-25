@@ -36,7 +36,7 @@ defmodule CodePuppyControlWeb.ChannelCase do
     # doesn't auto-restart, then start the Stub under the same name.
     supervisor = CodePuppyControl.Supervisor
 
-    if pid = Process.whereis(CodePuppyControl.PtyManager) do
+    if _pid = Process.whereis(CodePuppyControl.PtyManager) do
       # 1. Terminate the running child (doesn't delete the child spec)
       :ok = Supervisor.terminate_child(supervisor, CodePuppyControl.PtyManager)
       # 2. Delete the child spec so the supervisor won't restart it

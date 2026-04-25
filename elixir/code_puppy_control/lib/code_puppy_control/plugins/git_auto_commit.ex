@@ -64,8 +64,8 @@ defmodule CodePuppyControl.Plugins.GitAutoCommit do
         untracked = length(result.untracked_files)
         "No staged changes. #{unstaged} modified, #{untracked} untracked."
 
-      {:ok, %{has_staged: true}} ->
-        staged_count = length(args.staged_files)
+      {:ok, %{has_staged: true} = result} ->
+        staged_count = length(result.staged_files)
 
         if subcommand == "status" do
           "Found #{staged_count} staged file(s)"

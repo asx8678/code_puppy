@@ -52,7 +52,7 @@ defmodule CodePuppyControl.TUI.Progress do
 
       {:ok, ref} = Progress.spinner("Fetching results...")
       Progress.stop(ref)
-  ""
+  """
   @spec spinner(String.t(), keyword()) :: {:ok, term()} | {:error, term()}
   def spinner(label, opts \\ []) do
     if tty_available?() do
@@ -78,7 +78,7 @@ defmodule CodePuppyControl.TUI.Progress do
     end
   end
 
-  @doc \"""
+  @doc """
   Stops a running spinner.
 
   Accepts the ref returned by `spinner/1`. The spinner is removed from
@@ -148,12 +148,16 @@ defmodule CodePuppyControl.TUI.Progress do
         [Data.tag(String.duplicate("\u2588", filled), color), String.duplicate("\u2591", empty)]
 
       pct = Float.round(ratio * 100, 1)
+      pct_str = "#{pct}%"
+      count_str = "(#{current}/#{total})"
 
+      # Build Owl.Data IO list — bar_inner contains Owl.Data.tag/2 tuples
+      # which cannot be string-interpolated (lists don't implement String.Chars).
       line =
         if label != "" do
-          "#{label} [#{bar_inner}] #{pct}% (#{current}/#{total})"
+          [label, " [", bar_inner, "] ", pct_str, " ", count_str]
         else
-          "[#{bar_inner}] #{pct}% (#{current}/#{total})"
+          ["[", bar_inner, "] ", pct_str, " ", count_str]
         end
 
       Owl.IO.puts(line)
