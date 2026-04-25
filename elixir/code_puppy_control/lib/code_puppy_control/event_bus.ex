@@ -33,6 +33,8 @@ defmodule CodePuppyControl.EventBus do
 
   alias Phoenix.PubSub
 
+  alias CodePuppyControl.Messaging.{WireEvent, Commands}
+
   @pubsub CodePuppyControl.PubSub
 
   # ============================================================================
@@ -345,5 +347,187 @@ defmodule CodePuppyControl.EventBus do
 
     # Heartbeats are not stored to avoid flooding the event store
     broadcast_event(event, store: false)
+  end
+
+  # ============================================================================
+  # Structured Messaging (Wire Events) - Agent→UI
+  # ============================================================================
+
+  @doc """
+  Broadcast a structured message from an internal message map.
+
+  Accepts an internal structured message map from Messaging.Messages constructors
+  (string keys), injects/overrides "run_id" and "session_id" wrapper fields,
+  serializes via WireEvent.to_wire/1, and broadcasts/stores the resulting
+  wire envelope using existing routing semantics.
+
+  ## Parameters
+
+    * `run_id` - Execution run identifier (can be nil)
+    * `session_id` - Session grouping (can be nil)
+    * `internal_message` - Internal message map with string keys
+    * `opts` - Options (see broadcast_event/2)
+
+  ## Returns
+
+    * `:ok` on success
+    * `{:error, reason}` on validation failure (no broadcast/store)
+
+  ## Examples
+
+      # Broadcast a text message
+      {:ok, msg} = Messages.text_message(%{"level" => "info", "text" => "Hello"})
+      EventBus.broadcast_message("run-1", "session-1", msg)
+  """
+  @spec broadcast_message(String.t() | nil, String.t() | nil, map(), keyword()) ::
+          :ok | {:error, term()}
+  def broadcast_message(run_id, session_id, internal_message, opts \\ [])
+
+  def broadcast_message(_run_id, _session_id, internal_message, _opts)
+      when not is_map(internal_message) do
+    {:error, {:not_a_map, internal_message}}
+  end
+
+  def broadcast_message(run_id, session_id, internal_message, opts) do
+    # Inject run_id and session_id into the internal message
+    message_with_ids =
+      internal_message
+      |> Map.put("run_id", run_id)
+      |> Map.put("session_id", session_id)
+
+    # Serialize to wire format
+    case WireEvent.to_wire(message_with_ids) do
+      {:ok, wire_event} ->
+        # Broadcast using existing routing semantics
+        broadcast_event(wire_event, opts)
+
+      {:error, reason} ->
+        {:error, reason}
+    end
+  end
+
+  @doc """
+  Broadcast a validated wire event envelope.
+
+  Validates the wire envelope using WireEvent.from_wire/1 before broadcasting.
+  If invalid, returns error and does not broadcast/store.
+
+  ## Parameters
+
+    * `wire_event` - Wire envelope map (string-keyed)
+    * `opts` - Options (see broadcast_event/2)
+
+  ## Returns
+
+    * `:ok` on success
+    * `{:error, reason}` on validation failure (no broadcast/store)
+
+  ## Examples
+
+      wire_event = %{
+        "event_type" => "system",
+        "run_id" => "run-1",
+        "session_id" => "session-1",
+        "timestamp" => 1717000000000,
+        "payload" => %{"id" => "msg-1", "category" => "system", "level" => "info", "text" => "Hello"}
+      }
+      EventBus.broadcast_wire_event(wire_event)
+  """
+  @spec broadcast_wire_event(map(), keyword()) :: :ok | {:error, term()}
+  def broadcast_wire_event(wire_event, opts \\ []) do
+    # Validate the wire envelope
+    case WireEvent.from_wire(wire_event) do
+      {:ok, _internal} ->
+        # Valid wire envelope, broadcast using existing routing semantics
+        broadcast_event(wire_event, opts)
+
+      {:error, reason} ->
+        {:error, reason}
+    end
+  end
+
+  # ============================================================================
+  # Structured Messaging - UI→Agent Commands
+  # ============================================================================
+
+  @doc """
+  Broadcast a UI→Agent command.
+
+  Accepts either a Commands struct (using Commands.to_wire/1) or a string-keyed
+  command wire map (validated by Commands.from_wire/1). Broadcasts a
+  legacy-compatible event map with type "command" that preserves EventStore
+  filtering and existing channel expectations.
+
+  ## Parameters
+
+    * `run_id` - Execution run identifier (can be nil)
+    * `session_id` - Session grouping (can be nil)
+    * `command_or_wire` - Commands struct or command wire map
+    * `opts` - Options (see broadcast_event/2)
+
+  ## Returns
+
+    * `:ok` on success
+    * `{:error, reason}` on validation failure (no broadcast/store)
+
+  ## Examples
+
+      # Broadcast a CancelAgentCommand struct
+      cmd = Commands.cancel_agent(reason: "user requested")
+      EventBus.broadcast_command("run-1", "session-1", cmd)
+
+      # Broadcast a command wire map
+      wire = %{"command_type" => "cancel_agent", "reason" => "user requested"}
+      EventBus.broadcast_command("run-1", "session-1", wire)
+  """
+  # Known Commands struct modules — only these are accepted as valid command input.
+  @known_command_structs [
+    Commands.CancelAgentCommand,
+    Commands.InterruptShellCommand,
+    Commands.UserInputResponse,
+    Commands.ConfirmationResponse,
+    Commands.SelectionResponse
+  ]
+
+  @spec broadcast_command(String.t() | nil, String.t() | nil, term(), keyword()) ::
+          :ok | {:error, term()}
+  def broadcast_command(run_id, session_id, command_or_wire, opts \\ []) do
+    # Convert to wire format
+    wire_command =
+      case command_or_wire do
+        # Only accept known Commands structs (not arbitrary maps with :command_type)
+        %module{} = cmd when module in @known_command_structs ->
+          Commands.to_wire(cmd)
+
+        # It's a wire map (string keys) — validate through from_wire
+        wire when is_map(wire) ->
+          case Commands.from_wire(wire) do
+            {:ok, cmd_struct} ->
+              Commands.to_wire(cmd_struct)
+
+            {:error, reason} ->
+              {:error, reason}
+          end
+
+        _ ->
+          {:error, {:invalid_command_input, command_or_wire}}
+      end
+
+    case wire_command do
+      {:error, reason} ->
+        {:error, reason}
+
+      wire when is_map(wire) ->
+        # Build legacy-compatible event map
+        event = %{
+          type: "command",
+          run_id: run_id,
+          session_id: session_id,
+          command: wire,
+          timestamp: DateTime.utc_now()
+        }
+
+        broadcast_event(event, opts)
+    end
   end
 end

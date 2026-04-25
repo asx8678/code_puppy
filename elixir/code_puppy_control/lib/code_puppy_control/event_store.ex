@@ -110,13 +110,13 @@ defmodule CodePuppyControl.EventStore do
   """
   @spec replay(String.t(), keyword()) :: list(map())
   def replay(session_id, opts \\ []) do
-    since = Keyword.get(opts, :since, 0)
+    since = Keyword.get(opts, :since, nil)
     limit = Keyword.get(opts, :limit, @max_events_per_session)
     event_types = Keyword.get(opts, :event_types)
 
     session_id
     |> lookup_events()
-    |> filter_by_timestamp(since)
+    |> maybe_filter_by_timestamp(since)
     |> maybe_filter_types(event_types)
     |> sort_by_timestamp()
     |> take_limit(limit)
@@ -244,7 +244,9 @@ defmodule CodePuppyControl.EventStore do
     :ets.lookup(@table, session_id)
   end
 
-  defp filter_by_timestamp(events, since) do
+  defp maybe_filter_by_timestamp(events, nil), do: events
+
+  defp maybe_filter_by_timestamp(events, since) do
     Enum.filter(events, fn {_, ts, _} -> ts > since end)
   end
 
@@ -255,7 +257,8 @@ defmodule CodePuppyControl.EventStore do
     type_set = MapSet.new(types)
 
     Enum.filter(events, fn {_, _, event} ->
-      event_type = event[:type] || event["type"]
+      # Check both legacy :type/"type" and structured "event_type" fields
+      event_type = event[:type] || event["type"] || event["event_type"]
       MapSet.member?(type_set, event_type)
     end)
   end
