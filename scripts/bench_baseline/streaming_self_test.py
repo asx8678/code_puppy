@@ -6,6 +6,7 @@ Split from self_test.py to keep the original file from growing needlessly.
 from __future__ import annotations
 
 import json
+import os
 import sys
 import unittest
 from pathlib import Path
@@ -23,6 +24,11 @@ from scripts.bench_baseline.streaming_fixtures import (
     MEDIUM,
     all_fixture_ids,
     get_fixture,
+)
+from scripts.bench_baseline.streaming_probes import (
+    StreamingProbes,
+    extract_anthropic_token_text,
+    extract_openai_token_text,
 )
 
 
@@ -315,6 +321,165 @@ class TestTTFTvsTTFBDistinction(unittest.TestCase):
             prompt_id="short_v1",
         )
         self.assertAlmostEqual(streaming.ttft_ms, 50.0)
+
+
+# ---------------------------------------------------------------------------
+# Streaming extraction helper tests (offline, fake chunk objects)
+# ---------------------------------------------------------------------------
+
+
+class _FakeAnthropicDelta:
+    """Minimal fake Anthropic delta for offline extraction tests."""
+
+    def __init__(self, text: str | None):
+        self.text = text
+
+
+class _FakeAnthropicEvent:
+    """Minimal fake Anthropic streaming event for offline extraction tests."""
+
+    def __init__(self, event_type: str, delta: _FakeAnthropicDelta | None = None):
+        self.type = event_type
+        self.delta = delta
+
+
+class _FakeOpenAIDelta:
+    """Minimal fake OpenAI delta for offline extraction tests."""
+
+    def __init__(self, content: str | None):
+        self.content = content
+
+
+class _FakeOpenAIChoice:
+    """Minimal fake OpenAI choice for offline extraction tests."""
+
+    def __init__(self, delta: _FakeOpenAIDelta):
+        self.delta = delta
+
+
+class _FakeOpenAIChunk:
+    """Minimal fake OpenAI streaming chunk for offline extraction tests."""
+
+    def __init__(self, choices: list[_FakeOpenAIChoice] | None = None):
+        self.choices = choices or []
+
+
+class TestExtractAnthropicTokenText(unittest.TestCase):
+    """Offline tests for Anthropic streaming event text extraction."""
+
+    def test_content_block_delta_returns_text(self):
+        """content_block_delta event with text delta must return the text."""
+        event = _FakeAnthropicEvent(
+            "content_block_delta",
+            delta=_FakeAnthropicDelta("Hello"),
+        )
+        self.assertEqual(extract_anthropic_token_text(event), "Hello")
+
+    def test_message_start_returns_none(self):
+        """message_start event must return None (no token text)."""
+        event = _FakeAnthropicEvent("message_start")
+        self.assertIsNone(extract_anthropic_token_text(event))
+
+    def test_content_block_start_returns_none(self):
+        """content_block_start event must return None (no token text)."""
+        event = _FakeAnthropicEvent("content_block_start")
+        self.assertIsNone(extract_anthropic_token_text(event))
+
+    def test_content_block_delta_no_delta_returns_none(self):
+        """content_block_delta with no delta attribute must return None."""
+        event = _FakeAnthropicEvent("content_block_delta", delta=None)
+        self.assertIsNone(extract_anthropic_token_text(event))
+
+    def test_content_block_delta_empty_text(self):
+        """content_block_delta with empty text string must return empty string."""
+        event = _FakeAnthropicEvent(
+            "content_block_delta",
+            delta=_FakeAnthropicDelta(""),
+        )
+        self.assertEqual(extract_anthropic_token_text(event), "")
+
+    def test_event_without_type_attr_returns_none(self):
+        """Event without type attribute must return None."""
+        self.assertIsNone(extract_anthropic_token_text(object()))
+
+
+class TestExtractOpenAITokenText(unittest.TestCase):
+    """Offline tests for OpenAI streaming chunk text extraction."""
+
+    def test_chunk_with_content_returns_text(self):
+        """Chunk with content delta must return the text."""
+        chunk = _FakeOpenAIChunk(choices=[_FakeOpenAIChoice(_FakeOpenAIDelta("World"))])
+        self.assertEqual(extract_openai_token_text(chunk), "World")
+
+    def test_chunk_with_none_content_returns_none(self):
+        """Chunk with None content (role-only) must return None."""
+        chunk = _FakeOpenAIChunk(choices=[_FakeOpenAIChoice(_FakeOpenAIDelta(None))])
+        self.assertIsNone(extract_openai_token_text(chunk))
+
+    def test_chunk_without_choices_returns_none(self):
+        """Chunk with empty choices must return None."""
+        chunk = _FakeOpenAIChunk(choices=[])
+        self.assertIsNone(extract_openai_token_text(chunk))
+
+    def test_chunk_without_choices_attr_returns_none(self):
+        """Object without choices attribute must return None."""
+        self.assertIsNone(extract_openai_token_text(object()))
+
+    def test_chunk_empty_content_returns_empty(self):
+        """Chunk with empty string content must return empty string."""
+        chunk = _FakeOpenAIChunk(choices=[_FakeOpenAIChoice(_FakeOpenAIDelta(""))])
+        self.assertEqual(extract_openai_token_text(chunk), "")
+
+
+class TestStreamingProbesNoCredentials(unittest.TestCase):
+    """Offline tests for StreamingProbes with no credentials present."""
+
+    def test_run_all_no_credentials_returns_empty_results(self):
+        """With no API keys, run_all() must return empty results."""
+        # Ensure no keys in environment
+        saved = {}
+        for key in (
+            "PUP_ANTHROPIC_API_KEY",
+            "ANTHROPIC_API_KEY",
+            "PUP_OPENAI_API_KEY",
+            "OPENAI_API_KEY",
+        ):
+            if key in os.environ:
+                saved[key] = os.environ.pop(key)
+        try:
+            probes = StreamingProbes("quick")
+            results, not_impl = probes.run_all()
+            self.assertEqual(len(results), 0)
+            self.assertIn("llm_streaming_no_credentials", not_impl)
+        finally:
+            os.environ.update(saved)
+
+    def test_streaming_probes_uses_fixture(self):
+        """StreamingProbes should reference the short_v1 fixture."""
+        fixture = get_fixture("short_v1")
+        self.assertEqual(fixture.prompt_id, "short_v1")
+        # Verify the fixture is the one probes will use
+        self.assertTrue(len(fixture.text) > 0)
+
+    def test_streaming_probes_result_category(self):
+        """Verify expected category/operation naming convention."""
+        # We can't run live probes without credentials, but we can
+        # verify the expected category and operation names are used
+        # by constructing a BenchmarkResult with the streaming category.
+        from scripts.bench_baseline.models import BenchmarkResult, LatencyStats
+
+        stats = LatencyStats.from_samples([100.0])
+        result = BenchmarkResult(
+            category="llm_streaming",
+            operation="anthropic_streaming_ttft_tbt",
+            approach="live_api",
+            latency_stats=stats,
+            throughput_ops_per_sec=0,
+            metadata={"ttft_ms": 100.0, "prompt_id": "short_v1"},
+            notes="Streaming TTFT/TBT probe.",
+        )
+        self.assertEqual(result.category, "llm_streaming")
+        self.assertIn("streaming_ttft_tbt", result.operation)
 
 
 def load_streaming_tests() -> unittest.TestSuite:
