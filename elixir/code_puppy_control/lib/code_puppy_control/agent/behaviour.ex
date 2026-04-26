@@ -107,8 +107,6 @@ defmodule CodePuppyControl.Agent.Behaviour do
   Default: title-cased version of `name/0` atom.
   """
 
-  @callback response_schema() :: module() | nil
-
   @callback display_name() :: String.t()
 
   @doc """
@@ -117,8 +115,6 @@ defmodule CodePuppyControl.Agent.Behaviour do
   Shown in `/agents` output and the agent selector.
   Default: empty string.
   """
-
-  @callback response_schema() :: module() | nil
 
   @callback description() :: String.t()
 
@@ -158,8 +154,6 @@ defmodule CodePuppyControl.Agent.Behaviour do
   """
   @callback on_after_run(context(), result :: map()) :: :ok
 
-  @callback response_schema() :: module() | nil
-
   @optional_callbacks [
     response_schema: 0,
     display_name: 0,
@@ -180,8 +174,6 @@ defmodule CodePuppyControl.Agent.Behaviour do
   The `state` map is agent-owned mutable state that persists across turns.
   Default implementation: always continue.
   """
-
-  @callback response_schema() :: module() | nil
 
   @callback on_tool_result(tool_name :: atom(), result :: term(), agent_state()) ::
               {:cont, agent_state()} | {:halt, term()}

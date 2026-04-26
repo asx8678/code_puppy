@@ -317,12 +317,7 @@ defmodule CodePuppyControl.Agent.Lifecycle do
     try do
       CodePuppyControl.Config.Models.global_model_name()
     rescue
-      _ ->
-        try do
-          CodePuppyControl.Config.Models.global_model_name()
-        rescue
-          _ -> nil
-        end
+      _ -> nil
     end
   end
 end
