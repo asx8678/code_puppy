@@ -63,7 +63,16 @@ defmodule CodePuppyControl.Agent.Loop do
 
   require Logger
 
-  alias CodePuppyControl.Agent.{Events, ResponseValidator, Turn}
+  alias CodePuppyControl.Agent.{
+    BudgetEnforcer,
+    Events,
+    Lifecycle,
+    MessageProcessor,
+    ResponseValidator,
+    ToolCallTracker,
+    Turn
+  }
+
   alias CodePuppyControl.Compaction
   alias CodePuppyControl.Stream.{Event, Normalizer}
   alias CodePuppyControl.Tool.Runner
@@ -421,31 +430,69 @@ defmodule CodePuppyControl.Agent.Loop do
   defp do_llm_stream(state, turn) do
     case Turn.start_streaming(turn) do
       {:ok, turn} ->
-        system_prompt =
-          state.agent_module.system_prompt(%{
-            session_id: state.session_id,
-            run_id: state.run_id,
-            messages: state.messages
-          })
+        # Use Lifecycle for system prompt assembly (base + puppy rules)
+        context = %{
+          session_id: state.session_id,
+          run_id: state.run_id,
+          messages: state.messages
+        }
+
+        {:ok, system_prompt} = Lifecycle.assemble_system_prompt(state.agent_module, context)
 
         tools = state.agent_module.allowed_tools()
         model = resolve_model(state)
 
-        raw_callback = build_stream_callback(state)
-        stream_callback = Normalizer.normalize(raw_callback)
+        # Pre-send budget check via BudgetEnforcer
+        estimated_overhead =
+          BudgetEnforcer.estimate_context_overhead(system_prompt, tools)
 
-        case state.llm_module.stream_chat(
-               state.messages,
-               tools,
-               [model: model, system_prompt: system_prompt],
-               stream_callback
-             ) do
-          {:ok, response} ->
-            turn = accumulate_response(turn, response)
-            Turn.start_tool_calls(turn)
+        estimated_input =
+          estimated_overhead + MessageProcessor.estimate_batch_tokens(state.messages)
+
+        budget_check =
+          BudgetEnforcer.check_before_send(estimated_input, %{
+            context_budget: %{
+              model_context_length: BudgetEnforcer.model_context_length(model),
+              max_output_tokens: 4096
+            },
+            token_budgets: %{max_session_tokens: 0, max_run_tokens: 0},
+            usage_limits: nil
+          })
+
+        case budget_check do
+          {:error, :context_budget_exceeded, msg} ->
+            Logger.warning("Agent.Loop: #{msg}")
+            # Trigger compaction as a recovery attempt
+            _state_compacted = compact_messages(state)
+            Turn.fail(turn, {:context_budget_exceeded, msg})
 
           {:error, reason} ->
             Turn.fail(turn, reason)
+
+          {:ok, :checked} ->
+            :ok
+        end
+
+        # Re-check: if budget check failed, the turn is already in error state
+        if turn.state == :error do
+          {:ok, turn}
+        else
+          raw_callback = build_stream_callback(state)
+          stream_callback = Normalizer.normalize(raw_callback)
+
+          case state.llm_module.stream_chat(
+                 state.messages,
+                 tools,
+                 [model: model, system_prompt: system_prompt],
+                 stream_callback
+               ) do
+            {:ok, response} ->
+              turn = accumulate_response(turn, response)
+              Turn.start_tool_calls(turn)
+
+            {:error, reason} ->
+              Turn.fail(turn, reason)
+          end
         end
 
       error ->
@@ -585,6 +632,9 @@ defmodule CodePuppyControl.Agent.Loop do
         true ->
           state.messages
       end
+
+    # Prune any interrupted tool calls before dispatch
+    messages = ToolCallTracker.prune_interrupted(messages)
 
     # Dispatch tool calls and collect results
     messages = dispatch_tool_calls(state, turn, messages)
@@ -726,14 +776,7 @@ defmodule CodePuppyControl.Agent.Loop do
   end
 
   defp resolve_model(%__MODULE__{agent_module: agent_module}) do
-    case agent_module.model_preference() do
-      {:pack, role} ->
-        # TODO: Integrate with model packs when available
-        Logger.debug("Agent.Loop: model pack resolution not yet implemented for #{inspect(role)}")
-        "claude-sonnet-4-20250514"
-
-      model_name when is_binary(model_name) ->
-        model_name
-    end
+    preference = agent_module.model_preference()
+    Lifecycle.resolve_model(nil, preference)
   end
 end
