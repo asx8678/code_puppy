@@ -160,83 +160,8 @@ defmodule CodePuppyControl.RuntimeState do
   end
 
   # ============================================================================
-  # Server Callbacks
+  # Cache Invalidation Methods (from Python AgentRuntimeState)
   # ============================================================================
-
-  @impl true
-  def handle_call(:get_current_autosave_id, _from, %{autosave_id: nil} = state) do
-    new_id = generate_autosave_id()
-    new_state = %{state | autosave_id: new_id}
-    {:reply, new_id, new_state}
-  end
-
-  def handle_call(:get_current_autosave_id, _from, state) do
-    {:reply, state.autosave_id, state}
-  end
-
-  @impl true
-  def handle_call(:rotate_autosave_id, _from, state) do
-    new_id = generate_autosave_id()
-    new_state = %{state | autosave_id: new_id}
-    Logger.info("Rotated autosave session ID to #{new_id}")
-    {:reply, new_id, new_state}
-  end
-
-  @impl true
-  def handle_call({:set_autosave_from_session_name, session_name}, _from, state) do
-    prefix = "auto_session_"
-
-    new_id =
-      if String.starts_with?(session_name, prefix) do
-        String.replace_prefix(session_name, prefix, "")
-      else
-        session_name
-      end
-
-    new_state = %{state | autosave_id: new_id}
-    {:reply, new_id, new_state}
-  end
-
-  @impl true
-  def handle_call(:get_session_model, _from, state) do
-    {:reply, state.session_model, state}
-  end
-
-  @impl true
-  def handle_call(:get_state, _from, state) do
-    {:reply, state, state}
-  end
-
-  @impl true
-  def handle_cast(:reset_autosave_id, state) do
-    {:noreply, %{state | autosave_id: nil}}
-  end
-
-  @impl true
-  def handle_cast({:set_session_model, model}, state) do
-    {:noreply, %{state | session_model: model}}
-  end
-
-  @impl true
-  def handle_cast(:reset_session_model, state) do
-    {:noreply, %{state | session_model: nil}}
-  end
-
-  @impl true
-  def handle_info(msg, state) do
-    Logger.debug("RuntimeState received unexpected message: #{inspect(msg)}")
-    {:noreply, state}
-  end
-
-  # ============================================================================
-  # Private Functions
-  # ============================================================================
-
-  defp generate_autosave_id do
-    # Use a full timestamp so tests and UX can predict the name if needed
-    DateTime.utc_now()
-    |> Calendar.strftime("%Y%m%d_%H%M%S")
-  end
 
   # ============================================================================
   # Cache Invalidation Methods (from Python AgentRuntimeState)
@@ -299,19 +224,58 @@ defmodule CodePuppyControl.RuntimeState do
 
   @impl true
   def init(_opts) do
-    {:ok,
-     %__MODULE__{
-       autosave_id: nil,
-       session_model: nil,
-       session_start_time: DateTime.utc_now(),
-       cached_system_prompt: nil,
-       cached_tool_defs: nil,
-       model_name_cache: nil,
-       delayed_compaction_requested: false,
-       tool_ids_cache: nil,
-       cached_context_overhead: nil,
-       resolved_model_components_cache: nil
-     }}
+    state = %__MODULE__{
+      autosave_id: nil,
+      session_model: nil,
+      session_start_time: DateTime.utc_now()
+    }
+
+    Logger.info("RuntimeState initialized")
+    {:ok, state}
+  end
+
+  @impl true
+  def handle_call(:get_current_autosave_id, _from, %{autosave_id: nil} = state) do
+    new_id = generate_autosave_id()
+    new_state = %{state | autosave_id: new_id}
+    {:reply, new_id, new_state}
+  end
+
+  def handle_call(:get_current_autosave_id, _from, state) do
+    {:reply, state.autosave_id, state}
+  end
+
+  @impl true
+  def handle_call(:rotate_autosave_id, _from, state) do
+    new_id = generate_autosave_id()
+    new_state = %{state | autosave_id: new_id}
+    Logger.info("Rotated autosave session ID to #{new_id}")
+    {:reply, new_id, new_state}
+  end
+
+  @impl true
+  def handle_call({:set_autosave_from_session_name, session_name}, _from, state) do
+    prefix = "auto_session_"
+
+    new_id =
+      if String.starts_with?(session_name, prefix) do
+        String.replace_prefix(session_name, prefix, "")
+      else
+        session_name
+      end
+
+    new_state = %{state | autosave_id: new_id}
+    {:reply, new_id, new_state}
+  end
+
+  @impl true
+  def handle_call(:get_session_model, _from, state) do
+    {:reply, state.session_model, state}
+  end
+
+  @impl true
+  def handle_call(:get_state, _from, state) do
+    {:reply, state, state}
   end
 
   @impl true
@@ -361,4 +325,33 @@ defmodule CodePuppyControl.RuntimeState do
     {:reply, :ok, new_state}
   end
 
+  def handle_cast(:reset_autosave_id, state) do
+    {:noreply, %{state | autosave_id: nil}}
+  end
+
+  @impl true
+  def handle_cast({:set_session_model, model}, state) do
+    {:noreply, %{state | session_model: model}}
+  end
+
+  @impl true
+  def handle_cast(:reset_session_model, state) do
+    {:noreply, %{state | session_model: nil}}
+  end
+
+  @impl true
+  def handle_info(msg, state) do
+    Logger.debug("RuntimeState received unexpected message: #{inspect(msg)}")
+    {:noreply, state}
+  end
+
+  # ============================================================================
+  # Private Functions
+  # ============================================================================
+
+  defp generate_autosave_id do
+    # Use a full timestamp so tests and UX can predict the name if needed
+    DateTime.utc_now()
+    |> Calendar.strftime("%Y%m%d_%H%M%S")
+  end
 end
