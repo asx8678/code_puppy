@@ -58,9 +58,9 @@ CodePuppyControl.Parsing.Parsers.register_all()
 # Refs: code_puppy-d7m
 exclude_tags =
   if System.get_env("RUN_EVALS") == "1" do
-    [:integration, :e2e, :skip, :triage_pending, :packaged_cli]
+    [:integration, :e2e, :skip, :triage_pending, :packaged_cli, :phase_c_e2e]
   else
-    [:integration, :e2e, :skip, :eval, :triage_pending, :packaged_cli]
+    [:integration, :e2e, :skip, :eval, :triage_pending, :packaged_cli, :phase_c_e2e]
   end
 
 # ---------------------------------------------------------------------------
