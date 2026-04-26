@@ -47,6 +47,9 @@ Prerequisites before launching the Python-to-Elixir port.
 
 ### Phase C: Base agent port
 
+> Tracking: epic `code_puppy-4s8` (filed 2026-04-25), 7 child tasks: <C.1: `code_puppy-4s8.1`>, <C.2: `code_puppy-4s8.4`>, <C.3: `code_puppy-4s8.6`>, <C.4: `code_puppy-4s8.5`>, <C.5: `code_puppy-4s8.2`>, <C.6: `code_puppy-4s8.3`>, <C.7: `code_puppy-4s8.7`>
+
+
 - [ ] Port `code_puppy/agents/base_agent.py`
 - [ ] Port `code_puppy/agents/agent_manager.py`
 - [ ] Agent registry in Elixir
@@ -54,16 +57,25 @@ Prerequisites before launching the Python-to-Elixir port.
 
 ### Phase D: Session + state
 
+> Tracking: epic `code_puppy-ctj` (filed 2026-04-25), 6 child tasks: <D.1: `code_puppy-ctj.1`>, <D.2: `code_puppy-ctj.2`>, <D.3: `code_puppy-ctj.4`>, <D.4: `code_puppy-ctj.3`>, <D.5: `code_puppy-ctj.5`>, <D.6: `code_puppy-ctj.6`>
+
+
 - [ ] Port session storage (Phoenix PubSub + ETS + disk)
 - [ ] Port config system (dual-home isolation, see ADR-003)
 - [ ] Port runtime state
 
 ### Phase E: Tools
 
+> Tracking: epic `code_puppy-mmk` (filed 2026-04-25), 7 child tasks: <E.1: `code_puppy-mmk.1`>, <E.2: `code_puppy-mmk.5`>, <E.3: `code_puppy-mmk.6`>, <E.4: `code_puppy-mmk.4`>, <E.5: `code_puppy-mmk.3`>, <E.6: `code_puppy-mmk.7`>, <E.7: `code_puppy-mmk.2`>
+
+
 - [ ] Port `code_puppy/tools/*` (file ops, command runner, grep)
 - [ ] Port tool permission callbacks
 
 ### Phase F: Plugins
+
+> Tracking: epic `code_puppy-154` (filed 2026-04-25), 6 child tasks: <F.1: `code_puppy-154.1`>, <F.2: `code_puppy-154.6`>, <F.3: `code_puppy-154.4`>, <F.4: `code_puppy-154.3`>, <F.5: `code_puppy-154.2`>, <F.6: `code_puppy-154.5`>
+
 
 - [ ] Design Elixir plugin loader equivalent
 - [ ] Port callback system (`code_puppy/callbacks.py`)
@@ -71,11 +83,17 @@ Prerequisites before launching the Python-to-Elixir port.
 
 ### Phase G: CLI + UI
 
+> Tracking: epic `code_puppy-prg` (filed 2026-04-25), 6 child tasks: <G.1: `code_puppy-prg.1`>, <G.2: `code_puppy-prg.2`>, <G.3: `code_puppy-prg.3`>, <G.4: `code_puppy-prg.5`>, <G.5: `code_puppy-prg.6`>, <G.6: `code_puppy-prg.4`>
+
+
 - [ ] Port interactive loop
 - [ ] Port command line / slash commands
 - [ ] TUI in Elixir (Owl? Ratatouille?)
 
 ### Phase H: Cutover
+
+> Tracking: epic `code_puppy-3f9` (filed 2026-04-25), 7 child tasks: <H.1: `code_puppy-3f9.1`>, <H.2: `code_puppy-3f9.7`>, <H.3: `code_puppy-3f9.6`>, <H.4: `code_puppy-3f9.2`>, <H.5: `code_puppy-3f9.5`>, <H.6: `code_puppy-3f9.4`>, <H.7: `code_puppy-3f9.3`>
+
 
 - [ ] Feature-flag Elixir code paths
 - [ ] Gradual rollout per capability
