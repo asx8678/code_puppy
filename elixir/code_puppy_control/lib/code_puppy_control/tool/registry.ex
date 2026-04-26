@@ -244,9 +244,22 @@ defmodule CodePuppyControl.Tool.Registry do
       :ets.insert(table, {entry.name, entry})
     end
 
+    # Auto-discover and register :cp_-prefixed tool wrappers
+    # These expose the same functionality under agent-facing names
+    # used by CodePuppyControl.Agents.CodePuppy.allowed_tools/0.
+    cp_tools = discover_cp_tools()
+
+    for tool_module <- cp_tools do
+      entry = ToolEntry.from_module(tool_module)
+      :ets.insert(table, {entry.name, entry})
+    end
+
+    total = length(builtin_tools) + length(cp_tools)
+
     Logger.info(
-      "Tool.Registry started with #{length(builtin_tools)} built-in tools: " <>
-        inspect(Enum.map(builtin_tools, & &1.name()))
+      "Tool.Registry started with #{total} tools " <>
+        "(#{length(builtin_tools)} builtin, #{length(cp_tools)} cp_): " <>
+        inspect(Enum.map(builtin_tools ++ cp_tools, & &1.name()))
     )
 
     {:ok, %{table: table}}
@@ -345,6 +358,35 @@ defmodule CodePuppyControl.Tool.Registry do
       CodePuppyControl.Tools.ProcessRunner.ListProcesses,
       CodePuppyControl.Tools.ProcessRunner.KillProcess,
       CodePuppyControl.Tools.ProcessRunner.KillAllProcesses
+    ]
+
+    Enum.filter(candidates, fn mod ->
+      Code.ensure_loaded?(mod) and
+        function_exported?(mod, :name, 0) and
+        function_exported?(mod, :description, 0) and
+        function_exported?(mod, :parameters, 0)
+    end)
+  end
+
+  @doc false
+  # Discovers :cp_-prefixed tool modules that implement the Tool behaviour.
+  # These are the agent-facing tool names used by
+  # CodePuppyControl.Agents.CodePuppy.allowed_tools/0.
+  #
+  # Refs: code_puppy-4s8.7 (Phase C CI gate)
+  defp discover_cp_tools do
+    candidates = [
+      CodePuppyControl.Tools.CpFileOps.CpListFiles,
+      CodePuppyControl.Tools.CpFileOps.CpReadFile,
+      CodePuppyControl.Tools.CpFileOps.CpGrep,
+      CodePuppyControl.Tools.CpShell.CpRunCommand,
+      CodePuppyControl.Tools.CpAgentOps.CpInvokeAgent,
+      CodePuppyControl.Tools.CpAgentOps.CpListAgents,
+      CodePuppyControl.Tools.CpFileMods.CpCreateFile,
+      CodePuppyControl.Tools.CpFileMods.CpReplaceInFile,
+      CodePuppyControl.Tools.CpFileMods.CpEditFile,
+      CodePuppyControl.Tools.CpFileMods.CpDeleteFile,
+      CodePuppyControl.Tools.CpFileMods.CpDeleteSnippet
     ]
 
     Enum.filter(candidates, fn mod ->
