@@ -17,6 +17,7 @@ defmodule CodePuppyControl.Application do
   9b. CodePuppyControl.ModelAvailability - Model health circuit breaker (ETS-backed)
   9c. CodePuppyControl.ModelPacks - Role-based model packs
   9d. CodePuppyControl.Tools.AgentCatalogue - Agent catalogue with descriptions
+  9d2. CodePuppyControl.Tools.AgentManager - Session mgmt, JSON discovery, clones
   9e. CodePuppyControl.Tools.UniversalConstructor.Registry - UC tool discovery
   10. CodePuppyControl.RoundRobinModel - Round-robin model rotation (ETS-backed)
   11a. CodePuppyControl.ModelsDevParser.Registry - Models.dev API registry
@@ -81,6 +82,8 @@ defmodule CodePuppyControl.Application do
       CodePuppyControl.ModelAvailability,
       CodePuppyControl.ModelPacks,
       CodePuppyControl.Tools.AgentCatalogue,
+      # Agent manager — session tracking, JSON discovery, clone management
+      CodePuppyControl.Tools.AgentManager,
       # UC tool registry (GenServer) for Universal Constructor tool discovery
       CodePuppyControl.Tools.UniversalConstructor.Registry,
       CodePuppyControl.RoundRobinModel,
