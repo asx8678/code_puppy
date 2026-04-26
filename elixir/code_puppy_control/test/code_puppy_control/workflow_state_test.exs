@@ -6,6 +6,8 @@ defmodule CodePuppyControl.WorkflowStateTest do
   # async: false because WorkflowState is a named singleton Agent.
 
   setup do
+    :ok = Ecto.Adapters.SQL.Sandbox.checkout(CodePuppyControl.Repo)
+
     # Start the WorkflowState agent if not already running
     case Process.whereis(WorkflowState) do
       nil -> start_supervised!({WorkflowState, name: WorkflowState})
@@ -44,7 +46,7 @@ defmodule CodePuppyControl.WorkflowStateTest do
       assert names == flag_keys
     end
 
-    test "includes key flags from Python source" do
+    test "includes all flags from Python source" do
       names = WorkflowState.flag_names()
       assert :did_generate_code in names
       assert :did_execute_shell in names
@@ -54,6 +56,13 @@ defmodule CodePuppyControl.WorkflowStateTest do
       assert :did_edit_file in names
       assert :did_create_file in names
       assert :did_run_tests in names
+      assert :did_make_api_call in names
+      assert :did_check_lint in names
+      assert :did_delete_file in names
+      assert :did_save_session in names
+      assert :did_use_fallback_model in names
+      assert :did_trigger_compaction in names
+      assert :needs_user_confirmation in names
     end
   end
 
@@ -216,6 +225,62 @@ defmodule CodePuppyControl.WorkflowStateTest do
       assert m.metadata["key"] == "val"
       assert m.start_time != nil
       assert is_binary(m.summary)
+    end
+  end
+
+  describe "did_make_api_call flag" do
+    test "sets and checks the :did_make_api_call flag" do
+      WorkflowState.set_flag(:did_make_api_call)
+      assert WorkflowState.has_flag?(:did_make_api_call)
+    end
+
+    test "clears the :did_make_api_call flag" do
+      WorkflowState.set_flag(:did_make_api_call)
+      WorkflowState.clear_flag(:did_make_api_call)
+      refute WorkflowState.has_flag?(:did_make_api_call)
+    end
+  end
+
+  describe "persistence: save/1 and load/1" do
+    test "roundtrips state through SQLite" do
+      WorkflowState.set_flag(:did_generate_code)
+      WorkflowState.set_flag(:did_run_tests)
+      WorkflowState.put_metadata("agent", "test-agent")
+
+      # Save to SQLite
+      assert {:ok, snapshot} = WorkflowState.save("persist-test-1")
+      assert "did_generate_code" in snapshot.flags
+
+      # Mutate in-memory state
+      WorkflowState.reset()
+      refute WorkflowState.has_flag?(:did_generate_code)
+
+      # Load from SQLite
+      assert {:ok, _loaded} = WorkflowState.load("persist-test-1")
+      assert WorkflowState.has_flag?(:did_generate_code)
+      assert WorkflowState.has_flag?(:did_run_tests)
+      assert WorkflowState.get_metadata("agent") == "test-agent"
+    end
+
+    test "save/1 updates existing snapshot" do
+      WorkflowState.set_flag(:did_generate_code)
+      WorkflowState.save("persist-test-2")
+
+      WorkflowState.set_flag(:did_run_tests)
+      assert {:ok, updated} = WorkflowState.save("persist-test-2")
+      assert length(updated.flags) == 2
+    end
+
+    test "load/1 returns :not_found for missing session" do
+      assert {:error, :not_found} = WorkflowState.load("nonexistent-session")
+    end
+
+    test "delete_snapshot/1 removes saved snapshot" do
+      WorkflowState.set_flag(:did_generate_code)
+      WorkflowState.save("persist-test-3")
+
+      assert :ok = WorkflowState.delete_snapshot("persist-test-3")
+      assert {:error, :not_found} = WorkflowState.load("persist-test-3")
     end
   end
 end

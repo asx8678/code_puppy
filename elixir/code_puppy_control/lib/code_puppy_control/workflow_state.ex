@@ -6,12 +6,21 @@ defmodule CodePuppyControl.WorkflowState do
   active flags and optional metadata in an Agent so that multiple processes
   in the same BEAM node can query/mutate the state concurrently.
 
+  Supports persistence hooks for saving/loading workflow state to SQLite
+  via `CodePuppyControl.Persistence.Store`, enabling crash recovery and
+  session resumption per §4.1 (domain truth is persistent).
+
   ## Quick start
 
       WorkflowState.start_link()          # typically in a supervision tree
       WorkflowState.set_flag(:did_generate_code)
       WorkflowState.has_flag?(:did_generate_code)  #=> true
       WorkflowState.reset()
+
+  ## Persistence
+
+      WorkflowState.save("session-abc")   # persist current state to SQLite
+      WorkflowState.load("session-abc")   # restore from SQLite
   """
 
   use Agent
@@ -28,6 +37,7 @@ defmodule CodePuppyControl.WorkflowState do
     {:did_save_session, "Session saved"},
     {:did_use_fallback_model, "Fallback model used"},
     {:did_trigger_compaction, "Context compacted"},
+    {:did_make_api_call, "API call was made to a model"},
     {:did_edit_file, "File edited"},
     {:did_create_file, "File created"},
     {:did_delete_file, "File deleted"},
@@ -181,5 +191,110 @@ defmodule CodePuppyControl.WorkflowState do
       start_time: state.start_time,
       summary: summary()
     }
+  end
+
+  # ── Persistence Hooks ─────────────────────────────────────────────────────
+
+  @doc """
+  Saves the current workflow state to SQLite as a snapshot keyed by `session_id`.
+
+  Uses `Ecto.Multi` for atomic write (§6.3 dual-write discipline).
+  If a snapshot already exists for this session, it is updated in place.
+
+  ## Parameters
+
+    * `session_id` - Unique session identifier
+    * `opts` - Options (reserved for future use)
+
+  ## Returns
+
+    * `{:ok, snapshot}` on success
+    * `{:error, reason}` on failure
+  """
+  @spec save(String.t(), keyword()) :: {:ok, map()} | {:error, term()}
+  def save(session_id, _opts \\ []) when is_binary(session_id) do
+    import Ecto.Query, warn: false
+
+    alias CodePuppyControl.Repo
+    alias CodePuppyControl.Persistence.{Store, WorkflowSnapshot}
+
+    state = get()
+
+    attrs = %{
+      session_id: session_id,
+      flags: state.flags |> MapSet.to_list() |> Enum.map(&Atom.to_string/1),
+      metadata: state.metadata,
+      start_time: state.start_time
+    }
+
+    case Store.get(:workflow_snapshot, session_id) do
+      {:ok, existing} ->
+        existing
+        |> WorkflowSnapshot.changeset(attrs)
+        |> Repo.update()
+
+      {:error, :not_found} ->
+        Store.create(:workflow_snapshot, attrs)
+    end
+  end
+
+  @doc """
+  Loads a workflow state snapshot from SQLite and applies it to the
+  running Agent state.
+
+  If no snapshot exists for `session_id`, the current state is left
+  unchanged and `{:error, :not_found}` is returned.
+
+  ## Parameters
+
+    * `session_id` - Unique session identifier
+
+  ## Returns
+
+    * `{:ok, state}` on success
+    * `{:error, :not_found}` if no snapshot exists
+  """
+  @spec load(String.t()) :: {:ok, t()} | {:error, :not_found}
+  def load(session_id) when is_binary(session_id) do
+    alias CodePuppyControl.Persistence.Store
+
+    case Store.get(:workflow_snapshot, session_id) do
+      {:ok, snapshot} ->
+        flags =
+          snapshot.flags
+          |> Enum.map(&String.to_atom/1)
+          |> Enum.filter(&known_flag?/1)
+          |> MapSet.new()
+
+        loaded = %__MODULE__{
+          flags: flags,
+          metadata: snapshot.metadata || %{},
+          start_time: snapshot.start_time
+        }
+
+        Agent.update(__MODULE__, fn _ -> loaded end)
+        {:ok, loaded}
+
+      {:error, :not_found} = error ->
+        error
+    end
+  end
+
+  @doc """
+  Deletes a saved workflow snapshot from SQLite.
+
+  ## Parameters
+
+    * `session_id` - Unique session identifier
+
+  ## Returns
+
+    * `:ok` on success
+    * `{:error, :not_found}` if no snapshot exists
+  """
+  @spec delete_snapshot(String.t()) :: :ok | {:error, :not_found}
+  def delete_snapshot(session_id) when is_binary(session_id) do
+    alias CodePuppyControl.Persistence.Store
+    Store.delete(:workflow_snapshot, session_id)
   end
 end
