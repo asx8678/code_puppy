@@ -156,21 +156,29 @@ defmodule CodePuppyControl.Agent.SubagentStreamHandler do
 
   # TextStart — track initial content tokens
   defp process_event(%Event.TextStart{index: idx} = _event, state) do
-    fire_callback("part_start", %{
-      "index" => idx,
-      "part_type" => "TextPart"
-    }, state)
+    fire_callback(
+      "part_start",
+      %{
+        "index" => idx,
+        "part_type" => "TextPart"
+      },
+      state
+    )
 
     state
   end
 
   # TextDelta — count tokens from content delta
   defp process_event(%Event.TextDelta{index: idx, text: text} = _event, state) do
-    fire_callback("part_delta", %{
-      "index" => idx,
-      "delta_type" => "TextPartDelta",
-      "content_delta" => text
-    }, state)
+    fire_callback(
+      "part_delta",
+      %{
+        "index" => idx,
+        "delta_type" => "TextPartDelta",
+        "content_delta" => text
+      },
+      state
+    )
 
     tokens = estimate_tokens(text)
     new_count = state.token_count + tokens
@@ -182,20 +190,28 @@ defmodule CodePuppyControl.Agent.SubagentStreamHandler do
 
   # TextEnd — no special action
   defp process_event(%Event.TextEnd{index: idx} = _event, state) do
-    fire_callback("part_end", %{
-      "index" => idx,
-      "next_part_kind" => nil
-    }, state)
+    fire_callback(
+      "part_end",
+      %{
+        "index" => idx,
+        "next_part_kind" => nil
+      },
+      state
+    )
 
     state
   end
 
   # ThinkingStart — track initial content tokens
   defp process_event(%Event.ThinkingStart{index: idx} = _event, state) do
-    fire_callback("part_start", %{
-      "index" => idx,
-      "part_type" => "ThinkingPart"
-    }, state)
+    fire_callback(
+      "part_start",
+      %{
+        "index" => idx,
+        "part_type" => "ThinkingPart"
+      },
+      state
+    )
 
     publish_status(state, "thinking")
     state
@@ -203,11 +219,15 @@ defmodule CodePuppyControl.Agent.SubagentStreamHandler do
 
   # ThinkingDelta — count tokens from thinking content
   defp process_event(%Event.ThinkingDelta{index: idx, text: text} = _event, state) do
-    fire_callback("part_delta", %{
-      "index" => idx,
-      "delta_type" => "ThinkingPartDelta",
-      "content_delta" => text
-    }, state)
+    fire_callback(
+      "part_delta",
+      %{
+        "index" => idx,
+        "delta_type" => "ThinkingPartDelta",
+        "content_delta" => text
+      },
+      state
+    )
 
     tokens = estimate_tokens(text)
     new_count = state.token_count + tokens
@@ -219,10 +239,14 @@ defmodule CodePuppyControl.Agent.SubagentStreamHandler do
 
   # ThinkingEnd — reset to running
   defp process_event(%Event.ThinkingEnd{index: idx} = _event, state) do
-    fire_callback("part_end", %{
-      "index" => idx,
-      "next_part_kind" => nil
-    }, state)
+    fire_callback(
+      "part_end",
+      %{
+        "index" => idx,
+        "next_part_kind" => nil
+      },
+      state
+    )
 
     publish_status(state, "running")
     state
@@ -230,20 +254,25 @@ defmodule CodePuppyControl.Agent.SubagentStreamHandler do
 
   # ToolCallStart — increment tool call count, track active tool
   defp process_event(%Event.ToolCallStart{index: idx, name: name} = event, state) do
-    fire_callback("part_start", %{
-      "index" => idx,
-      "part_type" => "ToolCallPart",
-      "tool_name" => name,
-      "tool_call_id" => event.id
-    }, state)
+    fire_callback(
+      "part_start",
+      %{
+        "index" => idx,
+        "part_type" => "ToolCallPart",
+        "tool_name" => name,
+        "tool_call_id" => event.id
+      },
+      state
+    )
 
     new_tool_count = state.tool_call_count + 1
     active = MapSet.put(state.active_tool_parts, idx)
 
-    state = %{state |
-      tool_call_count: new_tool_count,
-      active_tool_parts: active,
-      current_tool: name
+    state = %{
+      state
+      | tool_call_count: new_tool_count,
+        active_tool_parts: active,
+        current_tool: name
     }
 
     publish_status(state, "tool_calling")
@@ -252,11 +281,15 @@ defmodule CodePuppyControl.Agent.SubagentStreamHandler do
 
   # ToolCallArgsDelta — count tokens from args delta
   defp process_event(%Event.ToolCallArgsDelta{index: idx, arguments: args} = _event, state) do
-    fire_callback("part_delta", %{
-      "index" => idx,
-      "delta_type" => "ToolCallArgsDelta",
-      "args_delta" => args
-    }, state)
+    fire_callback(
+      "part_delta",
+      %{
+        "index" => idx,
+        "delta_type" => "ToolCallArgsDelta",
+        "args_delta" => args
+      },
+      state
+    )
 
     tokens = estimate_tokens(args)
     new_count = state.token_count + tokens
@@ -268,11 +301,15 @@ defmodule CodePuppyControl.Agent.SubagentStreamHandler do
 
   # ToolCallEnd — deactivate tool part, reset status if no active tools
   defp process_event(%Event.ToolCallEnd{index: idx, name: name} = _event, state) do
-    fire_callback("part_end", %{
-      "index" => idx,
-      "next_part_kind" => nil,
-      "tool_name" => name
-    }, state)
+    fire_callback(
+      "part_end",
+      %{
+        "index" => idx,
+        "next_part_kind" => nil,
+        "tool_name" => name
+      },
+      state
+    )
 
     active = MapSet.delete(state.active_tool_parts, idx)
 
@@ -298,11 +335,15 @@ defmodule CodePuppyControl.Agent.SubagentStreamHandler do
 
   # Done — final event
   defp process_event(%Event.Done{} = done, state) do
-    fire_callback("done", %{
-      "id" => done.id,
-      "model" => done.model,
-      "finish_reason" => done.finish_reason
-    }, state)
+    fire_callback(
+      "done",
+      %{
+        "id" => done.id,
+        "model" => done.model,
+        "finish_reason" => done.finish_reason
+      },
+      state
+    )
 
     state
   end

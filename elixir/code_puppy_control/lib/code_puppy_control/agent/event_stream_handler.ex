@@ -71,9 +71,7 @@ defmodule CodePuppyControl.Agent.EventStreamHandler do
           did_stream_text: boolean(),
           streamed_line_count: non_neg_integer(),
           # Batched callback events
-          pending_events: [{String.t(), map(), String.t() | nil}],
-          # Did we stream any content at all?
-          did_stream_anything: boolean()
+          pending_events: [{String.t(), map(), String.t() | nil}]
         }
 
   defstruct [
@@ -89,8 +87,7 @@ defmodule CodePuppyControl.Agent.EventStreamHandler do
     tool_names: %{},
     did_stream_text: false,
     streamed_line_count: 0,
-    pending_events: [],
-    did_stream_anything: false
+    pending_events: []
   ]
 
   # ── Public API ─────────────────────────────────────────────────────
@@ -178,11 +175,15 @@ defmodule CodePuppyControl.Agent.EventStreamHandler do
   # ── Event Processing ────────────────────────────────────────────────
 
   defp process_event(%Event.TextStart{index: idx} = event, state) do
-    fire_callback("part_start", %{
-      "index" => idx,
-      "part_type" => "TextPart",
-      "part" => event
-    }, state)
+    fire_callback(
+      "part_start",
+      %{
+        "index" => idx,
+        "part_type" => "TextPart",
+        "part" => event
+      },
+      state
+    )
 
     state
     |> add_to_set(:streaming_parts, idx)
@@ -192,11 +193,15 @@ defmodule CodePuppyControl.Agent.EventStreamHandler do
   end
 
   defp process_event(%Event.TextDelta{index: idx, text: text} = _event, state) do
-    fire_callback("part_delta", %{
-      "index" => idx,
-      "delta_type" => "TextPartDelta",
-      "delta" => %{content_delta: text}
-    }, state)
+    fire_callback(
+      "part_delta",
+      %{
+        "index" => idx,
+        "delta_type" => "TextPartDelta",
+        "delta" => %{content_delta: text}
+      },
+      state
+    )
 
     # Only process if this is a tracked text part
     if MapSet.member?(state.text_parts, idx) do
@@ -210,10 +215,14 @@ defmodule CodePuppyControl.Agent.EventStreamHandler do
   end
 
   defp process_event(%Event.TextEnd{index: idx} = _event, state) do
-    fire_callback("part_end", %{
-      "index" => idx,
-      "next_part_kind" => nil
-    }, state)
+    fire_callback(
+      "part_end",
+      %{
+        "index" => idx,
+        "next_part_kind" => nil
+      },
+      state
+    )
 
     # Flush any remaining buffered content
     state = flush_remaining_text_buffer(state, idx)
@@ -241,11 +250,15 @@ defmodule CodePuppyControl.Agent.EventStreamHandler do
   end
 
   defp process_event(%Event.ThinkingStart{index: idx} = event, state) do
-    fire_callback("part_start", %{
-      "index" => idx,
-      "part_type" => "ThinkingPart",
-      "part" => event
-    }, state)
+    fire_callback(
+      "part_start",
+      %{
+        "index" => idx,
+        "part_type" => "ThinkingPart",
+        "part" => event
+      },
+      state
+    )
 
     state
     |> add_to_set(:streaming_parts, idx)
@@ -254,11 +267,15 @@ defmodule CodePuppyControl.Agent.EventStreamHandler do
   end
 
   defp process_event(%Event.ThinkingDelta{index: idx, text: text} = _event, state) do
-    fire_callback("part_delta", %{
-      "index" => idx,
-      "delta_type" => "ThinkingPartDelta",
-      "delta" => %{content_delta: text}
-    }, state)
+    fire_callback(
+      "part_delta",
+      %{
+        "index" => idx,
+        "delta_type" => "ThinkingPartDelta",
+        "delta" => %{content_delta: text}
+      },
+      state
+    )
 
     if MapSet.member?(state.thinking_parts, idx) do
       emit_thinking_delta_event(state, text)
@@ -268,10 +285,14 @@ defmodule CodePuppyControl.Agent.EventStreamHandler do
   end
 
   defp process_event(%Event.ThinkingEnd{index: idx} = _event, state) do
-    fire_callback("part_end", %{
-      "index" => idx,
-      "next_part_kind" => nil
-    }, state)
+    fire_callback(
+      "part_end",
+      %{
+        "index" => idx,
+        "next_part_kind" => nil
+      },
+      state
+    )
 
     # Print newline after thinking (if banner was printed)
     state =
@@ -285,12 +306,16 @@ defmodule CodePuppyControl.Agent.EventStreamHandler do
   end
 
   defp process_event(%Event.ToolCallStart{index: idx, name: name} = event, state) do
-    fire_callback("part_start", %{
-      "index" => idx,
-      "part_type" => "ToolCallPart",
-      "tool_name" => name,
-      "part" => event
-    }, state)
+    fire_callback(
+      "part_start",
+      %{
+        "index" => idx,
+        "part_type" => "ToolCallPart",
+        "tool_name" => name,
+        "part" => event
+      },
+      state
+    )
 
     state
     |> add_to_set(:streaming_parts, idx)
@@ -302,11 +327,15 @@ defmodule CodePuppyControl.Agent.EventStreamHandler do
   end
 
   defp process_event(%Event.ToolCallArgsDelta{index: idx, arguments: args} = _event, state) do
-    fire_callback("part_delta", %{
-      "index" => idx,
-      "delta_type" => "ToolCallArgsDelta",
-      "delta" => %{args_delta: args}
-    }, state)
+    fire_callback(
+      "part_delta",
+      %{
+        "index" => idx,
+        "delta_type" => "ToolCallArgsDelta",
+        "delta" => %{args_delta: args}
+      },
+      state
+    )
 
     if MapSet.member?(state.tool_parts, idx) do
       # Estimate tokens from args content: rough heuristic, 4 chars ≈ 1 token
@@ -335,11 +364,15 @@ defmodule CodePuppyControl.Agent.EventStreamHandler do
   end
 
   defp process_event(%Event.ToolCallEnd{index: idx, name: name} = event, state) do
-    fire_callback("part_end", %{
-      "index" => idx,
-      "next_part_kind" => nil,
-      "tool_name" => name
-    }, state)
+    fire_callback(
+      "part_end",
+      %{
+        "index" => idx,
+        "next_part_kind" => nil,
+        "tool_name" => name
+      },
+      state
+    )
 
     # Publish tool call completion via EventBus
     EventBus.broadcast_tool_result(
@@ -354,21 +387,30 @@ defmodule CodePuppyControl.Agent.EventStreamHandler do
   end
 
   defp process_event(%Event.UsageUpdate{} = usage, state) do
-    fire_callback("usage_update", %{
-      "prompt_tokens" => usage.prompt_tokens,
-      "completion_tokens" => usage.completion_tokens,
-      "total_tokens" => usage.total_tokens
-    }, state)
+    fire_callback(
+      "usage_update",
+      %{
+        "prompt_tokens" => usage.prompt_tokens,
+        "completion_tokens" => usage.completion_tokens,
+        "total_tokens" => usage.total_tokens
+      },
+      state
+    )
 
     state
   end
 
   defp process_event(%Event.Done{} = done, state) do
-    fire_callback("done", %{
-      "id" => done.id,
-      "model" => done.model,
-      "finish_reason" => done.finish_reason
-    }, state)
+    state =
+      fire_callback(
+        "done",
+        %{
+          "id" => done.id,
+          "model" => done.model,
+          "finish_reason" => done.finish_reason
+        },
+        state
+      )
 
     # Flush any remaining batched events
     flush_pending_events(state)
@@ -435,7 +477,11 @@ defmodule CodePuppyControl.Agent.EventStreamHandler do
           line_count = state.streamed_line_count + count_newlines(buf)
 
           # Reset buffer
-          %{state | streamed_line_count: line_count, text_buffers: Map.put(state.text_buffers, idx, [])}
+          %{
+            state
+            | streamed_line_count: line_count,
+              text_buffers: Map.put(state.text_buffers, idx, [])
+          }
         else
           state
         end
@@ -463,7 +509,12 @@ defmodule CodePuppyControl.Agent.EventStreamHandler do
           )
 
           line_count = state.streamed_line_count + count_newlines(buf)
-          %{state | streamed_line_count: line_count, text_buffers: Map.put(state.text_buffers, idx, [])}
+
+          %{
+            state
+            | streamed_line_count: line_count,
+              text_buffers: Map.put(state.text_buffers, idx, [])
+          }
         else
           state
         end
@@ -493,7 +544,6 @@ defmodule CodePuppyControl.Agent.EventStreamHandler do
       |> add_to_set(:banner_printed, idx)
       |> Map.put(:did_stream_text, true)
       |> Map.put(:streamed_line_count, state.streamed_line_count + 2)
-      |> Map.put(:did_stream_anything, true)
     end
   end
 
@@ -508,7 +558,7 @@ defmodule CodePuppyControl.Agent.EventStreamHandler do
       ""
     )
 
-    %{state | did_stream_anything: true}
+    state
   end
 
   defp emit_thinking_delta_event(state, text) do
@@ -530,7 +580,7 @@ defmodule CodePuppyControl.Agent.EventStreamHandler do
       tool_call_id: nil
     )
 
-    %{state | did_stream_anything: true}
+    state
   end
 
   # ── Tool Tracking ──────────────────────────────────────────────────

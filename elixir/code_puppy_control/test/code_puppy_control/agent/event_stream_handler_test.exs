@@ -35,7 +35,8 @@ defmodule CodePuppyControl.Agent.EventStreamHandlerTest do
 
       {did_stream, line_count} = EventStreamHandler.get_stream_state(pid)
       assert did_stream == true
-      assert line_count >= 2  # Banner (2 lines) + content
+      # Banner (2 lines) + content
+      assert line_count >= 2
 
       EventStreamHandler.drain(pid)
     end
@@ -140,8 +141,18 @@ defmodule CodePuppyControl.Agent.EventStreamHandlerTest do
 
     test "processes tool call events with token estimation", %{pid: pid} do
       EventStreamHandler.push(pid, %Event.ToolCallStart{index: 0, id: "tc-1", name: "read_file"})
-      EventStreamHandler.push(pid, %Event.ToolCallArgsDelta{index: 0, arguments: "{\"path\": \"/tmp\"}"})
-      EventStreamHandler.push(pid, %Event.ToolCallEnd{index: 0, id: "tc-1", name: "read_file", arguments: "{}"})
+
+      EventStreamHandler.push(pid, %Event.ToolCallArgsDelta{
+        index: 0,
+        arguments: "{\"path\": \"/tmp\"}"
+      })
+
+      EventStreamHandler.push(pid, %Event.ToolCallEnd{
+        index: 0,
+        id: "tc-1",
+        name: "read_file",
+        arguments: "{}"
+      })
 
       Process.sleep(50)
 
@@ -150,12 +161,32 @@ defmodule CodePuppyControl.Agent.EventStreamHandlerTest do
 
     test "handles multiple tool calls", %{pid: pid} do
       EventStreamHandler.push(pid, %Event.ToolCallStart{index: 0, id: "tc-1", name: "read_file"})
-      EventStreamHandler.push(pid, %Event.ToolCallArgsDelta{index: 0, arguments: "{\"path\": \"/a\"}"})
-      EventStreamHandler.push(pid, %Event.ToolCallEnd{index: 0, id: "tc-1", name: "read_file", arguments: "{}"})
+
+      EventStreamHandler.push(pid, %Event.ToolCallArgsDelta{
+        index: 0,
+        arguments: "{\"path\": \"/a\"}"
+      })
+
+      EventStreamHandler.push(pid, %Event.ToolCallEnd{
+        index: 0,
+        id: "tc-1",
+        name: "read_file",
+        arguments: "{}"
+      })
 
       EventStreamHandler.push(pid, %Event.ToolCallStart{index: 1, id: "tc-2", name: "shell"})
-      EventStreamHandler.push(pid, %Event.ToolCallArgsDelta{index: 1, arguments: "{\"cmd\": \"ls\"}"})
-      EventStreamHandler.push(pid, %Event.ToolCallEnd{index: 1, id: "tc-2", name: "shell", arguments: "{}"})
+
+      EventStreamHandler.push(pid, %Event.ToolCallArgsDelta{
+        index: 1,
+        arguments: "{\"cmd\": \"ls\"}"
+      })
+
+      EventStreamHandler.push(pid, %Event.ToolCallEnd{
+        index: 1,
+        id: "tc-2",
+        name: "shell",
+        arguments: "{}"
+      })
 
       Process.sleep(50)
       EventStreamHandler.drain(pid)
@@ -181,8 +212,18 @@ defmodule CodePuppyControl.Agent.EventStreamHandlerTest do
 
       # Tool call
       EventStreamHandler.push(pid, %Event.ToolCallStart{index: 2, id: "tc-1", name: "grep"})
-      EventStreamHandler.push(pid, %Event.ToolCallArgsDelta{index: 2, arguments: "{\"q\": \"test\"}"})
-      EventStreamHandler.push(pid, %Event.ToolCallEnd{index: 2, id: "tc-1", name: "grep", arguments: "{}"})
+
+      EventStreamHandler.push(pid, %Event.ToolCallArgsDelta{
+        index: 2,
+        arguments: "{\"q\": \"test\"}"
+      })
+
+      EventStreamHandler.push(pid, %Event.ToolCallEnd{
+        index: 2,
+        id: "tc-1",
+        name: "grep",
+        arguments: "{}"
+      })
 
       Process.sleep(50)
 

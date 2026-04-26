@@ -255,5 +255,4 @@ defmodule CodePuppyControl.Stream.EventNormalizer do
 
   defp maybe_append(list, nil), do: list
   defp maybe_append(list, value), do: list ++ [to_string(value)]
-
 end

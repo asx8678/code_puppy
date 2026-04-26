@@ -49,7 +49,11 @@ defmodule CodePuppyControl.Agent.SubagentStreamHandlerTest do
     end
 
     test "counts tokens from thinking deltas", %{pid: pid} do
-      SubagentStreamHandler.push(pid, %Event.ThinkingDelta{index: 0, text: "Let me think about this..."})
+      SubagentStreamHandler.push(pid, %Event.ThinkingDelta{
+        index: 0,
+        text: "Let me think about this..."
+      })
+
       Process.sleep(50)
 
       metrics = SubagentStreamHandler.get_metrics(pid)
@@ -59,8 +63,17 @@ defmodule CodePuppyControl.Agent.SubagentStreamHandlerTest do
     end
 
     test "counts tokens from tool call args deltas", %{pid: pid} do
-      SubagentStreamHandler.push(pid, %Event.ToolCallStart{index: 0, id: "tc-1", name: "read_file"})
-      SubagentStreamHandler.push(pid, %Event.ToolCallArgsDelta{index: 0, arguments: "{\"path\": \"/tmp/test\"}"})
+      SubagentStreamHandler.push(pid, %Event.ToolCallStart{
+        index: 0,
+        id: "tc-1",
+        name: "read_file"
+      })
+
+      SubagentStreamHandler.push(pid, %Event.ToolCallArgsDelta{
+        index: 0,
+        arguments: "{\"path\": \"/tmp/test\"}"
+      })
+
       Process.sleep(50)
 
       metrics = SubagentStreamHandler.get_metrics(pid)
@@ -104,7 +117,12 @@ defmodule CodePuppyControl.Agent.SubagentStreamHandlerTest do
     end
 
     test "increments tool_call_count on ToolCallStart", %{pid: pid} do
-      SubagentStreamHandler.push(pid, %Event.ToolCallStart{index: 0, id: "tc-1", name: "read_file"})
+      SubagentStreamHandler.push(pid, %Event.ToolCallStart{
+        index: 0,
+        id: "tc-1",
+        name: "read_file"
+      })
+
       Process.sleep(50)
 
       metrics = SubagentStreamHandler.get_metrics(pid)
@@ -125,8 +143,19 @@ defmodule CodePuppyControl.Agent.SubagentStreamHandlerTest do
     end
 
     test "resets current_tool when all tool parts end", %{pid: pid} do
-      SubagentStreamHandler.push(pid, %Event.ToolCallStart{index: 0, id: "tc-1", name: "read_file"})
-      SubagentStreamHandler.push(pid, %Event.ToolCallEnd{index: 0, id: "tc-1", name: "read_file", arguments: "{}"})
+      SubagentStreamHandler.push(pid, %Event.ToolCallStart{
+        index: 0,
+        id: "tc-1",
+        name: "read_file"
+      })
+
+      SubagentStreamHandler.push(pid, %Event.ToolCallEnd{
+        index: 0,
+        id: "tc-1",
+        name: "read_file",
+        arguments: "{}"
+      })
+
       Process.sleep(50)
 
       metrics = SubagentStreamHandler.get_metrics(pid)
@@ -144,7 +173,13 @@ defmodule CodePuppyControl.Agent.SubagentStreamHandlerTest do
       assert metrics.tool_call_count == 2
 
       # End one — still have active tool
-      SubagentStreamHandler.push(pid, %Event.ToolCallEnd{index: 0, id: "tc-1", name: "read", arguments: "{}"})
+      SubagentStreamHandler.push(pid, %Event.ToolCallEnd{
+        index: 0,
+        id: "tc-1",
+        name: "read",
+        arguments: "{}"
+      })
+
       Process.sleep(50)
 
       metrics = SubagentStreamHandler.get_metrics(pid)
@@ -152,7 +187,13 @@ defmodule CodePuppyControl.Agent.SubagentStreamHandlerTest do
       assert metrics.current_tool != nil
 
       # End the other
-      SubagentStreamHandler.push(pid, %Event.ToolCallEnd{index: 1, id: "tc-2", name: "shell", arguments: "{}"})
+      SubagentStreamHandler.push(pid, %Event.ToolCallEnd{
+        index: 1,
+        id: "tc-2",
+        name: "shell",
+        arguments: "{}"
+      })
+
       Process.sleep(50)
 
       metrics = SubagentStreamHandler.get_metrics(pid)
@@ -177,17 +218,41 @@ defmodule CodePuppyControl.Agent.SubagentStreamHandlerTest do
     test "handles full agent run flow", %{pid: pid} do
       # Thinking
       SubagentStreamHandler.push(pid, %Event.ThinkingStart{index: 0, id: nil})
-      SubagentStreamHandler.push(pid, %Event.ThinkingDelta{index: 0, text: "I need to read a file..."})
+
+      SubagentStreamHandler.push(pid, %Event.ThinkingDelta{
+        index: 0,
+        text: "I need to read a file..."
+      })
+
       SubagentStreamHandler.push(pid, %Event.ThinkingEnd{index: 0, id: nil})
 
       # Tool call
-      SubagentStreamHandler.push(pid, %Event.ToolCallStart{index: 1, id: "tc-1", name: "read_file"})
-      SubagentStreamHandler.push(pid, %Event.ToolCallArgsDelta{index: 1, arguments: "{\"path\": \"/etc/hosts\"}"})
-      SubagentStreamHandler.push(pid, %Event.ToolCallEnd{index: 1, id: "tc-1", name: "read_file", arguments: "{}"})
+      SubagentStreamHandler.push(pid, %Event.ToolCallStart{
+        index: 1,
+        id: "tc-1",
+        name: "read_file"
+      })
+
+      SubagentStreamHandler.push(pid, %Event.ToolCallArgsDelta{
+        index: 1,
+        arguments: "{\"path\": \"/etc/hosts\"}"
+      })
+
+      SubagentStreamHandler.push(pid, %Event.ToolCallEnd{
+        index: 1,
+        id: "tc-1",
+        name: "read_file",
+        arguments: "{}"
+      })
 
       # Text response
       SubagentStreamHandler.push(pid, %Event.TextStart{index: 2, id: nil})
-      SubagentStreamHandler.push(pid, %Event.TextDelta{index: 2, text: "The file contains host mappings."})
+
+      SubagentStreamHandler.push(pid, %Event.TextDelta{
+        index: 2,
+        text: "The file contains host mappings."
+      })
+
       SubagentStreamHandler.push(pid, %Event.TextEnd{index: 2, id: nil})
 
       # Done
@@ -231,7 +296,8 @@ defmodule CodePuppyControl.Agent.SubagentStreamHandlerTest do
       Process.sleep(50)
 
       metrics = SubagentStreamHandler.get_metrics(pid)
-      assert metrics.token_count == 0  # Not counted in our metrics
+      # Not counted in our metrics
+      assert metrics.token_count == 0
 
       SubagentStreamHandler.drain(pid)
     end
