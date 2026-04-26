@@ -63,18 +63,26 @@ defmodule CodePuppyControl.Agent.PromptMixin do
         {:win32, _} ->
           ["- Platform: Windows" | lines]
 
-        {:unix, darwin} ->
+        {:unix, :darwin} ->
           ["- Platform: macOS" | lines]
 
-        {:unix, linux} ->
+        {:unix, :linux} ->
           ["- Platform: Linux" | lines]
+
+        {:unix, _} ->
+          ["- Platform: Unix" | lines]
 
         _ ->
           ["- Platform: unknown" | lines]
       end
 
     # Shell
-    shell_var = if :os.type() == {:win32, _}, do: "COMSPEC", else: "SHELL"
+    shell_var =
+      case :os.type() do
+        {:win32, _} -> "COMSPEC"
+        _ -> "SHELL"
+      end
+
     shell_val = System.get_env(shell_var, "unknown")
     lines = ["- Shell: #{shell_var}=#{shell_val}" | lines]
 
@@ -83,12 +91,22 @@ defmodule CodePuppyControl.Agent.PromptMixin do
     lines = ["- Current date: #{dt}" | lines]
 
     # Working directory
-    lines = ["- Working directory: #{File.cwd!()}" | lines]
+    cwd =
+      try do
+        File.cwd!()
+      rescue
+        _ -> "<unknown>"
+      end
+
+    lines = ["- Working directory: #{cwd}" | lines]
 
     # Git repo detection
-    if File.dir?(".git") do
-      lines = ["- The user is working inside a git repository" | lines]
-    end
+    lines =
+      if File.dir?(".git") do
+        ["- The user is working inside a git repository" | lines]
+      else
+        lines
+      end
 
     lines
     |> Enum.reverse()
@@ -104,20 +122,18 @@ defmodule CodePuppyControl.Agent.PromptMixin do
   Returns the full system prompt including platform and identity information.
   """
   @spec get_full_system_prompt(String.t(), String.t()) :: String.t()
-  def get_full_system_prompt(base_prompt, identity) when is_binary(base_prompt) and is_binary(identity) do
+  def get_full_system_prompt(base_prompt, identity)
+      when is_binary(base_prompt) and is_binary(identity) do
     prompt = base_prompt
 
     # Add plugin prompt additions (e.g., from prompt_store, file_mentions)
+    # Callbacks.on(:load_prompt) uses :concat_str merge strategy, so
+    # the result is a merged binary string (or nil if no callbacks registered).
     prompt_additions = CodePuppyControl.Callbacks.on(:load_prompt)
 
     prompt =
-      if prompt_additions && length(prompt_additions) > 0 do
-        filtered = Enum.filter(prompt_additions, &(&1 != nil))
-        if length(filtered) > 0 do
-          prompt <> "\n\n# Custom Instructions\n" <> Enum.join(filtered, "\n")
-        else
-          prompt
-        end
+      if is_binary(prompt_additions) and prompt_additions != "" do
+        prompt <> "\n\n# Custom Instructions\n" <> prompt_additions
       else
         prompt
       end

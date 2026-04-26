@@ -63,7 +63,7 @@ defmodule CodePuppyControl.Agent.Loop do
 
   require Logger
 
-  alias CodePuppyControl.Agent.{Events, ResponseValidator, Turn}
+  alias CodePuppyControl.Agent.{Events, PromptMixin, ResponseValidator, Turn}
   alias CodePuppyControl.Compaction
   alias CodePuppyControl.Stream.{Event, Normalizer}
   alias CodePuppyControl.Tool.Runner
@@ -429,12 +429,15 @@ defmodule CodePuppyControl.Agent.Loop do
   defp do_llm_stream(state, turn) do
     case Turn.start_streaming(turn) do
       {:ok, turn} ->
-        system_prompt =
+        base_prompt =
           state.agent_module.system_prompt(%{
             session_id: state.session_id,
             run_id: state.run_id,
             messages: state.messages
           })
+
+        identity = PromptMixin.get_identity(state.agent_module.name(), state.run_id)
+        system_prompt = PromptMixin.get_full_system_prompt(base_prompt, identity)
 
         tools = state.agent_module.allowed_tools()
         model = resolve_model(state)

@@ -52,8 +52,9 @@ defmodule CodePuppyControl.Agent.PromptMixinTest do
       assert full_prompt =~ "Your ID is `test-agent-abc123`"
     end
 
-    test "includes custom instructions from callbacks" do
-      # Register a test callback
+    test "includes custom instructions from callbacks (concat_str merge)" do
+      # Register a test callback — :load_prompt uses :concat_str merge strategy,
+      # so Callbacks.on(:load_prompt) returns a merged binary string
       CodePuppyControl.Callbacks.register(:load_prompt, fn -> "Custom instruction" end)
 
       base_prompt = "Base prompt"
@@ -65,6 +66,38 @@ defmodule CodePuppyControl.Agent.PromptMixinTest do
       assert full_prompt =~ "# Custom Instructions"
 
       # Clean up
+      CodePuppyControl.Callbacks.clear(:load_prompt)
+    end
+
+    test "handles nil return from Callbacks.on(:load_prompt) gracefully" do
+      # Ensure no callbacks are registered — Callbacks.on returns nil
+      CodePuppyControl.Callbacks.clear(:load_prompt)
+
+      base_prompt = "Base prompt"
+      identity = "test-agent-abc123"
+
+      full_prompt = PromptMixin.get_full_system_prompt(base_prompt, identity)
+
+      refute full_prompt =~ "# Custom Instructions"
+      assert full_prompt =~ "Base prompt"
+      assert full_prompt =~ "# Environment"
+    end
+
+    test "concatenates multiple load_prompt callbacks" do
+      CodePuppyControl.Callbacks.clear(:load_prompt)
+      CodePuppyControl.Callbacks.register(:load_prompt, fn -> "First addition" end)
+      CodePuppyControl.Callbacks.register(:load_prompt, fn -> "Second addition" end)
+
+      base_prompt = "Base prompt"
+      identity = "test-agent-abc123"
+
+      full_prompt = PromptMixin.get_full_system_prompt(base_prompt, identity)
+
+      # :concat_str merge strategy joins with newlines
+      assert full_prompt =~ "First addition"
+      assert full_prompt =~ "Second addition"
+      assert full_prompt =~ "# Custom Instructions"
+
       CodePuppyControl.Callbacks.clear(:load_prompt)
     end
   end
