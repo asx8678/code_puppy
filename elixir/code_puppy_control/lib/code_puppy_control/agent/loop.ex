@@ -68,6 +68,7 @@ defmodule CodePuppyControl.Agent.Loop do
     Events,
     Lifecycle,
     MessageProcessor,
+    PromptMixin,
     ResponseValidator,
     ToolCallTracker,
     Turn
@@ -392,13 +393,18 @@ defmodule CodePuppyControl.Agent.Loop do
     case Turn.start_streaming(turn) do
       {:ok, turn} ->
         # Use Lifecycle for system prompt assembly (base + puppy rules)
+        # then PromptMixin for platform info, identity, and load_prompt callbacks
         context = %{
           session_id: state.session_id,
           run_id: state.run_id,
           messages: state.messages
         }
 
-        {:ok, system_prompt} = Lifecycle.assemble_system_prompt(state.agent_module, context)
+        {:ok, base_prompt} = Lifecycle.assemble_system_prompt(state.agent_module, context)
+
+        identity = PromptMixin.get_identity(state.agent_module.name(), state.run_id)
+        system_prompt = PromptMixin.get_full_system_prompt(base_prompt, identity)
+
 
         tools = state.agent_module.allowed_tools()
         model = resolve_model(state)
