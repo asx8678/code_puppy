@@ -459,18 +459,20 @@ defmodule CodePuppyControl.Agent.Loop do
             usage_limits: nil
           })
 
-        case budget_check do
+        turn = case budget_check do
           {:error, :context_budget_exceeded, msg} ->
             Logger.warning("Agent.Loop: #{msg}")
             # Trigger compaction as a recovery attempt
             _state_compacted = compact_messages(state)
-            Turn.fail(turn, {:context_budget_exceeded, msg})
+            {:ok, failed_turn} = Turn.fail(turn, {:context_budget_exceeded, msg})
+            failed_turn
 
           {:error, reason} ->
-            Turn.fail(turn, reason)
+            {:ok, failed_turn} = Turn.fail(turn, reason)
+            failed_turn
 
           {:ok, :checked} ->
-            :ok
+            turn
         end
 
         # Re-check: if budget check failed, the turn is already in error state

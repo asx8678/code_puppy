@@ -341,14 +341,14 @@ defmodule CodePuppyControl.Agent.BudgetEnforcer do
           name_tokens = estimate_tokens(Atom.to_string(tool_name))
 
           desc_tokens =
-            case CodePuppyControl.Tool.description(module) do
+            case module.description() do
               nil -> 0
               desc -> estimate_tokens(desc)
             end
 
           schema_tokens =
             try do
-              schema = CodePuppyControl.Tool.parameters(module)
+              schema = module.parameters()
 
               if is_map(schema) and map_size(schema) > 0 do
                 estimate_tokens(Jason.encode!(schema))

@@ -176,10 +176,6 @@ defmodule CodePuppyControl.Agent.MessageProcessor do
           # Prune any tool call mismatches introduced by compaction
           result = ToolCallTracker.prune_interrupted(compacted)
           {result, true}
-
-        {:error, reason} ->
-          Logger.warning("MessageProcessor: compaction failed: #{inspect(reason)}")
-          {messages, false}
       end
     else
       {filtered, false}

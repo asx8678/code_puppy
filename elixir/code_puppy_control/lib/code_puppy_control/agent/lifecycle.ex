@@ -247,7 +247,7 @@ defmodule CodePuppyControl.Agent.Lifecycle do
       []
     else
       try do
-        CodePuppyControl.MCP.Manager.get_servers_for_agent()
+        CodePuppyControl.MCP.Manager.list_servers()
       rescue
         _ ->
           Logger.debug("Lifecycle: MCP manager unavailable, returning empty servers")
@@ -267,8 +267,8 @@ defmodule CodePuppyControl.Agent.Lifecycle do
   @spec reload_mcp_servers() :: [map()]
   def reload_mcp_servers do
     try do
-      CodePuppyControl.MCP.Manager.sync_from_config()
-      CodePuppyControl.MCP.Manager.get_servers_for_agent()
+      CodePuppyControl.MCP.Manager.start_all_configured()
+      CodePuppyControl.MCP.Manager.list_servers()
     rescue
       _ ->
         Logger.debug("Lifecycle: MCP reload failed, returning empty servers")
@@ -294,7 +294,7 @@ defmodule CodePuppyControl.Agent.Lifecycle do
   @spec resolve_pack_model(atom()) :: String.t()
   def resolve_pack_model(role) when is_atom(role) do
     try do
-      case CodePuppyControl.ModelPacks.resolve(role) do
+      case CodePuppyControl.ModelPacks.get_model_for_role(to_string(role)) do
         {:ok, model_name} -> model_name
         {:error, _reason} -> default_model()
       end
@@ -319,7 +319,7 @@ defmodule CodePuppyControl.Agent.Lifecycle do
     rescue
       _ ->
         try do
-          CodePuppyControl.Config.get_global_model_name()
+          CodePuppyControl.Config.Models.global_model_name()
         rescue
           _ -> nil
         end

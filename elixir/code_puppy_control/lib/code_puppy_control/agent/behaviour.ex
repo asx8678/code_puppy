@@ -97,12 +97,18 @@ defmodule CodePuppyControl.Agent.Behaviour do
 
   See `CodePuppyControl.Agent.ResponseValidator` for schema requirements.
   """
+
+  @callback response_schema() :: module() | nil
+
   @doc """
   Returns the human-readable display name for this agent.
 
   Used in the TUI agent selector and log messages.
   Default: title-cased version of `name/0` atom.
   """
+
+  @callback response_schema() :: module() | nil
+
   @callback display_name() :: String.t()
 
   @doc """
@@ -111,6 +117,9 @@ defmodule CodePuppyControl.Agent.Behaviour do
   Shown in `/agents` output and the agent selector.
   Default: empty string.
   """
+
+  @callback response_schema() :: module() | nil
+
   @callback description() :: String.t()
 
   @doc """
@@ -171,6 +180,9 @@ defmodule CodePuppyControl.Agent.Behaviour do
   The `state` map is agent-owned mutable state that persists across turns.
   Default implementation: always continue.
   """
+
+  @callback response_schema() :: module() | nil
+
   @callback on_tool_result(tool_name :: atom(), result :: term(), agent_state()) ::
               {:cont, agent_state()} | {:halt, term()}
 
