@@ -161,5 +161,11 @@ def get_model_type_description(model_type: str) -> str:
 
 # Re-export for backward compatibility
 # This allows existing code to import from model_config instead of model_factory
-get_model_builders = lambda: dict(_MODEL_BUILDERS)
-get_custom_model_providers = lambda: dict(_CUSTOM_MODEL_PROVIDERS)
+def get_model_builders() -> dict[str, Any]:
+    """Return a copy of the model builders dictionary."""
+    return dict(_MODEL_BUILDERS)
+
+
+def get_custom_model_providers() -> dict[str, Any]:
+    """Return a copy of the custom model providers dictionary."""
+    return dict(_CUSTOM_MODEL_PROVIDERS)

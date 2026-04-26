@@ -51,7 +51,9 @@ defmodule CodePuppyControl.Tools.FileModifications.CreateFileTest do
     end
 
     test "creates parent directories" do
-      subdir = Path.join(@tmp_dir, "create_test_#{:rand.uniform(10000)}")
+      subdir =
+        Path.join(@tmp_dir, "create_test_#{:erlang.unique_integer([:positive, :monotonic])}")
+
       path = Path.join([subdir, "nested", "file.txt"])
 
       args = %{
@@ -63,7 +65,7 @@ defmodule CodePuppyControl.Tools.FileModifications.CreateFileTest do
       assert result.success == true
       assert File.exists?(path)
 
-      File.rm_rf!(Path.join(@tmp_dir, "create_test_"))
+      File.rm_rf!(subdir)
     end
 
     test "fails when file exists and overwrite is false" do

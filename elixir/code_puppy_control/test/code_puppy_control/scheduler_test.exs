@@ -7,7 +7,6 @@ defmodule CodePuppyControl.SchedulerTest do
 
   alias CodePuppyControl.Scheduler
   alias CodePuppyControl.Repo
-  alias CodePuppyControl.Scheduler.Task
 
   setup do
     :ok = Ecto.Adapters.SQL.Sandbox.checkout(Repo)
@@ -56,7 +55,9 @@ defmodule CodePuppyControl.SchedulerTest do
                  prompt: "test"
                })
 
-      assert changeset.errors[:name] == {"has already been taken", []}
+      assert {"has already been taken", opts} = changeset.errors[:name]
+      assert opts[:constraint] == :unique
+      assert opts[:constraint_name] == "scheduled_tasks_name_index"
     end
   end
 
@@ -197,11 +198,16 @@ defmodule CodePuppyControl.SchedulerTest do
           prompt: "test"
         })
 
-      # Create a job
-      {:ok, _} = Scheduler.run_task_now(task)
+      # Insert a persisted job record directly: Oban's test :inline mode executes
+      # run_task_now/1 immediately and does not leave a historical row to query.
+      job =
+        %{task_id: task.id}
+        |> CodePuppyControl.Scheduler.Worker.new(queue: :scheduled)
+        |> Ecto.Changeset.put_change(:state, "completed")
+        |> Repo.insert!()
 
       history = Scheduler.get_task_history(task.id, limit: 10)
-      assert length(history) >= 1
+      assert Enum.any?(history, &(&1.id == job.id))
     end
   end
 end

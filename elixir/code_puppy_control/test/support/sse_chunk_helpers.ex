@@ -25,13 +25,6 @@ defmodule CodePuppyControl.Test.SSEChunkHelpers do
   - `:persistent_term` entries that are never cleaned up.
   """
 
-  @doc """
-  A static mock HTTP client module for SSE chunk-boundary tests.
-
-  Reads chunk data from the process dictionary (key: `{:sse_chunk_mock_chunks, self()}`).
-  All functions are synchronous and execute in the calling process, so
-  the process dictionary is always accessible.
-  """
   defmodule MockClient do
     @moduledoc false
 

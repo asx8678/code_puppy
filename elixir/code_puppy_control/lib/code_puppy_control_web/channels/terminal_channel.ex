@@ -240,6 +240,12 @@ defmodule CodePuppyControlWeb.TerminalChannel do
     )
 
     if pty_session_id do
+      # Unsubscribe before closing to prevent :pty_exit feedback loop.
+      # close_session sends {:pty_exit, ...} to the subscriber, but we
+      # are the subscriber and are already terminating — processing that
+      # message would trigger handle_info/2's {:stop, ...} path, crashing
+      # the process when terminate is called outside normal lifecycle.
+      PtyManager.unsubscribe(pty_session_id)
       PtyManager.close_session(pty_session_id)
     end
 

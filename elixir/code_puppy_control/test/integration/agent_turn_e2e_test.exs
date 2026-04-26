@@ -19,7 +19,7 @@ defmodule CodePuppyControl.Integration.AgentTurnE2ETest do
   @moduletag :integration
   @moduletag timeout: 30_000
 
-  alias CodePuppyControl.Agent.{Loop, Events}
+  alias CodePuppyControl.Agent.Loop
   alias CodePuppyControl.EventBus
   alias CodePuppyControl.Tool.Registry
 
@@ -454,6 +454,124 @@ defmodule CodePuppyControl.Integration.AgentTurnE2ETest do
   end
 
   # ===========================================================================
+  # Test 4: Multi-turn replay — history correctness for subsequent LLM turns
+  # ===========================================================================
+
+  describe "multi-turn replay: history correctness" do
+    test "tool-call-only turn produces assistant(tool_calls) before tool result" do
+      run_id = unique_run_id()
+
+      {:ok, pid} =
+        Loop.start_link(E2EAgent, [%{role: "user", content: "Run the test tool"}],
+          run_id: run_id,
+          llm_module: ToolCallLLM,
+          max_turns: 5
+        )
+
+      result = Loop.run_until_done(pid, 15_000)
+      assert result == :ok
+
+      messages = Loop.get_messages(pid)
+
+      # Expected order: user → assistant(tool_calls) → tool(result) → assistant(text)
+      assert length(messages) == 4
+
+      # 1. User message
+      assert Enum.at(messages, 0)[:role] == "user"
+
+      # 2. Assistant with tool_calls (NOT missing!)
+      assistant_tc_msg = Enum.at(messages, 1)
+      assert assistant_tc_msg[:role] == "assistant"
+      assert is_list(assistant_tc_msg[:tool_calls])
+      assert length(assistant_tc_msg[:tool_calls]) == 1
+
+      [tc] = assistant_tc_msg[:tool_calls]
+      assert tc.id == "tc-e2e-1"
+      assert tc.name == :e2e_test_tool
+
+      # 3. Tool result message
+      tool_result_msg = Enum.at(messages, 2)
+      assert tool_result_msg[:role] == "tool"
+      assert tool_result_msg[:tool_call_id] == "tc-e2e-1"
+
+      # 4. Assistant text response (turn 2)
+      assistant_text_msg = Enum.at(messages, 3)
+      assert assistant_text_msg[:role] == "assistant"
+      assert assistant_text_msg[:content] == "Tool executed!"
+
+      _events = flush_events()
+      GenServer.stop(pid, :normal)
+    end
+
+    test "subsequent LLM turn receives replayable history in correct order" do
+      # Use a custom LLM that captures the messages it receives on turn 2
+      run_id = unique_run_id()
+
+      {:ok, pid} =
+        Loop.start_link(E2EAgent, [%{role: "user", content: "Run the test tool"}],
+          run_id: run_id,
+          llm_module: ToolCallLLM,
+          max_turns: 5
+        )
+
+      result = Loop.run_until_done(pid, 15_000)
+      assert result == :ok
+
+      messages = Loop.get_messages(pid)
+
+      # Verify the message sequence is provider-replayable:
+      # every tool-role message must have a preceding assistant message
+      # with tool_calls that includes its tool_call_id.
+      tool_result_ids =
+        messages
+        |> Enum.filter(fn m -> m[:role] == "tool" end)
+        |> Enum.map(fn m -> m[:tool_call_id] end)
+
+      assert length(tool_result_ids) >= 1, "Expected at least one tool result"
+
+      # For each tool result, find the assistant message with matching tool_calls
+      for tcid <- tool_result_ids do
+        has_matching_assistant =
+          Enum.any?(messages, fn m ->
+            m[:role] == "assistant" and
+              is_list(m[:tool_calls]) and
+              Enum.any?(m[:tool_calls], fn tc -> tc.id == tcid end)
+          end)
+
+        assert has_matching_assistant,
+               "Tool result with id=#{tcid} has no preceding assistant(tool_calls) message"
+      end
+
+      # Also verify: no tool result appears before its assistant(tool_calls)
+      tool_result_positions =
+        messages
+        |> Enum.with_index()
+        |> Enum.filter(fn {m, _i} -> m[:role] == "tool" end)
+        |> Enum.map(fn {m, i} -> {m[:tool_call_id], i} end)
+
+      assistant_tc_positions =
+        messages
+        |> Enum.with_index()
+        |> Enum.filter(fn {m, _i} -> m[:role] == "assistant" and is_list(m[:tool_calls]) end)
+        |> Enum.flat_map(fn {m, i} ->
+          Enum.map(m[:tool_calls], fn tc -> {tc.id, i} end)
+        end)
+
+      for {tcid, tool_idx} <- tool_result_positions do
+        {^tcid, assistant_idx} =
+          Enum.find(assistant_tc_positions, fn {id, _i} -> id == tcid end)
+
+        assert assistant_idx < tool_idx,
+               "Tool result for id=#{tcid} at index=#{tool_idx} must come after " <>
+                 "assistant(tool_calls) at index=#{assistant_idx}"
+      end
+
+      _events = flush_events()
+      GenServer.stop(pid, :normal)
+    end
+  end
+
+  # ===========================================================================
   # Test 3: Multi-turn (max_turns boundary)
   # ===========================================================================
 
@@ -478,7 +596,7 @@ defmodule CodePuppyControl.Integration.AgentTurnE2ETest do
       assert state.turn_number == 3
 
       events = flush_events()
-      types = event_types(events)
+      _types = event_types(events)
 
       # 3 turns started, 3 turns ended
       turn_starts = events_of_type(events, "agent_turn_started")

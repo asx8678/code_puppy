@@ -276,21 +276,6 @@ defmodule CodePuppyControl.Tool.Schema do
 
   defp maybe_validate_properties(errors, _schema, _data, _path), do: errors
 
-  # enum
-  defp maybe_validate_errors_enum(errors, schema, data, _path) do
-    case Map.get(schema, "enum") do
-      nil ->
-        errors
-
-      allowed ->
-        if data in allowed do
-          errors
-        else
-          errors ++ ["value #{inspect(data)} not in enum #{inspect(allowed)}"]
-        end
-    end
-  end
-
   defp maybe_validate_enum(errors, schema, data, path) do
     case Map.get(schema, "enum") do
       nil ->

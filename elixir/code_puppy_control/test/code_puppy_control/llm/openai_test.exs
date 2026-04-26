@@ -251,7 +251,7 @@ defmodule CodePuppyControl.LLM.Providers.OpenAITest do
       assert tc.arguments == %{"location" => "Boston"}
     end
 
-    test "handles HTTP error in stream" do
+    test "stream_chat returns {:error, _} for HTTP 500" do
       MockLLMHTTP.register(fn :post, url, _opts ->
         if url =~ "/chat/completions" do
           {:ok, %{status: 500, body: "Internal Server Error", headers: []}}
@@ -260,11 +260,56 @@ defmodule CodePuppyControl.LLM.Providers.OpenAITest do
         end
       end)
 
-      # HTTP stream returns {:error, ...} which gets picked up by the reducer
-      result = OpenAI.stream_chat(@messages, [], @opts, fn _ -> :ok end)
-      # The stream function returns a stream that yields {:error, msg}
-      # Our code should propagate this
-      assert result == :ok or match?({:error, _}, result)
+      assert {:error, %{status: 500}} =
+               OpenAI.stream_chat(@messages, [], @opts, fn _ -> :ok end)
+    end
+
+    test "stream_chat returns {:error, _} for HTTP 401" do
+      MockLLMHTTP.register(fn :post, url, _opts ->
+        if url =~ "/chat/completions" do
+          {:ok,
+           %{
+             status: 401,
+             body: ~s({"error":{"message":"Invalid API key","type":"auth_error"}}),
+             headers: []
+           }}
+        else
+          {:passthrough}
+        end
+      end)
+
+      assert {:error, %{status: 401}} =
+               OpenAI.stream_chat(@messages, [], @opts, fn _ -> :ok end)
+    end
+
+    test "stream_chat returns {:error, _} for HTTP 429 rate limit" do
+      MockLLMHTTP.register(fn :post, url, _opts ->
+        if url =~ "/chat/completions" do
+          {:ok,
+           %{
+             status: 429,
+             body: ~s({"error":{"message":"Rate limited","type":"rate_limit"}}),
+             headers: [{"retry-after", "5"}]
+           }}
+        else
+          {:passthrough}
+        end
+      end)
+
+      assert {:error, %{status: 429}} =
+               OpenAI.stream_chat(@messages, [], @opts, fn _ -> :ok end)
+    end
+
+    test "stream_chat returns {:error, _} for transport error" do
+      MockLLMHTTP.register(fn :post, url, _opts ->
+        if url =~ "/chat/completions" do
+          {:error, "Connection refused"}
+        else
+          {:passthrough}
+        end
+      end)
+
+      assert {:error, _} = OpenAI.stream_chat(@messages, [], @opts, fn _ -> :ok end)
     end
   end
 

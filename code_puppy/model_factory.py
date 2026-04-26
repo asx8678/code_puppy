@@ -1,4 +1,4 @@
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 import json
 import logging
 import os
@@ -13,12 +13,19 @@ import httpx
 # Light pydantic-ai imports needed at module scope for make_model_settings()
 from pydantic_ai.models.anthropic import AnthropicModelSettings
 from pydantic_ai.models.openai import (
+    OpenAIChatModel as _OpenAIChatModel,
     OpenAIChatModelSettings,
     OpenAIResponsesModelSettings,
 )
 from pydantic_ai.settings import ModelSettings
 
 from code_puppy.messaging import emit_warning
+from code_puppy.model_config import (
+    _CUSTOM_MODEL_PROVIDERS,
+    _MODEL_BUILDERS,
+    load_plugin_providers as _load_plugin_model_providers,
+    register_model_builder,
+)
 
 from . import callbacks
 from .config import EXTRA_MODELS_FILE, get_value, get_yolo_mode
@@ -99,17 +106,44 @@ def resolve_max_output_tokens(
     
     return max(1, cap)
 
+
+def _to_mutable_nested(obj: Any) -> Any:
+    """Return a mutable copy of nested model config structures.
+
+    ModelFactory caches configuration as nested MappingProxyType values. Default
+    settings are later merged and occasionally mutated (for example extra_body
+    gets provider-specific fields), so copy nested mappings/lists before use.
+    """
+    if isinstance(obj, Mapping):
+        return {key: _to_mutable_nested(value) for key, value in obj.items()}
+    if isinstance(obj, list):
+        return [_to_mutable_nested(item) for item in obj]
+    if isinstance(obj, tuple):
+        return tuple(_to_mutable_nested(item) for item in obj)
+    return obj
+
+
+def get_model_default_settings(model_config: Mapping[str, Any]) -> dict[str, Any]:
+    """Read provider/model default settings from a model config.
+
+    ``default_settings`` lets a model entry define request settings that cannot
+    be conveniently expressed in puppy.cfg, such as nested OpenAI ``extra_body``
+    payloads required by some OpenAI-compatible providers.
+
+    User-configured per-model settings still win because callers merge them
+    after these defaults.
+    """
+    default_settings = model_config.get("default_settings")
+    if default_settings is None:
+        return {}
+    if not isinstance(default_settings, Mapping):
+        emit_warning("Model 'default_settings' must be a JSON object; ignoring it.")
+        return {}
+    return _to_mutable_nested(default_settings)
+
+
 # Pre-compiled regex pattern for environment variable substitution (e.g., ${VAR_NAME} or $VAR_NAME)
 _ENV_VAR_RE = re.compile(r"\$\{([^}]+)\}|\$([A-Za-z_][A-Za-z0-9_]*)")
-
-# Import centralized model configuration
-# Model builder registry and custom providers are now centralized in model_config module
-from code_puppy.model_config import (
-    _MODEL_BUILDERS,
-    _CUSTOM_MODEL_PROVIDERS,
-    register_model_builder,
-    load_plugin_providers as _load_plugin_model_providers,
-)
 
 
 # Anthropic beta header required for 1M context window support.
@@ -206,8 +240,6 @@ def make_model_settings(
     Returns:
         Appropriate ModelSettings subclass instance for the model.
     """
-    model_settings_dict: dict = {}
-
     # Calculate max_tokens using centralized resolver
     try:
         models_config = ModelFactory.load_config()
@@ -215,7 +247,8 @@ def make_model_settings(
     except Exception:
         # Fallback if config loading fails (e.g., in CI environments)
         model_config = {}
-    
+
+    model_settings_dict: dict = get_model_default_settings(model_config)
     max_tokens = resolve_max_output_tokens(model_name, model_config, requested=max_tokens)
     model_settings_dict["max_tokens"] = max_tokens
     effective_settings = _config_module.get_effective_model_settings(model_name)
@@ -338,9 +371,6 @@ def make_model_settings(
         model_settings = ModelSettings(**model_settings_dict)
 
     return model_settings
-
-
-from pydantic_ai.models.openai import OpenAIChatModel as _OpenAIChatModel
 
 
 class ZaiChatModel(_OpenAIChatModel):
@@ -1044,7 +1074,6 @@ class ModelFactory:
             raise ValueError(f"Model '{model_name}' not found in configuration.")
 
         model_type = model_config.get("type")
-        provider_identity = resolve_provider_identity(model_name, model_config)
 
         def _check_result(result: Any, source: str) -> Any:
             """Raise if a builder / provider returned None."""
@@ -1110,6 +1139,5 @@ class ModelFactory:
                             ) from e
 
         raise ValueError(f"Unsupported model type: {model_type}")
-
 
 

@@ -25,7 +25,7 @@ defmodule CodePuppyControl.Config.Models do
   @doc """
   Return the currently configured global model name.
 
-  Resolution: `puppy.cfg [puppy] model` → first model in `models.json`
+  Resolution: `puppy.cfg [puppy] model` → first model in `ModelRegistry`
   → `"gpt-5"` fallback.
   """
   @spec global_model_name() :: String.t()
@@ -34,13 +34,36 @@ defmodule CodePuppyControl.Config.Models do
   end
 
   @doc """
-  Return the default model (first available or fallback `"gpt-5"`).
+  Return the default model (first available from ModelRegistry, or fallback `"gpt-5"`).
+
+  Resolution: first model in `ModelRegistry.list_model_names()` → `"gpt-5"`.
+  Safe when ModelRegistry/ETS is not yet started (bootstrap, tests).
   """
   @spec default_model() :: String.t()
   def default_model do
-    # In the Elixir port, model availability is managed by ModelRegistry.
-    # Fall back to a sensible default.
-    "gpt-5"
+    case first_registry_model() do
+      nil -> "gpt-5"
+      name -> name
+    end
+  end
+
+  @doc """
+  Try to fetch the first model name from ModelRegistry.
+
+  Returns `nil` when the registry or ETS table is unavailable
+  (e.g. during early bootstrap, in isolated test contexts, or when
+  the GenServer hasn't been started yet).
+  """
+  @spec first_registry_model() :: String.t() | nil
+  def first_registry_model do
+    CodePuppyControl.ModelRegistry.list_model_names()
+    |> List.first()
+  rescue
+    ArgumentError -> nil
+  catch
+    :exit, {:noproc, _} -> nil
+    :exit, {:shutdown, _} -> nil
+    :exit, {:timeout, _} -> nil
   end
 
   @doc """

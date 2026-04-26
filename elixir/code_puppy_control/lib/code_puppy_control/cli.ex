@@ -17,10 +17,10 @@ defmodule CodePuppyControl.CLI do
     * `-v`, `-V`, `--version` - Show version and exit
     * `-m`, `--model MODEL` - Model to use (default: from config)
     * `-a`, `--agent AGENT` - Agent to use (default: code-puppy)
-    * `-c`, `--continue` - Continue last session
+    * `-c`, `--continue` - Parsed flag; currently routes to interactive mode without session restore
     * `-p`, `--prompt PROMPT` - Execute a single prompt and exit
     * `-i`, `--interactive` - Run in interactive mode
-    * `--bridge-mode` - Enable Mana LiveView TCP bridge
+    * `--bridge-mode` - Parsed flag; reserved for bridge-mode delegation (no runtime effect in current Elixir CLI)
   """
 
   alias CodePuppyControl.CLI.Parser
@@ -52,6 +52,39 @@ defmodule CodePuppyControl.CLI do
   end
 
   @doc """
+  Determine the run mode from parsed CLI opts.
+
+  Returns an atom tag describing which execution path `run/1` will
+  take, without starting the OTP supervision tree or calling
+  `System.halt/1`.  Extracted for testability — the routing
+  logic is pure and deterministic.
+
+  ## Returns
+
+    * `:one_shot`               — Non-interactive prompt (`-p TEXT` / positional)
+    * `:interactive_with_prompt` — Interactive mode with an initial prompt (`-p TEXT -i`)
+    * `:continue_session`       — Parsed flag (`-c`); currently routes to interactive mode without session restore
+    * `:interactive_default`     — Plain interactive REPL (no prompt / empty prompt)
+  """
+  @spec resolve_run_mode(map()) ::
+          :one_shot | :interactive_with_prompt | :continue_session | :interactive_default
+  def resolve_run_mode(opts) do
+    case opts do
+      %{prompt: _, interactive: true} ->
+        :interactive_with_prompt
+
+      %{prompt: prompt} when is_binary(prompt) and prompt != "" ->
+        :one_shot
+
+      %{continue: true} ->
+        :continue_session
+
+      _ ->
+        :interactive_default
+    end
+  end
+
+  @doc """
   Run the application with parsed options.
 
   Starts the OTP supervision tree (unless --help/--version) and
@@ -62,24 +95,17 @@ defmodule CodePuppyControl.CLI do
     # Ensure the OTP app is started for full invocations
     Application.ensure_all_started(:code_puppy_control)
 
-    case opts do
-      %{prompt: prompt, interactive: true} ->
-        # Interactive mode with initial prompt
-        IO.puts("[cli] Starting interactive mode with prompt: #{prompt}")
-        run_interactive(opts)
-
-      %{prompt: prompt} when is_binary(prompt) and prompt != "" ->
-        # Single prompt mode
-        IO.puts("[cli] Running single prompt: #{prompt}")
+    case resolve_run_mode(opts) do
+      :one_shot ->
         run_single_prompt(opts)
 
-      %{continue: true} ->
-        # Continue last session
-        IO.puts("[cli] Continuing last session")
+      :interactive_with_prompt ->
         run_interactive(opts)
 
-      _ ->
-        # Default: interactive mode
+      :continue_session ->
+        run_interactive(opts)
+
+      :interactive_default ->
         run_interactive(opts)
     end
 
@@ -95,13 +121,13 @@ defmodule CodePuppyControl.CLI do
   end
 
   defp run_single_prompt(opts) do
-    # TODO: Wire to CodePuppyControl prompt runner
-    model = Map.get(opts, :model)
-    prompt = opts[:prompt]
+    case CodePuppyControl.REPL.OneShot.run(opts) do
+      :ok ->
+        :ok
 
-    IO.puts("[cli] Single prompt: #{prompt}")
-    if model, do: IO.puts("[cli] Model override: #{model}")
-    IO.puts("[cli] Prompt runner not yet implemented - exiting")
+      :error ->
+        System.halt(1)
+    end
   end
 
   @doc """
@@ -119,15 +145,15 @@ defmodule CodePuppyControl.CLI do
       -v, -V, --version Show version and exit
       -m, --model MODEL Model to use (default: from config)
       -a, --agent AGENT Agent to use (default: code-puppy)
-      -c, --continue Continue last session
+      -c, --continue Parsed flag; currently routes to interactive mode (no session restore yet)
       -p, --prompt PROMPT Execute a single prompt and exit
       -i, --interactive Run in interactive mode
-      --bridge-mode Enable Mana LiveView TCP bridge
+      --bridge-mode Parsed; reserved (no runtime effect in current Elixir CLI)
 
     Examples:
       pup Start interactive mode
       pup "explain this code" Run single prompt
-      pup -m claude-sonnet -c Continue with specific model
+      pup -m claude-sonnet -c       -c flag parsed (currently same as interactive mode)
 
     For more information: https://github.com/anthropics/code-puppy
     """

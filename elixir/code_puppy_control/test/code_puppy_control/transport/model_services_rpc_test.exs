@@ -8,9 +8,6 @@ defmodule CodePuppyControl.Transport.ModelServicesRpcTest do
 
   use ExUnit.Case
 
-  import ExUnit.CaptureIO
-
-  alias CodePuppyControl.ModelRegistry
   alias CodePuppyControl.Transport.StdioService
   alias CodePuppyControl.Support.StdioTestHelper
 
@@ -87,11 +84,11 @@ defmodule CodePuppyControl.Transport.ModelServicesRpcTest do
       }
 
       output =
-        with_bundled_models_path(@test_models_path, fn ->
-          capture_local_stdio([Jason.encode!(request)], fn ->
-            StdioService.run()
-          end)
-        end)
+        capture_stdio(
+          [Jason.encode!(request)],
+          fn -> StdioService.run() end,
+          env: [{"PUP_BUNDLED_MODELS_PATH", @test_models_path}]
+        )
 
       response = Jason.decode!(output)
       assert response["jsonrpc"] == "2.0"
@@ -455,37 +452,7 @@ defmodule CodePuppyControl.Transport.ModelServicesRpcTest do
   # Helper Functions
   # ============================================================================
 
-  defp capture_stdio(inputs, fun) do
-    StdioTestHelper.capture_stdio(inputs, fun)
-  end
-
-  defp capture_local_stdio(inputs, fun) do
-    input = Enum.join(inputs, "\n") <> "\n"
-
-    capture_io(input, fun)
-    |> String.split("\n")
-    |> Enum.find(&(String.starts_with?(&1, "{") and &1 != ""))
-    |> case do
-      nil -> "{}"
-      line -> line
-    end
-  end
-
-  defp with_bundled_models_path(path, fun) do
-    original = Application.get_env(:code_puppy_control, :bundled_models_path)
-
-    try do
-      Application.put_env(:code_puppy_control, :bundled_models_path, path)
-      :ok = ModelRegistry.reload()
-      fun.()
-    after
-      if original do
-        Application.put_env(:code_puppy_control, :bundled_models_path, original)
-      else
-        Application.delete_env(:code_puppy_control, :bundled_models_path)
-      end
-
-      ModelRegistry.reload()
-    end
+  defp capture_stdio(inputs, fun \\ nil, opts \\ []) do
+    StdioTestHelper.capture_stdio(inputs, fun, opts)
   end
 end

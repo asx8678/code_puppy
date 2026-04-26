@@ -10,6 +10,10 @@ defmodule CodePuppyControl.Agent do
   - **Agent.Loop** — GenServer that drives turns until done
   - **Agent.Events** — Structured event types for UI/monitoring
   - **Agent.LLM** — Behaviour for LLM client (placeholder until )
+  - **Agent.ToolCallTracker** — Tool call ID tracking and pruning
+  - **Agent.MessageProcessor** — Message history filtering, dedup, truncation
+  - **Agent.BudgetEnforcer** — Token budget and context window checks
+  - **Agent.Lifecycle** — Model resolution, prompt assembly, MCP loading
 
   ## Quick Start
 

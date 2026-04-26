@@ -90,15 +90,17 @@ defmodule CodePuppyControl.Config.WriterTest do
     test "consecutive writes stay in the originally loaded file", %{cfg_path: cfg_path} do
       ensure_writer_started()
 
+      unique_timeout = "writer_timeout_#{System.unique_integer([:positive])}"
+
       # First write
       assert :ok = Writer.set_value("model", "first_write")
       # Second write WITHOUT calling Loader.load/1 in between
-      assert :ok = Writer.set_value("timeout", "42")
+      assert :ok = Writer.set_value("timeout", unique_timeout)
 
       # Both writes should be in the originally loaded file
       content = File.read!(cfg_path)
       assert content =~ "first_write", "Expected first_write in #{cfg_path}"
-      assert content =~ "42", "Expected timeout=42 in #{cfg_path}"
+      assert content =~ unique_timeout, "Expected timeout=#{unique_timeout} in #{cfg_path}"
 
       # Default config file should NOT contain our test values
       default_path = CodePuppyControl.Config.Paths.config_file()
@@ -109,7 +111,7 @@ defmodule CodePuppyControl.Config.WriterTest do
         refute default_content =~ "first_write",
                "Test value leaked into default config at #{default_path}"
 
-        refute default_content =~ "42",
+        refute default_content =~ unique_timeout,
                "Test value leaked into default config at #{default_path}"
       end
     end

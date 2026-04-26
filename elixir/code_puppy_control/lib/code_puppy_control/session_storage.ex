@@ -81,7 +81,7 @@ defmodule CodePuppyControl.SessionStorage do
   @spec save_session(session_name(), history(), keyword()) ::
           {:ok, session_metadata()} | {:error, term()}
   def save_session(name, history, opts \\ []) do
-    dir = Keyword.get(opts, :base_dir, base_dir())
+    dir = resolve_base_dir(opts)
     compacted_hashes = Keyword.get(opts, :compacted_hashes, [])
     total_tokens = Keyword.get(opts, :total_tokens, 0)
     auto_saved = Keyword.get(opts, :auto_saved, false)
@@ -139,7 +139,7 @@ defmodule CodePuppyControl.SessionStorage do
           {:ok, %{messages: history(), compacted_hashes: compacted_hashes()}}
           | {:error, :not_found | term()}
   def load_session(name, opts \\ []) do
-    dir = Keyword.get(opts, :base_dir, base_dir())
+    dir = resolve_base_dir(opts)
     paths = Format.build_paths(dir, name)
 
     case File.read(paths.session_path) do
@@ -173,7 +173,7 @@ defmodule CodePuppyControl.SessionStorage do
   @spec load_session_full(session_name(), keyword()) ::
           {:ok, session_data()} | {:error, :not_found | term()}
   def load_session_full(name, opts \\ []) do
-    dir = Keyword.get(opts, :base_dir, base_dir())
+    dir = resolve_base_dir(opts)
     paths = Format.build_paths(dir, name)
 
     case File.read(paths.session_path) do
@@ -195,7 +195,7 @@ defmodule CodePuppyControl.SessionStorage do
   @spec update_session(session_name(), keyword()) ::
           {:ok, session_metadata()} | {:error, term()}
   def update_session(name, opts \\ []) do
-    dir = Keyword.get(opts, :base_dir, base_dir())
+    dir = resolve_base_dir(opts)
     normalized = Format.normalize_name(name)
 
     case load_session_full(normalized, base_dir: dir) do
@@ -239,7 +239,7 @@ defmodule CodePuppyControl.SessionStorage do
   @doc "Deletes a session by name (idempotent). Options: `:base_dir`.\n"
   @spec delete_session(session_name(), keyword()) :: :ok | {:error, term()}
   def delete_session(name, opts \\ []) do
-    dir = Keyword.get(opts, :base_dir, base_dir())
+    dir = resolve_base_dir(opts)
     paths = Format.build_paths(dir, name)
 
     _ = File.rm(paths.session_path)
@@ -255,7 +255,7 @@ defmodule CodePuppyControl.SessionStorage do
   @doc "Lists all session names sorted alphabetically. Options: `:base_dir`.\n"
   @spec list_sessions(keyword()) :: {:ok, [session_name()]} | {:error, term()}
   def list_sessions(opts \\ []) do
-    dir = Keyword.get(opts, :base_dir, base_dir())
+    dir = resolve_base_dir(opts)
 
     case File.ls(dir) do
       {:ok, files} ->
@@ -279,7 +279,7 @@ defmodule CodePuppyControl.SessionStorage do
   @doc "Lists sessions with metadata, sorted newest-first. Options: `:base_dir`.\n"
   @spec list_sessions_with_metadata(keyword()) :: {:ok, [session_metadata()]} | {:error, term()}
   def list_sessions_with_metadata(opts \\ []) do
-    dir = Keyword.get(opts, :base_dir, base_dir())
+    dir = resolve_base_dir(opts)
 
     case File.ls(dir) do
       {:ok, files} ->
@@ -378,7 +378,7 @@ defmodule CodePuppyControl.SessionStorage do
   @spec export_session(session_name(), keyword()) ::
           {:ok, String.t() | Path.t()} | {:error, term()}
   def export_session(name, opts \\ []) do
-    dir = Keyword.get(opts, :base_dir, base_dir())
+    dir = resolve_base_dir(opts)
 
     with {:ok, data} <- load_session_full(name, base_dir: dir) do
       json = Jason.encode!(data, pretty: true)
@@ -430,20 +430,36 @@ defmodule CodePuppyControl.SessionStorage do
     # History is already immutable in Elixir — no list() snapshot needed
     # unlike Python. The variable binding captures the current value.
     history_snapshot = history
-    opts_snapshot = opts
 
-    _ =
-      Task.start(fn ->
-        case save_session(name, history_snapshot, opts_snapshot) do
-          {:ok, _meta} ->
-            mark_autosave_complete(history_snapshot)
+    # (code_puppy-dku) Lazy base_dir resolution: Keyword.fetch/2 avoids
+    # eagerly calling base_dir() when :base_dir is present in opts.
+    # safe_resolve_base_dir/1 also catches errors from base_dir()/0,
+    # preserving the fire-and-forget contract — errors are logged, not
+    # raised synchronously.
+    case safe_resolve_base_dir(opts) do
+      {:ok, dir} ->
+        opts_with_dir = Keyword.put(opts, :base_dir, dir)
 
-          {:error, reason} ->
-            Logger.warning("Async session save failed: #{inspect(reason)}")
-        end
-      end)
+        _ =
+          Task.start(fn ->
+            case save_session(name, history_snapshot, opts_with_dir) do
+              {:ok, _meta} ->
+                mark_autosave_complete(history_snapshot)
 
-    :ok
+              {:error, reason} ->
+                Logger.warning("Async session save failed: #{inspect(reason)}")
+            end
+          end)
+
+        :ok
+
+      {:error, reason} ->
+        Logger.warning(
+          "Async session save skipped — failed to resolve base_dir: #{inspect(reason)}"
+        )
+
+        :ok
+    end
   end
 
   @doc """
@@ -476,7 +492,7 @@ defmodule CodePuppyControl.SessionStorage do
   @doc "Checks if a session exists. Options: `:base_dir`.\n"
   @spec session_exists?(session_name(), keyword()) :: boolean()
   def session_exists?(name, opts \\ []) do
-    dir = Keyword.get(opts, :base_dir, base_dir())
+    dir = resolve_base_dir(opts)
     paths = Format.build_paths(dir, name)
     File.exists?(paths.session_path)
   end
@@ -494,6 +510,38 @@ defmodule CodePuppyControl.SessionStorage do
   # Private Helpers
   # ---------------------------------------------------------------------------
 
+  # (code_puppy-dku) Lazy base_dir resolution.  Keyword.get/3 eagerly
+  # evaluates its default argument even when the key is present, so
+  # `Keyword.get(opts, :base_dir, base_dir())` would call base_dir()/0
+  # on every invocation — including cases where the env is invalid,
+  # causing synchronous raises.  Keyword.fetch/2 only evaluates the
+  # fallback when the key is absent.
+  @spec resolve_base_dir(keyword()) :: Path.t()
+  defp resolve_base_dir(opts) do
+    case Keyword.fetch(opts, :base_dir) do
+      {:ok, dir} -> dir
+      :error -> base_dir()
+    end
+  end
+
+  # (code_puppy-dku) Safe variant for fire-and-forget callers.
+  # Catches errors from base_dir()/0 so that invalid env does not
+  # propagate as a synchronous exception.
+  @spec safe_resolve_base_dir(keyword()) :: {:ok, Path.t()} | {:error, term()}
+  defp safe_resolve_base_dir(opts) do
+    case Keyword.fetch(opts, :base_dir) do
+      {:ok, dir} ->
+        {:ok, dir}
+
+      :error ->
+        try do
+          {:ok, base_dir()}
+        rescue
+          e -> {:error, e}
+        end
+    end
+  end
+
   defp now_iso do
     DateTime.utc_now() |> DateTime.to_iso8601()
   end
@@ -502,12 +550,39 @@ defmodule CodePuppyControl.SessionStorage do
     canonical = Path.expand(dir)
     ex_home = Path.expand("~/.code_puppy_ex")
 
-    unless String.starts_with?(canonical, ex_home) do
+    # PUP_TEST_SESSION_ROOT: test-only alternative root. Only honoured
+    # when the :allow_test_session_root Application env is set (configured
+    # exclusively in test.exs).  This prevents production from expanding
+    # allowed roots via env var.  (code_puppy-dku)
+    test_root =
+      if Application.get_env(:code_puppy_control, :allow_test_session_root, false) do
+        System.get_env("PUP_TEST_SESSION_ROOT")
+      end
+
+    allowed_roots = [ex_home] ++ if(test_root, do: [test_root], else: [])
+
+    # Canonicalize each allowed root and perform a path-boundary check
+    # (not raw String.starts_with?/2) to prevent prefix/sibling escapes
+    # e.g. /tmp/root2 matching /tmp/root.  (code_puppy-dku)
+    unless Enum.any?(allowed_roots, &path_under_root?(canonical, &1)) do
       raise ArgumentError,
             "Storage dir #{inspect(dir)} is outside ~/.code_puppy_ex/"
     end
 
     canonical
+  end
+
+  # Returns true if `path` is equal to or a proper descendant of `root`.
+  # Uses Path.split/1 + segment comparison to avoid prefix/sibling escapes
+  # where e.g. "/tmp/root2" would match String.starts_with?("/tmp/root").
+  # Both arguments MUST be pre-expanded (via Path.expand/1).  (code_puppy-dku)
+  @spec path_under_root?(Path.t(), Path.t()) :: boolean()
+  defp path_under_root?(path, root) do
+    path_segments = Path.split(path)
+    root_segments = Path.split(root)
+
+    length(path_segments) >= length(root_segments) and
+      Enum.take(path_segments, length(root_segments)) == root_segments
   end
 
   defp write_tmp(path, data) do
@@ -534,20 +609,6 @@ defmodule CodePuppyControl.SessionStorage do
         end
 
       {:error, reason} ->
-        {:error, reason}
-    end
-  end
-
-  defp atomic_write_json(path, data) do
-    json = Jason.encode!(data, pretty: true)
-    tmp_path = path <> ".tmp.#{:erlang.unique_integer([:positive])}"
-
-    with :ok <- File.write(tmp_path, json),
-         :ok <- File.rename(tmp_path, path) do
-      :ok
-    else
-      {:error, reason} ->
-        _ = File.rm(tmp_path)
         {:error, reason}
     end
   end

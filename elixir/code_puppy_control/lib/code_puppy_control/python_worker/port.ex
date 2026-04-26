@@ -702,16 +702,16 @@ defmodule CodePuppyControl.PythonWorker.Port do
     Protocol.encode_response(%{"count" => count}, nil)
   end
 
+  defp handle_file_request(method, _params) do
+    Protocol.encode_error(-32601, "Method not found: #{method}", nil, nil)
+  end
+
   defp traverse_changeset_errors(changeset) do
     Ecto.Changeset.traverse_errors(changeset, fn {msg, opts} ->
       Enum.reduce(opts, msg, fn {key, value}, acc ->
         String.replace(acc, "%{#{key}}", to_string(value))
       end)
     end)
-  end
-
-  defp handle_file_request(method, _params) do
-    Protocol.encode_error(-32601, "Method not found: #{method}", nil, nil)
   end
 
   defp params_to_file_ops_opts(params) do

@@ -63,10 +63,19 @@ defmodule CodePuppyControl.Agent.Loop do
 
   require Logger
 
-  alias CodePuppyControl.Agent.{Events, ResponseValidator, Turn}
-  alias CodePuppyControl.Compaction
-  alias CodePuppyControl.Stream.{Event, Normalizer}
-  alias CodePuppyControl.Tool.Runner
+  alias CodePuppyControl.Agent.{
+    BudgetEnforcer,
+    Events,
+    Lifecycle,
+    MessageProcessor,
+    PromptMixin,
+    ResponseValidator,
+    ToolCallTracker,
+    Turn
+  }
+
+  alias CodePuppyControl.Agent.Loop.{Compaction, Streaming, ToolDispatch}
+  alias CodePuppyControl.Stream.Normalizer
   alias CodePuppyControl.TokenLedger
 
   # ---------------------------------------------------------------------------
@@ -366,7 +375,7 @@ defmodule CodePuppyControl.Agent.Loop do
     turn_number = state.turn_number + 1
 
     # Compact messages if needed before LLM call
-    state = maybe_compact_messages(state)
+    state = Compaction.maybe_compact_messages(state)
 
     turn = Turn.new(turn_number, state.messages)
 
@@ -380,139 +389,86 @@ defmodule CodePuppyControl.Agent.Loop do
     end
   end
 
-  # ---------------------------------------------------------------------------
-  # Compaction Integration
-  # ---------------------------------------------------------------------------
-
-  defp maybe_compact_messages(%{compaction_enabled: false} = state), do: state
-
-  defp maybe_compact_messages(%{compaction_enabled: true} = state) do
-    if Compaction.should_compact?(state.messages, state.compaction_opts) do
-      compact_messages(state)
-    else
-      state
-    end
-  end
-
-  defp compact_messages(state) do
-    case Compaction.compact(state.messages, state.compaction_opts) do
-      {:ok, compacted, stats} ->
-        Logger.info(
-          "Agent.Loop compaction: run_id=#{state.run_id} " <>
-            "#{stats.original_count} -> #{length(compacted)} messages " <>
-            "(dropped=#{stats.dropped_by_filter}, truncated=#{stats.truncated_count})"
-        )
-
-        Events.publish(
-          Events.messages_compacted(state.run_id, state.session_id, %{
-            original_count: stats.original_count,
-            compacted_count: length(compacted),
-            dropped_by_filter: stats.dropped_by_filter,
-            truncated_count: stats.truncated_count,
-            summarize_count: stats.summarize_count,
-            protected_count: stats.protected_count
-          })
-        )
-
-        %{state | messages: compacted}
-
-      {:error, reason} ->
-        Logger.warning(
-          "Agent.Loop compaction failed: run_id=#{state.run_id} reason=#{inspect(reason)}"
-        )
-
-        # Fail gracefully — continue with original messages
-        state
-    end
-  end
-
   defp do_llm_stream(state, turn) do
     case Turn.start_streaming(turn) do
       {:ok, turn} ->
-        system_prompt =
-          state.agent_module.system_prompt(%{
-            session_id: state.session_id,
-            run_id: state.run_id,
-            messages: state.messages
-          })
+        # Use Lifecycle for system prompt assembly (base + puppy rules)
+        # then PromptMixin for platform info, identity, and load_prompt callbacks
+        context = %{
+          session_id: state.session_id,
+          run_id: state.run_id,
+          messages: state.messages
+        }
+
+        {:ok, base_prompt} = Lifecycle.assemble_system_prompt(state.agent_module, context)
+
+        identity = PromptMixin.get_identity(state.agent_module.name(), state.run_id)
+        system_prompt = PromptMixin.get_full_system_prompt(base_prompt, identity)
+
 
         tools = state.agent_module.allowed_tools()
         model = resolve_model(state)
 
-        raw_callback = build_stream_callback(state)
-        stream_callback = Normalizer.normalize(raw_callback)
+        # Pre-send budget check via BudgetEnforcer
+        estimated_overhead =
+          BudgetEnforcer.estimate_context_overhead(system_prompt, tools)
 
-        case state.llm_module.stream_chat(
-               state.messages,
-               tools,
-               [model: model, system_prompt: system_prompt],
-               stream_callback
-             ) do
-          {:ok, response} ->
-            turn = accumulate_response(turn, response)
-            Turn.start_tool_calls(turn)
+        estimated_input =
+          estimated_overhead + MessageProcessor.estimate_batch_tokens(state.messages)
 
-          {:error, reason} ->
-            Turn.fail(turn, reason)
+        budget_check =
+          BudgetEnforcer.check_before_send(estimated_input, %{
+            context_budget: %{
+              model_context_length: BudgetEnforcer.model_context_length(model),
+              max_output_tokens: 4096
+            },
+            token_budgets: %{max_session_tokens: 0, max_run_tokens: 0},
+            usage_limits: nil
+          })
+
+        turn =
+          case budget_check do
+            {:error, :context_budget_exceeded, msg} ->
+              Logger.warning("Agent.Loop: #{msg}")
+              # Trigger compaction as a recovery attempt
+              _state_compacted = Compaction.compact_messages(state)
+              {:ok, failed_turn} = Turn.fail(turn, {:context_budget_exceeded, msg})
+              failed_turn
+
+            {:error, reason} ->
+              {:ok, failed_turn} = Turn.fail(turn, reason)
+              failed_turn
+
+            {:ok, :checked} ->
+              turn
+          end
+
+        # Re-check: if budget check failed, the turn is already in error state
+        if turn.state == :error do
+          {:ok, turn}
+        else
+          raw_callback = Streaming.build_stream_callback(state)
+          stream_callback = Normalizer.normalize(raw_callback)
+
+          case state.llm_module.stream_chat(
+                 state.messages,
+                 tools,
+                 [model: model, system_prompt: system_prompt],
+                 stream_callback
+               ) do
+            {:ok, response} ->
+              turn = Streaming.accumulate_response(turn, response)
+              Turn.start_tool_calls(turn)
+
+            {:error, reason} ->
+              Turn.fail(turn, reason)
+          end
         end
 
       error ->
         error
     end
   end
-
-  defp build_stream_callback(state) do
-    fn
-      {:stream, %Event.TextDelta{text: text}} when is_binary(text) ->
-        Events.publish(Events.llm_stream(state.run_id, state.session_id, text))
-
-      {:stream, %Event.ToolCallEnd{name: name, arguments: args_json, id: id}} ->
-        arguments = parse_tool_arguments(args_json)
-
-        Events.publish(
-          Events.tool_call_start(state.run_id, state.session_id, name, arguments, id)
-        )
-
-      {:stream, %Event.Done{}} ->
-        :ok
-
-      {:stream, _other} ->
-        :ok
-
-      _other ->
-        :ok
-    end
-  end
-
-  defp parse_tool_arguments(args_json) when is_binary(args_json) do
-    case Jason.decode(args_json) do
-      {:ok, parsed} when is_map(parsed) -> parsed
-      _ -> args_json
-    end
-  end
-
-  defp parse_tool_arguments(args), do: args
-
-  defp accumulate_response(turn, %{text: text, tool_calls: tool_calls}) do
-    turn =
-      if text && text != "" do
-        case Turn.append_text(turn, text) do
-          {:ok, t} -> t
-          _ -> turn
-        end
-      else
-        turn
-      end
-
-    Enum.reduce(tool_calls || [], turn, fn tc, acc ->
-      case Turn.add_tool_call(acc, tc) do
-        {:ok, t} -> t
-        _ -> acc
-      end
-    end)
-  end
-
-  defp accumulate_response(turn, _other), do: turn
 
   defp handle_turn_result(state, %{state: :done} = turn, turn_number) do
     state = finalize_turn(state, turn, turn_number)
@@ -539,6 +495,17 @@ defmodule CodePuppyControl.Agent.Loop do
     end
   end
 
+  defp handle_turn_result(state, %{state: :error, error: reason} = turn, turn_number) do
+    state = finalize_turn(state, turn, turn_number)
+    Events.publish(Events.turn_ended(state.run_id, state.session_id, turn_number, :error))
+    {:error, reason, state}
+  end
+
+  defp handle_turn_result(state, turn, turn_number) do
+    state = finalize_turn(state, turn, turn_number)
+    {:ok, state}
+  end
+
   # Validates response against agent's response_schema if defined.
   # Returns {:ok, response} if no schema or validation passes.
   # Returns {:error, errors} if validation fails.
@@ -555,28 +522,39 @@ defmodule CodePuppyControl.Agent.Loop do
     ResponseValidator.validate(response, schema)
   end
 
-  defp handle_turn_result(state, %{state: :error, error: reason} = turn, turn_number) do
-    state = finalize_turn(state, turn, turn_number)
-    Events.publish(Events.turn_ended(state.run_id, state.session_id, turn_number, :error))
-    {:error, reason, state}
-  end
-
-  defp handle_turn_result(state, turn, turn_number) do
-    state = finalize_turn(state, turn, turn_number)
-    {:ok, state}
-  end
-
   defp finalize_turn(state, turn, turn_number) do
-    # Append accumulated text to messages as assistant response
+    # Build the assistant message for this turn.
+    #
+    # Provider APIs require that tool-result messages are preceded by an
+    # assistant message containing the tool_calls that initiated them.
+    # Previously we only appended assistant text, which omitted the required
+    # assistant(tool_calls) message for tool-call-only turns — breaking
+    # conversation history replay on subsequent LLM turns.
     messages =
-      if turn.accumulated_text != "" do
-        state.messages ++ [%{role: "assistant", content: turn.accumulated_text}]
-      else
-        state.messages
+      cond do
+        turn.pending_tool_calls != [] ->
+          # Tool calls present: always emit assistant message with tool_calls.
+          # Content is nil when the LLM emitted only tool calls (no text).
+          assistant_msg = %{
+            role: "assistant",
+            content: if(turn.accumulated_text != "", do: turn.accumulated_text),
+            tool_calls: turn.pending_tool_calls
+          }
+
+          state.messages ++ [assistant_msg]
+
+        turn.accumulated_text != "" ->
+          state.messages ++ [%{role: "assistant", content: turn.accumulated_text}]
+
+        true ->
+          state.messages
       end
 
+    # Prune any interrupted tool calls before dispatch
+    messages = ToolCallTracker.prune_interrupted(messages)
+
     # Dispatch tool calls and collect results
-    messages = dispatch_tool_calls(state, turn, messages)
+    messages = ToolDispatch.dispatch_tool_calls(state, turn, messages)
 
     # Record token usage in the ledger.
     # TODO: When real LLM usage data is available, replace these
@@ -608,104 +586,6 @@ defmodule CodePuppyControl.Agent.Loop do
   end
 
   # ---------------------------------------------------------------------------
-  # Tool Dispatch — resolved via CodePuppyControl.Tool.Runner
-  # ---------------------------------------------------------------------------
-
-  defp dispatch_tool_calls(state, turn, messages) do
-    allowed = MapSet.new(state.agent_module.allowed_tools())
-
-    Enum.reduce(turn.pending_tool_calls, messages, fn tool_call, acc ->
-      # Provider-emitted tool call names may arrive as strings, but
-      # allowed_tools uses atoms. Resolve string names against the known
-      # allowed set — never call String.to_atom/1 on untrusted input.
-      resolved_name = resolve_tool_name(tool_call.name, allowed)
-      tool_call = %{tool_call | name: resolved_name}
-
-      if MapSet.member?(allowed, resolved_name) do
-        execute_tool_call(state, tool_call, acc)
-      else
-        Logger.warning(
-          "Agent.Loop: tool #{inspect(resolved_name)} not in allowed_tools for #{inspect(state.agent_module)}"
-        )
-
-        result_msg = %{
-          role: "tool",
-          tool_call_id: tool_call.id,
-          content: "Error: tool #{inspect(resolved_name)} is not available"
-        }
-
-        Events.publish(
-          Events.tool_call_end(
-            state.run_id,
-            state.session_id,
-            resolved_name,
-            {:error, :tool_not_allowed},
-            tool_call.id
-          )
-        )
-
-        acc ++ [result_msg]
-      end
-    end)
-  end
-
-  # Resolve a tool name (possibly a string from the provider) to an atom
-  # by matching against the known allowed set. Returns the atom if found,
-  # or the original name (string or atom) if no match — caller treats
-  # unresolved strings as not-allowed.
-  defp resolve_tool_name(name, _allowed) when is_atom(name), do: name
-
-  defp resolve_tool_name(name, allowed) when is_binary(name) do
-    case Enum.find(allowed, &(Atom.to_string(&1) == name)) do
-      nil -> name
-      atom -> atom
-    end
-  end
-
-  defp resolve_tool_name(name, _allowed), do: name
-
-  defp execute_tool_call(state, tool_call, messages) do
-    Events.publish(
-      Events.tool_call_start(
-        state.run_id,
-        state.session_id,
-        tool_call.name,
-        tool_call.arguments,
-        tool_call.id
-      )
-    )
-
-    # Dispatch via Tool.Runner (registry + permission check + validation + timeout)
-    context = Runner.build_context(run_id: state.run_id)
-    result = Runner.invoke(tool_call.name, tool_call.arguments, context)
-
-    Events.publish(
-      Events.tool_call_end(state.run_id, state.session_id, tool_call.name, result, tool_call.id)
-    )
-
-    # Check if agent wants to halt
-    case state.agent_module.on_tool_result(tool_call.name, result, state.agent_state) do
-      {:cont, _new_agent_state} ->
-        result_msg = %{
-          role: "tool",
-          tool_call_id: tool_call.id,
-          content: format_tool_result(result)
-        }
-
-        messages ++ [result_msg]
-
-      {:halt, reason} ->
-        Logger.info("Agent.Loop: agent halted after tool #{tool_call.name}: #{inspect(reason)}")
-
-        messages
-    end
-  end
-
-  defp format_tool_result({:ok, result}), do: inspect(result)
-  defp format_tool_result({:error, reason}), do: "Error: #{inspect(reason)}"
-  defp format_tool_result(other), do: inspect(other)
-
-  # ---------------------------------------------------------------------------
   # Helpers
   # ---------------------------------------------------------------------------
 
@@ -715,14 +595,7 @@ defmodule CodePuppyControl.Agent.Loop do
   end
 
   defp resolve_model(%__MODULE__{agent_module: agent_module}) do
-    case agent_module.model_preference() do
-      {:pack, role} ->
-        # TODO: Integrate with model packs when available
-        Logger.debug("Agent.Loop: model pack resolution not yet implemented for #{inspect(role)}")
-        "claude-sonnet-4-20250514"
-
-      model_name when is_binary(model_name) ->
-        model_name
-    end
+    preference = agent_module.model_preference()
+    Lifecycle.resolve_model(nil, preference)
   end
 end

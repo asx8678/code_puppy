@@ -16,7 +16,6 @@ it shows an empty menu and returns False.
 import logging
 import sys
 import time
-from pathlib import Path
 
 try:
     from prompt_toolkit.application import Application

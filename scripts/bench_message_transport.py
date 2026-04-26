@@ -159,10 +159,8 @@ def run_benchmarks() -> list[BenchmarkResult]:
     # Import Elixir transport
     try:
         from code_puppy import message_transport
-        elixir_available = True
     except ImportError:
         print("⚠️ Elixir transport not available, skipping Elixir benchmarks")
-        elixir_available = False
         return results
     
     # Generate test data

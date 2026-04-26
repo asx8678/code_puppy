@@ -318,7 +318,7 @@ def _register_turbo_execute_tool(agent):
             if summarize:
                 try:
                     response["summary"] = summarize_plan_result(result)
-                except Exception as exc:
+                except Exception:
                     logger.warning(
                         "Summarization failed for plan %s",
                         result.plan_id,

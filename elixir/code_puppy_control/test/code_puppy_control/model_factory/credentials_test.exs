@@ -5,6 +5,47 @@ defmodule CodePuppyControl.ModelFactory.CredentialsTest do
 
   # We use System.put_env/delete_env in tests, so not async
 
+  # ── Module-level sandbox ──────────────────────────────────────────────
+  # Because resolve_api_key/2 and resolve_headers/1 now fall through to
+  # env_or_store/1 → credential_store_get/1 → Crypto.derive_key/0 when
+  # env vars are absent, ANY test that deletes an env var can accidentally
+  # read or CREATE the real ~/.code_puppy_ex/ credential store and
+  # .machine_secret.  Redirect both paths to a temp dir so no test can
+  # touch the real files.  (Newer describe blocks override PUP_EX_HOME
+  # to their own temp dirs, which is fine — on_exit restores in LIFO
+  # order, so the real env is always restored last.)
+  setup_all do
+    tmp =
+      Path.join(
+        System.tmp_dir!(),
+        "mf_cred_sandbox_#{:erlang.unique_integer([:positive, :monotonic])}"
+      )
+
+    File.mkdir_p!(tmp)
+    secret_path = Path.join(tmp, ".machine_secret")
+
+    prev_ex_home = System.get_env("PUP_EX_HOME")
+    prev_secret = System.get_env("PUP_MACHINE_SECRET_PATH")
+    System.put_env("PUP_EX_HOME", tmp)
+    System.put_env("PUP_MACHINE_SECRET_PATH", secret_path)
+
+    on_exit(fn ->
+      case prev_ex_home do
+        nil -> System.delete_env("PUP_EX_HOME")
+        v -> System.put_env("PUP_EX_HOME", v)
+      end
+
+      case prev_secret do
+        nil -> System.delete_env("PUP_MACHINE_SECRET_PATH")
+        v -> System.put_env("PUP_MACHINE_SECRET_PATH", v)
+      end
+
+      File.rm_rf(tmp)
+    end)
+
+    :ok
+  end
+
   describe "resolve_api_key/2" do
     test "resolves from model config api_key_env" do
       System.put_env("MY_CUSTOM_KEY", "sk-custom-123")
@@ -194,35 +235,211 @@ defmodule CodePuppyControl.ModelFactory.CredentialsTest do
     end
   end
 
+  describe "env var substitution with credential store fallback" do
+    setup do
+      # ── Isolation: redirect both credential store and machine secret ──
+      # Production code path: ModelFactory.Credentials.env_or_store/1 →
+      # credential_store_get/1 → CodePuppyControl.Credentials.get(key)
+      # (no store_dir: option), so we MUST redirect the DEFAULT store via
+      # PUP_EX_HOME.  We also isolate the machine secret so Crypto.derive_key/0
+      # never reads or creates the real ~/.code_puppy_ex/.machine_secret.
+      tmp =
+        Path.join(
+          System.tmp_dir!(),
+          "mf_cred_fallback_#{:erlang.unique_integer([:positive, :monotonic])}"
+        )
+
+      File.mkdir_p!(tmp)
+      store_dir = Path.join(tmp, "credentials")
+      secret_path = Path.join(tmp, ".machine_secret")
+
+      prev_ex_home = System.get_env("PUP_EX_HOME")
+      prev_secret = System.get_env("PUP_MACHINE_SECRET_PATH")
+      System.put_env("PUP_EX_HOME", tmp)
+      System.put_env("PUP_MACHINE_SECRET_PATH", secret_path)
+
+      # Unique key names to avoid collisions with other tests or real env
+      prefix = "CP_OYL_TEST_#{:erlang.unique_integer([:positive])}"
+      env_key = "#{prefix}_ENV_ONLY"
+      store_key = "#{prefix}_STORE_ONLY"
+      both_key = "#{prefix}_BOTH"
+      neither_key = "#{prefix}_NEITHER"
+
+      # Clean slate: delete all env vars
+      for k <- [env_key, store_key, both_key, neither_key] do
+        System.delete_env(k)
+      end
+
+      on_exit(fn ->
+        # Restore env vars so other tests (and the real store) are unaffected
+        case prev_ex_home do
+          nil -> System.delete_env("PUP_EX_HOME")
+          v -> System.put_env("PUP_EX_HOME", v)
+        end
+
+        case prev_secret do
+          nil -> System.delete_env("PUP_MACHINE_SECRET_PATH")
+          v -> System.put_env("PUP_MACHINE_SECRET_PATH", v)
+        end
+
+        for k <- [env_key, store_key, both_key, neither_key] do
+          System.delete_env(k)
+        end
+
+        File.rm_rf(tmp)
+      end)
+
+      {:ok,
+       env_key: env_key,
+       store_key: store_key,
+       both_key: both_key,
+       neither_key: neither_key,
+       store_dir: store_dir}
+    end
+
+    test "header substitution: env var takes precedence over store", context do
+      System.put_env(context.both_key, "env-value")
+
+      :ok =
+        CodePuppyControl.Credentials.set(context.both_key, "store-value",
+          store_dir: context.store_dir
+        )
+
+      result = Credentials.resolve_headers(%{"X-Test" => "${#{context.both_key}}"})
+      assert [{"X-Test", "env-value"}] = result
+    end
+
+    test "header substitution: falls back to credential store when env unset", context do
+      :ok =
+        CodePuppyControl.Credentials.set(context.store_key, "store-secret",
+          store_dir: context.store_dir
+        )
+
+      result = Credentials.resolve_headers(%{"X-Auth" => "Bearer $#{context.store_key}"})
+      assert [{"X-Auth", "Bearer store-secret"}] = result
+    end
+
+    test "header substitution: empty string when neither env nor store", context do
+      result =
+        Credentials.resolve_headers(%{"X-Missing" => "prefix-${#{context.neither_key}}-suffix"})
+
+      assert [{"X-Missing", "prefix--suffix"}] = result
+    end
+
+    test "custom endpoint api_key: falls back to credential store when env unset", context do
+      :ok =
+        CodePuppyControl.Credentials.set(context.store_key, "sk-store-endpoint",
+          store_dir: context.store_dir
+        )
+
+      config = %{
+        "url" => "https://custom.example.com",
+        "api_key" => "$#{context.store_key}"
+      }
+
+      assert {:ok, {_url, _headers, api_key}} = Credentials.resolve_custom_endpoint(config)
+      assert api_key == "sk-store-endpoint"
+    end
+
+    test "custom endpoint headers: falls back to credential store when env unset", context do
+      :ok =
+        CodePuppyControl.Credentials.set(context.store_key, "token-from-store",
+          store_dir: context.store_dir
+        )
+
+      config = %{
+        "url" => "https://custom.example.com",
+        "headers" => %{"Authorization" => "Bearer ${#{context.store_key}}"}
+      }
+
+      assert {:ok, {_url, headers, _api_key}} = Credentials.resolve_custom_endpoint(config)
+      assert headers == [{"Authorization", "Bearer token-from-store"}]
+    end
+
+    test "braced and unbraced syntax both resolve from store", context do
+      :ok =
+        CodePuppyControl.Credentials.set(context.store_key, "braced-val",
+          store_dir: context.store_dir
+        )
+
+      result_braced =
+        Credentials.resolve_headers(%{"X-A" => "${#{context.store_key}}"})
+
+      :ok =
+        CodePuppyControl.Credentials.set(context.store_key, "unbraced-val",
+          store_dir: context.store_dir
+        )
+
+      result_unbraced =
+        Credentials.resolve_headers(%{"X-B" => "$#{context.store_key}"})
+
+      assert [{"X-A", "braced-val"}] = result_braced
+      assert [{"X-B", "unbraced-val"}] = result_unbraced
+    end
+  end
+
   describe "resolve_api_key/2 with credential store" do
     setup do
-      dir = Path.join(System.tmp_dir!(), "cred_mf_test_#{:erlang.unique_integer([:positive])}")
-      File.mkdir_p!(dir)
+      # ── Isolation: redirect both credential store and machine secret ──
+      # resolve_api_key/2 calls env_or_store/1 → credential_store_get/1 →
+      # CodePuppyControl.Credentials.get(key) (no store_dir: option).
+      # PUP_EX_HOME redirects the default store; PUP_MACHINE_SECRET_PATH
+      # isolates the encryption key.
+      tmp =
+        Path.join(
+          System.tmp_dir!(),
+          "mf_cred_resolve_#{:erlang.unique_integer([:positive, :monotonic])}"
+        )
+
+      File.mkdir_p!(tmp)
+      store_dir = Path.join(tmp, "credentials")
+      secret_path = Path.join(tmp, ".machine_secret")
+
+      prev_ex_home = System.get_env("PUP_EX_HOME")
+      prev_secret = System.get_env("PUP_MACHINE_SECRET_PATH")
+      System.put_env("PUP_EX_HOME", tmp)
+      System.put_env("PUP_MACHINE_SECRET_PATH", secret_path)
 
       # Ensure env vars are clean so we test the store fallback
       System.delete_env("OPENAI_API_KEY")
       System.delete_env("ANTHROPIC_API_KEY")
 
       on_exit(fn ->
-        File.rm_rf(dir)
+        case prev_ex_home do
+          nil -> System.delete_env("PUP_EX_HOME")
+          v -> System.put_env("PUP_EX_HOME", v)
+        end
+
+        case prev_secret do
+          nil -> System.delete_env("PUP_MACHINE_SECRET_PATH")
+          v -> System.put_env("PUP_MACHINE_SECRET_PATH", v)
+        end
+
         System.delete_env("OPENAI_API_KEY")
         System.delete_env("ANTHROPIC_API_KEY")
+        File.rm_rf(tmp)
       end)
 
-      {:ok, store_dir: dir}
+      {:ok, store_dir: store_dir}
     end
 
     test "falls back to credential store when env var is not set", %{store_dir: dir} do
-      # Store a key in the encrypted credential store
       :ok = CodePuppyControl.Credentials.set("OPENAI_API_KEY", "sk-from-store", store_dir: dir)
 
-      # Since OPENAI_API_KEY env var is not set, should resolve from store
-      # Note: the default store_dir is ~/.code_puppy_ex/credentials,
-      # so we need to set the env var for the real test or the store needs to be there.
-      # For unit testing, we verify the integration path via the private helper.
-      # The env-var-first path is already tested above.
-      assert Credentials.resolve_api_key("openai", %{}) == nil or
-               is_binary(Credentials.resolve_api_key("openai", %{}))
+      # OPENAI_API_KEY env var is unset (cleaned in setup), so
+      # resolve_api_key should fall through to the encrypted store.
+      # PUP_EX_HOME redirects the default store_dir to our temp dir,
+      # so the production code path will find the key there.
+      assert Credentials.resolve_api_key("openai", %{}) == "sk-from-store"
+    end
+
+    test "env var still wins over store when set", %{store_dir: dir} do
+      :ok = CodePuppyControl.Credentials.set("OPENAI_API_KEY", "sk-from-store", store_dir: dir)
+      System.put_env("OPENAI_API_KEY", "sk-from-env")
+
+      assert Credentials.resolve_api_key("openai", %{}) == "sk-from-env"
+
+      System.delete_env("OPENAI_API_KEY")
     end
   end
 end

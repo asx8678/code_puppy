@@ -7,7 +7,7 @@ defmodule CodePuppyControl.Plugins.AgentTrace.Store do
   `Config.Isolation.safe_write!`.
   """
 
-  alias CodePuppyControl.Config.{Isolation, Paths}
+  alias CodePuppyControl.Config.Paths
   alias CodePuppyControl.Plugins.AgentTrace.Schema
 
   @doc "Get the base directory for trace files."

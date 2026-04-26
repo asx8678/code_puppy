@@ -166,7 +166,10 @@ defmodule CodePuppyControl.REPL.DispatchRollbackWithClauseTest do
 
       Application.delete_env(:code_puppy_control, :test_ensure_renderer_raise)
 
-      DispatchRollbackTestHelper.DispatchRollbackMockLLM.set_response(%{text: "recovered reply", tool_calls: []})
+      DispatchRollbackTestHelper.DispatchRollbackMockLLM.set_response(%{
+        text: "recovered reply",
+        tool_calls: []
+      })
 
       ExUnit.CaptureIO.capture_io(fn ->
         assert {:continue, ^state} = Loop.handle_input("try again", state)

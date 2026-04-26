@@ -189,6 +189,118 @@ defmodule CodePuppyControl.Runtime.AgentLoopTest do
   # Agent Events
   # ---------------------------------------------------------------------------
 
+  # ---------------------------------------------------------------------------
+  # Mock LLM Module (captures system prompt for assertion)
+  # ---------------------------------------------------------------------------
+
+  defmodule CapturingMockLLM do
+    @moduledoc false
+    # Uses an Agent to store the system_prompt across process boundaries
+    # (the GenServer loop runs in its own process, so Process dict won't work).
+
+    @table :capturing_mock_llm_ets
+
+    @spec stream_chat([map()], [atom()], keyword(), fun()) :: {:ok, map()} | {:error, term()}
+    def stream_chat(_messages, _tools, opts, _callback) do
+      system_prompt = Keyword.get(opts, :system_prompt, "")
+      :ets.insert(@table, {:system_prompt, system_prompt})
+      {:ok, %{text: "Mock response", tool_calls: []}}
+    end
+
+    @doc "Initializes ETS table for capturing prompts (call from test setup)."
+    @spec setup() :: :ok
+    def setup do
+      if :ets.whereis(@table) == :undefined do
+        :ets.new(@table, [:named_table, :public, :set])
+      else
+        :ets.delete_all_objects(@table)
+      end
+
+      :ok
+    end
+
+    @doc "Retrieves the system prompt captured by the last stream_chat call."
+    @spec get_captured_prompt() :: String.t() | nil
+    def get_captured_prompt do
+      case :ets.lookup(@table, :system_prompt) do
+        [{:system_prompt, prompt}] -> prompt
+        [] -> nil
+      end
+    end
+
+    @doc "Clears the captured system prompt."
+    @spec reset() :: :ok
+    def reset do
+      :ets.delete_all_objects(@table)
+      :ok
+    end
+  end
+
+  describe "Agent.Loop integration with PromptMixin" do
+    @tag capture_log: true
+    test "system_prompt includes platform info and identity via get_full_system_prompt" do
+      CapturingMockLLM.setup()
+
+      run_id = "prompt-mixin-test-#{System.unique_integer([:positive])}"
+
+      {:ok, pid} =
+        Loop.start_link(MockAgent, [%{role: "user", content: "Hello"}],
+          run_id: run_id,
+          llm_module: CapturingMockLLM,
+          max_turns: 1
+        )
+
+      :ok = Loop.run_until_done(pid, 10_000)
+
+      captured = CapturingMockLLM.get_captured_prompt()
+
+      # Base prompt from MockAgent
+      assert captured =~ "You are a test assistant."
+
+      # Platform info injected by PromptMixin.get_full_system_prompt
+      assert captured =~ "# Environment"
+      assert captured =~ "- Platform:"
+      assert captured =~ "- Shell:"
+
+      # Identity injected by PromptMixin.get_full_system_prompt
+      assert captured =~ "Your ID is"
+      assert captured =~ "mock_agent-"
+
+      GenServer.stop(pid, :normal)
+    end
+
+    @tag capture_log: true
+    test "system_prompt includes load_prompt callback additions" do
+      CapturingMockLLM.setup()
+
+      CodePuppyControl.Callbacks.clear(:load_prompt)
+      CodePuppyControl.Callbacks.register(:load_prompt, fn -> "Integration test instruction" end)
+
+      run_id = "prompt-callback-test-#{System.unique_integer([:positive])}"
+
+      {:ok, pid} =
+        Loop.start_link(MockAgent, [%{role: "user", content: "Hello"}],
+          run_id: run_id,
+          llm_module: CapturingMockLLM,
+          max_turns: 1
+        )
+
+      :ok = Loop.run_until_done(pid, 10_000)
+
+      captured = CapturingMockLLM.get_captured_prompt()
+
+      assert captured =~ "# Custom Instructions"
+      assert captured =~ "Integration test instruction"
+
+      CodePuppyControl.Callbacks.clear(:load_prompt)
+      GenServer.stop(pid, :normal)
+    end
+  end
+
+  # ---------------------------------------------------------------------------
+  # Agent Events
+  # ---------------------------------------------------------------------------
+
   describe "agent events" do
     test "Agent.Events.builds correctly structured events" do
       run_id = "event-test-#{System.unique_integer([:positive])}"

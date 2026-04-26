@@ -101,8 +101,10 @@ defmodule CodePuppyControl.FileOps.Security do
     else
       expanded = Path.expand(file_path)
 
-      # Check the user-supplied path (case-insensitive) — fixes # Also check the symlink target if it resolves differently — fixes path_is_sensitive?(expanded) or
-      symlink_target_is_sensitive?(expanded)
+      # Check the user-supplied path (case-insensitive)
+      # Also check the symlink target if it resolves differently
+      path_is_sensitive?(expanded) or
+        symlink_target_is_sensitive?(expanded)
     end
   end
 

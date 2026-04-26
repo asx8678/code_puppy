@@ -7,6 +7,26 @@ OTP design. The core insight: **the Python loop is fundamentally a state machine
 orchestrating LLM calls and tool dispatch** — which maps cleanly to a GenServer
 driving a pure state struct.
 
+Python's `base_agent.py` (2901 lines, 89 methods) has been decomposed into
+focused concern modules, each ≤600 lines:
+
+| Concern Module | Python methods ported | Responsibility |
+|---|---|---|
+| `Agent.Behaviour` | name, system_prompt, allowed_tools, model_preference, display_name, description, on_tool_result, on_before_run, on_after_run | Agent contract |
+| `Agent.Loop` | run_with_mcp, run_agent_task | Turn orchestration GenServer |
+| `Agent.Turn` | (state machine) | Pure turn state transitions |
+| `Agent.State` | message_history, hash_message, set/clear/append/extend | Message history GenServer |
+| `Agent.ToolCallTracker` | _collect_tool_call_ids, has_pending_tool_calls, prune_interrupted_tool_calls, _is_tool_call_part, _is_tool_return_part, find_safe_split_index | Tool call ID tracking & pruning |
+| `Agent.MessageProcessor` | ensure_history_ends_with_request, filter_huge_messages, message_history_processor, message_history_accumulator, truncation | History processing & filtering |
+| `Agent.BudgetEnforcer` | _check_token_budgets, _check_context_budget_before_send, estimate_context_overhead_tokens | Token budget & context enforcement |
+| `Agent.Lifecycle` | _load_model_with_fallback, load_puppy_rules, load_mcp_servers, reload_mcp_servers, model_preference pack resolution, prompt assembly | Model resolution & prompt construction |
+| `Agent.Events` | (event builders) | Event type definitions |
+| `Agent.LLMAdapter` | (bridge) | LLM provider contract translation |
+| `Agent.ResponseValidator` | (validation) | Structured output validation |
+| `Agent.RunContext` | RunContext port | Tool dependency injection |
+| `Agent.RunUsage` | RunUsage port | LLM usage tracking |
+| `Agent.UsageLimits` | UsageLimits port | Token/request budgeting |
+
 ```
 ┌─────────────────────────────────────────────────────────────┐
 │ Agent.Loop (GenServer) │

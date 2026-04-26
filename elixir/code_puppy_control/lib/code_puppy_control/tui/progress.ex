@@ -9,9 +9,9 @@ defmodule CodePuppyControl.TUI.Progress do
   ## Usage
 
       # Spinner
-      {:ok, pid} = Progress.spinner("Compiling...")
+      {:ok, ref} = Progress.spinner("Compiling...")
       :timer.sleep(2000)
-      Progress.stop(pid)
+      Progress.stop(ref)
 
       # Progress bar
       Progress.bar(50, 100, label: "Downloading")
@@ -19,8 +19,10 @@ defmodule CodePuppyControl.TUI.Progress do
 
   ## Design notes
 
-  * `spinner/1` returns `{:ok, pid}` — callers should **not** store the
-    pid across async boundaries without monitoring. For GenServer-managed
+  * `spinner/1` returns `{:ok, ref}` where `ref` is an opaque reference
+    generated via `make_ref/0`. This ref is used as the Owl.Spinner `:id`
+    for subsequent `stop/2` calls. Callers should **not** store the ref
+    across async boundaries without monitoring. For GenServer-managed
     spinners (e.g. the Renderer's tool-call spinners), use the internal
     `Owl.Spinner` API directly with reference tracking.
   * `bar/3` is fire-and-forget — it renders inline and returns `:ok`.
@@ -32,9 +34,6 @@ defmodule CodePuppyControl.TUI.Progress do
 
   # ── Constants ─────────────────────────────────────────────────────────────
 
-  # Owl.Spinner refresh interval (ms)
-  @default_refresh_ms 80
-
   # Progress bar width in terminal columns
   @default_bar_width 40
 
@@ -43,33 +42,35 @@ defmodule CodePuppyControl.TUI.Progress do
   @doc """
   Starts a labelled spinner in the terminal.
 
-  Returns `{:ok, pid}` on success, `{:error, reason}` on failure.
+  Returns `{:ok, ref}` on success (where `ref` is an opaque reference for
+  use with `stop/2`), `{:error, reason}` on failure.
   When no TTY is available, returns `{:error, :no_tty}`.
 
   ## Options
 
     * `:refresh_every` — frame interval in ms (default 80)
-    * `:frames` — list of frame strings (defaults to Owl's braille dots)
 
   ## Examples
 
-      {:ok, pid} = Progress.spinner("Fetching results...")
-      Progress.stop(pid)
+      {:ok, ref} = Progress.spinner("Fetching results...")
+      Progress.stop(ref)
   """
-  @spec spinner(String.t(), keyword()) :: {:ok, pid()} | {:error, term()}
+  @spec spinner(String.t(), keyword()) :: {:ok, term()} | {:error, term()}
   def spinner(label, opts \\ []) do
     if tty_available?() do
-      refresh = Keyword.get(opts, :refresh_every, @default_refresh_ms)
+      refresh = Keyword.get(opts, :refresh_every, 80)
+      ref = make_ref()
 
       spinner_opts = [
+        id: ref,
         labels: [processing: Data.tag(label, :faint)],
         refresh_every: refresh
       ]
 
       case Owl.Spinner.start(spinner_opts) do
-        {:ok, pid} ->
-          Owl.Spinner.update(pid, labels: [processing: Data.tag(label, :faint)])
-          {:ok, pid}
+        {:ok, _pid} ->
+          Owl.Spinner.update_label(id: ref, label: Data.tag(label, :faint))
+          {:ok, ref}
 
         {:error, reason} ->
           {:error, reason}
@@ -82,7 +83,7 @@ defmodule CodePuppyControl.TUI.Progress do
   @doc """
   Stops a running spinner.
 
-  Accepts the pid returned by `spinner/1`. The spinner is removed from
+  Accepts the ref returned by `spinner/1`. The spinner is removed from
   the terminal and the line is cleared.
 
   ## Options
@@ -92,15 +93,15 @@ defmodule CodePuppyControl.TUI.Progress do
 
   ## Examples
 
-      Progress.stop(pid)
-      Progress.stop(pid, resolution: :error)
+      Progress.stop(ref)
+      Progress.stop(ref, resolution: :error)
   """
-  @spec stop(pid(), keyword()) :: :ok
-  def stop(pid, opts \\ []) do
+  @spec stop(term(), keyword()) :: :ok
+  def stop(ref, opts \\ []) do
     resolution = Keyword.get(opts, :resolution, :ok)
 
     try do
-      Owl.Spinner.stop(pid, resolution: resolution)
+      Owl.Spinner.stop(id: ref, resolution: resolution)
     catch
       :exit, _ -> :ok
     end
@@ -141,21 +142,22 @@ defmodule CodePuppyControl.TUI.Progress do
       width = Keyword.get(opts, :width, @default_bar_width)
       color = Keyword.get(opts, :color, :cyan)
 
-      ratio = if total > 0, do: current / total, else: 1.0
-      filled = trunc(ratio * width)
-      empty = width - filled
+      %{ratio: _ratio, filled: filled, empty: empty, percentage: pct} =
+        compute_bar_segments(current, total, width)
 
       bar_inner =
-        Data.tag(String.duplicate("█", filled), color) <>
-          String.duplicate("░", empty)
+        [Data.tag(String.duplicate("\u2588", filled), color), String.duplicate("\u2591", empty)]
 
-      pct = Float.round(ratio * 100, 1)
+      pct_str = "#{pct}%"
+      count_str = "(#{current}/#{total})"
 
+      # Build Owl.Data IO list — bar_inner contains Owl.Data.tag/2 tuples
+      # which cannot be string-interpolated (lists don't implement String.Chars).
       line =
         if label != "" do
-          "#{label} [#{bar_inner}] #{pct}% (#{current}/#{total})"
+          [label, " [", bar_inner, "] ", pct_str, " ", count_str]
         else
-          "[#{bar_inner}] #{pct}% (#{current}/#{total})"
+          ["[", bar_inner, "] ", pct_str, " ", count_str]
         end
 
       Owl.IO.puts(line)
@@ -163,6 +165,23 @@ defmodule CodePuppyControl.TUI.Progress do
     else
       {:error, :no_tty}
     end
+  end
+
+  @doc false
+  @spec compute_bar_segments(integer(), integer(), non_neg_integer()) :: %{
+          ratio: float(),
+          filled: non_neg_integer(),
+          empty: non_neg_integer(),
+          percentage: float()
+        }
+  def compute_bar_segments(current, total, width) do
+    raw_ratio = if total > 0, do: current / total, else: 1.0
+    ratio = raw_ratio |> max(0.0) |> min(1.0)
+    filled = trunc(ratio * width)
+    empty = width - filled
+    percentage = Float.round(ratio * 100.0, 1)
+
+    %{ratio: ratio, filled: filled, empty: empty, percentage: percentage}
   end
 
   # ── Helpers ────────────────────────────────────────────────────────────────

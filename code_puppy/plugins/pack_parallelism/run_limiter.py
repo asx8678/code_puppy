@@ -664,7 +664,6 @@ _limiter_lock = threading.Lock()
 
 def _build_from_config() -> RunLimiter:
     """Build a RunLimiter from <active-home>/pack_parallelism.toml."""
-    from pathlib import Path
 
     from code_puppy.config_paths import resolve_path
 

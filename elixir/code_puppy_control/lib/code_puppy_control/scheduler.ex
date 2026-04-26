@@ -264,7 +264,7 @@ defmodule CodePuppyControl.Scheduler do
     base_query =
       Oban.Job
       |> where([j], j.worker == "CodePuppyControl.Scheduler.Worker")
-      |> where([j], fragment("?->>'task_id' = ?", j.args, ^to_string(task_id)))
+      |> where([j], fragment("?->>'task_id' = ?", j.args, ^task_id))
 
     query =
       if include_discarded do

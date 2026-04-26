@@ -24,24 +24,31 @@ Prerequisites before launching the Python-to-Elixir port.
 - [x] Remove bd tracker (done — commit `b94b6222`)
 - [x] Add local test gates to lefthook (this commit)
 - [x] Create ROADMAP.md (this commit)
-- [ ] Triage 121 pre-existing Elixir test failures (delete / fix / skip-with-reason)
-- [ ] Triage pre-existing ruff errors on Python side
-- [ ] Choose final naming for the Elixir umbrella app (currently `code_puppy_control`)
+- [x] Triage 121 pre-existing Elixir test failures (delete / fix / skip-with-reason) — baseline now passes: 5184 tests, 0 failures
+- [x] Triage pre-existing ruff errors on Python side (code_puppy-230 — all 44 errors fixed)
+- [x] Choose final naming for the Elixir umbrella app (currently `code_puppy_control`) — see [docs/adr/ELIXIR-APP-NAMING.md](docs/adr/ELIXIR-APP-NAMING.md)
 
 ### Phase A: Port planning formalization
 
-- [ ] Write ADR-004: Python-to-Elixir migration strategy (scope, phases, rollback)
-- [ ] Baseline performance benchmarks (LLM request latency, tool exec overhead)
-- [ ] Dependency graph of Python modules — identify leaf modules (port first) vs hub modules (port last)
+- [x] Write ADR-004: Python-to-Elixir migration strategy (scope, phases, rollback) — see [docs/adr/ADR-004-python-to-elixir-migration-strategy.md](docs/adr/ADR-004-python-to-elixir-migration-strategy.md)
+- [x] Baseline performance harness (tools) — see [docs/benchmarks/README.md](docs/benchmarks/README.md); offline filesystem primitives measured
+- [x] Baseline performance harness (LLM latency probe) — credential-gated TTFB probe implemented; requires PUP_ANTHROPIC_API_KEY or PUP_OPENAI_API_KEY; no live baseline numbers committed
+- [x] Baseline performance (LLM latency — streaming TTFT/TBT) — streaming probes implemented (credential-gated); live numbers remain operator-local and are not committed; see [docs/benchmarks/llm_latency.md](docs/benchmarks/llm_latency.md)
+- [x] Dependency graph of Python modules — see [docs/python_dependency_graph.md](docs/python_dependency_graph.md) — complete: SCC-based topological ordering (dependency-before-importer guaranteed for acyclic edges), relative import semantics fixed, symbol-level deps excluded, self-tests 14/14, reproducible artifacts, semantic sanity verified
 
 ### Phase B: Elixir LLM client
 
-- [ ] Port `code_puppy/model_factory.py` — provider registry
-- [ ] Port `code_puppy/messaging/*` — message types and serialization (partially done in Elixir already)
-- [ ] Elixir-native streaming HTTP client for OpenAI / Anthropic / local models
-- [ ] Tool-call dispatch plumbing
+- [x] Port `code_puppy/model_factory.py` — provider registry (e0a481dc ProviderRegistry core merge + c2a5738f ModelFactory integration merge; `CodePuppyControl.ModelFactory.ProviderRegistry` backed by Agent; `ModelFactory.provider_module_for_type/1` delegates to `ProviderRegistry.lookup/1`; tests: runtime register/override, `reset_for_test/0`, `list_available/0`, `resolve/1`, malformed non-binary type rejection, provider-map parity — 110 model_factory tests + 29 LLM/parity tests pass)
+- [x] Port `code_puppy/messaging/*` — message types and serialization (073335a1, 366101ca, 45cbe34e, 3e67001e; smoke 521/0 across EventBus structured, EventsChannel, messaging, message_core, serializer; Types + Messages facade + split families, WireEvent, Commands, EventBus wire-envelope helpers, EventStore legacy `type` + structured `event_type` filtering)
+- [x] Elixir-native streaming HTTP client for OpenAI / Anthropic / local models (code_puppy-9l1 — `CodePuppyControl.HttpClient.Streaming`; hardened `HttpClient.stream/3`: 2xx → `{:data,…}/{:done,…}`, non-2xx/transport → `{:error,…}`; OpenAI + Anthropic provider streaming error tests; full post-merge suite: 5688 tests, 0 failures, 107 excluded; 89 properties; 9 doctests)
+- [x] Tool-call dispatch plumbing (code_puppy-j05 — `Agent.Loop` appends `assistant(tool_calls)` before tool-result messages; `LLMAdapter` preserves/converts assistant tool_calls to provider shape safely; Anthropic nil-content replay emits `tool_use`/`tool_result` blocks; malformed tool calls and atom safety tested)
+
+> **Phase B is now complete.** All four sub-items (provider registry, messaging, streaming HTTP client, tool-call dispatch) are merged and tested. No live credentialed LLM baseline numbers were committed as part of this work.
 
 ### Phase C: Base agent port
+
+> Tracking: epic `code_puppy-4s8` (filed 2026-04-25), 7 child tasks: <C.1: `code_puppy-4s8.1`>, <C.2: `code_puppy-4s8.4`>, <C.3: `code_puppy-4s8.6`>, <C.4: `code_puppy-4s8.5`>, <C.5: `code_puppy-4s8.2`>, <C.6: `code_puppy-4s8.3`>, <C.7: `code_puppy-4s8.7`>
+
 
 - [ ] Port `code_puppy/agents/base_agent.py`
 - [ ] Port `code_puppy/agents/agent_manager.py`
@@ -50,16 +57,25 @@ Prerequisites before launching the Python-to-Elixir port.
 
 ### Phase D: Session + state
 
+> Tracking: epic `code_puppy-ctj` (filed 2026-04-25), 6 child tasks: <D.1: `code_puppy-ctj.1`>, <D.2: `code_puppy-ctj.2`>, <D.3: `code_puppy-ctj.4`>, <D.4: `code_puppy-ctj.3`>, <D.5: `code_puppy-ctj.5`>, <D.6: `code_puppy-ctj.6`>
+
+
 - [ ] Port session storage (Phoenix PubSub + ETS + disk)
 - [ ] Port config system (dual-home isolation, see ADR-003)
 - [ ] Port runtime state
 
 ### Phase E: Tools
 
+> Tracking: epic `code_puppy-mmk` (filed 2026-04-25), 7 child tasks: <E.1: `code_puppy-mmk.1`>, <E.2: `code_puppy-mmk.5`>, <E.3: `code_puppy-mmk.6`>, <E.4: `code_puppy-mmk.4`>, <E.5: `code_puppy-mmk.3`>, <E.6: `code_puppy-mmk.7`>, <E.7: `code_puppy-mmk.2`>
+
+
 - [ ] Port `code_puppy/tools/*` (file ops, command runner, grep)
 - [ ] Port tool permission callbacks
 
 ### Phase F: Plugins
+
+> Tracking: epic `code_puppy-154` (filed 2026-04-25), 6 child tasks: <F.1: `code_puppy-154.1`>, <F.2: `code_puppy-154.6`>, <F.3: `code_puppy-154.4`>, <F.4: `code_puppy-154.3`>, <F.5: `code_puppy-154.2`>, <F.6: `code_puppy-154.5`>
+
 
 - [ ] Design Elixir plugin loader equivalent
 - [ ] Port callback system (`code_puppy/callbacks.py`)
@@ -67,11 +83,17 @@ Prerequisites before launching the Python-to-Elixir port.
 
 ### Phase G: CLI + UI
 
+> Tracking: epic `code_puppy-prg` (filed 2026-04-25), 6 child tasks: <G.1: `code_puppy-prg.1`>, <G.2: `code_puppy-prg.2`>, <G.3: `code_puppy-prg.3`>, <G.4: `code_puppy-prg.5`>, <G.5: `code_puppy-prg.6`>, <G.6: `code_puppy-prg.4`>
+
+
 - [ ] Port interactive loop
 - [ ] Port command line / slash commands
 - [ ] TUI in Elixir (Owl? Ratatouille?)
 
 ### Phase H: Cutover
+
+> Tracking: epic `code_puppy-3f9` (filed 2026-04-25), 7 child tasks: <H.1: `code_puppy-3f9.1`>, <H.2: `code_puppy-3f9.7`>, <H.3: `code_puppy-3f9.6`>, <H.4: `code_puppy-3f9.2`>, <H.5: `code_puppy-3f9.5`>, <H.6: `code_puppy-3f9.4`>, <H.7: `code_puppy-3f9.3`>
+
 
 - [ ] Feature-flag Elixir code paths
 - [ ] Gradual rollout per capability

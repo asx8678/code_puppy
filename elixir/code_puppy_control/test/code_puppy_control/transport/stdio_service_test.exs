@@ -1250,13 +1250,10 @@ defmodule CodePuppyControl.Transport.StdioServiceTest do
   end
 
   # JSON-RPC response decoder
+  # Delegates to shared helper for consistent notification filtering.
   defp decode_response(output) do
-    output
-    |> String.split("
-")
-    |> Enum.find(&(String.starts_with?(&1, "{") and &1 != ""))
-    |> case do
-      nil -> %{}
+    case StdioTestHelper.find_json_rpc_response(output) do
+      "{}" -> %{}
       line -> Jason.decode!(line)
     end
   end

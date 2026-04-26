@@ -1,6 +1,5 @@
 defmodule CodePuppyControl.Auth.ChatGptOAuthTest do
   use ExUnit.Case, async: false
-
   alias CodePuppyControl.Auth.ChatGptOAuth
 
   describe "prepare_oauth_context/0" do

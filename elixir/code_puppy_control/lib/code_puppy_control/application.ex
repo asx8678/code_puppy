@@ -12,10 +12,12 @@ defmodule CodePuppyControl.Application do
   6. CodePuppyControl.RuntimeState - Global runtime state (autosave ID, session model)
   7. CodePuppyControl.PolicyEngine - Priority-based policy rule engine
   8. CodePuppyControl.AgentModelPinning - Agent-to-model pin configuration (ETS-backed)
+  8b. CodePuppyControl.ModelFactory.ProviderRegistry - Provider type -> module mapping (Agent-backed)
   9a. CodePuppyControl.ModelRegistry - Model configuration registry (ETS-backed)
   9b. CodePuppyControl.ModelAvailability - Model health circuit breaker (ETS-backed)
   9c. CodePuppyControl.ModelPacks - Role-based model packs
   9d. CodePuppyControl.Tools.AgentCatalogue - Agent catalogue with descriptions
+  9d2. CodePuppyControl.Tools.AgentManager - Session mgmt, JSON discovery, clones
   9e. CodePuppyControl.Tools.UniversalConstructor.Registry - UC tool discovery
   10. CodePuppyControl.RoundRobinModel - Round-robin model rotation (ETS-backed)
   11a. CodePuppyControl.ModelsDevParser.Registry - Models.dev API registry
@@ -74,10 +76,14 @@ defmodule CodePuppyControl.Application do
       {CodePuppyControl.WorkflowState, name: CodePuppyControl.WorkflowState},
       CodePuppyControl.PolicyEngine,
       CodePuppyControl.AgentModelPinning,
+      # Provider registry (Agent-backed) for provider type → module mapping
+      CodePuppyControl.ModelFactory.ProviderRegistry,
       CodePuppyControl.ModelRegistry,
       CodePuppyControl.ModelAvailability,
       CodePuppyControl.ModelPacks,
       CodePuppyControl.Tools.AgentCatalogue,
+      # Agent manager — session tracking, JSON discovery, clone management
+      CodePuppyControl.Tools.AgentManager,
       # UC tool registry (GenServer) for Universal Constructor tool discovery
       CodePuppyControl.Tools.UniversalConstructor.Registry,
       CodePuppyControl.RoundRobinModel,

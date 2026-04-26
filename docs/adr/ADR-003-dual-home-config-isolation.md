@@ -39,13 +39,15 @@ Elixir pup-ex resolves its home directory in this order:
 | Priority | Source | Behavior |
 |----------|--------|----------|
 | 1 (highest) | `PUP_EX_HOME` env var | Explicit override. If set, this IS the home. Period. |
-| 2 | XDG vars | Respected under the new home root. Same semantics as today — `XDG_CONFIG_HOME`, `XDG_DATA_HOME`, etc. resolve *relative to* the Elixir home, not independently. |
+| 2 | XDG vars | When `PUP_EX_HOME` is set, XDG vars are ignored (the env var IS the home). Otherwise, XDG vars resolve independently: `<XDG value>/code_puppy_ex` (e.g., `XDG_CONFIG_HOME=~/.config` → `~/.config/code_puppy_ex`). |
 | 3 (default) | `~/.code_puppy_ex/` | Used when no env var is set. Created on first run if absent. |
 | 4 (legacy) | `~/.code_puppy/` | **READ-ONLY** via explicit import flow only. Never a write target. Never auto-resolved as home. |
 
-> **Important**: XDG variables are respected *within* the Elixir home. For example,
-> `XDG_CONFIG_HOME` defaults to `~/.code_puppy_ex/config` (not `~/.config`), mirroring how
-> Python pup treats XDG under `~/.code_puppy/`. This preserves the "one tree per runtime" model.
+> **Important**: When `PUP_EX_HOME` is set, it takes total precedence and XDG vars are not
+> consulted for directory resolution. When no `PUP_EX_HOME` is set but an XDG var is present,
+> the path resolves to `<XDG value>/code_puppy_ex` (e.g., `XDG_CONFIG_HOME=~/.config` yields
+> `~/.config/code_puppy_ex`), which may be outside `~/.code_puppy_ex/`. When no XDG var is
+> set, all directories default under `~/.code_puppy_ex/`.
 
 ## Import Allowlist
 
@@ -86,23 +88,29 @@ Isolation is enforced at the code level via a dedicated module: `CodePuppyContro
 raise ConfigIsolationViolation, path: resolved_path, stacktrace: __STACKTRACE__
 ```
 
-Every attempted write to the legacy home (or any path outside the Elixir home) raises this
-exception with the full resolved path and stacktrace. There is no warning-level bypass.
-There is no config flag to disable it. The guard is always active.
+Every attempted write to the **legacy home** (`~/.code_puppy/`) via the `safe_*` wrappers
+raises this exception with the full resolved path and stacktrace. Writes to paths
+outside the Elixir home that are *not* under the legacy home (e.g., `/tmp`) are **not
+blocked** — the guard protects against legacy-home collision, not general filesystem
+sandboxing. There is no warning-level bypass. There is no config flag to disable it.
+The guard is always active.
 
 ### Safe Wrappers
 
-All file mutations in Elixir pup-ex MUST go through these wrappers:
+New and guarded config write paths in Elixir pup-ex MUST go through these wrappers:
 
 | Wrapper | Purpose |
 |---------|---------|
-| `safe_write!(path, content)` | Write a file; validates target is under Elixir home |
-| `safe_mkdir_p!(path)` | Create directory tree; validates target is under Elixir home |
-| `safe_rm!(path)` | Remove a file; validates target is under Elixir home |
-| `safe_rm_rf!(path)` | Recursive delete; validates target is under Elixir home |
+| `safe_write!(path, content)` | Write a file; raises `IsolationViolation` if target is under legacy home |
+| `safe_mkdir_p!(path)` | Create directory tree; raises `IsolationViolation` if target is under legacy home |
+| `safe_rm!(path)` | Remove a file; raises `IsolationViolation` if target is under legacy home |
+| `safe_rm_rf!(path)` | Recursive delete; raises `IsolationViolation` if target is under legacy home |
 
 Direct use of `File.write!/2`, `File.mkdir_p!/1`, `File.rm!/1`, or `File.rm_rf!/1` on
-config paths is a **violation of this ADR** and will be caught in code review.
+config paths is a **violation of this ADR** and will be caught in code review. **Caveat:**
+~8 hardcoded `File.*` references still bypass the `safe_*` API (see [Known Hardcoded Violations](#known-hardcoded-violations)).
+These are tracked for Phase 2 cleanup and represent known gaps in the isolation guarantee;
+no new direct `File.*` calls on config paths should be added.
 
 ### Canonical Path Resolution
 
@@ -110,7 +118,7 @@ Before any guard check, paths are resolved through **canonical path resolution**
 
 1. `Path.expand/1` — expands `~`, `..`, env vars
 2. `:file.read_link_info/1` — follows symlinks to their targets
-3. Compare resolved path against Elixir home prefix
+3. Compare resolved path against **legacy home** prefix (`~/.code_puppy/`)
 
 This blocks symlink attacks where `~/.code_puppy_ex/data → ~/.code_puppy/data` would bypass
 the guard. The check happens *after* resolution, against the real path.
@@ -144,12 +152,12 @@ needing to parse logs.
 
 ## Legacy Env Var Handling
 
-The Python pup's env vars continue to work as before. They are **not** repurposed for Elixir.
+The Python pup's env vars continue to work as before. They are **not adopted as the primary Elixir env var**; `PUP_EX_HOME` is the canonical variable for Elixir isolation. However, `PUP_HOME` and `PUPPY_HOME` are honoured as deprecated fallbacks by both Python and Elixir (Elixir logs a deprecation warning); they will be removed in a future release.
 
 | Env Var | Scope | Behavior |
 |---------|-------|----------|
-| `PUP_HOME` | Python pup | Overrides Python's home directory. Logs deprecation warning (will be removed in future release). |
-| `PUPPY_HOME` | Python pup (legacy) | Same as `PUP_HOME` but older name. Logs deprecation warning. |
+| `PUP_HOME` | Python pup (deprecated fallback) | Overrides home directory for both Python and Elixir. Elixir logs deprecation warning (will be removed in future release). |
+| `PUPPY_HOME` | Legacy (deprecated) | Same as `PUP_HOME` but older name. Logs deprecation warning in both runtimes. |
 | `PUP_EX_HOME` | Elixir pup-ex | **New.** Overrides Elixir's home directory. This is the preferred var for isolation. |
 
 > **Why not reuse `PUP_HOME`?** Because `PUP_HOME` controls *which runtime's home* to use, and
@@ -187,7 +195,7 @@ acceptance — no partial credit.
 | GATE-2 | **Guard raises** | Direct call to `safe_write!("~/.code_puppy/any_file", "data")` raises `ConfigIsolationViolation`. | Proves the guard catches explicit violations. |
 | GATE-3 | **Import is opt-in** | Start app with legacy home present and populated. App does NOT auto-copy any files. | Proves no silent side-effects on startup. |
 | GATE-4 | **Doctor passes** | `mix pup_ex.doctor` on a freshly initialized `~/.code_puppy_ex/` returns ✅ with no warnings. | Proves the new home is self-sufficient. |
-| GATE-5 | **Paths audit** | Every `Paths.*_dir/0` and `*_file/0` function resolves under `~/.code_puppy_ex/` (or `PUP_EX_HOME`), never under the legacy home. | Proves path routing is complete. |
+| GATE-5 | **Paths audit** | Every `Paths.*_dir/0` and `*_file/0` function never resolves under the legacy home. When XDG vars are set without `PUP_EX_HOME`, paths may resolve to `<XDG value>/code_puppy_ex`. | Proves path routing is complete. |
 
 ## Consequences
 

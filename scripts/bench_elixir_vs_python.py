@@ -35,22 +35,17 @@ Output:
 from __future__ import annotations
 
 import argparse
-import asyncio
 import json
-import os
-import signal
 import statistics
 import subprocess
 import sys
 import time
-import tempfile
 import concurrent.futures
 from dataclasses import dataclass, field, asdict
 from enum import Enum
 from pathlib import Path
 from typing import Any, Optional
-from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor
-from functools import partial
+from concurrent.futures import ThreadPoolExecutor
 
 
 # ============================================================================
@@ -446,9 +441,6 @@ class ElixirControlPlaneBenchmark:
         worker = spawn_jsonrpc_worker()
         worker.call("initialize", {}, timeout=5.0)
         
-        # Start timing detection
-        crash_start = time.perf_counter_ns()
-        
         # Send crash command with delay so we can measure detection
         try:
             worker.call("crash", {"graceful": True, "delay": 0.01}, timeout=0.5)
@@ -539,7 +531,7 @@ class PythonOnlyBenchmark:
         # Benchmark direct function calls
         for _ in range(self.runs):
             start = time.perf_counter_ns()
-            result = self._echo_function({"msg": "benchmark"})
+            self._echo_function({"msg": "benchmark"})
             end = time.perf_counter_ns()
             latencies_ns.append(end - start)
         
@@ -619,8 +611,6 @@ class PythonOnlyBenchmark:
         # Wait for ready
         proc.stdout.readline()
         
-        # Time crash detection
-        crash_start = time.perf_counter_ns()
         proc.terminate()
         
         detection_start = time.perf_counter_ns()

@@ -182,6 +182,95 @@ defmodule CodePuppyControl.HttpClientTest do
     end
   end
 
+  describe "streaming contract (via MockLLMHTTP)" do
+    # These tests verify the contract that both MockLLMHTTP.stream/3 and
+    # HttpClient.stream/3 must satisfy. Providers depend on this shape.
+    setup do
+      start_supervised!(CodePuppyControl.Test.MockLLMHTTP)
+      CodePuppyControl.Test.MockLLMHTTP.reset()
+      :ok
+    end
+
+    alias CodePuppyControl.Test.MockLLMHTTP
+
+    test "2xx yields {:data, chunk} then {:done, metadata}" do
+      MockLLMHTTP.register(fn :post, _url, _opts ->
+        {:ok, %{status: 200, body: "hello", headers: [{"content-type", "text/plain"}]}}
+      end)
+
+      events =
+        MockLLMHTTP.stream(:post, "https://example.com", [])
+        |> Enum.to_list()
+
+      assert [
+               {:data, "hello"},
+               {:done, %{status: 200, headers: [{"content-type", "text/plain"}]}}
+             ] =
+               events
+    end
+
+    test "non-2xx yields {:error, %{status, body, headers}} without {:done, ...}" do
+      MockLLMHTTP.register(fn :post, _url, _opts ->
+        {:ok,
+         %{
+           status: 401,
+           body: ~s({"error":"Unauthorized"}),
+           headers: [{"www-authenticate", "Bearer"}]
+         }}
+      end)
+
+      events =
+        MockLLMHTTP.stream(:post, "https://example.com", [])
+        |> Enum.to_list()
+
+      assert [{:error, %{status: 401, body: body, headers: headers}}] = events
+      assert body =~ "Unauthorized"
+      assert headers == [{"www-authenticate", "Bearer"}]
+
+      # Must NOT emit {:done, ...}
+      refute Enum.any?(events, fn
+               {:done, _} -> true
+               _ -> false
+             end)
+    end
+
+    test "500 yields {:error, %{status: 500, ...}}" do
+      MockLLMHTTP.register(fn :post, _url, _opts ->
+        {:ok, %{status: 500, body: "Internal Server Error", headers: []}}
+      end)
+
+      events =
+        MockLLMHTTP.stream(:post, "https://example.com", [])
+        |> Enum.to_list()
+
+      assert [{:error, %{status: 500, body: "Internal Server Error"}}] = events
+    end
+
+    test "transport error yields {:error, reason}" do
+      MockLLMHTTP.register(fn :post, _url, _opts ->
+        {:error, "Connection refused"}
+      end)
+
+      events =
+        MockLLMHTTP.stream(:post, "https://example.com", [])
+        |> Enum.to_list()
+
+      assert [{:error, "Connection refused"}] = events
+    end
+
+    test "2xx with empty body still yields {:done, ...}" do
+      MockLLMHTTP.register(fn :get, _url, _opts ->
+        {:ok, %{status: 204, body: "", headers: []}}
+      end)
+
+      events =
+        MockLLMHTTP.stream(:get, "https://example.com", [])
+        |> Enum.to_list()
+
+      assert [{:data, ""}, {:done, %{status: 204}}] = events
+    end
+  end
+
   describe "telemetry events" do
     test "telemetry handler can be attached" do
       test_pid = self()

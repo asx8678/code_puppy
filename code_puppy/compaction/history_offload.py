@@ -12,6 +12,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Sequence
 
+from code_puppy.config_paths import assert_write_allowed, resolve_path, safe_append, safe_mkdir_p
 from code_puppy.utils.path_safety import (
     PathSafetyError,
     safe_path_component,
@@ -22,8 +23,6 @@ if TYPE_CHECKING:
     pass
 
 logger = logging.getLogger(__name__)
-
-from code_puppy.config_paths import assert_write_allowed, resolve_path, safe_append, safe_mkdir_p
 
 _offload_lock = threading.Lock()
 

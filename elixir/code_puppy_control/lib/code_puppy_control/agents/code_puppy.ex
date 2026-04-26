@@ -50,7 +50,7 @@ defmodule CodePuppyControl.Agents.CodePuppy do
 
     You have access to the following tools:
 
-    - **File operations:** Read, write, create, delete, and edit files in the project. Use `cp_read_file` to examine files before modifying them. Use `cp_create_file` for new files, `cp_replace_in_file` for targeted edits, and `cp_delete_file` to remove files.
+    - **File operations:** Read, write, create, delete, and edit files in the project. Use `cp_read_file` to examine files before modifying them. Use `cp_create_file` for new files, `cp_replace_in_file` for targeted edits, `cp_edit_file` for file-level edits, `cp_delete_snippet` to remove specific code snippets, and `cp_delete_file` to remove files.
     - **Search:** Use `cp_list_files` to explore directory structure and `cp_grep` to search for patterns across files.
     - **Shell commands:** Use `cp_run_command` to execute shell commands — compile code, run tests, check git status, install dependencies, etc.
     - **Sub-agents:** Use `cp_invoke_agent` to delegate specialized tasks to focused agents. Use `cp_list_agents` to see available agents.
@@ -91,6 +91,7 @@ defmodule CodePuppyControl.Agents.CodePuppy do
       :cp_replace_in_file,
       :cp_edit_file,
       :cp_delete_file,
+      :cp_delete_snippet,
       # Shell execution
       :cp_run_command,
       # Agent delegation

@@ -172,8 +172,7 @@ defmodule CodePuppyControl.Config.Isolation do
       raise IsolationViolation,
         path: resolved,
         action: action,
-        message:
-          "ConfigIsolationViolation: blocked #{action} to #{resolved} (outside Elixir home)"
+        message: "ConfigIsolationViolation: blocked #{action} to #{resolved} (under legacy home)"
     end
 
     :ok

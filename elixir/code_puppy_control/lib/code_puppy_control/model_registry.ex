@@ -351,11 +351,19 @@ defmodule CodePuppyControl.ModelRegistry do
   end
 
   defp bundled_models_path do
-    Application.get_env(
-      :code_puppy_control,
-      :bundled_models_path,
-      Application.app_dir(:code_puppy_control, "priv/models.json")
-    )
+    # Allow env-var override for testing / ops overrides.
+    # Follows PUP_ prefix convention for core runtime settings.
+    env_path = System.get_env("PUP_BUNDLED_MODELS_PATH")
+
+    if env_path != nil and env_path != "" do
+      env_path
+    else
+      Application.get_env(
+        :code_puppy_control,
+        :bundled_models_path,
+        Application.app_dir(:code_puppy_control, "priv/models.json")
+      )
+    end
   end
 
   defp load_overlay_files do

@@ -471,8 +471,20 @@ defmodule CodePuppyControl.TestSupport.Reset do
       end
     end
 
-    # Limiter: reset counters to 0 but preserve limits
+    # Limiter: reset counters and queued waiters while preserving limits
     defp clear_concurrency_limits do
+      case Process.whereis(CodePuppyControl.Concurrency.Limiter) do
+        nil ->
+          reset_concurrency_limit_counters()
+
+        _pid ->
+          CodePuppyControl.Concurrency.Limiter.reset()
+      end
+    catch
+      :exit, _ -> reset_concurrency_limit_counters()
+    end
+
+    defp reset_concurrency_limit_counters do
       try do
         # Get current limits
         entries = :ets.tab2list(:concurrency_limits)

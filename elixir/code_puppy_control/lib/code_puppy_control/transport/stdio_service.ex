@@ -2273,23 +2273,13 @@ defmodule CodePuppyControl.Transport.StdioService do
   end
 
   defp handle_request("session_list", _params, id) do
-    case CodePuppyControl.Sessions.list_sessions() do
-      {:ok, names} ->
-        Protocol.encode_response(%{"sessions" => names}, id)
-
-      {:error, reason} ->
-        Protocol.encode_error(-32000, "Session list failed: #{inspect(reason)}", nil, id)
-    end
+    {:ok, names} = CodePuppyControl.Sessions.list_sessions()
+    Protocol.encode_response(%{"sessions" => names}, id)
   end
 
   defp handle_request("session_list_with_metadata", _params, id) do
-    case CodePuppyControl.Sessions.list_sessions_with_metadata() do
-      {:ok, sessions} ->
-        Protocol.encode_response(%{"sessions" => sessions}, id)
-
-      {:error, reason} ->
-        Protocol.encode_error(-32000, "Session list failed: #{inspect(reason)}", nil, id)
-    end
+    {:ok, sessions} = CodePuppyControl.Sessions.list_sessions_with_metadata()
+    Protocol.encode_response(%{"sessions" => sessions}, id)
   end
 
   defp handle_request("session_delete", params, id) do
@@ -2396,14 +2386,6 @@ defmodule CodePuppyControl.Transport.StdioService do
     end
   end
 
-  defp traverse_changeset_errors(changeset) do
-    Ecto.Changeset.traverse_errors(changeset, fn {msg, opts} ->
-      Enum.reduce(opts, msg, fn {key, value}, acc ->
-        String.replace(acc, "%{\#{key}}", to_string(value))
-      end)
-    end)
-  end
-
   # Method not found handler
   defp handle_request(method, _params, id) do
     Protocol.encode_error(
@@ -2412,6 +2394,14 @@ defmodule CodePuppyControl.Transport.StdioService do
       nil,
       id
     )
+  end
+
+  defp traverse_changeset_errors(changeset) do
+    Ecto.Changeset.traverse_errors(changeset, fn {msg, opts} ->
+      Enum.reduce(opts, msg, fn {_key, value}, acc ->
+        String.replace(acc, "%{\#{_key}}", to_string(value))
+      end)
+    end)
   end
 
   # Validates that params is a map (JSON-RPC object). Returns encoded error if not.

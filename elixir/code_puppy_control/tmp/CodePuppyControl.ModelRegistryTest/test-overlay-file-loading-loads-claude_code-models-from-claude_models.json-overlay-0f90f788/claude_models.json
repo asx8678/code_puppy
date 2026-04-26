@@ -1,1 +1,0 @@
-{"claude-code-claude-opus-4-7":{"context_length":200000,"custom_endpoint":{"api_key":"test-key","url":"https://api.anthropic.com"},"name":"claude-opus-4-7","oauth_source":"claude-code-plugin","supported_settings":["temperature","extended_thinking"],"type":"claude_code"}}

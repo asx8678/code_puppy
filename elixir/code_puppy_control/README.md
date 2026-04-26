@@ -40,6 +40,9 @@ lib/code_puppy_control/
 # Install dependencies
 mix deps.get
 
+# Run no-network dogfood smoke
+mix pup_ex.smoke
+
 # Setup database (SQLite)
 mix ecto.setup
 
@@ -49,6 +52,8 @@ mix test
 # Start the server
 mix phx.server
 ```
+
+For the full Elixir CLI daily-driver guide (setup, credentials, escript build, usage, troubleshooting), see [docs/ELIXIR_CLI_QUICKSTART.md](../../docs/ELIXIR_CLI_QUICKSTART.md).
 
 ## Running Tests
 

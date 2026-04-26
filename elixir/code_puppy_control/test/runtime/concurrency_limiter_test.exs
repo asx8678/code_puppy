@@ -17,19 +17,7 @@ defmodule CodePuppyControl.Runtime.ConcurrencyLimiterTest do
 
     CodePuppyControl.TestSupport.Reset.ensure_gen_server_started(Limiter)
 
-    # Flush pending casts
-    Limiter.ping()
-
-    # Reset counters to 0 (preserving limits)
-    try do
-      entries = :ets.tab2list(:concurrency_limits)
-
-      Enum.each(entries, fn {type, _current, limit} ->
-        :ets.insert(:concurrency_limits, {type, 0, limit})
-      end)
-    rescue
-      ArgumentError -> :ok
-    end
+    Limiter.reset()
 
     :ok
   end

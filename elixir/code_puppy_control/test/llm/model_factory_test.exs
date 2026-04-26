@@ -17,7 +17,7 @@ defmodule CodePuppyControl.LLM.ModelFactoryTest do
   alias CodePuppyControl.ModelFactory
   alias CodePuppyControl.ModelFactory.{Credentials, Handle}
   alias CodePuppyControl.ModelRegistry
-  alias CodePuppyControl.LLM.Providers.{OpenAI, Anthropic}
+  alias CodePuppyControl.LLM.Providers.{OpenAI, Anthropic, Google}
 
   # Helper to save, set, and restore env vars within a test
   defp with_env(vars, fun) do
@@ -68,7 +68,7 @@ defmodule CodePuppyControl.LLM.ModelFactoryTest do
         {"claude-code-test", %{"type" => "claude_code", "name" => "test"}}
       )
 
-      assert {:error, {:oauth_phase_4, "claude_code", "claude-code-test"}} =
+      assert {:error, :not_authenticated} =
                ModelFactory.resolve("claude-code-test")
     after
       :ets.delete(:model_configs, "claude-code-test")
@@ -165,7 +165,7 @@ defmodule CodePuppyControl.LLM.ModelFactoryTest do
 
       assert {:ok, handle} = ModelFactory.resolve("az-missing")
       # Without azure_endpoint, base_url comes from provider defaults (nil for azure)
-      assert handle.base_url == nil
+      assert handle.base_url == "https://YOUR_RESOURCE.openai.azure.com"
     after
       :ets.delete(:model_configs, "az-missing")
     end
@@ -178,8 +178,8 @@ defmodule CodePuppyControl.LLM.ModelFactoryTest do
         )
 
         assert {:ok, handle} = ModelFactory.resolve("test-gemini")
-        # Gemini uses OpenAI-compatible provider
-        assert handle.provider_module == OpenAI
+        # Gemini uses the Google provider
+        assert handle.provider_module == Google
         assert handle.api_key == "gem-key"
       end)
     after
@@ -236,8 +236,8 @@ defmodule CodePuppyControl.LLM.ModelFactoryTest do
       assert {:ok, OpenAI} = ModelFactory.provider_module_for_type("custom_openai")
     end
 
-    test "returns OpenAI for gemini type" do
-      assert {:ok, OpenAI} = ModelFactory.provider_module_for_type("gemini")
+    test "returns Google for gemini type" do
+      assert {:ok, Google} = ModelFactory.provider_module_for_type("gemini")
     end
 
     test "returns error for unknown type" do

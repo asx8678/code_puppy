@@ -78,10 +78,6 @@ defmodule CodePuppyControl.TUI.Widgets.SessionBrowser do
       {:ok, sessions} ->
         render_session_table(sessions)
         prompt_action(sessions)
-
-      {:error, reason} ->
-        Owl.IO.puts(Owl.Data.tag("\n  Error loading sessions: #{inspect(reason)}\n", :red))
-        :cancelled
     end
   end
 
@@ -211,17 +207,17 @@ defmodule CodePuppyControl.TUI.Widgets.SessionBrowser do
   # ── Private: Action Prompt ────────────────────────────────────────────────
 
   defp prompt_action(sessions) do
-    Owl.IO.puts(
-      Owl.Data.tag("\n  Actions: ", [:bright, :yellow]) <>
-        Owl.Data.tag("number", :cyan) <>
-        Owl.Data.tag(" = select  ", :faint) <>
-        Owl.Data.tag("d NUM", :cyan) <>
-        Owl.Data.tag(" = delete  ", :faint) <>
-        Owl.Data.tag("p NUM", :cyan) <>
-        Owl.Data.tag(" = preview  ", :faint) <>
-        Owl.Data.tag("Enter", :cyan) <>
-        Owl.Data.tag(" = cancel", :faint)
-    )
+    Owl.IO.puts([
+      Owl.Data.tag("\n  Actions: ", [:bright, :yellow]),
+      Owl.Data.tag("number", :cyan),
+      Owl.Data.tag(" = select  ", :faint),
+      Owl.Data.tag("d NUM", :cyan),
+      Owl.Data.tag(" = delete  ", :faint),
+      Owl.Data.tag("p NUM", :cyan),
+      Owl.Data.tag(" = preview  ", :faint),
+      Owl.Data.tag("Enter", :cyan),
+      Owl.Data.tag(" = cancel", :faint)
+    ])
 
     case IO.gets("  > ") do
       :eof ->
