@@ -154,6 +154,74 @@ defmodule CodePuppyControl.Config.Models do
     end)
   end
 
+  @doc """
+  Get all effective settings for a model, filtered by what the model supports.
+
+  This is the generalized way to get model settings. It:
+  1. Gets all per-model settings from config
+  2. Falls back to global temperature if not set per-model
+  3. Filters to only include settings the model actually supports
+  4. Converts seed to int (other settings stay as-is)
+
+  Args:
+    model_name: The model name. If `nil`, uses the current global model.
+
+  Returns:
+    Map of setting_name -> value for all applicable settings.
+  """
+  @spec effective_model_settings(String.t() | nil) :: map()
+  def effective_model_settings(model_name \\ nil) do
+    model_name = model_name || global_model_name()
+
+    # Start with all per-model settings
+    settings = get_all_model_settings(model_name)
+
+    # Fall back to global temperature if not set per-model
+    settings =
+      if Map.has_key?(settings, "temperature") do
+        settings
+      else
+        case temperature() do
+          nil -> settings
+          temp -> Map.put(settings, "temperature", temp)
+        end
+      end
+
+    # Filter to only settings the model supports
+    settings
+    |> Enum.filter(fn {setting_name, _value} ->
+      model_supports_setting?(model_name, setting_name)
+    end)
+    |> Map.new(fn
+      {"seed", value} when is_integer(value) -> {"seed", value}
+      {"seed", value} when is_float(value) -> {"seed", round(value)}
+      {key, value} -> {key, value}
+    end)
+  end
+
+  @doc """
+  Get the effective temperature for a model.
+
+  Checks per-model settings first, then falls back to global temperature.
+  """
+  @spec effective_temperature(String.t() | nil) :: float() | nil
+  def effective_temperature(model_name \\ nil) do
+    effective_model_settings(model_name) |> Map.get("temperature")
+  end
+
+  @doc """
+  Get the effective seed for a model as an integer.
+  """
+  @spec effective_seed(String.t() | nil) :: integer() | nil
+  def effective_seed(model_name \\ nil) do
+    case Map.get(effective_model_settings(model_name), "seed") do
+      nil -> nil
+      val when is_integer(val) -> val
+      val when is_float(val) -> round(val)
+      _ -> nil
+    end
+  end
+
   # ── Agent-model pinning ─────────────────────────────────────────────────
 
   @doc """
@@ -367,4 +435,61 @@ defmodule CodePuppyControl.Config.Models do
   end
 
   defp round2(float), do: round(float * 100) / 100
+
+  # Check if a model supports a given setting.
+  # Delegates to ModelRegistry for model-specific configuration.
+  # Falls back to sensible defaults based on model family.
+  defp model_supports_setting?(model_name, setting) do
+    # Check ModelRegistry for explicit supported_settings
+    case get_supported_settings_from_registry(model_name) do
+      nil ->
+        # Fallback: infer from model family
+        model_supports_setting_default?(model_name, setting)
+
+      supported ->
+        setting in supported
+    end
+  end
+
+  defp get_supported_settings_from_registry(model_name) do
+    try do
+      case CodePuppyControl.ModelRegistry.get_config(model_name) do
+        %{"supported_settings" => settings} when is_list(settings) ->
+          settings
+
+        _ ->
+          nil
+      end
+    rescue
+      _ -> nil
+    catch
+      _, _ -> nil
+    end
+  end
+
+  defp model_supports_setting_default?(model_name, setting) do
+    # Default supported settings by model family
+    cond do
+      # GLM models support clear_thinking
+      String.contains?(String.downcase(model_name), "glm-4.7") or
+          String.contains?(String.downcase(model_name), "glm-5") ->
+        setting in ["clear_thinking", "temperature"]
+
+      # Claude/Anthropic models support extended thinking
+      String.starts_with?(model_name, "claude-") or
+          String.starts_with?(model_name, "anthropic-") ->
+        base = ["temperature", "extended_thinking", "budget_tokens"]
+
+        if String.contains?(String.downcase(model_name), "opus-4-6") or
+             String.contains?(String.downcase(model_name), "4-6-opus") do
+          ["effort" | base]
+        else
+          base
+        end
+
+      # Default: assume common settings
+      true ->
+        setting in ["temperature", "seed"]
+    end
+  end
 end

@@ -16,11 +16,14 @@ defmodule CodePuppyControl.Config.Debug do
   - `enable_streaming` — enable SSE streaming (default `true`)
   - `enable_gitignore_filtering` — filter gitignored files in list_files (default `false`)
   - `enable_agent_memory` — enable cross-session agent memory (default `false`)
+  - `enable_elixir_message_shadow_mode` — shadow mode for Elixir message ops (default `false`)
+  - `enable_user_plugins` — allow user plugins (default `true`)
   - `http2` — enable HTTP/2 for httpx clients (default `false`)
   - `subagent_verbose` — verbose output for sub-agents (default `false`)
   - `disable_mcp` — skip MCP server loading (default `false`)
   - `grep_output_verbose` — full grep output (default `false`)
-  - `safety_permission_level` — risk threshold (default `"medium"`)
+  - `safety_permission_level` — risk threshold (default `\"medium\"`)
+  - `cancel_agent_key` — keyboard shortcut for canceling agent (default `\"ctrl-c\"`)
   - `debug` — debug mode flag
   """
 
@@ -60,6 +63,14 @@ defmodule CodePuppyControl.Config.Debug do
   @spec agent_memory_enabled?() :: boolean()
   def agent_memory_enabled?, do: truthy?("enable_agent_memory", false)
 
+  @doc "Return `true` if Elixir message shadow mode is enabled (default `false`)."
+  @spec elixir_message_shadow_mode?() :: boolean()
+  def elixir_message_shadow_mode?, do: truthy?("enable_elixir_message_shadow_mode", false)
+
+  @doc "Return `true` if user plugins are enabled (default `true`)."
+  @spec user_plugins_enabled?() :: boolean()
+  def user_plugins_enabled?, do: truthy?("enable_user_plugins", true)
+
   @doc "Return `true` if HTTP/2 is enabled (default `false`)."
   @spec http2_enabled?() :: boolean()
   def http2_enabled?, do: truthy?("http2", false)
@@ -71,6 +82,54 @@ defmodule CodePuppyControl.Config.Debug do
   @doc "Return `true` if MCP is disabled (default `false`)."
   @spec mcp_disabled?() :: boolean()
   def mcp_disabled?, do: truthy?("disable_mcp", false)
+
+  @doc """
+  Return the cancel agent key binding (default `\"ctrl-c\"`).
+
+  Configurable via `cancel_agent_key` in `puppy.cfg`.
+  Common values: `\"ctrl-c\"`, `\"ctrl-d\"`, `\"escape\"`.
+  """
+  @spec cancel_agent_key() :: String.t()
+  def cancel_agent_key do
+    Loader.get_value("cancel_agent_key") || "ctrl-c"
+  end
+
+  @doc """
+  Set the cancel agent key binding.
+  """
+  @spec set_cancel_agent_key(String.t()) :: :ok
+  def set_cancel_agent_key(key) when is_binary(key) do
+    CodePuppyControl.Config.Writer.set_value("cancel_agent_key", key)
+  end
+
+  @doc """
+  Return the list of allowed user plugins.
+
+  If `allowed_user_plugins` is not set or empty, all plugins are allowed
+  (when `enable_user_plugins` is true).
+  """
+  @spec allowed_user_plugins() :: [String.t()]
+  def allowed_user_plugins do
+    case Loader.get_value("allowed_user_plugins") do
+      nil -> []
+      "" -> []
+      val -> String.split(val, ",", trim: true) |> Enum.map(&String.trim/1)
+    end
+  end
+
+  @doc """
+  Set the list of allowed user plugins.
+
+  Pass a list of plugin names, or `nil` to allow all plugins.
+  """
+  @spec set_allowed_user_plugins([String.t()] | nil) :: :ok
+  def set_allowed_user_plugins(nil),
+    do: CodePuppyControl.Config.Writer.set_value("allowed_user_plugins", "")
+
+  def set_allowed_user_plugins(list) when is_list(list) do
+    value = Enum.join(list, ", ")
+    CodePuppyControl.Config.Writer.set_value("allowed_user_plugins", value)
+  end
 
   @doc """
   Adaptive rendering enabled.

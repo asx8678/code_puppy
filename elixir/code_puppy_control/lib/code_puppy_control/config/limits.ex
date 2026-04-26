@@ -189,6 +189,11 @@ defmodule CodePuppyControl.Config.Limits do
   @spec summarization_pretruncate_enabled?() :: boolean()
   def summarization_pretruncate_enabled?, do: truthy?("summarization_pretruncate_enabled", true)
 
+  @doc "Return `true` if history offload is enabled (default `false`)."
+  @spec summarization_history_offload_enabled?() :: boolean()
+  def summarization_history_offload_enabled?,
+    do: truthy?("summarization_history_offload_enabled", false)
+
   @doc "Return max characters for tool call args before truncation (default `500`)."
   @spec summarization_arg_max_length() :: pos_integer()
   def summarization_arg_max_length do
@@ -217,6 +222,18 @@ defmodule CodePuppyControl.Config.Limits do
           :error -> 5000
         end
     end
+  end
+
+  @doc "Return chars to preserve from start of truncated tool return (default `500`)."
+  @spec summarization_return_head_chars() :: pos_integer()
+  def summarization_return_head_chars do
+    parse_int("summarization_return_head_chars", 500, 100)
+  end
+
+  @doc "Return chars to preserve from end of truncated tool return (default `200`)."
+  @spec summarization_return_tail_chars() :: pos_integer()
+  def summarization_return_tail_chars do
+    parse_int("summarization_return_tail_chars", 200, 50)
   end
 
   @doc "Model to use for summarization. Default: claude-3-haiku"

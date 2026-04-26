@@ -15,6 +15,7 @@ defmodule CodePuppyControl.Config do
   | `Config.Cache` | Session cache, WS history, frontend emitter |
   | `Config.Limits` | Compaction, token budgets, timeouts |
   | `Config.Debug` | Feature toggles, safety levels, API keys |
+  | `Config.MCP` | MCP server configuration loading |
   | `Config.Migrator` | Schema version migrations for puppy.cfg |
 
   ## Environment Variables
@@ -396,6 +397,18 @@ defmodule CodePuppyControl.Config do
   def set_temperature(val), do: Models.set_temperature(val)
   @deprecated "Use CodePuppyControl.Config.Debug functions directly"
   def load_api_keys_to_environment, do: Debug.load_api_keys_to_environment()
+  @deprecated "Use CodePuppyControl.Config.Debug functions directly"
+  def get_elixir_message_shadow_mode_enabled, do: Debug.elixir_message_shadow_mode?()
+  @deprecated "Use CodePuppyControl.Config.Debug functions directly"
+  def get_cancel_agent_key, do: Debug.cancel_agent_key()
+  @deprecated "Use CodePuppyControl.Config.Debug functions directly"
+  def get_user_plugins_enabled, do: Debug.user_plugins_enabled?()
+
+  # MCP
+  @deprecated "Use CodePuppyControl.Config.MCP functions directly"
+  def load_mcp_server_configs, do: CodePuppyControl.Config.MCP.load_server_configs()
+  @deprecated "Use CodePuppyControl.Config.MCP functions directly"
+  def mcp_disabled?, do: CodePuppyControl.Config.MCP.disabled?()
 
   # ── Ensure config exists ───────────────────────────────────────────────
 
