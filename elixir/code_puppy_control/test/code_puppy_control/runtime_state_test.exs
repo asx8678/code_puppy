@@ -11,8 +11,7 @@ defmodule CodePuppyControl.RuntimeStateTest do
       # Invalidate caches
       assert :ok = RuntimeState.invalidate_caches()
 
-      # Verify caches are cleared (we'd need to expose getters or check via reflection)
-      # For now, just verify the call succeeds
+      # Verify the call succeeds (full validation would need getters)
     end
 
     test "invalidate_all_token_caches clears all token-related caches" do
@@ -41,6 +40,8 @@ defmodule CodePuppyControl.RuntimeStateTest do
 
     test "rotate_autosave_id creates new ID" do
       first_id = RuntimeState.get_current_autosave_id()
+      # Sleep to ensure second-level timestamp changes
+      Process.sleep(1100)
       second_id = RuntimeState.rotate_autosave_id()
       assert first_id != second_id
     end
