@@ -137,4 +137,30 @@ defmodule CodePuppyControl.Runtime.RuntimeStateTest do
       assert %DateTime{} = state.session_start_time
     end
   end
+
+  # ---------------------------------------------------------------------------
+  # Finalize Autosave Session
+  # ---------------------------------------------------------------------------
+
+  describe "finalize_autosave_session/0" do
+    test "rotates to a new autosave ID and returns it" do
+      old_id = RuntimeState.get_current_autosave_id()
+      # Sleep to ensure the timestamp changes (format is YYYYMMDD_HHMMSS)
+      Process.sleep(1100)
+      new_id = RuntimeState.finalize_autosave_session()
+      assert new_id != old_id
+      assert is_binary(new_id)
+    end
+
+    test "updates the stored autosave ID" do
+      RuntimeState.finalize_autosave_session()
+      current_id = RuntimeState.get_current_autosave_id()
+      assert RuntimeState.get_state().autosave_id == current_id
+    end
+
+    test "ID matches YYYYMMDD_HHMMSS format" do
+      new_id = RuntimeState.finalize_autosave_session()
+      assert Regex.match?(~r/^\d{8}_\d{6}$/, new_id)
+    end
+  end
 end

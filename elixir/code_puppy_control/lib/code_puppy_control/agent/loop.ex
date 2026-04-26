@@ -405,7 +405,6 @@ defmodule CodePuppyControl.Agent.Loop do
         identity = PromptMixin.get_identity(state.agent_module.name(), state.run_id)
         system_prompt = PromptMixin.get_full_system_prompt(base_prompt, identity)
 
-
         tools = state.agent_module.allowed_tools()
         model = resolve_model(state)
 

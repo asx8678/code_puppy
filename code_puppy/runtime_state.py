@@ -252,12 +252,14 @@ def finalize_autosave_session() -> str:
         )
 
     try:
-        return rotate_autosave_id()
+        transport = _get_transport()
+        result = transport.runtime_finalize_autosave_session()
+        return result
     except Exception as exc:
         import logging
         from datetime import datetime
         logging.getLogger(__name__).warning(
-            "rotate_autosave_id failed during finalize; using timestamp fallback: %s", exc
+            "runtime_finalize_autosave_session failed; using timestamp fallback: %s", exc
         )
         return datetime.now().strftime("%Y%m%d_%H%M%S_fallback")
 

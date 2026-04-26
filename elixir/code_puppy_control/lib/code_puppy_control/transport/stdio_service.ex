@@ -753,6 +753,12 @@ defmodule CodePuppyControl.Transport.StdioService do
     Protocol.encode_response(result, id)
   end
 
+  # runtime_finalize_autosave_session - Persist and rotate autosave session
+  defp handle_request("runtime_finalize_autosave_session", _params, id) do
+    new_id = CodePuppyControl.RuntimeState.finalize_autosave_session()
+    Protocol.encode_response(%{"autosave_id" => new_id}, id)
+  end
+
   # ============================================================================
   # Agent Model Pinning Operations
   # ============================================================================

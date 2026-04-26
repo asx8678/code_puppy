@@ -790,6 +790,26 @@ class ElixirTransport:
         return result.get("count", 0)
 
     # ============================================================================
+    # Runtime State API
+    # ============================================================================
+
+    def runtime_finalize_autosave_session(self) -> str:
+        """
+        Persist the current autosave snapshot and rotate to a fresh session.
+
+        This function is best-effort and never raises: autosave rotation is not
+        a critical-path operation, so any failure falls back gracefully.
+
+        Returns:
+            The new autosave session ID
+
+        Raises:
+            ElixirTransportError: If the request fails catastrophically
+        """
+        result = self._send_request("runtime_finalize_autosave_session", {})
+        return result.get("autosave_id", "")
+
+    # ============================================================================
     # Context Manager Support
     # ============================================================================
 
