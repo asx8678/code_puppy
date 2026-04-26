@@ -25,15 +25,32 @@ defmodule CodePuppyControl.RuntimeState do
   require Logger
 
   defstruct [
+    # Existing fields
     :autosave_id,
     :session_model,
-    :session_start_time
+    :session_start_time,
+    
+    # Caching fields from Python AgentRuntimeState
+    :cached_system_prompt,
+    :cached_tool_defs,
+    :model_name_cache,
+    :delayed_compaction_requested,
+    :tool_ids_cache,
+    :cached_context_overhead,
+    :resolved_model_components_cache
   ]
 
   @type t :: %__MODULE__{
           autosave_id: String.t() | nil,
           session_model: String.t() | nil,
-          session_start_time: DateTime.t()
+          session_start_time: DateTime.t(),
+          cached_system_prompt: String.t() | nil,
+          cached_tool_defs: list(map()) | nil,
+          model_name_cache: String.t() | nil,
+          delayed_compaction_requested: boolean(),
+          tool_ids_cache: any(),
+          cached_context_overhead: integer() | nil,
+          resolved_model_components_cache: map() | nil
         }
 
   # ============================================================================
@@ -232,4 +249,124 @@ defmodule CodePuppyControl.RuntimeState do
     DateTime.utc_now()
     |> Calendar.strftime("%Y%m%d_%H%M%S")
   end
+
+
+  # ============================================================================
+  # Cache Invalidation Methods (from Python AgentRuntimeState)
+  # ============================================================================
+
+  @doc """
+  Invalidate ephemeral caches. Call when model/tool config changes.
+  
+  Clears context overhead and tool ID caches. For a full reset
+  including session-scoped caches, use `invalidate_all_token_caches/0`.
+  """
+  @spec invalidate_caches() :: :ok
+  def invalidate_caches do
+    GenServer.call(__MODULE__, :invalidate_caches)
+  end
+
+  @doc """
+  Invalidate ALL token-related caches as a group.
+  
+  Must be called when any of these change:
+  - System prompt (custom prompts, /prompts command)
+  - Tool definitions (agent reload, MCP changes)
+  - Model (model switch)
+  - Puppy rules file (AGENTS.md changes)
+  
+  This prevents stale token estimates from causing incorrect
+  context budgeting or premature/missed compaction.
+  """
+  @spec invalidate_all_token_caches() :: :ok
+  def invalidate_all_token_caches do
+    GenServer.call(__MODULE__, :invalidate_all_token_caches)
+  end
+
+  @doc """
+  Invalidate cached system prompt when plugin state changes.
+  
+  This is called by plugins (e.g., prompt_store) when the user
+  changes custom prompt instructions, ensuring the next agent
+  invocation picks up the new prompt.
+  
+  Also invalidates context overhead since the system prompt
+  contributes to overhead estimation.
+  """
+  @spec invalidate_system_prompt_cache() :: :ok
+  def invalidate_system_prompt_cache do
+    GenServer.call(__MODULE__, :invalidate_system_prompt_cache)
+  end
+
+  @doc """
+  Reset autosave ID to nil (primarily for testing).
+  """
+  @spec reset_for_test() :: :ok
+  def reset_for_test do
+    GenServer.call(__MODULE__, :reset_for_test)
+  end
+
+  # ============================================================================
+  # Server Callbacks
+  # ============================================================================
+
+  @impl true
+  def init(_opts) do
+    {:ok, %__MODULE__{
+      autosave_id: nil,
+      session_model: nil,
+      session_start_time: DateTime.utc_now(),
+      cached_system_prompt: nil,
+      cached_tool_defs: nil,
+      model_name_cache: nil,
+      delayed_compaction_requested: false,
+      tool_ids_cache: nil,
+      cached_context_overhead: nil,
+      resolved_model_components_cache: nil
+    }}
+  end
+
+  @impl true
+  def handle_call(:invalidate_caches, _from, state) do
+    {:reply, :ok, %{state |
+      cached_context_overhead: nil,
+      tool_ids_cache: nil
+    }}
+  end
+
+  @impl true
+  def handle_call(:invalidate_all_token_caches, _from, state) do
+    {:reply, :ok, %{state |
+      cached_context_overhead: nil,
+      cached_system_prompt: nil,
+      cached_tool_defs: nil,
+      tool_ids_cache: nil,
+      resolved_model_components_cache: nil
+    }}
+  end
+
+  @impl true
+  def handle_call(:invalidate_system_prompt_cache, _from, state) do
+    {:reply, :ok, %{state |
+      cached_system_prompt: nil,
+      cached_context_overhead: nil
+    }}
+  end
+
+  @impl true
+  def handle_call(:reset_for_test, _from, _state) do
+    {:reply, :ok, %__MODULE__{
+      autosave_id: nil,
+      session_model: nil,
+      session_start_time: DateTime.utc_now(),
+      cached_system_prompt: nil,
+      cached_tool_defs: nil,
+      model_name_cache: nil,
+      delayed_compaction_requested: false,
+      tool_ids_cache: nil,
+      cached_context_overhead: nil,
+      resolved_model_components_cache: nil
+    }}
+  end
+
 end
