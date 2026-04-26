@@ -17,8 +17,7 @@ defmodule CodePuppyControl.Tools.AgentManager do
   `AgentManagerState`:
 
   - Current agent per session (ETS `:agent_manager_sessions` for fast reads)
-  - Registry population flag
-  - Session file persistence
+  - Debounced session file persistence
 
   ## Thread-safety
 
@@ -45,8 +44,7 @@ defmodule CodePuppyControl.Tools.AgentManager do
   # ── State ─────────────────────────────────────────────────────────────
 
   defstruct [
-    :registry_populated,
-    :session_file_loaded
+    :persist_timer_ref
   ]
 
   # ── Client API ────────────────────────────────────────────────────────
@@ -269,8 +267,7 @@ defmodule CodePuppyControl.Tools.AgentManager do
     end
 
     state = %__MODULE__{
-      registry_populated: false,
-      session_file_loaded: true
+      persist_timer_ref: nil
     }
 
     Logger.info("AgentManager initialized with #{map_size(session_data)} persisted sessions")
@@ -283,8 +280,7 @@ defmodule CodePuppyControl.Tools.AgentManager do
     case AgentCatalogue.get_agent_info(agent_name) do
       {:ok, _info} ->
         :ets.insert(@sessions_table, {session_id, agent_name})
-        persist_sessions()
-        {:reply, :ok, state}
+        {:reply, :ok, schedule_persist(state)}
 
       :not_found ->
         {:reply, {:error, :agent_not_found}, state}
@@ -305,12 +301,12 @@ defmodule CodePuppyControl.Tools.AgentManager do
     do_register_json_agents()
 
     Logger.info("AgentManager: agent registry refreshed")
-    {:reply, :ok, %{state | registry_populated: true}}
+    {:reply, :ok, state}
   end
 
   @impl true
   def handle_call(:invalidate_registry, _from, state) do
-    {:reply, :ok, %{state | registry_populated: false}}
+    {:reply, :ok, state}
   end
 
   @impl true
@@ -326,18 +322,44 @@ defmodule CodePuppyControl.Tools.AgentManager do
   end
 
   @impl true
-  def handle_call(:reset_for_testing, _from, _state) do
+  def handle_call(:reset_for_testing, _from, state) do
     :ets.delete_all_objects(@sessions_table)
     AgentCatalogue.clear_catalogue()
+    _ = cancel_persist_timer(state)
 
-    {:reply, :ok,
-     %__MODULE__{
-       registry_populated: false,
-       session_file_loaded: true
-     }}
+    {:reply, :ok, %__MODULE__{}}
   end
 
+  # Debounce interval for persisting sessions (ms)
+  @persist_debounce_ms 500
+
   # ── Private: Session Persistence ──────────────────────────────────────
+
+  defp schedule_persist(state) do
+    # Cancel any existing timer, then schedule a new one
+    state = cancel_persist_timer(state)
+    timer_ref = Process.send_after(self(), :do_persist, @persist_debounce_ms)
+    %{state | persist_timer_ref: timer_ref}
+  end
+
+  defp cancel_persist_timer(state) do
+    case state.persist_timer_ref do
+      nil ->
+        state
+
+      ref ->
+        Process.cancel_timer(ref)
+        %{state | persist_timer_ref: nil}
+    end
+  end
+
+  @impl true
+  def handle_info(:do_persist, state) do
+    persist_sessions()
+    {:noreply, %{state | persist_timer_ref: nil}}
+  end
+
+  # ── Private: Session Persistence (disk I/O) ───────────────────────────
 
   defp session_file_path do
     state_dir =
@@ -488,12 +510,12 @@ defmodule CodePuppyControl.Tools.AgentManager do
         if File.exists?(clone_path) do
           {:error, "Clone target '#{clone_name}' already exists"}
         else
-          build_and_write_clone(agent_name, clone_name, clone_path, agents_dir)
+          build_and_write_clone(agent_name, clone_name, clone_index, clone_path, agents_dir)
         end
     end
   end
 
-  defp build_and_write_clone(source_name, clone_name, clone_path, _agents_dir) do
+  defp build_and_write_clone(source_name, clone_name, clone_index, clone_path, _agents_dir) do
     # Try to find the source agent's JSON file
     search_paths = CodePuppyControl.Config.Agents.agent_search_paths()
 
@@ -506,9 +528,9 @@ defmodule CodePuppyControl.Tools.AgentManager do
 
     clone_config =
       if source_json_path do
-        build_clone_from_json(source_json_path, clone_name)
+        build_clone_from_json(source_json_path, clone_name, clone_index)
       else
-        build_clone_from_catalogue(source_name, clone_name)
+        build_clone_from_catalogue(source_name, clone_name, clone_index)
       end
 
     case clone_config do
@@ -532,7 +554,7 @@ defmodule CodePuppyControl.Tools.AgentManager do
     end
   end
 
-  defp build_clone_from_json(json_path, clone_name) do
+  defp build_clone_from_json(json_path, clone_name, clone_index) do
     case File.read(json_path) do
       {:ok, content} ->
         case Jason.decode(content) do
@@ -542,7 +564,7 @@ defmodule CodePuppyControl.Tools.AgentManager do
             clone_config =
               config
               |> Map.put("name", clone_name)
-              |> Map.put("display_name", build_clone_display_name(source_display))
+              |> Map.put("display_name", build_clone_display_name(source_display, clone_index))
 
             {:ok, clone_config}
 
@@ -555,12 +577,12 @@ defmodule CodePuppyControl.Tools.AgentManager do
     end
   end
 
-  defp build_clone_from_catalogue(source_name, clone_name) do
+  defp build_clone_from_catalogue(source_name, clone_name, clone_index) do
     case AgentCatalogue.get_agent_info(source_name) do
       {:ok, info} ->
         config = %{
           "name" => clone_name,
-          "display_name" => build_clone_display_name(info.display_name),
+          "display_name" => build_clone_display_name(info.display_name, clone_index),
           "description" => info.description
         }
 
@@ -617,10 +639,10 @@ defmodule CodePuppyControl.Tools.AgentManager do
     end
   end
 
-  defp build_clone_display_name(display_name) do
+  defp build_clone_display_name(display_name, clone_index) do
     cleaned = Regex.replace(@clone_display_pattern, display_name, "") |> String.trim()
     cleaned = if cleaned == "", do: display_name, else: cleaned
-    "#{cleaned} (Clone)"
+    "#{cleaned} (Clone #{clone_index})"
   end
 
   defp next_clone_index(base_name, existing_names, agents_dir) do
@@ -673,7 +695,7 @@ defmodule CodePuppyControl.Tools.AgentManager do
 
   defp pack_visible?(name) do
     if MapSet.member?(@pack_agent_names, name) do
-      get_config_flag("pack_agents_enabled", true)
+      CodePuppyControl.Config.Debug.pack_agents_enabled?()
     else
       true
     end
@@ -681,20 +703,9 @@ defmodule CodePuppyControl.Tools.AgentManager do
 
   defp uc_visible?(name) do
     if MapSet.member?(@uc_agent_names, name) do
-      get_config_flag("universal_constructor_enabled", true)
+      CodePuppyControl.Config.Debug.universal_constructor_enabled?()
     else
       true
-    end
-  end
-
-  defp get_config_flag(key, default) do
-    case CodePuppyControl.Config.Loader.get_value(key) do
-      nil -> default
-      "true" -> true
-      "false" -> false
-      true -> true
-      false -> false
-      _ -> default
     end
   end
 end

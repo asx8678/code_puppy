@@ -215,9 +215,9 @@ defmodule CodePuppyControl.Tools.AgentManagerTest do
       assert clone_name == "source-agent-clone-1"
       assert AgentManager.is_clone_agent?(clone_name)
 
-      # Verify clone is in catalogue
+      # Verify clone is in catalogue with indexed display name
       {:ok, clone_info} = AgentCatalogue.get_agent_info(clone_name)
-      assert clone_info.display_name =~ "Clone"
+      assert clone_info.display_name == "Source Agent (Clone 1)"
       assert clone_info.description == "Original description"
 
       # Clean up the generated file
@@ -233,6 +233,12 @@ defmodule CodePuppyControl.Tools.AgentManagerTest do
 
       assert clone1 == "multi-source-clone-1"
       assert clone2 == "multi-source-clone-2"
+
+      # Verify display names have correct indices
+      {:ok, info1} = AgentCatalogue.get_agent_info(clone1)
+      {:ok, info2} = AgentCatalogue.get_agent_info(clone2)
+      assert info1.display_name == "Multi Source (Clone 1)"
+      assert info2.display_name == "Multi Source (Clone 2)"
 
       # Clean up
       agents_dir = CodePuppyControl.Config.Agents.user_agents_dir()
