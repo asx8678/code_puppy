@@ -472,6 +472,44 @@ async def call_elixir_workflow(
         return {"status": "timeout", "fallback": True}
 
 
+async def call_elixir_agent_tools(
+    method: str, params: dict[str, Any], timeout: float = 30.0
+) -> dict[str, Any]:
+    """Call an agent_tools method on the Elixir control plane.
+
+    Specialized wrapper for agent tool operations ported from
+    agent_tools.py (Phase E: code_puppy-mmk.4). When the Elixir
+    control plane is connected, routes agent invocation and listing
+    through the Elixir AgentInvocation module. Falls back to local
+    Python execution on timeout/connection errors.
+
+    Supported methods:
+        - "agent_tools.list": List available sub-agents
+        - "agent_tools.invoke": Invoke a sub-agent with full session mgmt
+        - "agent_tools.invoke_headless": Lightweight agent invocation for plugins
+        - "agent_tools.generate_session_id": Generate a unique session ID
+
+    Args:
+        method: Agent tool method name (e.g., "agent_tools.invoke")
+        params: Method parameters dict
+        timeout: Maximum seconds to wait for response
+
+    Returns:
+        Response result dict from Elixir, or fallback result on timeout
+
+    Raises:
+        ConnectionError: If Elixir control plane is not connected
+    """
+    if not is_connected():
+        raise ConnectionError("Elixir control plane not connected")
+
+    try:
+        return await asyncio.to_thread(call_method, method, params, timeout=timeout)
+    except TimeoutError:
+        # Return a fallback result that signals local handling
+        return {"status": "timeout", "fallback": True}
+
+
 def send_request_to_elixir(request: dict[str, Any]) -> None:
     """Send a JSON-RPC request to the Elixir control plane.
 
@@ -722,4 +760,6 @@ __all__ = [
     "call_elixir_model_packs",
     # Workflow bridge support (DBOS replacement)
     "call_elixir_workflow",
+    # Agent tools bridge support (Phase E: code_puppy-mmk.4)
+    "call_elixir_agent_tools",
 ]

@@ -940,6 +940,94 @@ defmodule CodePuppyControl.Transport.StdioService do
   end
 
   # ============================================================================
+  # Agent Tools (Phase E: code_puppy-mmk.4)
+  # ============================================================================
+
+  # agent_tools.list - List available agents (matches Python ListAgentsOutput)
+  defp handle_request("agent_tools.list", _params, id) do
+    result = CodePuppyControl.Tools.AgentInvocation.list_agents()
+
+    Protocol.encode_response(
+      %{
+        "agents" => result.agents,
+        "error" => result.error
+      },
+      id
+    )
+  end
+
+  # agent_tools.invoke - Invoke a sub-agent (matches Python AgentInvokeOutput)
+  defp handle_request("agent_tools.invoke", params, id) do
+    agent_name = params["agent_name"]
+    prompt = params["prompt"]
+    session_id = params["session_id"]
+    context = params["context"]
+
+    cond do
+      is_nil(agent_name) or not is_binary(agent_name) ->
+        Protocol.encode_error(-32602, "Missing or invalid param: agent_name", nil, id)
+
+      is_nil(prompt) or not is_binary(prompt) ->
+        Protocol.encode_error(-32602, "Missing or invalid param: prompt", nil, id)
+
+      true ->
+        opts = [session_id: session_id, context: context]
+
+        result = CodePuppyControl.Tools.AgentInvocation.invoke(agent_name, prompt, opts)
+
+        Protocol.encode_response(
+          %{
+            "response" => result.response,
+            "agent_name" => result.agent_name,
+            "session_id" => result.session_id,
+            "error" => result.error
+          },
+          id
+        )
+    end
+  end
+
+  # agent_tools.invoke_headless - Headless invocation for plugin use
+  defp handle_request("agent_tools.invoke_headless", params, id) do
+    agent_name = params["agent_name"]
+    prompt = params["prompt"]
+
+    cond do
+      is_nil(agent_name) or not is_binary(agent_name) ->
+        Protocol.encode_error(-32602, "Missing or invalid param: agent_name", nil, id)
+
+      is_nil(prompt) or not is_binary(prompt) ->
+        Protocol.encode_error(-32602, "Missing or invalid param: prompt", nil, id)
+
+      true ->
+        opts = [session_id: params["session_id"], model: params["model"]]
+
+        case CodePuppyControl.Tools.AgentInvocation.invoke_headless(agent_name, prompt, opts) do
+          {:ok, response} ->
+            Protocol.encode_response(
+              %{"response" => response, "agent_name" => agent_name},
+              id
+            )
+
+          {:error, reason} ->
+            Protocol.encode_error(
+              -32000,
+              "Headless invocation failed: #{inspect(reason)}",
+              nil,
+              id
+            )
+        end
+    end
+  end
+
+  # agent_tools.generate_session_id - Generate a unique session ID
+  defp handle_request("agent_tools.generate_session_id", params, id) do
+    agent_name = params["agent_name"] || "agent"
+    session_id = CodePuppyControl.Tools.AgentInvocation.generate_session_id(agent_name)
+    Protocol.encode_response(%{"session_id" => session_id}, id)
+  end
+
+  # ============================================================================
   # Scheduler Tools
   # ============================================================================
 
