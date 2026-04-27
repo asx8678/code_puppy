@@ -2,10 +2,11 @@ defmodule CodePuppyControl.Plugins.PackParallelism do
   @moduledoc """
   Semaphore-based concurrency limiter for agent pack invocations.
 
-  Replaces the Python `_async_active` counter (HACK(pack-parallelism) race)
-  with an Elixir GenServer that serializes all state mutations, eliminating
-  the race condition where concurrent acquire/release calls could read stale
-  counter values from `threading.Lock`-protected Python attributes.
+  Authoritative concurrency state for pack invocations when the Elixir
+  control plane is connected. The GenServer serializes all mutations
+  (acquire, release, set_limit, reset) through a single BEAM process
+  mailbox, eliminating the Python `_async_active` counter race
+  (HACK(pack-parallelism)) where concurrent threads could read stale values.
 
   ## Architecture
 
@@ -167,8 +168,13 @@ defmodule CodePuppyControl.Plugins.PackParallelism do
   @doc """
   Updates the concurrency limit at runtime.
 
-  When growing (`new > old`), releases net-new slots to the semaphore.
-  When shrinking (`new < old`), absorbs releases into deficit tracking.
+  When growing (`new > old`), absorbs deficit first, then wakes queued
+  waiters for newly available capacity. Does NOT inflate the current
+  (active) counter — only real acquires increment it.
+
+  When shrinking (`new < old`), sets deficit to the number of active runs
+  above the new limit (`max(current - effective, 0)`). This ensures only
+  truly excess releases are absorbed, not the full old_limit - effective gap.
   """
   @spec set_limit(non_neg_integer()) :: :ok | {:error, :invalid}
   def set_limit(new_limit) when is_integer(new_limit) and new_limit >= 1 do
@@ -251,7 +257,8 @@ defmodule CodePuppyControl.Plugins.PackParallelism do
       "status" => "ok",
       "limit" => s.limit,
       "active" => s.active,
-      "waiters" => s.waiters
+      "waiters" => s.waiters,
+      "available" => s.available
     }
   end
 
@@ -263,8 +270,12 @@ defmodule CodePuppyControl.Plugins.PackParallelism do
     limit = Map.get(params, "limit", 2)
 
     case set_limit(limit) do
-      :ok -> %{"status" => "ok", "limit" => effective_limit()}
-      {:error, :invalid} -> %{"status" => "error", "message" => "Invalid limit value"}
+      :ok ->
+        s = status()
+        %{"status" => "ok", "limit" => s.limit, "active" => s.active, "available" => s.available}
+
+      {:error, :invalid} ->
+        %{"status" => "error", "message" => "Invalid limit value"}
     end
   end
 
@@ -377,39 +388,42 @@ defmodule CodePuppyControl.Plugins.PackParallelism do
     state =
       cond do
         effective > old_limit ->
-          # Growing: release net-new slots
+          # Growing: absorb deficit first, then wake queued waiters for
+          # newly available capacity. Do NOT increment the current counter
+          # for net-new slots — current tracks real active runs, and
+          # inflating it would make slots LESS available, not more.
           growth = effective - old_limit
           deficit_absorbed = min(growth, state.deficit)
           new_deficit = state.deficit - deficit_absorbed
-          net_new = growth - deficit_absorbed
 
-          # Increment the ETS limit (and counter if we have net-new)
+          # Update limit in ETS (current stays the same — it tracks real active)
           :ets.insert(@table, {:pack_run, current, effective})
 
-          # For net-new capacity, increment the counter to make slots available
-          if net_new > 0 do
-            :ets.update_counter(@table, :pack_run, {2, net_new})
-          end
+          # Wake queued waiters for newly available capacity
+          available = max(effective - current, 0)
+          state = wake_waiters(state, available)
 
           Logger.info(
             "PackParallelism limit grown: #{old_limit} -> #{effective} " <>
-              "(deficit absorbed: #{deficit_absorbed}, net-new: #{net_new})"
+              "(deficit absorbed: #{deficit_absorbed}, available: #{available})"
           )
 
           %{state | deficit: new_deficit}
 
         effective < old_limit ->
-          # Shrinking: track deficit for absorbing future releases
-          excess = old_limit - effective
-          new_deficit = state.deficit + excess
+          # Shrinking: deficit = how many active runs are above the new limit.
+          # Each excess release must be absorbed to enforce the lower cap.
+          # Using max(current - effective, 0) instead of old_limit - effective
+          # ensures we only absorb releases that are truly excess.
+          excess_active = max(current - effective, 0)
           :ets.insert(@table, {:pack_run, current, effective})
 
           Logger.info(
             "PackParallelism limit shrunk: #{old_limit} -> #{effective} " <>
-              "(deficit now: #{new_deficit})"
+              "(active above limit: #{excess_active}, deficit: #{excess_active})"
           )
 
-          %{state | deficit: new_deficit}
+          %{state | deficit: excess_active}
 
         true ->
           # No change
@@ -540,6 +554,26 @@ defmodule CodePuppyControl.Plugins.PackParallelism do
       cancel_timeout_timer(waiter.timer_ref)
       GenServer.reply(waiter.from, reply)
     end)
+  end
+
+  defp wake_waiters(state, 0), do: state
+
+  defp wake_waiters(state, n) when n > 0 do
+    case :queue.out(state.waiters) do
+      {{:value, waiter}, rest_waiters} ->
+        cancel_timeout_timer(waiter.timer_ref)
+
+        # Increment counter for the granted waiter
+        :ets.update_counter(@table, :pack_run, {2, 1})
+        [{:pack_run, new_count, limit}] = :ets.lookup(@table, :pack_run)
+        emit_telemetry(:acquire, new_count, limit)
+        GenServer.reply(waiter.from, :ok)
+
+        wake_waiters(%{state | waiters: rest_waiters}, n - 1)
+
+      {:empty, _} ->
+        state
+    end
   end
 
   defp cancel_timeout_timer(nil), do: :ok
