@@ -161,6 +161,18 @@ defmodule CodePuppyControl.Application do
           require Logger
           Logger.warning("Failed to register built-in slash commands: #{inspect(e)}")
       end
+
+      # Wire workflow-state callback handlers AFTER the Callbacks.Registry
+      # is started. This ensures flags like :did_execute_shell and
+      # :did_generate_code are set automatically based on tool calls and
+      # agent lifecycle events. Failures are logged but non-fatal.
+      try do
+        CodePuppyControl.Workflow.State.register_callback_handlers()
+      rescue
+        e ->
+          require Logger
+          Logger.warning("Failed to register workflow-state callbacks: #{inspect(e)}")
+      end
     end
 
     # When running inside a Burrito-wrapped binary, dispatch the CLI

@@ -195,7 +195,8 @@ defmodule CodePuppyControl.Persistence do
   """
   @spec atomic_write_bytes(Path.t(), binary()) :: :ok | {:error, term()}
   def atomic_write_bytes(path, data) when is_binary(path) and is_binary(data) do
-    with {:ok, resolved} <- safe_resolve_path(path) do
+    with {:ok, resolved} <- safe_resolve_path(path),
+         :ok <- check_isolation_guard(resolved) do
       ensure_parent_dir(resolved)
       SafeWrite.safe_write(resolved, data)
     end
@@ -274,6 +275,7 @@ defmodule CodePuppyControl.Persistence do
   """
   @spec atomic_write_compact_json(Path.t(), term(), keyword()) :: :ok | {:error, term()}
   def atomic_write_compact_json(path, data, opts \\ []) when is_binary(path) and is_list(opts) do
+    # Isolation guard is applied inside atomic_write_bytes — no redundant check here.
     encoder = Keyword.get(opts, :encoder)
 
     try do
@@ -380,8 +382,11 @@ defmodule CodePuppyControl.Persistence do
     parent = Path.dirname(path)
 
     case File.mkdir_p(parent) do
-      :ok -> :ok
-      {:error, reason} -> {:error, "Failed to create parent directory: #{:file.format_error(reason)}"}
+      :ok ->
+        :ok
+
+      {:error, reason} ->
+        {:error, "Failed to create parent directory: #{:file.format_error(reason)}"}
     end
   end
 

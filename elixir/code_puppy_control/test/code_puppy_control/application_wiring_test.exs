@@ -95,7 +95,11 @@ defmodule CodePuppyControl.ApplicationWiringTest do
 
       try do
         result = CodePuppyControl.Callbacks.trigger(:startup)
-        assert result == :test_result
+        # :startup uses :noop merge, so result may be a list of all
+        # callback returns or a single value depending on how many are
+        # registered. We just verify our callback's return is in the results.
+        results = List.wrap(result)
+        assert :test_result in results
       after
         CodePuppyControl.Callbacks.unregister(:startup, test_cb)
       end
@@ -111,6 +115,61 @@ defmodule CodePuppyControl.ApplicationWiringTest do
       # Must return a proper map (not crash)
       assert is_map(result)
       assert Map.has_key?(result, :allowed)
+    end
+  end
+
+  describe "Workflow.State callback registration wiring (code-puppy-ctj.3)" do
+    test "workflow-state callbacks are auto-registered on startup" do
+      # The Application.start/2 callback calls
+      # Workflow.State.register_callback_handlers() after the
+      # Callbacks.Registry is started. This test verifies the
+      # handlers are present in the live registry.
+      CodePuppyControl.Callbacks.clear(:pre_tool_call)
+      CodePuppyControl.Callbacks.clear(:run_shell_command)
+      CodePuppyControl.Callbacks.clear(:agent_run_start)
+      CodePuppyControl.Callbacks.clear(:agent_run_end)
+      CodePuppyControl.Callbacks.clear(:delete_file)
+
+      # Simulate the application startup wiring
+      CodePuppyControl.Workflow.State.register_callback_handlers()
+
+      # Verify handlers are registered for key hooks
+      assert CodePuppyControl.Callbacks.count_callbacks(:pre_tool_call) >= 1
+      assert CodePuppyControl.Callbacks.count_callbacks(:run_shell_command) >= 1
+      assert CodePuppyControl.Callbacks.count_callbacks(:agent_run_start) >= 1
+      assert CodePuppyControl.Callbacks.count_callbacks(:agent_run_end) >= 1
+      assert CodePuppyControl.Callbacks.count_callbacks(:delete_file) >= 1
+
+      # Verify the run_shell_command callback has the correct arity
+      # (hook declares arity 3: context, command, cwd)
+      callbacks = CodePuppyControl.Callbacks.get_callbacks(:run_shell_command)
+
+      Enum.each(callbacks, fn cb ->
+        {:arity, arity} = Function.info(cb, :arity)
+        assert arity == 3, "run_shell_command callback must be arity 3, got #{arity}"
+      end)
+
+      # Verify end-to-end: triggering run_shell_command sets workflow flag
+      CodePuppyControl.Workflow.State.clear_run_key()
+      CodePuppyControl.Workflow.State.reset()
+
+      # Add policy to allow the command
+      CodePuppyControl.PolicyEngine.add_rule(%CodePuppyControl.PolicyEngine.PolicyRule{
+        tool_name: "run_shell_command",
+        decision: :allow,
+        priority: 10,
+        source: "wiring-test"
+      })
+
+      result =
+        CodePuppyControl.Callbacks.RunShellCommand.check("pytest run", cwd: "/tmp")
+
+      assert result.allowed == true
+      assert CodePuppyControl.Workflow.State.has_flag?(:did_execute_shell)
+      assert CodePuppyControl.Workflow.State.has_flag?(:did_run_tests)
+
+      CodePuppyControl.PolicyEngine.remove_rules_by_source("wiring-test")
+      CodePuppyControl.Workflow.State.unregister_callback_handlers()
     end
   end
 end

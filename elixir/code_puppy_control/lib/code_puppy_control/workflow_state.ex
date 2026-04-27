@@ -55,7 +55,9 @@ defmodule CodePuppyControl.WorkflowState do
   # ── State Struct ──────────────────────────────────────────────────────────
 
   # Struct retained for backward compat — callers may pattern-match on it.
-  # Internally, the struct is created by Workflow.State.new/0.
+  # Unlike the previous implementation which returned a %Workflow.State{}
+  # (different struct type), new/0 now returns a proper %WorkflowState{}
+  # struct with fields copied from Workflow.State.new/0.
   defstruct flags: MapSet.new(), metadata: %{}, start_time: nil
 
   @type t :: %__MODULE__{
@@ -64,9 +66,23 @@ defmodule CodePuppyControl.WorkflowState do
           start_time: integer() | nil
         }
 
-  @doc "Creates a fresh workflow state struct (delegates to Workflow.State)."
+  @doc """
+  Creates a fresh workflow state struct.
+
+  Returns a `%WorkflowState{}` struct (not `%Workflow.State{}`) for
+  backward compatibility with callers that pattern-match on the
+  facade struct type.
+  """
   @spec new() :: t()
-  def new, do: State.new()
+  def new do
+    internal = State.new()
+
+    %__MODULE__{
+      flags: internal.flags,
+      metadata: internal.metadata,
+      start_time: internal.start_time
+    }
+  end
 
   # ── Agent API ─────────────────────────────────────────────────────────────
 
@@ -76,13 +92,13 @@ defmodule CodePuppyControl.WorkflowState do
   @spec start_link(keyword()) :: Agent.on_start()
   def start_link(opts \\ []), do: State.start_link(opts)
 
-  @doc "Returns the current workflow state."
+  @doc "Returns the current workflow state as a facade struct."
   @spec get() :: t()
-  def get, do: State.get()
+  def get, do: to_facade(State.get())
 
-  @doc "Resets to a fresh workflow state and returns it."
+  @doc "Resets to a fresh workflow state and returns it as a facade struct."
   @spec reset() :: t()
-  def reset, do: State.reset()
+  def reset, do: to_facade(State.reset())
 
   @doc "Sets a flag (adds it to the active set). Unknown flags are ignored."
   @spec set_flag(atom()) :: :ok
@@ -119,4 +135,27 @@ defmodule CodePuppyControl.WorkflowState do
   @doc "Converts the current state to a map for serialization."
   @spec to_map() :: map()
   def to_map, do: State.to_map()
+
+  # ── Per-Run Key Delegations ───────────────────────────────────────────
+
+  @doc "Returns the current run key for the calling process."
+  @spec get_run_key() :: String.t()
+  def get_run_key, do: State.get_run_key()
+
+  @doc "Sets the run key for the calling process."
+  @spec set_run_key(String.t()) :: :ok
+  def set_run_key(key), do: State.set_run_key(key)
+
+  @doc "Clears the run key for the calling process."
+  @spec clear_run_key() :: :ok
+  def clear_run_key, do: State.clear_run_key()
+
+  # ── Private ───────────────────────────────────────────────────────────
+
+  # Convert internal %Workflow.State{} to facade %WorkflowState{} struct.
+  # This preserves backward compat for callers that pattern-match on
+  # the facade struct type rather than the internal one.
+  defp to_facade(%State{flags: flags, metadata: metadata, start_time: start_time}) do
+    %__MODULE__{flags: flags, metadata: metadata, start_time: start_time}
+  end
 end

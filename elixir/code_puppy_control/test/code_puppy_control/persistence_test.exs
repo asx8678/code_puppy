@@ -3,7 +3,10 @@ defmodule CodePuppyControl.PersistenceTest do
 
   alias CodePuppyControl.Persistence
 
-  @tmp_dir Path.join(System.tmp_dir!(), "cp_persistence_test_#{:erlang.unique_integer([:positive])}")
+  @tmp_dir Path.join(
+             System.tmp_dir!(),
+             "cp_persistence_test_#{:erlang.unique_integer([:positive])}"
+           )
 
   setup do
     # Create a fresh temp directory for each test
@@ -322,6 +325,48 @@ defmodule CodePuppyControl.PersistenceTest do
         Path.wildcard(Path.join(@tmp_dir, ".~*.tmp*"))
 
       assert tmp_files == []
+    end
+  end
+
+  # ── Isolation guard on all write paths (code-puppy-ctj.3) ──────────
+
+  describe "isolation guard on atomic_write_bytes (code-puppy-ctj.3)" do
+    test "allows writes outside config home" do
+      path = Path.join(@tmp_dir, "bytes_outside.bin")
+      assert :ok = Persistence.atomic_write_bytes(path, <<1, 2, 3>>)
+    end
+
+    test "blocks writes to legacy home" do
+      legacy = CodePuppyControl.Config.Paths.legacy_home_dir()
+      child_path = Path.join(legacy, "blocked.bin")
+
+      result = Persistence.atomic_write_bytes(child_path, <<1, 2, 3>>)
+      assert {:error, :isolation_violation, _} = result
+    end
+  end
+
+  describe "isolation guard on atomic_write_compact_json (code-puppy-ctj.3)" do
+    test "allows writes outside config home" do
+      path = Path.join(@tmp_dir, "compact_outside.json")
+      assert :ok = Persistence.atomic_write_compact_json(path, %{x: 1})
+    end
+
+    test "blocks writes to legacy home" do
+      legacy = CodePuppyControl.Config.Paths.legacy_home_dir()
+      child_path = Path.join(legacy, "blocked_compact.json")
+
+      result = Persistence.atomic_write_compact_json(child_path, %{x: 1})
+      assert {:error, :isolation_violation, _} = result
+    end
+  end
+
+  describe "isolation guard on atomic_write_json (existing, regression check)" do
+    test "blocks writes to legacy home" do
+      legacy = CodePuppyControl.Config.Paths.legacy_home_dir()
+      child_path = Path.join(legacy, "blocked_pretty.json")
+
+      result = Persistence.atomic_write_json(child_path, %{x: 1})
+      assert {:error, :isolation_violation, _} = result
     end
   end
 end

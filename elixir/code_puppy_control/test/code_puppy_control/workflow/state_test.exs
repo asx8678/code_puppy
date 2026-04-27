@@ -412,18 +412,18 @@ defmodule CodePuppyControl.Workflow.StateTest do
     end
 
     test "_on_run_shell_command sets did_execute_shell flag" do
-      State._on_run_shell_command(nil, "ls -la")
+      State._on_run_shell_command(nil, "ls -la", "/tmp")
       assert State.has_flag?(:did_execute_shell)
     end
 
     test "_on_run_shell_command detects test commands" do
-      State._on_run_shell_command(nil, "pytest test_foo.py")
+      State._on_run_shell_command(nil, "pytest test_foo.py", "/tmp")
       assert State.has_flag?(:did_execute_shell)
       assert State.has_flag?(:did_run_tests)
     end
 
     test "_on_run_shell_command detects lint commands" do
-      State._on_run_shell_command(nil, "ruff check .")
+      State._on_run_shell_command(nil, "ruff check .", "/tmp")
       assert State.has_flag?(:did_execute_shell)
       assert State.has_flag?(:did_check_lint)
     end
@@ -553,6 +553,197 @@ defmodule CodePuppyControl.Workflow.StateTest do
         ef = String.downcase(pf)
         assert MapSet.member?(elixir_names, ef), "Missing Elixir equivalent for Python flag #{pf}"
       end
+    end
+  end
+
+  # ── Callback arity contract (code-puppy-ctj.3) ─────────────────────
+
+  describe "callback arity matches hook declarations (code-puppy-ctj.3)" do
+    setup do
+      CodePuppyControl.Callbacks.clear(:run_shell_command)
+      CodePuppyControl.Callbacks.clear(:agent_run_start)
+      CodePuppyControl.Callbacks.clear(:agent_run_end)
+      CodePuppyControl.Callbacks.clear(:pre_tool_call)
+      CodePuppyControl.Callbacks.clear(:delete_file)
+
+      on_exit(fn ->
+        CodePuppyControl.Callbacks.clear(:run_shell_command)
+        CodePuppyControl.Callbacks.clear(:agent_run_start)
+        CodePuppyControl.Callbacks.clear(:agent_run_end)
+        CodePuppyControl.Callbacks.clear(:pre_tool_call)
+        CodePuppyControl.Callbacks.clear(:delete_file)
+      end)
+
+      :ok
+    end
+
+    test "run_shell_command callback is arity 3 (context, command, cwd)" do
+      # The hook declares arity 3. The handler must accept 3 args.
+      assert CodePuppyControl.Callbacks.Hooks.arity(:run_shell_command) == 3
+
+      # Register and trigger via Callbacks.trigger_raw to verify actual pipeline
+      State.register_callback_handlers()
+
+      results =
+        CodePuppyControl.Callbacks.trigger_raw(:run_shell_command, [%{}, "pytest run", "/tmp"])
+
+      # Should not crash; handler sets flags on the default run key
+      assert is_list(results)
+      assert State.has_flag?(:did_execute_shell)
+      assert State.has_flag?(:did_run_tests)
+
+      State.unregister_callback_handlers()
+    end
+
+    test "agent_run_start callback is arity 3" do
+      assert CodePuppyControl.Callbacks.Hooks.arity(:agent_run_start) == 3
+
+      State.register_callback_handlers()
+
+      results =
+        CodePuppyControl.Callbacks.trigger_raw(:agent_run_start, [
+          "test-agent",
+          "claude-3.5",
+          "session-123"
+        ])
+
+      assert is_list(results)
+
+      State.unregister_callback_handlers()
+    end
+
+    test "agent_run_end callback is arity 6" do
+      assert CodePuppyControl.Callbacks.Hooks.arity(:agent_run_end) == 6
+
+      State.register_callback_handlers()
+
+      results =
+        CodePuppyControl.Callbacks.trigger_raw(:agent_run_end, [
+          "test-agent",
+          "claude-3.5",
+          "session-123",
+          true,
+          nil,
+          nil
+        ])
+
+      assert is_list(results)
+
+      State.unregister_callback_handlers()
+    end
+
+    test "pre_tool_call callback is arity 3" do
+      assert CodePuppyControl.Callbacks.Hooks.arity(:pre_tool_call) == 3
+
+      State.register_callback_handlers()
+
+      results =
+        CodePuppyControl.Callbacks.trigger_raw(:pre_tool_call, [
+          "create_file",
+          %{},
+          nil
+        ])
+
+      assert is_list(results)
+      assert State.has_flag?(:did_create_file)
+
+      State.unregister_callback_handlers()
+    end
+  end
+
+  # ── Per-Run Isolation (code-puppy-ctj.3) ───────────────────────────
+
+  describe "per-run isolation (code-puppy-ctj.3)" do
+    test "two concurrent runs do not reset or leak each other's state" do
+      # Simulate Run A setting flags on run key "run-a"
+      State.set_run_key("run-a")
+      State.set_flag(:did_generate_code)
+      State.put_metadata("agent_name", "agent-a")
+
+      # Simulate Run B resetting its own state on run key "run-b"
+      State.set_run_key("run-b")
+      State.reset()
+      State.set_flag(:did_execute_shell)
+      State.put_metadata("agent_name", "agent-b")
+
+      # Verify Run A's state is untouched
+      State.set_run_key("run-a")
+      assert State.has_flag?(:did_generate_code)
+      refute State.has_flag?(:did_execute_shell)
+      assert State.get_metadata("agent_name") == "agent-a"
+
+      # Verify Run B's state is isolated
+      State.set_run_key("run-b")
+      refute State.has_flag?(:did_generate_code)
+      assert State.has_flag?(:did_execute_shell)
+      assert State.get_metadata("agent_name") == "agent-b"
+
+      # Clean up
+      State.clear_run_key()
+    end
+
+    test "_on_agent_run_start derives per-run key from session_id" do
+      # Two simulated agent starts should not clobber each other
+      State.set_run_key("first-run")
+      State.set_flag(:did_generate_code)
+
+      # Simulate second run starting (with session_id)
+      State._on_agent_run_start("agent-b", "model-b", "session-b")
+      # After _on_agent_run_start, the process is now on run key "session-b"
+      assert State.get_run_key() == "session-b"
+
+      # First run should still have its flag
+      State.set_run_key("first-run")
+      assert State.has_flag?(:did_generate_code)
+
+      # Clean up
+      State.clear_run_key()
+    end
+
+    test "default run key works for legacy callers" do
+      # Without setting a run key, everything goes to "default"
+      assert State.get_run_key() == "default"
+
+      State.set_flag(:did_load_context)
+      assert State.has_flag?(:did_load_context)
+
+      # Reset only affects the default run
+      State.reset()
+      refute State.has_flag?(:did_load_context)
+    end
+
+    test "run_keys/0 returns all stored run keys" do
+      State.set_run_key("run-x")
+      State.set_flag(:did_generate_code)
+
+      State.set_run_key("run-y")
+      State.set_flag(:did_execute_shell)
+
+      keys = State.run_keys()
+      assert "run-x" in keys
+      assert "run-y" in keys
+
+      State.clear_run_key()
+    end
+
+    test "delete_run/1 removes a specific run's state" do
+      State.set_run_key("doomed-run")
+      State.set_flag(:did_generate_code)
+
+      State.set_run_key("survivor-run")
+      State.set_flag(:did_execute_shell)
+
+      State.delete_run("doomed-run")
+
+      # Doomed run is gone
+      State.set_run_key("doomed-run")
+      refute State.has_flag?(:did_generate_code)
+
+      # Survivor is fine
+      State.set_run_key("survivor-run")
+      assert State.has_flag?(:did_execute_shell)
+
+      State.clear_run_key()
     end
   end
 end

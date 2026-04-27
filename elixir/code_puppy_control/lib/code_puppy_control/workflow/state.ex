@@ -6,12 +6,23 @@ defmodule CodePuppyControl.Workflow.State do
   active flags and optional metadata in an Agent so that multiple
   processes in the same BEAM node can query/mutate the state concurrently.
 
+  ## Per-Run Isolation
+
+  State is **keyed by run key** to prevent concurrent agent runs from
+  clobbering each other's flags. Each run gets its own isolated namespace
+  inside the Agent. The current run key is stored in the process dictionary
+  (`:workflow_state_run_key`) and is set automatically by `_on_agent_run_start`
+  or manually via `set_run_key/1`.
+
+  The **default run key** is `:default`. Legacy callers that do not set a
+  run key continue to work against `:default`, preserving backward compat.
+
   ## Migration from Python `workflow_state.py`
 
   | Python Feature | Elixir Equivalent |
   |----------------|-------------------|
   | `WorkflowFlag` enum | `@all_flags` attribute list |
-  | `ContextVar` storage | Agent (named `__MODULE__`) |
+  | `ContextVar` storage | Agent (named `__MODULE__`) + per-run key |
   | `set_flag(str)` | String-to-atom conversion via `resolve_flag/1` |
   | `increment_counter/2` | `increment_counter/2` |
   | `detect_and_mark_plan_from_response/2` | `detect_and_mark_plan_from_response/2` |
@@ -24,11 +35,14 @@ defmodule CodePuppyControl.Workflow.State do
       # Start in supervision tree
       {CodePuppyControl.Workflow.State, name: CodePuppyControl.Workflow.State}
 
-      # Use the API
+      # Use the API (default run key)
       Workflow.State.set_flag(:did_generate_code)
       Workflow.State.has_flag?(:did_generate_code)  #=> true
-      Workflow.State.increment_counter("file_edits")
-      Workflow.State.reset()
+
+      # Use with explicit run key (concurrent-safe)
+      Workflow.State.set_run_key("run-abc")
+      Workflow.State.set_flag(:did_generate_code)
+      Workflow.State.reset()  # Only resets run-abc
   """
 
   use Agent
@@ -128,10 +142,70 @@ defmodule CodePuppyControl.Workflow.State do
           start_time: integer() | nil
         }
 
+  # Internal Agent state: map of run_key => %__MODULE__{}
+  @type internal_state :: %{String.t() => t()}
+
+  @default_run_key "default"
+
   @doc "Creates a fresh workflow state struct."
   @spec new() :: t()
   def new do
     %__MODULE__{start_time: System.system_time(:second)}
+  end
+
+  # ── Run Key Management ──────────────────────────────────────────────
+
+  @doc """
+  Returns the current run key for the calling process.
+
+  The run key determines which per-run namespace inside the Agent is
+  targeted by `set_flag`, `has_flag?`, `reset`, etc. Defaults to
+  `"default"` if not set.
+  """
+  @spec get_run_key() :: String.t()
+  def get_run_key do
+    Process.get(:workflow_state_run_key, @default_run_key)
+  end
+
+  @doc """
+  Sets the run key for the calling process.
+
+  All subsequent calls from this process will target the given run's
+  namespace. This is per-process (process dictionary) and does not
+  affect other processes.
+  """
+  @spec set_run_key(String.t()) :: :ok
+  def set_run_key(key) when is_binary(key) do
+    Process.put(:workflow_state_run_key, key)
+    :ok
+  end
+
+  @doc """
+  Clears the run key for the calling process, reverting to `"default"`.
+  """
+  @spec clear_run_key() :: :ok
+  def clear_run_key do
+    Process.delete(:workflow_state_run_key)
+    :ok
+  end
+
+  @doc """
+  Returns all run keys currently stored in the Agent.
+  """
+  @spec run_keys() :: [String.t()]
+  def run_keys do
+    Agent.get(__MODULE__, fn state -> Map.keys(state) end)
+  end
+
+  @doc """
+  Deletes a specific run key's state from the Agent.
+
+  Returns `:ok`. Does not affect the calling process's current run key.
+  """
+  @spec delete_run(String.t()) :: :ok
+  def delete_run(key) when is_binary(key) do
+    Agent.update(__MODULE__, fn state -> Map.delete(state, key) end)
+    :ok
   end
 
   # ── Agent API ─────────────────────────────────────────────────────────
@@ -140,23 +214,34 @@ defmodule CodePuppyControl.Workflow.State do
   Starts the Workflow.State agent.
 
   For application-wide state, use `start_link/1` with `name: __MODULE__`.
+  The internal state is a map of `run_key => %__MODULE__{}`.
   """
   @spec start_link(keyword()) :: Agent.on_start()
   def start_link(opts \\ []) do
-    Agent.start_link(fn -> new() end, opts)
+    Agent.start_link(
+      fn -> %{@default_run_key => new()} end,
+      opts
+    )
   end
 
-  @doc "Returns the current workflow state."
+  @doc "Returns the current workflow state for the calling process's run key."
   @spec get() :: t()
   def get do
-    Agent.get(__MODULE__, & &1)
+    key = get_run_key()
+    Agent.get(__MODULE__, fn state -> Map.get(state, key, new()) end)
   end
 
-  @doc "Resets to a fresh workflow state and returns it."
+  @doc """
+  Resets the workflow state for the calling process's run key.
+
+  Only the state for the current run key is reset; other runs are
+  unaffected. Returns the fresh state struct.
+  """
   @spec reset() :: t()
   def reset do
     fresh = new()
-    Agent.update(__MODULE__, fn _ -> fresh end)
+    key = get_run_key()
+    Agent.update(__MODULE__, fn state -> Map.put(state, key, fresh) end)
     fresh
   end
 
@@ -177,8 +262,11 @@ defmodule CodePuppyControl.Workflow.State do
   def set_flag(flag) when is_atom(flag) or is_binary(flag) do
     case resolve_flag(flag) do
       {:ok, resolved} ->
+        key = get_run_key()
+
         Agent.update(__MODULE__, fn state ->
-          %{state | flags: MapSet.put(state.flags, resolved)}
+          run_state = Map.get(state, key, new())
+          Map.put(state, key, %{run_state | flags: MapSet.put(run_state.flags, resolved)})
         end)
 
       {:error, :unknown_flag} ->
@@ -209,8 +297,11 @@ defmodule CodePuppyControl.Workflow.State do
   def clear_flag(flag) when is_atom(flag) or is_binary(flag) do
     case resolve_flag(flag) do
       {:ok, resolved} ->
+        key = get_run_key()
+
         Agent.update(__MODULE__, fn state ->
-          %{state | flags: MapSet.delete(state.flags, resolved)}
+          run_state = Map.get(state, key, new())
+          Map.put(state, key, %{run_state | flags: MapSet.delete(run_state.flags, resolved)})
         end)
 
       {:error, :unknown_flag} ->
@@ -230,7 +321,12 @@ defmodule CodePuppyControl.Workflow.State do
   def has_flag?(flag) when is_atom(flag) or is_binary(flag) do
     case resolve_flag(flag) do
       {:ok, resolved} ->
-        Agent.get(__MODULE__, fn state -> MapSet.member?(state.flags, resolved) end)
+        key = get_run_key()
+
+        Agent.get(__MODULE__, fn state ->
+          run_state = Map.get(state, key, new())
+          MapSet.member?(run_state.flags, resolved)
+        end)
 
       {:error, :unknown_flag} ->
         false
@@ -242,21 +338,34 @@ defmodule CodePuppyControl.Workflow.State do
   @doc "Stores a metadata key/value pair."
   @spec put_metadata(String.t(), any()) :: :ok
   def put_metadata(key, value) when is_binary(key) do
+    run_key = get_run_key()
+
     Agent.update(__MODULE__, fn state ->
-      %{state | metadata: Map.put(state.metadata, key, value)}
+      run_state = Map.get(state, run_key, new())
+      Map.put(state, run_key, %{run_state | metadata: Map.put(run_state.metadata, key, value)})
     end)
   end
 
   @doc "Reads a metadata value, defaulting to `default`."
   @spec get_metadata(String.t(), any()) :: any()
   def get_metadata(key, default \\ nil) when is_binary(key) do
-    Agent.get(__MODULE__, fn state -> Map.get(state.metadata, key, default) end)
+    run_key = get_run_key()
+
+    Agent.get(__MODULE__, fn state ->
+      run_state = Map.get(state, run_key, new())
+      Map.get(run_state.metadata, key, default)
+    end)
   end
 
   @doc "Returns a map of current metadata."
   @spec metadata() :: %{String.t() => any()}
   def metadata do
-    Agent.get(__MODULE__, fn state -> state.metadata end)
+    run_key = get_run_key()
+
+    Agent.get(__MODULE__, fn state ->
+      run_state = Map.get(state, run_key, new())
+      run_state.metadata
+    end)
   end
 
   @doc """
@@ -275,10 +384,14 @@ defmodule CodePuppyControl.Workflow.State do
   """
   @spec increment_counter(String.t(), integer()) :: integer()
   def increment_counter(key, amount \\ 1) when is_binary(key) and is_integer(amount) do
+    run_key = get_run_key()
+
     Agent.get_and_update(__MODULE__, fn state ->
-      current = Map.get(state.metadata, key, 0)
+      run_state = Map.get(state, run_key, new())
+      current = Map.get(run_state.metadata, key, 0)
       new_value = current + amount
-      {{:ok, new_value}, %{state | metadata: Map.put(state.metadata, key, new_value)}}
+      updated = %{run_state | metadata: Map.put(run_state.metadata, key, new_value)}
+      {{:ok, new_value}, Map.put(state, run_key, updated)}
     end)
     |> case do
       {:ok, value} -> value
@@ -290,7 +403,12 @@ defmodule CodePuppyControl.Workflow.State do
   @doc "Returns the count of active flags."
   @spec active_count() :: non_neg_integer()
   def active_count do
-    Agent.get(__MODULE__, fn state -> MapSet.size(state.flags) end)
+    run_key = get_run_key()
+
+    Agent.get(__MODULE__, fn state ->
+      run_state = Map.get(state, run_key, new())
+      MapSet.size(run_state.flags)
+    end)
   end
 
   @doc "Generates a short human-readable summary of active flags."
@@ -384,7 +502,7 @@ defmodule CodePuppyControl.Workflow.State do
   end
 
   @doc false
-  def _on_run_shell_command(_context, command, _cwd \\ nil, _timeout \\ 60) do
+  def _on_run_shell_command(_context, command, _cwd) do
     set_flag(:did_execute_shell)
 
     cmd_lower = if is_binary(command), do: String.downcase(command), else: ""
@@ -403,14 +521,30 @@ defmodule CodePuppyControl.Workflow.State do
   end
 
   @doc false
-  def _on_agent_run_start(agent_name, model_name, _session_id \\ nil) do
+  def _on_agent_run_start(agent_name, model_name, session_id \\ nil) do
+    # Derive a per-run key from the session_id (or agent_name+timestamp)
+    # so concurrent runs get isolated state namespaces.
+    run_key =
+      case session_id do
+        nil -> "#{agent_name}_#{System.system_time(:millisecond)}"
+        sid -> to_string(sid)
+      end
+
+    set_run_key(run_key)
     reset()
     put_metadata("agent_name", agent_name)
     put_metadata("model_name", model_name)
   end
 
   @doc false
-  def _on_agent_run_end(agent_name, model_name, session_id \\ nil, success \\ true, error \\ nil, metadata \\ nil) do
+  def _on_agent_run_end(
+        agent_name,
+        model_name,
+        session_id \\ nil,
+        success \\ true,
+        error \\ nil,
+        metadata \\ nil
+      ) do
     _ = {agent_name, model_name, session_id, error, metadata}
 
     if not success do
@@ -464,7 +598,7 @@ defmodule CodePuppyControl.Workflow.State do
   def register_callback_handlers do
     Callbacks.register(:delete_file, &_on_delete_file/1)
 
-    Callbacks.register(:run_shell_command, &_on_run_shell_command/4)
+    Callbacks.register(:run_shell_command, &_on_run_shell_command/3)
 
     Callbacks.register(:agent_run_start, &_on_agent_run_start/3)
 
@@ -484,7 +618,7 @@ defmodule CodePuppyControl.Workflow.State do
   @spec unregister_callback_handlers() :: :ok
   def unregister_callback_handlers do
     Callbacks.unregister(:delete_file, &_on_delete_file/1)
-    Callbacks.unregister(:run_shell_command, &_on_run_shell_command/4)
+    Callbacks.unregister(:run_shell_command, &_on_run_shell_command/3)
     Callbacks.unregister(:agent_run_start, &_on_agent_run_start/3)
     Callbacks.unregister(:agent_run_end, &_on_agent_run_end/6)
     Callbacks.unregister(:pre_tool_call, &_on_pre_tool_call/3)
