@@ -625,7 +625,10 @@ From `code_puppy/callbacks.py`:
 ### Elixir Hooks
 
 From `CodePuppyControl.Callbacks.Hooks` — arities and merge strategies
-are declared in the module and enforced at registration time:
+are declared in the module; `Callbacks.register/2` validates the hook name
+but **not** arity at registration time. A function with the wrong arity
+fails when the hook is triggered and is handled as a callback failure
+(`:callback_failed` sentinel), not at registration.
 
 | Hook | Arity | Merge | Async | Description |
 |------|-------|-------|-------|-------------|
@@ -664,9 +667,11 @@ are declared in the module and enforced at registration time:
 | `:message_history_processor_end` | 1 | `:noop` | Yes | After msg history processing |
 
 > **Full Elixir list**: Call `CodePuppyControl.Callbacks.Hooks.all/0` for the
-> authoritative source. Arities are enforced at registration time via
-> `Callbacks.register/2` — passing a function with the wrong arity raises
-> `ArgumentError`.
+> authoritative source. `Hooks` declares each hook's expected arity and
+> merge strategy; `Callbacks.register/2` validates the hook name only.
+> A function with the wrong arity will fail when the hook is triggered
+> and is handled as a callback failure (`:callback_failed` sentinel),
+> not at registration time.
 
 ---
 
@@ -681,8 +686,15 @@ or `callbacks.py` in Python):
 | String concatenation | `str` → concatenate | `:concat_str` | Two `load_prompt` hooks append to the system prompt |
 | List extend | `list` → extend | `:extend_list` | Two `register_tools` hooks combine their tool lists |
 | Map update (later wins) | `dict` → update | `:update_map` | Two `load_models_config` hooks merge model dicts |
-| Boolean OR | `bool` → OR | `:or_bool` | Two `file_permission` hooks: either can allow |
+| Boolean OR | `bool` → OR | `:or_bool` | Two hooks returning `bool`: any `True` wins |
 | No merge (collect raw) | `None` → ignored | `:noop` | Hook results collected as-is |
+
+> **Security hooks use `:noop` merge, not `:or_bool`**: Both
+> `file_permission` and `run_shell_command` have `merge: :noop` in Elixir.
+> Results are collected as-is and interpreted by the **caller** with
+> fail-closed semantics — any callback returning a deny (or failing with
+> an exception) blocks the operation. Do **not** assume OR aggregation
+> for security hooks; a single `False` / `:deny` always wins.
 
 **Design rule**: Write callbacks expecting **additive semantics**, not
 replacement. Your `load_prompt` return will be *appended* to the prompt,
@@ -790,7 +802,7 @@ Builtin plugins ship with Code Puppy in:
 - `code_puppy/plugins/<name>/` (Python)
 - `priv/plugins/<name>/` (Elixir)
 
-To contribute a builtin plugin, open a PR following [CONTRIBUTING.md].
+To contribute a builtin plugin, open a PR following [CONTRIBUTING.md](../CONTRIBUTING.md).
 Note: the **Python freeze** is in effect — new Python plugins require
 justification (see the freeze policy).
 
