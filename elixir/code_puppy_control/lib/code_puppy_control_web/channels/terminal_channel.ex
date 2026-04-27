@@ -145,9 +145,9 @@ defmodule CodePuppyControlWeb.TerminalChannel do
             :ok -> :ok
             {:error, reason} ->
               Logger.warning(
-                "TerminalChannel: register_terminal failed for #{session_id}: #{inspect(reason)}. """
-                Terminal metadata will be persisted on next save_session.
-                """
+                "TerminalChannel: register_terminal failed for " <>
+                  "#{session_id}: #{inspect(reason)}. " <>
+                  "Terminal metadata will be persisted on next save_session."
               )
           end
         end

@@ -19,6 +19,7 @@ defmodule CodePuppyControl.SessionStorage.Store do
   require Logger
 
   alias CodePuppyControl.Sessions
+  alias CodePuppyControl.SessionStorage.StoreHelpers
   alias CodePuppyControl.SessionStorage.TerminalRecovery
 
   @pubsub CodePuppyControl.PubSub
@@ -107,7 +108,7 @@ defmodule CodePuppyControl.SessionStorage.Store do
         # Cache miss: read from SQLite, populate ETS
         case Sessions.load_session(name) do
           {:ok, data} ->
-            entry = session_data_to_entry(name, data)
+            entry = StoreHelpers.session_data_to_entry(name, data)
             :ets.insert(@session_table, {name, entry})
             {:ok, data}
 
@@ -132,7 +133,7 @@ defmodule CodePuppyControl.SessionStorage.Store do
       [] ->
         case Sessions.load_session_full(name) do
           {:ok, session} ->
-            entry = chat_session_to_entry(session)
+            entry = StoreHelpers.chat_session_to_entry(session)
             :ets.insert(@session_table, {name, entry})
             {:ok, entry}
 
@@ -347,7 +348,7 @@ defmodule CodePuppyControl.SessionStorage.Store do
     compacted_hashes = Keyword.get(opts, :compacted_hashes, [])
     total_tokens = Keyword.get(opts, :total_tokens, 0)
     auto_saved = Keyword.get(opts, :auto_saved, false)
-    timestamp = Keyword.get(opts, :timestamp, now_iso())
+    timestamp = Keyword.get(opts, :timestamp) || StoreHelpers.now_iso()
     has_terminal = Keyword.get(opts, :has_terminal, false)
     terminal_meta = Keyword.get(opts, :terminal_meta)
 
@@ -358,21 +359,23 @@ defmodule CodePuppyControl.SessionStorage.Store do
            has_terminal: has_terminal, terminal_meta: terminal_meta
          ) do
       {:ok, session} ->
-    # 2. Update ETS cache (only after durable write succeeds)
-    entry = build_entry(name, history, compacted_hashes, total_tokens,
-             auto_saved, timestamp, has_terminal, terminal_meta)
-    :ets.insert(@session_table, {name, entry})
+        # 2. Update ETS cache (only after durable write succeeds)
+        entry = StoreHelpers.build_entry(
+          name, history, compacted_hashes, total_tokens,
+          auto_saved, timestamp, has_terminal, terminal_meta
+        )
+        :ets.insert(@session_table, {name, entry})
 
-    # 3. Broadcast via PubSub
-    Phoenix.PubSub.broadcast(@pubsub, @sessions_topic,
-      {:session_saved, name, Map.drop(entry, [:history])})
+        # 3. Broadcast via PubSub
+        Phoenix.PubSub.broadcast(@pubsub, @sessions_topic,
+          {:session_saved, name, Map.drop(entry, [:history])})
 
-    # 4: Track terminal metadata if present
-    if has_terminal && terminal_meta do
-      :ets.insert(@terminal_table, {name, terminal_meta})
-    end
+        # 4: Track terminal metadata if present
+        if has_terminal && terminal_meta do
+          :ets.insert(@terminal_table, {name, terminal_meta})
+        end
 
-        {:reply, {:ok, session_to_result(session)}, state}
+        {:reply, {:ok, StoreHelpers.session_to_result(session)}, state}
 
       {:error, reason} ->
         # Durable write failed — no ETS update, no broadcast
@@ -458,7 +461,10 @@ defmodule CodePuppyControl.SessionStorage.Store do
         case Sessions.save_session(session_name, [],
                has_terminal: true, terminal_meta: meta) do
           {:ok, _session} ->
-            entry = build_entry(session_name, [], [], 0, false, now_iso(), true, meta)
+            entry = StoreHelpers.build_entry(
+              session_name, [], [], 0, false,
+              StoreHelpers.now_iso(), true, meta
+            )
             :ets.insert(@session_table, {session_name, entry})
             :ets.insert(@terminal_table, {session_name, meta})
             Phoenix.PubSub.broadcast(@pubsub, @terminal_topic, {:terminal_registered, session_name})
@@ -524,7 +530,7 @@ defmodule CodePuppyControl.SessionStorage.Store do
     case Sessions.list_sessions_with_metadata() do
       {:ok, sessions} ->
         count = Enum.reduce(sessions, 0, fn session, acc ->
-          entry = chat_session_to_entry(session)
+          entry = StoreHelpers.chat_session_to_entry(session)
           :ets.insert(@session_table, {session.name, entry})
           acc + 1
         end)
@@ -550,79 +556,4 @@ defmodule CodePuppyControl.SessionStorage.Store do
     }
   end
 
-  # ---------------------------------------------------------------------------
-  # Private Helpers
-  # ---------------------------------------------------------------------------
-
-  defp now_iso, do: DateTime.utc_now() |> DateTime.to_iso8601()
-
-  defp build_entry(name, history, compacted_hashes, total_tokens, auto_saved, timestamp, has_terminal, terminal_meta) do
-    %{
-      name: name, history: history, compacted_hashes: compacted_hashes,
-      total_tokens: total_tokens, message_count: length(history),
-      auto_saved: auto_saved, timestamp: timestamp,
-      has_terminal: has_terminal, terminal_meta: terminal_meta,
-      updated_at: System.monotonic_time(:millisecond)
-    }
-  end
-
-  # Whitelist of known terminal_meta keys.  We never call String.to_atom/1
-  # on persisted JSON / user-influenced data — only known keys are promoted
-  # to atoms; unknown string keys are preserved as strings so downstream code
-  # can still read them via dual-key access (get_key).  (code_puppy-ctj.1 fix)
-  @terminal_meta_whitelist %{
-    "session_id" => :session_id,
-    "cols" => :cols,
-    "rows" => :rows,
-    "shell" => :shell,
-    "attached_at" => :attached_at
-  }
-
-  defp normalize_meta_keys(nil), do: nil
-  defp normalize_meta_keys(meta) when is_map(meta) do
-    Map.new(meta, fn
-      {k, v} when is_binary(k) ->
-        {Map.get(@terminal_meta_whitelist, k, k), v}
-      {k, v} when is_atom(k) ->
-        {k, v}
-    end)
-  end
-  defp normalize_meta_keys(meta), do: meta
-
-  # Dual-key map accessor: atom key first, then string key fallback.
-  defp get_key(map, atom_key, string_key, default \\ nil) do
-    Map.get(map, atom_key, Map.get(map, string_key, default))
-  end
-
-  # Convert ChatSession map to ETS entry; normalizes string keys from SQLite.
-  defp chat_session_to_entry(session) when is_map(session) do
-    raw_meta = get_key(session, :terminal_meta, "terminal_meta")
-    %{
-      name: get_key(session, :name, "name", ""),
-      history: get_key(session, :history, "history", []),
-      compacted_hashes: get_key(session, :compacted_hashes, "compacted_hashes", []),
-      total_tokens: get_key(session, :total_tokens, "total_tokens", 0),
-      message_count: get_key(session, :message_count, "message_count", 0),
-      auto_saved: get_key(session, :auto_saved, "auto_saved", false),
-      timestamp: get_key(session, :timestamp, "timestamp", ""),
-      has_terminal: get_key(session, :has_terminal, "has_terminal", false),
-      terminal_meta: normalize_meta_keys(raw_meta),
-      updated_at: System.monotonic_time(:millisecond)
-    }
-  end
-
-  # Convert session data from Sessions.load_session to ETS entry.
-  defp session_data_to_entry(name, data) do
-    history = Map.get(data, :history, [])
-    %{name: name, history: history, compacted_hashes: Map.get(data, :compacted_hashes, []),
-      total_tokens: 0, message_count: length(history), auto_saved: false,
-      timestamp: "", has_terminal: false, terminal_meta: nil,
-      updated_at: System.monotonic_time(:millisecond)}
-  end
-
-  defp session_to_result(session) do
-    %{name: session.name, message_count: session.message_count,
-      total_tokens: session.total_tokens, auto_saved: session.auto_saved,
-      timestamp: session.timestamp}
-  end
 end
