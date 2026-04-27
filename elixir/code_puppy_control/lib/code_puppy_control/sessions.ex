@@ -48,6 +48,14 @@ defmodule CodePuppyControl.Sessions do
           keyword()
         ) :: session_result()
   def save_session(name, history, opts \\ []) do
+    # (code_puppy-ctj.1 fix) When opts omit :has_terminal / :terminal_meta,
+    # preserve existing values from the database row instead of defaulting
+    # to false/nil — which would silently clear registered terminal recovery
+    # metadata. The Store layer resolves these before calling us, but direct
+    # callers (e.g. python_worker/port.ex) bypass the Store.
+    {has_terminal, terminal_meta} =
+      resolve_terminal_attrs(name, opts)
+
     attrs = %{
       name: name,
       history: history,
@@ -57,8 +65,8 @@ defmodule CodePuppyControl.Sessions do
       auto_saved: Keyword.get(opts, :auto_saved, false),
       timestamp: Keyword.get(opts, :timestamp, now_iso()),
       # (code_puppy-ctj.1) Terminal session fields for crash recovery
-      has_terminal: Keyword.get(opts, :has_terminal, false),
-      terminal_meta: Keyword.get(opts, :terminal_meta)
+      has_terminal: has_terminal,
+      terminal_meta: terminal_meta
     }
 
     case Repo.get_by(ChatSession, name: name) do
@@ -254,6 +262,50 @@ defmodule CodePuppyControl.Sessions do
     "shell" => :shell,
     "attached_at" => :attached_at
   }
+
+  # (code_puppy-ctj.1 fix) Resolve terminal attrs from opts, preserving
+  # existing database values when the caller does not explicitly provide
+  # :has_terminal or :terminal_meta.  Returns {has_terminal, terminal_meta}.
+  @spec resolve_terminal_attrs(session_name(), keyword()) ::
+          {boolean(), map() | nil}
+  defp resolve_terminal_attrs(name, opts) do
+    has_terminal_explicit? = Keyword.has_key?(opts, :has_terminal)
+    terminal_meta_explicit? = Keyword.has_key?(opts, :terminal_meta)
+
+    if has_terminal_explicit? or terminal_meta_explicit? do
+      # At least one field is explicit — resolve both, falling back to
+      # existing DB values for anything not explicitly provided.
+      existing = get_existing_terminal_from_db(name)
+
+      has_terminal =
+        if has_terminal_explicit?,
+          do: Keyword.get(opts, :has_terminal),
+          else: (if terminal_meta_explicit?, do: true, else: elem(existing, 0))
+
+      terminal_meta =
+        if terminal_meta_explicit?,
+          do: Keyword.get(opts, :terminal_meta),
+          else: elem(existing, 1)
+
+      {has_terminal, terminal_meta}
+    else
+      # Neither field explicit — preserve existing DB values.
+      # For new sessions (no DB row), default to false/nil.
+      existing = get_existing_terminal_from_db(name)
+      existing
+    end
+  end
+
+  # Reads existing terminal state from the DB. Returns {false, nil}
+  # for unknown sessions (safe defaults for a new row).
+  @spec get_existing_terminal_from_db(session_name()) ::
+          {boolean(), map() | nil}
+  defp get_existing_terminal_from_db(name) do
+    case Repo.get_by(ChatSession, name: name) do
+      nil -> {false, nil}
+      session -> {session.has_terminal || false, session.terminal_meta}
+    end
+  end
 
   defp normalize_terminal_meta(nil), do: nil
 

@@ -349,10 +349,15 @@ defmodule CodePuppyControl.SessionStorage.Store do
     total_tokens = Keyword.get(opts, :total_tokens, 0)
     auto_saved = Keyword.get(opts, :auto_saved, false)
     timestamp = Keyword.get(opts, :timestamp) || StoreHelpers.now_iso()
-    has_terminal = Keyword.get(opts, :has_terminal, false)
-    terminal_meta = Keyword.get(opts, :terminal_meta)
 
-    # 1. Persist to SQLite (durable). (code_puppy-ctj.1 fix: pass terminal fields)
+    # (code_puppy-ctj.1 fix) Preserve existing terminal metadata when opts
+    # omit :has_terminal / :terminal_meta — previously defaulting to false/nil
+    # would silently clear registered terminal recovery data.
+    {has_terminal, terminal_meta, terminal_explicit?} =
+      StoreHelpers.resolve_terminal_fields(name, opts, @session_table)
+
+    # 1. Persist to SQLite (durable). Always pass resolved values so
+    # Sessions.save_session/3 receives the correct terminal state.
     case Sessions.save_session(name, history,
            compacted_hashes: compacted_hashes, total_tokens: total_tokens,
            auto_saved: auto_saved, timestamp: timestamp,
@@ -370,9 +375,19 @@ defmodule CodePuppyControl.SessionStorage.Store do
         Phoenix.PubSub.broadcast(@pubsub, @sessions_topic,
           {:session_saved, name, Map.drop(entry, [:history])})
 
-        # 4: Track terminal metadata if present
-        if has_terminal && terminal_meta do
-          :ets.insert(@terminal_table, {name, terminal_meta})
+        # 4. Terminal ETS table consistency:
+        #    - insert/update when has_terminal true + meta present
+        #    - delete when caller explicitly clears has_terminal to false
+        #    - preserve (no change) when opts omitted both fields
+        cond do
+          has_terminal && terminal_meta ->
+            :ets.insert(@terminal_table, {name, terminal_meta})
+
+          terminal_explicit? && !has_terminal ->
+            :ets.delete(@terminal_table, name)
+
+          true ->
+            :ok
         end
 
         {:reply, {:ok, StoreHelpers.session_to_result(session)}, state}

@@ -154,4 +154,72 @@ defmodule CodePuppyControl.SessionStorage.StoreHelpers do
       timestamp: session.timestamp
     }
   end
+
+  # ---------------------------------------------------------------------------
+  # Terminal Field Resolution (code_puppy-ctj.1 fix)
+  # ---------------------------------------------------------------------------
+
+  @doc """
+  Resolves :has_terminal and :terminal_meta from opts, preserving existing
+  ETS values when the caller does not explicitly provide them.
+
+  Returns `{has_terminal, terminal_meta, has_terminal_explicit?}` where the
+  third element indicates whether the caller explicitly set `:has_terminal` —
+  this drives the terminal ETS table consistency logic (delete on explicit
+  clear, preserve otherwise).
+
+  The `session_table` argument is the ETS table reference (atom) to read
+  existing terminal state from.
+  """
+  @spec resolve_terminal_fields(String.t(), keyword(), atom()) ::
+          {boolean(), map() | nil, boolean()}
+  def resolve_terminal_fields(name, opts, session_table) do
+    has_terminal_explicit? = Keyword.has_key?(opts, :has_terminal)
+    terminal_meta_explicit? = Keyword.has_key?(opts, :terminal_meta)
+
+    {existing_ht, existing_tm} = get_existing_terminal_state(name, session_table)
+
+    cond do
+      # Case 1: Neither field explicit → preserve existing entirely.
+      # This is the common path (save_session called without terminal opts),
+      # e.g. autosave updating history while a terminal is attached.
+      not has_terminal_explicit? and not terminal_meta_explicit? ->
+        {existing_ht, existing_tm, false}
+
+      # Case 2: has_terminal explicitly false → clear terminal state.
+      # Caller is intentionally unregistering via save_session.
+      has_terminal_explicit? and not Keyword.get(opts, :has_terminal) ->
+        {false, nil, true}
+
+      # Case 3: At least one explicit with has_terminal true (or implied by
+      # providing terminal_meta). Use explicit values, falling back to
+      # existing for anything not explicitly provided.
+      true ->
+        ht =
+          if has_terminal_explicit?,
+            do: Keyword.get(opts, :has_terminal),
+            else: (if terminal_meta_explicit?, do: true, else: existing_ht)
+
+        tm =
+          if terminal_meta_explicit?,
+            do: Keyword.get(opts, :terminal_meta),
+            else: existing_tm
+
+        {ht, tm, has_terminal_explicit?}
+    end
+  end
+
+  @doc """
+  Reads the current terminal state from the session ETS table.
+
+  Returns `{false, nil}` for unknown sessions (safe defaults for a new row).
+  """
+  @spec get_existing_terminal_state(String.t(), atom()) ::
+          {boolean(), map() | nil}
+  def get_existing_terminal_state(name, session_table) do
+    case :ets.lookup(session_table, name) do
+      [{^name, entry}] -> {entry.has_terminal, entry.terminal_meta}
+      [] -> {false, nil}
+    end
+  end
 end
