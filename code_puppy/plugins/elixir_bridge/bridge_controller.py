@@ -80,7 +80,7 @@ class BridgeController:
         """Initialize the bridge controller."""
         self._running = True
         self._command_count = 0
-        self._active_runs: dict[str, Any] = {} # Track active runs for cancel support
+        self._active_runs: dict[str, Any] = {}  # Track active runs for cancel support
 
     async def shutdown(self) -> None:
         """Shutdown the controller and cleanup resources."""
@@ -90,6 +90,36 @@ class BridgeController:
             if hasattr(run_info, "cancel"):
                 await run_info.cancel()
         self._active_runs.clear()
+
+    def _emit_notification(self, method: str, params: dict[str, Any]) -> None:
+        """Emit a JSON-RPC notification to Elixir via stdout.
+
+        Fire-and-forget: writes Content-Length framed JSON-RPC notification.
+        Used by _execute_agent_run to emit run.completed / run.failed
+        so that Run.State.await_run completes and AgentInvocation can
+        extract the response.
+
+        Args:
+            method: JSON-RPC method name (e.g., "run.completed")
+            params: Notification parameters dict
+        """
+        import sys
+        from .wire_protocol import _serialize_json
+
+        notification = {
+            "jsonrpc": "2.0",
+            "method": method,
+            "params": params,
+        }
+        try:
+            body_bytes = _serialize_json(notification)
+            header = f"Content-Length: {len(body_bytes)}\r\n\r\n"
+            sys.stdout.buffer.write(header.encode("utf-8"))
+            sys.stdout.buffer.write(body_bytes)
+            sys.stdout.buffer.flush()
+        except Exception:
+            # Fire-and-forget: silently ignore errors
+            pass
 
     async def dispatch(self, request: dict[str, Any]) -> dict[str, Any] | None:
         """Dispatch a JSON-RPC request to the appropriate handler.
@@ -199,12 +229,27 @@ class BridgeController:
         Args:
             params: {"agent_name": str, "prompt": str, "session_id": str | None,
                      "run_id": str | None, "context": dict}
+            Also accepts Elixir AgentInvocation wire shape where prompt is
+            nested under params["config"]["prompt"] instead of top-level.
 
         Returns:
             {"status": "started", "run_id": str, "session_id": str | None}
         """
         agent_name = params["agent_name"]
-        prompt = params["prompt"]
+        # code_puppy-mmk.4: Elixir AgentInvocation.invoke puts prompt under
+        # config when calling Run.Manager.start_run. Accept both shapes:
+        #   Top-level:  {agent_name, prompt, session_id, ...}
+        #   Elixir:     {agent_name, config: {prompt, ...}, session_id, ...}
+        prompt = params.get("prompt")
+        if prompt is None:
+            config = params.get("config", {})
+            if isinstance(config, dict):
+                prompt = config.get("prompt")
+        if not prompt:
+            raise WireMethodError(
+                "run.start requires 'prompt' (top-level or under config)",
+                code=-32602,
+            )
         session_id = params.get("session_id")
         run_id = params.get("run_id", f"run-{asyncio.get_event_loop().time()}")
 
@@ -212,7 +257,7 @@ class BridgeController:
         if run_id in self._active_runs:
             raise WireMethodError(
                 f"Run already active: {run_id}",
-                code=-32002, # Run already active
+                code=-32002,  # Run already active
             )
 
         try:
@@ -248,18 +293,51 @@ class BridgeController:
         """Execute an agent run and emit lifecycle events.
 
         This runs in a background task and emits run.status, run.text,
-        run.completed or run.failed notifications.
+        run.completed or run.failed notifications back to Elixir via
+        stdout so that Run.State.await_run completes and
+        AgentInvocation.extract_response can find the response.
+
+        code_puppy-mmk.4: emits canonical run.completed / run.failed
+        JSON-RPC notifications with response/error metadata.
         """
+        import os
+        import logging
+
         from code_puppy.tools.agent_tools import invoke_agent_headless
+
+        _log = logging.getLogger(__name__)
 
         try:
             self._active_runs[run_id]["status"] = "running"
 
-            # Execute agent
-            await invoke_agent_headless(
-                agent_name=agent_name,
-                prompt=prompt,
-                session_id=session_id,
+            # Prevent recursive delegation: we're inside an Elixir-managed
+            # Python worker, so invoke_agent_headless must NOT delegate back
+            # to Elixir. Set the guard env var for the duration of the run.
+            _prev_skip = os.environ.get("PUP_SKIP_ELIXIR_AGENT_TOOLS")
+            os.environ["PUP_SKIP_ELIXIR_AGENT_TOOLS"] = "1"
+            try:
+                # Execute agent (PUP_SKIP_ELIXIR_AGENT_TOOLS prevents recursion)
+                response = await invoke_agent_headless(
+                    agent_name=agent_name,
+                    prompt=prompt,
+                    session_id=session_id,
+                )
+            finally:
+                # Restore previous env var state
+                if _prev_skip is None:
+                    os.environ.pop("PUP_SKIP_ELIXIR_AGENT_TOOLS", None)
+                else:
+                    os.environ["PUP_SKIP_ELIXIR_AGENT_TOOLS"] = _prev_skip
+
+            # Emit canonical run.completed notification to Elixir
+            # Shape matches port.ex handle_message("run.completed")
+            self._emit_notification(
+                "run.completed",
+                {
+                    "run_id": run_id,
+                    "session_id": session_id,
+                    "result": {"response": response},
+                },
             )
 
             # Mark as completed
@@ -269,9 +347,20 @@ class BridgeController:
         except asyncio.CancelledError:
             self._active_runs.pop(run_id, None)
             raise
-        except Exception:
+        except Exception as exc:
+            _log.warning("run %s failed: %s", run_id, exc)
+
+            # Emit canonical run.failed notification to Elixir
+            self._emit_notification(
+                "run.failed",
+                {
+                    "run_id": run_id,
+                    "session_id": session_id,
+                    "error": str(exc),
+                },
+            )
+
             self._active_runs.pop(run_id, None)
-            # Exception will be handled by the agent system
 
     async def _handle_run_cancel(self, params: dict[str, Any]) -> dict[str, Any]:
         """Handle run.cancel method (V1 canonical).
@@ -350,7 +439,11 @@ class BridgeController:
         Returns:
             {"response": str, "success": bool}
         """
+        import logging
+
         from code_puppy.tools.agent_tools import invoke_agent_headless
+
+        _log = logging.getLogger(__name__)
 
         agent_name = params["agent_name"]
         prompt = params["prompt"]
@@ -358,6 +451,8 @@ class BridgeController:
 
         try:
             # invoke_agent_headless returns string directly
+            # PUP_SKIP_ELIXIR_AGENT_TOOLS is set inside the function to
+            # prevent recursive delegation back to Elixir.
             response = await invoke_agent_headless(
                 agent_name=agent_name,
                 prompt=prompt,
@@ -370,6 +465,7 @@ class BridgeController:
                 "session_id": session_id,
             }
         except Exception as e:
+            _log.debug("invoke_agent failed for %s: %s", agent_name, e)
             return {
                 "success": False,
                 "error": str(e),
@@ -520,7 +616,7 @@ class BridgeController:
                 total_lines = len(lines)
 
                 if start_line is not None:
-                    start_idx = start_line - 1 # Convert to 0-indexed
+                    start_idx = start_line - 1  # Convert to 0-indexed
                     end_idx = start_idx + (num_lines or len(lines))
                     selected = lines[start_idx:end_idx]
                     content = "".join(selected)
@@ -614,7 +710,7 @@ class BridgeController:
                                             "line_content": line.rstrip("\\n"),
                                         }
                                     )
-                    except (OSError, UnicodeDecodeError):
+                    except OSError, UnicodeDecodeError:
                         pass
 
             return {
@@ -671,7 +767,7 @@ class BridgeController:
             {"status": "ok"} on success, raises error on failure
         """
         limiter_type = params.get("type", "file_ops")
-        _timeout = params.get("timeout") # Reserved for future use (timeout support)
+        _timeout = params.get("timeout")  # Reserved for future use (timeout support)
 
         # Map limiter type to appropriate semaphore
         if limiter_type == "file_ops":
@@ -683,7 +779,7 @@ class BridgeController:
         else:
             raise WireMethodError(
                 f"Unknown limiter type: {limiter_type}",
-                code=-32602, # Invalid params
+                code=-32602,  # Invalid params
             )
 
         return {"status": "ok", "type": limiter_type}
@@ -713,7 +809,7 @@ class BridgeController:
         else:
             raise WireMethodError(
                 f"Unknown limiter type: {limiter_type}",
-                code=-32602, # Invalid params
+                code=-32602,  # Invalid params
             )
 
         return {"status": "ok", "type": limiter_type}
@@ -761,7 +857,7 @@ class BridgeController:
         except Exception as e:
             raise WireMethodError(
                 f"Failed to acquire run slot: {e}",
-                code=-32603, # Internal error
+                code=-32603,  # Internal error
             )
 
     async def _handle_run_limiter_release(
@@ -785,7 +881,7 @@ class BridgeController:
         except Exception as e:
             raise WireMethodError(
                 f"Failed to release run slot: {e}",
-                code=-32603, # Internal error
+                code=-32603,  # Internal error
             )
 
     async def _handle_run_limiter_status(
@@ -838,7 +934,7 @@ class BridgeController:
         except Exception as e:
             raise WireMethodError(
                 f"Failed to set run limit: {e}",
-                code=-32603, # Internal error
+                code=-32603,  # Internal error
             )
 
     # MCP Bridge Handlers
@@ -865,15 +961,15 @@ class BridgeController:
 
             # Build server config from params
             config = ServerConfig(
-                id="", # Auto-generated
+                id="",  # Auto-generated
                 name=name,
                 type="stdio",
                 enabled=True,
                 config={
                     "command": command,
                     "args": args,
-                    **env, # Merge env vars into config
-                    **opts, # Merge additional opts
+                    **env,  # Merge env vars into config
+                    **opts,  # Merge additional opts
                 },
             )
 
@@ -905,7 +1001,7 @@ class BridgeController:
             if not removed:
                 raise WireMethodError(
                     f"Server not found: {server_id}",
-                    code=-32001, # Server not found
+                    code=-32001,  # Server not found
                 )
 
             return {
@@ -973,7 +1069,7 @@ class BridgeController:
             if not status.get("exists", False):
                 raise WireMethodError(
                     f"Server not found: {server_id}",
-                    code=-32001, # Server not found
+                    code=-32001,  # Server not found
                 )
 
             return {
@@ -1137,7 +1233,7 @@ class BridgeController:
         except Exception as e:
             raise WireMethodError(
                 f"Failed to record rate limit: {e}",
-                code=-32603, # Internal error
+                code=-32603,  # Internal error
             )
 
     async def _handle_rate_limiter_record_success(
@@ -1168,7 +1264,7 @@ class BridgeController:
         except Exception as e:
             raise WireMethodError(
                 f"Failed to record success: {e}",
-                code=-32603, # Internal error
+                code=-32603,  # Internal error
             )
 
     async def _handle_rate_limiter_get_limit(
@@ -1201,7 +1297,7 @@ class BridgeController:
         except Exception as e:
             raise WireMethodError(
                 f"Failed to get limit: {e}",
-                code=-32603, # Internal error
+                code=-32603,  # Internal error
             )
 
     async def _handle_rate_limiter_circuit_status(
@@ -1238,7 +1334,7 @@ class BridgeController:
         except Exception as e:
             raise WireMethodError(
                 f"Failed to get circuit status: {e}",
-                code=-32603, # Internal error
+                code=-32603,  # Internal error
             )
 
     # Agent Manager Handlers
@@ -1274,7 +1370,7 @@ class BridgeController:
         except Exception as e:
             raise WireMethodError(
                 f"Failed to register agent: {e}",
-                code=-32603, # Internal error
+                code=-32603,  # Internal error
             )
 
     async def _handle_agent_manager_list(
@@ -1300,7 +1396,7 @@ class BridgeController:
         except Exception as e:
             raise WireMethodError(
                 f"Failed to list agents: {e}",
-                code=-32603, # Internal error
+                code=-32603,  # Internal error
             )
 
     async def _handle_agent_manager_get_current(
@@ -1325,7 +1421,7 @@ class BridgeController:
         except Exception as e:
             raise WireMethodError(
                 f"Failed to get current agent: {e}",
-                code=-32603, # Internal error
+                code=-32603,  # Internal error
             )
 
     async def _handle_agent_manager_set_current(
@@ -1362,7 +1458,7 @@ class BridgeController:
         except Exception as e:
             raise WireMethodError(
                 f"Failed to set current agent: {e}",
-                code=-32603, # Internal error
+                code=-32603,  # Internal error
             )
 
     # Model packs handlers
@@ -1414,19 +1510,21 @@ class BridgeController:
 
             packs_list = []
             for pack in packs:
-                packs_list.append({
-                    "name": pack.name,
-                    "description": pack.description,
-                    "default_role": pack.default_role,
-                    "roles": {
-                        role_name: {
-                            "primary": config.primary,
-                            "fallbacks": config.fallbacks,
-                            "trigger": config.trigger,
-                        }
-                        for role_name, config in pack.roles.items()
-                    },
-                })
+                packs_list.append(
+                    {
+                        "name": pack.name,
+                        "description": pack.description,
+                        "default_role": pack.default_role,
+                        "roles": {
+                            role_name: {
+                                "primary": config.primary,
+                                "fallbacks": config.fallbacks,
+                                "trigger": config.trigger,
+                            }
+                            for role_name, config in pack.roles.items()
+                        },
+                    }
+                )
 
             return {"status": "ok", "packs": packs_list, "count": len(packs_list)}
         except Exception as e:

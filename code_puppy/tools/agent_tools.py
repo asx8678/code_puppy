@@ -2,6 +2,7 @@
 import asyncio
 import itertools
 import logging
+import os
 import re
 import traceback
 from datetime import datetime
@@ -14,30 +15,30 @@ _SANITIZE_DASH_RUNS_RE = re.compile(r"-+")
 try:
     from pydantic_ai.messages import ModelMessagesTypeAdapter
 except ImportError:
-    ModelMessagesTypeAdapter = None # type: ignore[misc,assignment]
+    ModelMessagesTypeAdapter = None  # type: ignore[misc,assignment]
 
 # Imports for streaming retry logic (transient HTTP error handling)
-import httpcore # noqa: E402
-import httpx # noqa: E402
-from functools import partial # noqa: E402
-from pathlib import Path # noqa: E402
+import httpcore  # noqa: E402
+import httpx  # noqa: E402
+from functools import partial  # noqa: E402
+from pathlib import Path  # noqa: E402
 
 try:
-    from dbos import DBOS, SetWorkflowID # noqa: E402
+    from dbos import DBOS, SetWorkflowID  # noqa: E402
 except ImportError:
-    DBOS = None # type: ignore[assignment,misc]
-    SetWorkflowID = None # type: ignore[assignment,misc]
-from pydantic import BaseModel # noqa: E402
+    DBOS = None  # type: ignore[assignment,misc]
+    SetWorkflowID = None  # type: ignore[assignment,misc]
+from pydantic import BaseModel  # noqa: E402
 
 # Import Agent from pydantic_ai to create temporary agents for invocation
-from pydantic_ai import Agent, RunContext, UsageLimits # noqa: E402
-from pydantic_ai.messages import ModelMessage # noqa: E402
-from pydantic_ai.exceptions import ModelHTTPError # noqa: E402
+from pydantic_ai import Agent, RunContext, UsageLimits  # noqa: E402
+from pydantic_ai.messages import ModelMessage  # noqa: E402
+from pydantic_ai.exceptions import ModelHTTPError  # noqa: E402
 
-from code_puppy.config import DATA_DIR, get_use_dbos, get_value # noqa: E402
-from code_puppy.config_package import get_puppy_config # noqa: E402
-from code_puppy.dbos_utils import initialize_dbos_if_needed # noqa: E402
-from code_puppy.messaging import ( # noqa: E402
+from code_puppy.config import DATA_DIR, get_use_dbos, get_value  # noqa: E402
+from code_puppy.config_package import get_puppy_config  # noqa: E402
+from code_puppy.dbos_utils import initialize_dbos_if_needed  # noqa: E402
+from code_puppy.messaging import (  # noqa: E402
     SubAgentInvocationMessage,
     SubAgentResponseMessage,
     emit_error,
@@ -47,9 +48,9 @@ from code_puppy.messaging import ( # noqa: E402
     get_session_context,
     set_session_context,
 )
-from code_puppy.persistence import atomic_write_msgpack, read_msgpack # noqa: E402
-from code_puppy.tools.common import generate_group_id # noqa: E402
-from code_puppy.tools.subagent_context import subagent_context # noqa: E402
+from code_puppy.persistence import atomic_write_msgpack, read_msgpack  # noqa: E402
+from code_puppy.tools.common import generate_group_id  # noqa: E402
+from code_puppy.tools.subagent_context import subagent_context  # noqa: E402
 
 # RunLimiter import with graceful degradation
 try:
@@ -63,10 +64,10 @@ except ImportError:
     _RUN_LIMITER_AVAILABLE = False
     # Fallback stubs for graceful degradation
 
-    class RunConcurrencyLimitError(Exception): # type: ignore[no-redef]
+    class RunConcurrencyLimitError(Exception):  # type: ignore[no-redef]
         pass
 
-    def get_run_limiter() -> None: # type: ignore[misc]
+    def get_run_limiter() -> None:  # type: ignore[misc]
         return None
 
 
@@ -395,13 +396,13 @@ def _save_session_history_sync(
                 existing_meta = existing_data.get("metadata", {})
                 saved_initial_prompt = existing_meta.get("initial_prompt")
         except Exception:
-            pass # If read fails, proceed without preserving
+            pass  # If read fails, proceed without preserving
 
     payload = {
         "format": "pydantic-ai-json-v2",
         "payload": ModelMessagesTypeAdapter.dump_python(message_history, mode="json")
         if ModelMessagesTypeAdapter
-        else [], # type: ignore[attr]
+        else [],  # type: ignore[attr]
         "metadata": {
             "session_id": session_id,
             "agent_name": agent_name,
@@ -463,7 +464,7 @@ def _load_session_history_sync(session_id: str) -> list[ModelMessage]:
                 else []
             )
         except Exception:
-            pass # Fall through to other formats or return empty
+            pass  # Fall through to other formats or return empty
 
     # SECURITY FIX j0ha/l1en: Pickle completely removed - RCE vulnerability
     if pkl_path.exists():
@@ -473,7 +474,7 @@ def _load_session_history_sync(session_id: str) -> list[ModelMessage]:
 
     # Legacy .txt files are ignored (metadata now folded into msgpack)
     # We keep the txt_path reference for cleanup purposes if needed
-    _ = txt_path # Avoid unused variable warning; file may be cleaned up later
+    _ = txt_path  # Avoid unused variable warning; file may be cleaned up later
 
     return []
 
@@ -548,7 +549,7 @@ def register_list_agents(agent):
     """
 
     @agent.tool
-    def list_agents(context: RunContext) -> ListAgentsOutput:
+    async def list_agents(context: RunContext) -> ListAgentsOutput:
         """List all available sub-agents that can be invoked."""
         # Generate a group ID for this tool execution
         group_id = generate_group_id("list_agents")
@@ -570,14 +571,13 @@ def register_list_agents(agent):
 
                 if is_connected():
                     try:
-                        import asyncio
-
-                        result = asyncio.run(
-                            call_elixir_agent_tools(
-                                "agent_tools.list",
-                                {},
-                                timeout=2.0,
-                            )
+                        # Use _run_async_safe to avoid unsafe asyncio.run()
+                        # when an event loop is already running (e.g. inside
+                        # a pydantic-ai agent tool context).
+                        result = await call_elixir_agent_tools(
+                            "agent_tools.list",
+                            {},
+                            timeout=2.0,
                         )
                         if result.get("status") != "timeout" and "agents" in result:
                             agents = [
@@ -588,14 +588,23 @@ def register_list_agents(agent):
                                 )
                                 for a in result["agents"]
                             ]
-                    except Exception:
-                        pass  # Fallback to local on any error
+                    except Exception as exc:
+                        logger.debug(
+                            "list_agents: Elixir bridge error: %s, falling back",
+                            exc,
+                        )
             except ImportError:
+                logger.debug(
+                    "list_agents: elixir_bridge not importable, using local fallback"
+                )
                 pass
 
             if agents is None:
                 # Local fallback
-                from code_puppy.agents import get_agent_descriptions, get_available_agents
+                from code_puppy.agents import (
+                    get_agent_descriptions,
+                    get_available_agents,
+                )
 
                 agents_dict = get_available_agents()
                 descriptions_dict = get_agent_descriptions()
@@ -604,7 +613,9 @@ def register_list_agents(agent):
                     AgentInfo(
                         name=name,
                         display_name=display_name,
-                        description=descriptions_dict.get(name, "No description available"),
+                        description=descriptions_dict.get(
+                            name, "No description available"
+                        ),
                     )
                     for name, display_name in agents_dict.items()
                 ]
@@ -690,6 +701,92 @@ def register_invoke_agent(agent):
             session_id = f"{session_id}-{hash_suffix}"
         # else: continuing existing session, use session_id as-is
 
+        # ── Elixir bridge fast-path (code_puppy-mmk.4) ────────────────────
+        # Attempt agent_tools.invoke via Elixir when connected and NOT
+        # inside an Elixir-managed worker (which would recurse).
+        _skip_elixir = os.environ.get("PUP_SKIP_ELIXIR_AGENT_TOOLS", "").strip() in (
+            "1",
+            "true",
+            "yes",
+        )
+        if not _skip_elixir:
+            try:
+                from code_puppy.plugins.elixir_bridge import (
+                    is_connected,
+                    call_elixir_agent_tools,
+                )
+
+                if is_connected():
+                    try:
+                        bridge_result = await call_elixir_agent_tools(
+                            "agent_tools.invoke",
+                            {
+                                "agent_name": agent_name,
+                                "prompt": prompt,
+                                "session_id": session_id,
+                            },
+                            timeout=30.0,
+                        )
+                        if bridge_result.get(
+                            "status"
+                        ) != "timeout" and not bridge_result.get("error"):
+                            bridge_resp = bridge_result.get("response")
+                            if bridge_resp is not None:
+                                logger.debug(
+                                    "invoke_agent: Elixir bridge responded for %s",
+                                    agent_name,
+                                )
+                                # Emit invocation + response events for parity
+                                bus = get_message_bus()
+                                bus.emit(
+                                    SubAgentInvocationMessage(
+                                        agent_name=agent_name,
+                                        session_id=session_id,
+                                        prompt=prompt,
+                                        is_new_session=is_new_session,
+                                        message_count=len(message_history),
+                                    )
+                                )
+                                bus.emit(
+                                    SubAgentResponseMessage(
+                                        agent_name=agent_name,
+                                        session_id=session_id,
+                                        response=bridge_resp,
+                                        message_count=0,
+                                        was_streamed=False,
+                                        streamed_line_count=0,
+                                    )
+                                )
+                                emit_success(
+                                    f"✓ {agent_name} completed via Elixir bridge",
+                                    message_group=group_id,
+                                )
+                                return AgentInvokeOutput(
+                                    response=bridge_resp,
+                                    agent_name=agent_name,
+                                    session_id=session_id,
+                                )
+                        logger.debug(
+                            "invoke_agent: Elixir bridge timeout/error for %s, falling back to local",
+                            agent_name,
+                        )
+                    except Exception as exc:
+                        logger.debug(
+                            "invoke_agent: Elixir bridge exception for %s: %s, falling back",
+                            agent_name,
+                            exc,
+                        )
+            except ImportError:
+                logger.debug(
+                    "invoke_agent: elixir_bridge not importable, using local path"
+                )
+        else:
+            logger.debug(
+                "invoke_agent: PUP_SKIP_ELIXIR_AGENT_TOOLS=1, skipping Elixir for %s",
+                agent_name,
+            )
+        # ── End Elixir bridge fast-path ───────────────────────────────────
+
         # Lazy imports to avoid circular dependency
         from code_puppy.agents.subagent_stream_handler import subagent_stream_handler
 
@@ -764,7 +861,7 @@ def register_invoke_agent(agent):
                 model_name,
                 instructions,
                 prompt,
-                prepend_system_to_user=is_new_session, # Only prepend on first message
+                prepend_system_to_user=is_new_session,  # Only prepend on first message
             )
             instructions = prepared.instructions
             prompt = prepared.user_prompt
@@ -803,7 +900,7 @@ def register_invoke_agent(agent):
                     instructions=instructions,
                     output_type=str,
                     retries=3,
-                    toolsets=[], # MCP servers added separately for DBOS
+                    toolsets=[],  # MCP servers added separately for DBOS
                     history_processors=[agent_config.message_history_accumulator],
                     model_settings=model_settings,
                 )
@@ -842,7 +939,7 @@ def register_invoke_agent(agent):
 
             # Run the temporary agent with the provided prompt as an asyncio task
             # Pass the message_history from the session to continue the conversation
-            workflow_id = None # Track for potential cancellation
+            workflow_id = None  # Track for potential cancellation
 
             # Always use subagent_stream_handler to silence output and update console manager
             # This ensures all sub-agent output goes through the aggregated dashboard
@@ -969,7 +1066,7 @@ def register_invoke_agent(agent):
             else:
                 return (
                     await _run_with_limiter()
-                ) # Limiter is None inside, works as no-op
+                )  # Limiter is None inside, works as no-op
 
         except Exception as e:
             # Emit clean failure summary
@@ -1026,30 +1123,62 @@ async def invoke_agent_headless(
     Raises:
         RuntimeError: If agent loading or model initialization fails.
     """
-    # Try Elixir bridge first (code_puppy-mmk.4)
-    try:
-        from code_puppy.plugins.elixir_bridge import (
-            is_connected,
-            call_elixir_agent_tools,
-        )
+    # Prevent recursive delegation: when Python is running inside an
+    # Elixir-managed worker (bridge_controller), we must NOT delegate
+    # back to Elixir — that would create an infinite loop.
+    # PUP_SKIP_ELIXIR_AGENT_TOOLS is set by bridge_controller before
+    # calling this function from within an Elixir-managed context.
+    _skip_elixir = os.environ.get("PUP_SKIP_ELIXIR_AGENT_TOOLS", "").strip() in (
+        "1",
+        "true",
+        "yes",
+    )
 
-        if is_connected():
-            try:
-                result = await call_elixir_agent_tools(
-                    "agent_tools.invoke_headless",
-                    {
-                        "agent_name": agent_name,
-                        "prompt": prompt,
-                        "session_id": session_id,
-                    },
-                    timeout=30.0,
-                )
-                if result.get("status") != "timeout" and "response" in result:
-                    return result["response"]
-            except Exception:
-                pass  # Fallback to local on any error
-    except ImportError:
-        pass
+    # Try Elixir bridge first (code_puppy-mmk.4) — only when NOT in
+    # an Elixir-managed worker context.
+    if not _skip_elixir:
+        try:
+            from code_puppy.plugins.elixir_bridge import (
+                is_connected,
+                call_elixir_agent_tools,
+            )
+
+            if is_connected():
+                try:
+                    result = await call_elixir_agent_tools(
+                        "agent_tools.invoke_headless",
+                        {
+                            "agent_name": agent_name,
+                            "prompt": prompt,
+                            "session_id": session_id,
+                        },
+                        timeout=30.0,
+                    )
+                    if result.get("status") != "timeout" and "response" in result:
+                        logger.debug(
+                            "invoke_agent_headless: got response from Elixir bridge for %s",
+                            agent_name,
+                        )
+                        return result["response"]
+                    logger.debug(
+                        "invoke_agent_headless: Elixir bridge returned timeout/no-response for %s, falling back",
+                        agent_name,
+                    )
+                except Exception as exc:
+                    logger.debug(
+                        "invoke_agent_headless: Elixir bridge error for %s: %s, falling back",
+                        agent_name,
+                        exc,
+                    )
+        except ImportError:
+            logger.debug(
+                "invoke_agent_headless: elixir_bridge not importable, using local fallback"
+            )
+    else:
+        logger.debug(
+            "invoke_agent_headless: PUP_SKIP_ELIXIR_AGENT_TOOLS=1, skipping Elixir delegation for %s",
+            agent_name,
+        )
 
     # Local fallback
     from code_puppy.agents.agent_manager import load_agent

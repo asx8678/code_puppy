@@ -132,7 +132,8 @@ defmodule CodePuppyControl.Tools.AgentInvocation do
     # Step 3: Filter parent context for sub-agent isolation
     filtered_context = ContextFilter.filter_context(context)
 
-    _ = filtered_context  # Available for future agent run context injection
+    # Available for future agent run context injection
+    _ = filtered_context
 
     # Step 4: Emit structured invocation event
     emit_invocation_event(agent_name, session_id, prompt, is_new_session, message_history)
@@ -357,10 +358,33 @@ defmodule CodePuppyControl.Tools.AgentInvocation do
   end
 
   defp extract_response(state) do
+    # Support multiple result shapes that arrive from Run.State.metadata:
+    #   1. Atom-keyed:  %{response: "text"}
+    #   2. String-keyed: %{"response" => "text"}
+    #   3. Canonical run.completed: %{"result" => %{"response" => "text"}}
+    #   4. Nested in result key: %{result: %{response: "text"}}
     case state.metadata do
-      %{response: response} when is_binary(response) -> response
-      %{"response" => response} when is_binary(response) -> response
-      _ -> "Agent completed (no text response captured)"
+      %{response: response} when is_binary(response) ->
+        response
+
+      %{"response" => response} when is_binary(response) ->
+        response
+
+      %{"result" => %{"response" => response}} when is_binary(response) ->
+        # Canonical run.completed shape from port.ex
+        response
+
+      %{result: %{response: response}} when is_binary(response) ->
+        response
+
+      %{"result" => response} when is_binary(response) ->
+        response
+
+      %{result: response} when is_binary(response) ->
+        response
+
+      _ ->
+        "Agent completed (no text response captured)"
     end
   end
 

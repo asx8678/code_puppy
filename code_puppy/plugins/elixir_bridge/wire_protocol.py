@@ -1100,17 +1100,30 @@ def from_wire_params(method: str, params: dict[str, Any]) -> dict[str, Any]:
             raise WireMethodError(
                 "run.start requires 'agent_name' param", INVALID_PARAMS
             )
-        if "prompt" not in params:
-            raise WireMethodError("run.start requires 'prompt' param", INVALID_PARAMS)
+        # code_puppy-mmk.4: Accept prompt at top-level or nested under config
+        # Elixir AgentInvocation.invoke passes prompt inside config map
+        prompt = params.get("prompt")
+        if prompt is None:
+            config = params.get("config", {})
+            if isinstance(config, dict):
+                prompt = config.get("prompt")
+        if not prompt:
+            raise WireMethodError(
+                "run.start requires 'prompt' (top-level or under config)",
+                INVALID_PARAMS,
+            )
         result = {
             "agent_name": str(params["agent_name"]),
-            "prompt": str(params["prompt"]),
+            "prompt": str(prompt),
             "session_id": params.get("session_id"),
             "context": params.get("context", {}),
         }
         # Only include run_id if provided - handler will auto-generate if missing
         if "run_id" in params:
             result["run_id"] = params["run_id"]
+        # Preserve config for downstream consumption (e.g. is_new_session)
+        if "config" in params and isinstance(params["config"], dict):
+            result["config"] = params["config"]
         return result
 
     elif normalized_method == "run.cancel":
@@ -1236,7 +1249,7 @@ def from_wire_params(method: str, params: dict[str, Any]) -> dict[str, Any]:
         return {"type": limiter_type}
 
     elif normalized_method == "concurrency.status":
-        return {} # No params needed for status
+        return {}  # No params needed for status
 
     # Run limiter methods
     elif normalized_method == "run_limiter.acquire":
@@ -1246,10 +1259,10 @@ def from_wire_params(method: str, params: dict[str, Any]) -> dict[str, Any]:
         return result
 
     elif normalized_method == "run_limiter.release":
-        return {} # No params needed for release
+        return {}  # No params needed for release
 
     elif normalized_method == "run_limiter.status":
-        return {} # No params needed for status
+        return {}  # No params needed for status
 
     elif normalized_method == "run_limiter.set_limit":
         if "limit" not in params:
@@ -1290,7 +1303,7 @@ def from_wire_params(method: str, params: dict[str, Any]) -> dict[str, Any]:
         return {"server_id": str(params["server_id"])}
 
     elif normalized_method == "mcp.list":
-        return {} # No params needed for list
+        return {}  # No params needed for list
 
     elif normalized_method == "mcp.status":
         if "server_id" not in params:
@@ -1318,7 +1331,7 @@ def from_wire_params(method: str, params: dict[str, Any]) -> dict[str, Any]:
         return result
 
     elif normalized_method == "mcp.health_check":
-        return {} # No params needed for health_check
+        return {}  # No params needed for health_check
 
     # EventBus bridge methods
     elif normalized_method == "eventbus.event":
@@ -1382,10 +1395,10 @@ def from_wire_params(method: str, params: dict[str, Any]) -> dict[str, Any]:
         return result
 
     elif normalized_method == "agent_manager.list":
-        return {} # No params needed for list
+        return {}  # No params needed for list
 
     elif normalized_method == "agent_manager.get_current":
-        return {} # No params needed for get_current
+        return {}  # No params needed for get_current
 
     elif normalized_method == "agent_manager.set_current":
         if "agent_name" not in params:
@@ -1399,7 +1412,7 @@ def from_wire_params(method: str, params: dict[str, Any]) -> dict[str, Any]:
         return {"name": str(params.get("name", ""))} if params else {}
 
     elif normalized_method == "model_packs.list_packs":
-        return {} # No params needed
+        return {}  # No params needed
 
     elif normalized_method == "model_packs.set_current_pack":
         if "name" not in params:
@@ -1409,7 +1422,7 @@ def from_wire_params(method: str, params: dict[str, Any]) -> dict[str, Any]:
         return {"name": str(params["name"])}
 
     elif normalized_method == "model_packs.get_current_pack":
-        return {} # No params needed
+        return {}  # No params needed
 
     elif normalized_method == "model_packs.get_model_for_role":
         return {"role": str(params.get("role", ""))} if params else {}
@@ -1442,7 +1455,7 @@ def from_wire_params(method: str, params: dict[str, Any]) -> dict[str, Any]:
         return {"name": str(params["name"])}
 
     elif normalized_method == "model_packs.reload":
-        return {} # No params needed
+        return {}  # No params needed
 
     else:
         raise WireMethodError(f"Unknown method: {method}", METHOD_NOT_FOUND)
