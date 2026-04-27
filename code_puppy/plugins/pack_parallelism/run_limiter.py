@@ -1,15 +1,30 @@
-"""RunLimiter - semaphore-based concurrency gate for agent invocations.
+"""RunLimiter - concurrency gate for agent invocations.
 
-Fixes two critical bugs in the previous implementation:
-1. Zombie executor-thread leak on asyncio cancellation (now uses native asyncio.Semaphore)
-2. Reentrant deadlock from nested agent invocations (now uses contextvar reentrancy tracking)
+When the Elixir control plane is connected, delegates all counter state
+management to the ``CodePuppyControl.Plugins.PackParallelism`` GenServer,
+which serializes all mutations through a single BEAM process mailbox.
+This eliminates the ``_async_active`` race condition
+(HACK(pack-parallelism)) where concurrent Python threads could read stale
+counter values under ``threading.Lock``.
+
+When the Elixir control plane is NOT connected, falls back to local
+asyncio.Semaphore / threading.Semaphore with reentrancy tracking via
+contextvars.
 
 Design:
-- asyncio.Semaphore for the async path (primary, cancellation-safe)
-- threading.Semaphore for the sync path (tests only)
-- Independent semaphores - they do NOT share state (deliberate simplification)
-- contextvars.ContextVar for reentrancy depth tracking (CRITICAL: create_task copies context)
+- Elixir GenServer: **authoritative** state when connected (no race possible).
+  Python must sync its config to the GenServer before first acquire and on
+  every ``update_config`` call so the authoritative limiter stays consistent.
+- asyncio.Semaphore: local fallback for async path (cancellation-safe)
+- threading.Semaphore: local fallback for sync path (tests only)
+- contextvars.ContextVar: reentrancy depth tracking (always in Python)
 - Default wait_timeout = 600s (fail loud, not silent hang)
+
+Timeout alignment (code_puppy-154.3):
+  The outer JSON-RPC call timeout must accommodate the *full* acquire wait
+  timeout plus an IPC buffer.  If the Python side gives up before the
+  Elixir waiter expires, the waiter is "abandoned" and the slot it
+  eventually acquires is leaked.
 """
 
 import asyncio
@@ -40,6 +55,32 @@ def _get_reentrancy_depth() -> int:
 def _set_reentrancy_depth(depth: int) -> None:
     """Set reentrancy depth for the current async context."""
     _reentrancy_depth.set(max(0, depth))
+
+
+def _log_release_failure(task: asyncio.Task) -> None:
+    """Done-callback for fire-and-forget Elixir release tasks.
+
+    Logs cancellation, exceptions, or non-ok responses so failures
+    aren't silently swallowed.  Without this, a call_elixir_run_limiter
+    returning {status: timeout, fallback: true} would complete
+    "successfully" with no warning — causing a silent slot leak.
+    """
+    try:
+        if task.cancelled():
+            logger.warning("RunLimiter: Elixir release task was cancelled")
+        elif task.exception():
+            logger.warning(
+                "RunLimiter: Elixir release failed: %s", task.exception()
+            )
+        else:
+            result = task.result()
+            if isinstance(result, dict) and result.get("status") != "ok":
+                logger.warning(
+                    "RunLimiter: Elixir release returned non-ok response: %s",
+                    result,
+                )
+    except Exception:
+        pass  # Best-effort logging, never crash
 
 
 class RunConcurrencyLimitError(Exception):
@@ -106,6 +147,11 @@ class RunLimiter:
         self._async_deficit = 0
         self._sync_deficit = 0
 
+        # Track whether the Elixir GenServer has been synced with our config.
+        # Must be reset to False on every update_config() so the authoritative
+        # GenServer limit stays consistent.
+        self._elixir_synced = False
+
     def _validate_and_fix_config(self) -> None:
         """Validate config and replace invalid values with defaults."""
         if self._config.max_concurrent_runs < 1:
@@ -126,17 +172,135 @@ class RunLimiter:
             return 1
         return max(1, self._config.max_concurrent_runs)
 
+    # ── Elixir GenServer Config Sync ───────────────────────────────────
+
+    def _sync_config_to_elixir_sync(self) -> None:
+        """Sync current effective limit to the Elixir GenServer (blocking).
+
+        Called from sync contexts (update_config, startup).  The GenServer's
+        ``set_limit`` is a fast GenServer.call so the blocking time is
+        negligible (~ms).  Idempotent — calling twice with the same limit
+        is safe.
+        """
+        if self._elixir_synced:
+            return
+        try:
+            from code_puppy.plugins.elixir_bridge import is_connected, call_method
+
+            if is_connected():
+                call_method(
+                    "run_limiter.set_limit",
+                    {"limit": self.effective_limit},
+                    timeout=5.0,
+                )
+                self._elixir_synced = True
+                logger.info(
+                    "RunLimiter: synced limit %d to Elixir GenServer",
+                    self.effective_limit,
+                )
+        except ImportError:
+            pass
+        except Exception as e:
+            logger.debug(
+                "RunLimiter: failed to sync config to Elixir: %s", e
+            )
+
+    async def _sync_config_to_elixir_async(self) -> None:
+        """Sync current effective limit to the Elixir GenServer (async).
+
+        Called from async contexts (acquire_async).  Uses the async bridge
+        wrapper so the event loop is not blocked.
+        """
+        if self._elixir_synced:
+            return
+        try:
+            from code_puppy.plugins.elixir_bridge import (
+                is_connected,
+                call_elixir_run_limiter,
+            )
+
+            if is_connected():
+                await call_elixir_run_limiter(
+                    "run_limiter.set_limit",
+                    {"limit": self.effective_limit},
+                    timeout=5.0,
+                )
+                self._elixir_synced = True
+                logger.info(
+                    "RunLimiter: synced limit %d to Elixir GenServer (async)",
+                    self.effective_limit,
+                )
+        except ImportError:
+            pass
+        except Exception as e:
+            logger.debug(
+                "RunLimiter: failed to sync config to Elixir (async): %s", e
+            )
+
     @property
     def active_count(self) -> int:
-        """Current number of active runs (thread-safe read)."""
+        """Current number of active runs (thread-safe read).
+
+        When Elixir GenServer is connected, queries the authoritative
+        GenServer state via ``run_limiter.status`` for a race-free count.
+        Falls back to local counters when disconnected.
+        """
+        status = self._get_elixir_status()
+        if status is not None:
+            return status.get("active", 0)
+
         with self._state_lock:
             return self._async_active + self._sync_active
 
     @property
     def waiters_count(self) -> int:
-        """Number of callers currently waiting for a slot."""
+        """Number of callers currently waiting for a slot.
+
+        When Elixir GenServer is connected, queries the authoritative
+        GenServer state via ``run_limiter.status`` for a race-free count.
+        Falls back to local counters when disconnected.
+        """
+        status = self._get_elixir_status()
+        if status is not None:
+            return status.get("waiters", 0)
+
         with self._state_lock:
             return self._async_waiters + self._sync_waiters
+
+    @property
+    def available_count(self) -> int:
+        """Number of slots currently available for immediate acquire.
+
+        When Elixir GenServer is connected, queries the authoritative
+        GenServer state. Falls back to local calculation when disconnected.
+        """
+        status = self._get_elixir_status()
+        if status is not None:
+            return status.get("available", 0)
+
+        return max(self.effective_limit - self.active_count, 0)
+
+    def _get_elixir_status(self) -> dict | None:
+        """Query the full Elixir GenServer status when connected.
+
+        Returns the status dict from ``run_limiter.status`` or None if
+        the bridge is unavailable or the call fails.
+        """
+        try:
+            from code_puppy.plugins.elixir_bridge import is_connected
+
+            if is_connected():
+                from code_puppy.plugins.elixir_bridge import call_method
+
+                try:
+                    return call_method(
+                        "run_limiter.status", {}, timeout=5.0
+                    )
+                except Exception:
+                    pass  # Fall through to local count
+        except ImportError:
+            pass
+        return None
 
     async def acquire_async(self, timeout: float | None = None) -> None:
         """Async acquire. Cancellation-safe via native asyncio.Semaphore.
@@ -144,8 +308,14 @@ class RunLimiter:
         Reentrant: if the current task already holds a slot,
         this is a no-op bypass (just increments the depth counter).
 
-        Bridge-aware - delegates counter operations to Elixir when connected,
-        falls back to local semaphore. Reentrancy handling stays in Python.
+        When the Elixir control plane is connected, delegates entirely to
+        `CodePuppyControl.Plugins.PackParallelism` GenServer, which
+        serializes all mutations through a single BEAM process mailbox.
+        This eliminates the `_async_active` race condition where concurrent
+        Python threads could read stale counter values.
+
+        Falls back to local asyncio.Semaphore when disconnected.
+        Reentrancy handling stays in Python regardless of bridge state.
 
         Args:
             timeout: Max seconds to wait (None = use config default = 600s)
@@ -163,7 +333,23 @@ class RunLimiter:
             )
             return
 
-        # Try Elixir bridge first for global counter coordination
+        # Compute the effective acquire-wait timeout up front so both the
+        # Elixir acquire params AND the outer JSON-RPC timeout are aligned.
+        # Misalignment causes "abandoned waiter" slot leaks: if the Python
+        # side gives up first, the Elixir waiter may still acquire a slot
+        # whose response nobody will read — leaking that slot forever.
+        effective_timeout = (
+            timeout if timeout is not None else self._config.wait_timeout
+        )
+
+        # Ensure Elixir GenServer has the correct limit before we acquire.
+        # This syncs Python-side config to the authoritative GenServer on
+        # first contact or after a config change.
+        await self._sync_config_to_elixir_async()
+
+        # Try Elixir bridge first for authoritative state coordination.
+        # The GenServer serializes all mutations, eliminating the
+        # HACK(pack-parallelism) race on _async_active.
         try:
             from code_puppy.plugins.elixir_bridge import (
                 is_connected,
@@ -171,30 +357,52 @@ class RunLimiter:
             )
 
             if is_connected():
-                params = {}
-                if timeout is not None:
-                    params["timeout"] = timeout
+                # Pass the acquire-wait timeout (seconds) so Elixir uses the
+                # same value the caller expects.  The outer JSON-RPC timeout
+                # must exceed the acquire-wait timeout plus an IPC buffer so
+                # the response always arrives in time.
+                acquire_secs = effective_timeout if effective_timeout is not None else 86400.0
+                params = {"timeout": acquire_secs}
+                # code_puppy-154.3: JSON-RPC timeout = acquire timeout + 10s buffer
+                json_rpc_timeout = acquire_secs + 10.0
                 result = await call_elixir_run_limiter(
                     "run_limiter.acquire",
                     params,
-                    timeout=timeout if timeout is not None else 30.0,
+                    timeout=json_rpc_timeout,
                 )
                 if result.get("status") == "ok":
                     _set_reentrancy_depth(1)
-                    logger.debug("RunLimiter: slot acquired via Elixir bridge")
+                    logger.debug("RunLimiter: slot acquired via Elixir GenServer")
                     return
-                # On fallback/timeout, continue to local semaphore
+                if result.get("status") == "timeout":
+                    raise RunConcurrencyLimitError(
+                        f"Timeout waiting for run slot via Elixir GenServer "
+                        f"(limit={self.effective_limit})",
+                        active=self.active_count,
+                        limit=self.effective_limit,
+                        waited=effective_timeout,
+                    )
+                # Fallback for unexpected bridge responses
+                logger.debug(
+                    "RunLimiter: unexpected bridge response %s, falling back to local",
+                    result,
+                )
         except ImportError:
             pass
+        except RunConcurrencyLimitError:
+            raise
         except Exception as e:
             logger.debug(
                 "RunLimiter: bridge acquire failed, falling back to local: %s", e
             )
 
-        # Effective timeout
-        effective_timeout = (
-            timeout if timeout is not None else self._config.wait_timeout
-        )
+        # Local fallback: asyncio.Semaphore path (disconnected mode)
+        # NOTE(code_puppy-154.3): This local path still has the _async_active
+        # counter race (HACK(pack-parallelism)). It is only used when the
+        # Elixir control plane is disconnected. When connected, the
+        # GenServer path above is authoritative and race-free.
+        # effective_timeout was already computed above (before the Elixir
+        # branch) so both code paths use the same value.
 
         # For timeout=0, fail immediately if limit reached or semaphore locked
         if effective_timeout == 0:
@@ -366,8 +574,15 @@ class RunLimiter:
         Reentrancy-aware: if called from a context where depth > 1,
         only decrements the depth counter without releasing the actual slot.
 
-        Bridge-aware - notifies Elixir bridge if connected (fire-and-forget).
-        Reentrancy handling stays in Python; Elixir handles global counter state.
+        When the Elixir control plane is connected, delegates the release
+        to the GenServer via ``run_limiter.release``. Uses sync ``call_method``
+        when called from a sync context (no running event loop), and a
+        fire-and-forget ``asyncio.create_task`` with a done-callback for
+        error logging when called from an async context. Never silently
+        drops a release — failures are logged at WARNING level.
+
+        Falls back to local semaphore release when disconnected.
+        Reentrancy handling stays in Python regardless of bridge state.
 
         CRITICAL FIX: The depth reset to 0 when depth == 1 is hoisted into a
         finally block to ensure it always happens, even in sync-fallback paths
@@ -381,28 +596,69 @@ class RunLimiter:
             logger.debug("RunLimiter: reentrant release (depth now %d)", depth - 1)
             return
 
-        # Notify Elixir bridge if connected (fire-and-forget)
+        # When Elixir GenServer is connected, delegate release there.
+        # The GenServer serializes the decrement, eliminating the
+        # HACK(pack-parallelism) race on _async_active.
+        # code_puppy-154.3: Must not silently drop release when no event
+        # loop is running. Use sync call_method in sync contexts, async
+        # task in async contexts, and always log failures.
         try:
-            from code_puppy.plugins.elixir_bridge import (
-                is_connected,
-                call_elixir_run_limiter,
-            )
+            from code_puppy.plugins.elixir_bridge import is_connected
 
             if is_connected():
-                # Fire-and-forget: don't wait for response, ignore errors
                 try:
-                    asyncio.create_task(
-                        call_elixir_run_limiter("run_limiter.release", {}, timeout=1.0)
-                    )
+                    in_async = False
+                    try:
+                        asyncio.get_running_loop()
+                        in_async = True
+                    except RuntimeError:
+                        in_async = False
+
+                    if in_async:
+                        # Async path: fire-and-forget with error logging
+                        from code_puppy.plugins.elixir_bridge import (
+                            call_elixir_run_limiter,
+                        )
+
+                        try:
+                            task = asyncio.create_task(
+                                call_elixir_run_limiter(
+                                    "run_limiter.release", {}, timeout=5.0
+                                )
+                            )
+                            task.add_done_callback(_log_release_failure)
+                        except RuntimeError:
+                            # No running loop despite get_running_loop —
+                            # fall back to sync
+                            from code_puppy.plugins.elixir_bridge import (
+                                call_method,
+                            )
+
+                            call_method(
+                                "run_limiter.release", {}, timeout=5.0
+                            )
+                    else:
+                        # Sync path: blocking call (safe, release is a cast)
+                        from code_puppy.plugins.elixir_bridge import call_method
+
+                        call_method(
+                            "run_limiter.release", {}, timeout=5.0
+                        )
                     logger.debug(
-                        "RunLimiter: release notification sent to Elixir bridge"
+                        "RunLimiter: release delegated to Elixir GenServer"
                     )
-                except Exception:
-                    pass # Ignore errors for fire-and-forget
+                except Exception as e:
+                    logger.warning(
+                        "RunLimiter: failed to delegate release to Elixir: %s",
+                        e,
+                    )
+                # Always reset depth when depth == 1
+                _set_reentrancy_depth(0)
+                return
         except ImportError:
             pass
 
-        # Detect async vs sync context
+        # Local fallback: detect async vs sync context
         in_async = False
         try:
             asyncio.get_running_loop()
@@ -582,6 +838,9 @@ class RunLimiter:
             - Undrainable remainder becomes that semaphore's deficit
             - Deficit absorbs next N releases for that semaphore, enforcing lower cap
 
+        After local update, syncs the new limit to the Elixir GenServer when
+        connected so the authoritative limiter stays consistent.
+
         Config mutation happens inside the state lock to prevent races.
         """
         # Validate before applying
@@ -653,6 +912,12 @@ class RunLimiter:
                     self._async_sem, "_async_deficit", excess, is_async=True
                 )
 
+        # Reset Elixir sync flag so the new limit is synced on next
+        # contact.  Sync immediately if the bridge is connected — the
+        # authoritative GenServer must see the new limit right away.
+        self._elixir_synced = False
+        self._sync_config_to_elixir_sync()
+
 
 # ============================================================================
 # Singleton management
@@ -722,6 +987,10 @@ def get_run_limiter() -> RunLimiter:
                         _limiter_instance._config.allow_parallel,
                         _limiter_instance._config.wait_timeout,
                     )
+                    # Sync to Elixir GenServer if bridge is already connected
+                    # at init time (ensures authoritative limiter matches
+                    # pack_parallelism.toml from the start).
+                    _limiter_instance._sync_config_to_elixir_sync()
                 except Exception as e:
                     logger.warning(
                         "Failed to initialize RunLimiter from config, using defaults: %s",
@@ -754,7 +1023,9 @@ def update_run_limiter_config(
     """Update the singleton's config at runtime.
 
     Convenience function that reads current config, updates specified fields,
-    and applies the new config atomically.
+    and applies the new config atomically.  Also syncs the new limit to the
+    Elixir GenServer when connected so the authoritative limiter stays
+    consistent.
 
     Used by /pack-parallel command to adjust limit on the fly.
     """

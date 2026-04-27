@@ -38,6 +38,13 @@ except ImportError:
 
 logger = logging.getLogger(__name__)
 
+# NOTE(code_puppy-154.3): The authoritative concurrency state lives in the
+# Elixir GenServer ``CodePuppyControl.Plugins.PackParallelism`` when the
+# control plane is connected. Python must sync its config to the GenServer
+# (via ``run_limiter.set_limit``) before first acquire and on every runtime
+# update so the two stay consistent. The Python local fallback retains the old
+# semaphore+counter approach for disconnected mode only.
+
 
 # Respects pup-ex isolation (ADR-003) — resolves under active home
 _CONFIG_PATH: Path | None = None
@@ -253,7 +260,12 @@ def _effective_max() -> int:
 
 
 def _on_startup():
-    """Display current pack-parallel limit on startup."""
+    """Display current pack-parallel limit on startup.
+
+    Also syncs the Python-side config to the Elixir GenServer when
+    connected so the authoritative limiter initializes from the same
+    pack_parallelism.toml config path.
+    """
     try:
         from code_puppy.messaging import emit_info
     except ImportError:
@@ -262,6 +274,28 @@ def _on_startup():
     max_p = _effective_max()
     source = "config" if _session_max is None else "session"
     emit_info(f"🐺 Pack parallelism limit: {max_p} (from {source})")
+
+    # code_puppy-154.3: Sync Python config to Elixir GenServer on startup
+    # so the authoritative limiter uses the same pack_parallelism.toml values.
+    try:
+        from code_puppy.plugins.elixir_bridge import is_connected, call_method
+
+        if is_connected():
+            call_method(
+                "run_limiter.set_limit",
+                {"limit": max_p},
+                timeout=5.0,
+            )
+            logger.debug(
+                "pack_parallelism: synced limit %d to Elixir GenServer on startup",
+                max_p,
+            )
+    except ImportError:
+        pass
+    except Exception as e:
+        logger.debug(
+            "pack_parallelism: failed to sync to Elixir on startup: %s", e
+        )
 
 
 register_callback("startup", _on_startup)
@@ -354,11 +388,35 @@ def _handle_command(command: str, name: str):
     if subcommand == "status":
         if _RUN_LIMITER_AVAILABLE:
             limiter = get_run_limiter()
+            # When Elixir GenServer is connected, display full authoritative
+            # status from the GenServer (includes `available` count).
+            try:
+                from code_puppy.plugins.elixir_bridge import is_connected, call_method
+
+                if is_connected():
+                    result = call_method(
+                        "run_limiter.status", {}, timeout=5.0
+                    )
+                    emit_info(
+                        f"🐺 RunLimiter status (Elixir GenServer — authoritative):\n"
+                        f"   Active: {result.get('active', '?')}\n"
+                        f"   Waiters: {result.get('waiters', '?')}\n"
+                        f"   Limit: {result.get('limit', '?')}\n"
+                        f"   Available: {result.get('available', '?')}"
+                    )
+                    return True
+            except ImportError:
+                pass
+            except Exception:
+                pass  # Fall through to local status
+
+            # Local fallback
             emit_info(
-                f"🐺 RunLimiter status:\n"
+                f"🐺 RunLimiter status (local fallback):\n"
                 f"   Active: {limiter.active_count}\n"
                 f"   Waiters: {limiter.waiters_count}\n"
                 f"   Limit: {limiter.effective_limit}\n"
+                f"   Available: {limiter.available_count}\n"
                 f"   Wait timeout: {limiter._config.wait_timeout}s"
             )
         else:
@@ -436,6 +494,25 @@ def _handle_command(command: str, name: str):
             limiter = get_run_limiter()
             active = limiter.active_count if limiter else 0
             effective = limiter.effective_limit if limiter else new_val
+
+            # code_puppy-154.3: Sync new limit to Elixir GenServer so the
+            # authoritative limiter changes immediately when connected.
+            try:
+                from code_puppy.plugins.elixir_bridge import is_connected, call_method
+
+                if is_connected():
+                    result = call_method(
+                        "run_limiter.set_limit",
+                        {"limit": new_val},
+                        timeout=5.0,
+                    )
+                    logger.debug(
+                        "Synced limit %d to Elixir GenServer: %s", new_val, result
+                    )
+            except ImportError:
+                pass
+            except Exception as e:
+                logger.debug("Failed to sync limit to Elixir: %s", e)
         except Exception as e:
             logger.debug("Failed to update runtime limiter: %s", e)
             active = "?"

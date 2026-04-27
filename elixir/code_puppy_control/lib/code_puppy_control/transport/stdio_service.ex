@@ -98,6 +98,13 @@ defmodule CodePuppyControl.Transport.StdioService do
   - `scheduler.view_log` - View task execution history
   - `scheduler.force_check` - Force immediate schedule evaluation
 
+  ### Pack Parallelism / Run Limiter
+  - `run_limiter.acquire` - Acquire a pack run slot (blocking with timeout)
+  - `run_limiter.release` - Release a pack run slot
+  - `run_limiter.status` - Return current pack limiter status
+  - `run_limiter.set_limit` - Update the concurrency limit
+  - `run_limiter.reset` - Emergency force-reset of limiter state
+
   ### Models Dev Parser
   - `models_dev.get_providers` - Get all model providers
   - `models_dev.get_provider` - Get specific provider by ID
@@ -2643,6 +2650,37 @@ defmodule CodePuppyControl.Transport.StdioService do
   end
 
   # Method not found handler
+  # ── Pack Parallelism / Run Limiter ────────────────────────────────
+  # These handlers delegate to CodePuppyControl.Plugins.PackParallelism,
+  # the Elixir GenServer that replaces the Python _async_active HACK.
+  # When the Elixir control plane is active, these methods bypass the
+  # Python bridge_controller entirely.
+
+  defp handle_request("run_limiter.acquire", params, id) do
+    result = CodePuppyControl.Plugins.PackParallelism.JSONRPC.handle_jsonrpc_acquire(params)
+    Protocol.encode_response(result, id)
+  end
+
+  defp handle_request("run_limiter.release", params, id) do
+    result = CodePuppyControl.Plugins.PackParallelism.JSONRPC.handle_jsonrpc_release(params)
+    Protocol.encode_response(result, id)
+  end
+
+  defp handle_request("run_limiter.status", params, id) do
+    result = CodePuppyControl.Plugins.PackParallelism.JSONRPC.handle_jsonrpc_status(params)
+    Protocol.encode_response(result, id)
+  end
+
+  defp handle_request("run_limiter.set_limit", params, id) do
+    result = CodePuppyControl.Plugins.PackParallelism.JSONRPC.handle_jsonrpc_set_limit(params)
+    Protocol.encode_response(result, id)
+  end
+
+  defp handle_request("run_limiter.reset", params, id) do
+    result = CodePuppyControl.Plugins.PackParallelism.JSONRPC.handle_jsonrpc_reset(params)
+    Protocol.encode_response(result, id)
+  end
+
   defp handle_request(method, _params, id) do
     Protocol.encode_error(
       -32601,
