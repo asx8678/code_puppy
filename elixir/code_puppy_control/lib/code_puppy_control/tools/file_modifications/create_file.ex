@@ -9,14 +9,19 @@ defmodule CodePuppyControl.Tools.FileModifications.CreateFile do
   ## Security
 
   - Path is validated via `FileOps.Security.validate_path/2` to block sensitive paths
+  - Symlink-safe writes via `SafeWrite` (O_NOFOLLOW equivalent)
+  - BOM handling: strips BOM for matching, restores on write
   - Permission check integrates with `PolicyEngine`
+
+  Port of `code_puppy/tools/file_modifications.py:_write_to_file`.
   """
 
   use CodePuppyControl.Tool
 
   require Logger
 
-  alias CodePuppyControl.{FileOps.Security, Text.Diff}
+  alias CodePuppyControl.{FileOps.Security, Text.Diff, Text.EOL}
+  alias CodePuppyControl.Tools.FileModifications.{SafeWrite, DiffEmitter, Validation}
 
   @impl true
   def name, do: :create_file
@@ -83,7 +88,13 @@ defmodule CodePuppyControl.Tools.FileModifications.CreateFile do
       File.exists?(file_path) and overwrite ->
         case File.read(file_path) do
           {:ok, original} ->
-            write_and_report(file_path, content, original, :modify)
+            # Strip BOM for matching, track for restoration
+            {original_no_bom, bom} = EOL.strip_bom(original)
+            # Strip LLM-hallucinated blank lines
+            content_stripped = EOL.strip_added_blank_lines(original_no_bom, content)
+            # Restore BOM on write
+            final_content = EOL.restore_bom(content_stripped, bom)
+            write_and_report(file_path, final_content, original_no_bom, :modify, bom)
 
           {:error, reason} ->
             {:error,
@@ -96,50 +107,62 @@ defmodule CodePuppyControl.Tools.FileModifications.CreateFile do
         end
 
       true ->
-        # New file creation
-        write_and_report(file_path, content, "", :create)
+        # New file creation — no BOM to preserve
+        write_and_report(file_path, content, "", :create, nil)
     end
   end
 
-  defp write_and_report(file_path, content, original, operation) do
-    # Ensure parent directory exists
-    parent_dir = Path.dirname(file_path)
-
-    case File.mkdir_p(parent_dir) do
+  defp write_and_report(file_path, content, original, operation, _bom) do
+    case SafeWrite.safe_write(file_path, content) do
       :ok ->
-        case File.write(file_path, content) do
-          :ok ->
-            diff =
-              Diff.unified_diff(original, content,
-                from_file: "a/#{Path.basename(file_path)}",
-                to_file: "b/#{Path.basename(file_path)}"
-              )
+        diff =
+          Diff.unified_diff(original, content,
+            from_file: if(operation == :create, do: "/dev/null", else: "a/#{Path.basename(file_path)}"),
+            to_file: "b/#{Path.basename(file_path)}"
+          )
 
-            {:ok,
-             %{
-               success: true,
-               path: file_path,
-               message: "File #{(operation == :create && "created") || "updated"} successfully",
-               changed: original != content,
-               diff: diff
-             }}
+        # Emit diff for UI display
+        DiffEmitter.emit_diff(file_path, operation, diff,
+          new_content: content
+        )
 
-          {:error, reason} ->
-            {:error,
-             %{
-               success: false,
-               path: file_path,
-               message: "Failed to write file: #{:file.format_error(reason)}",
-               changed: false
-             }}
-        end
+        result = %{
+          success: true,
+          path: file_path,
+          message: "File #{(operation == :create && "created") || "updated"} successfully",
+          changed: original != content,
+          diff: diff
+        }
+
+        # Post-edit syntax validation (advisory only)
+        result = Validation.maybe_attach_warning(result, file_path)
+
+        {:ok, result}
+
+      {:error, :symlink_detected} ->
+        {:error,
+         %{
+           success: false,
+           path: file_path,
+           message: "Refusing to write to symlink (security: symlink attack prevention)",
+           changed: false
+         }}
+
+      {:error, reason} when is_binary(reason) ->
+        {:error,
+         %{
+           success: false,
+           path: file_path,
+           message: reason,
+           changed: false
+         }}
 
       {:error, reason} ->
         {:error,
          %{
            success: false,
            path: file_path,
-           message: "Failed to create parent directory: #{:file.format_error(reason)}",
+           message: "Failed to write file: #{inspect(reason)}",
            changed: false
          }}
     end

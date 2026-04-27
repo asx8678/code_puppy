@@ -15,7 +15,8 @@ defmodule CodePuppyControl.Tools.FileModifications.DeleteFile do
 
   require Logger
 
-  alias CodePuppyControl.{FileOps.Security, Text.Diff}
+  alias CodePuppyControl.FileOps.Security
+  alias CodePuppyControl.Tools.FileModifications.{SafeWrite, DiffEmitter}
 
   @impl true
   def name, do: :delete_file
@@ -79,17 +80,32 @@ defmodule CodePuppyControl.Tools.FileModifications.DeleteFile do
            changed: false
          }}
 
+      SafeWrite.symlink?(file_path) ->
+        {:error,
+         %{
+           success: false,
+           path: file_path,
+           message: "Refusing to delete symlink (security: symlink attack prevention)",
+           changed: false
+         }}
+
       true ->
         case File.read(file_path) do
           {:ok, original_content} ->
+            # Summary-style diff (avoids full content in diff for large files)
+            line_count = original_content |> String.split("\n") |> length()
+            file_size = byte_size(original_content)
+
             diff =
-              Diff.unified_diff(original_content, "",
-                from_file: "a/#{Path.basename(file_path)}",
-                to_file: "b/#{Path.basename(file_path)}"
-              )
+              "--- a/#{Path.basename(file_path)}\n+++ /dev/null\n" <>
+                "@@ -1,#{line_count} +0,0 @@\n" <>
+                "< File deleted: #{line_count} lines, #{file_size} bytes >\n"
 
             case File.rm(file_path) do
               :ok ->
+                # Emit diff for UI display
+                DiffEmitter.emit_diff(file_path, :delete, diff)
+
                 {:ok,
                  %{
                    success: true,

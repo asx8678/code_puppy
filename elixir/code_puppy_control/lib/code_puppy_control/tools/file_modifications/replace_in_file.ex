@@ -24,7 +24,8 @@ defmodule CodePuppyControl.Tools.FileModifications.ReplaceInFile do
 
   require Logger
 
-  alias CodePuppyControl.{FileOps.Security, Text.ReplaceEngine}
+  alias CodePuppyControl.{FileOps.Security, Text.ReplaceEngine, Text.EOL}
+  alias CodePuppyControl.Tools.FileModifications.{SafeWrite, DiffEmitter, Validation}
 
   @impl true
   def name, do: :replace_in_file
@@ -127,9 +128,15 @@ defmodule CodePuppyControl.Tools.FileModifications.ReplaceInFile do
   defp do_replace(file_path, replacements) do
     case File.read(file_path) do
       {:ok, content} ->
-        case ReplaceEngine.replace_in_content(content, replacements) do
+        # Strip BOM for matching (LLM output never has BOM)
+        {content_no_bom, bom} = EOL.strip_bom(content)
+
+        case ReplaceEngine.replace_in_content(content_no_bom, replacements) do
           {:ok, %{modified: modified, diff: diff}} ->
-            if modified == content do
+            # Strip LLM-hallucinated blank lines
+            modified_stripped = EOL.strip_added_blank_lines(content_no_bom, modified)
+
+            if modified_stripped == content_no_bom do
               {:ok,
                %{
                  success: true,
@@ -139,15 +146,43 @@ defmodule CodePuppyControl.Tools.FileModifications.ReplaceInFile do
                  diff: ""
                }}
             else
-              case File.write(file_path, modified) do
+              # Restore BOM on write
+              final_content = EOL.restore_bom(modified_stripped, bom)
+
+              case SafeWrite.safe_write(file_path, final_content) do
                 :ok ->
-                  {:ok,
+                  # Emit diff for UI display
+                  DiffEmitter.emit_diff(file_path, :modify, diff)
+
+                  result = %{
+                    success: true,
+                    path: file_path,
+                    message: "Replacements applied successfully",
+                    changed: true,
+                    diff: diff
+                  }
+
+                  # Post-edit syntax validation (advisory only)
+                  result = Validation.maybe_attach_warning(result, file_path)
+
+                  {:ok, result}
+
+                {:error, :symlink_detected} ->
+                  {:error,
                    %{
-                     success: true,
+                     success: false,
                      path: file_path,
-                     message: "Replacements applied successfully",
-                     changed: true,
-                     diff: diff
+                     message: "Refusing to write to symlink (security: symlink attack prevention)",
+                     changed: false
+                   }}
+
+                {:error, reason} when is_binary(reason) ->
+                  {:error,
+                   %{
+                     success: false,
+                     path: file_path,
+                     message: reason,
+                     changed: false
                    }}
 
                 {:error, reason} ->
@@ -155,7 +190,7 @@ defmodule CodePuppyControl.Tools.FileModifications.ReplaceInFile do
                    %{
                      success: false,
                      path: file_path,
-                     message: "Failed to write file: #{:file.format_error(reason)}",
+                     message: "Failed to write file: #{inspect(reason)}",
                      changed: false
                    }}
               end

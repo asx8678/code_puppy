@@ -52,8 +52,9 @@ defmodule CodePuppyControl.Tools.FileModifications.DeleteFileTest do
       args = %{"file_path" => path}
 
       assert {:ok, result} = DeleteFile.invoke(args, %{})
-      assert result.diff =~ "-line 1"
-      assert result.diff =~ "-line 2"
+      # Now generates summary diff (lines/bytes), not full content diff
+      assert result.diff =~ "lines"
+      assert result.diff =~ "bytes"
 
       # File is deleted, no cleanup needed
     end

@@ -10,6 +10,14 @@ defmodule CodePuppyControl.Tools.FileModifications do
   - `DeleteFile` — safely delete files
   - `DeleteSnippet` — remove first occurrence of a text snippet
 
+  Supporting modules:
+
+  - `SafeWrite` — symlink-safe file writing (O_NOFOLLOW equivalent)
+  - `FileLock` — per-file locking for concurrent mutation serialization
+  - `Validation` — post-edit syntax validation (advisory only)
+  - `Permissions` — user rejection and policy denial responses
+  - `DiffEmitter` — structured diff message emission for UI display
+
   ## Usage
 
       # Register all tools at startup
@@ -37,6 +45,20 @@ defmodule CodePuppyControl.Tools.FileModifications do
       __MODULE__.EditFile,
       __MODULE__.DeleteFile,
       __MODULE__.DeleteSnippet
+    ]
+  end
+
+  @doc """
+  Returns the list of all supporting modules (not tools themselves).
+  """
+  @spec support_modules() :: [module()]
+  def support_modules do
+    [
+      __MODULE__.SafeWrite,
+      __MODULE__.FileLock,
+      __MODULE__.Validation,
+      __MODULE__.Permissions,
+      __MODULE__.DiffEmitter
     ]
   end
 

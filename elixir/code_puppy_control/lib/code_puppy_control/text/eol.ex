@@ -176,10 +176,70 @@ defmodule CodePuppyControl.Text.EOL do
     {normalized, bom}
   end
 
+  @doc """
+  Remove leading/trailing blank lines that were added by the LLM.
+
+  Compares original and updated text line-by-line. If `updated` has more
+  leading blank lines than `original`, trims the surplus. Same for trailing.
+  Blank-line counts in the middle of the content are preserved.
+
+  Port of `code_puppy/utils/whitespace.py:strip_added_blank_lines`.
+
+  ## Examples
+
+      iex> EOL.strip_added_blank_lines("line1\nline2", "\nline1\nline2\n\n")
+      "line1\nline2\n"
+
+      iex> EOL.strip_added_blank_lines("line1\nline2", "line1\nline2")
+      "line1\nline2"
+
+      iex> EOL.strip_added_blank_lines("\nline1\n", "\nline1\n")
+      "\nline1\n"
+  """
+  @spec strip_added_blank_lines(String.t(), String.t()) :: String.t()
+  def strip_added_blank_lines(original, updated) do
+    orig_lines = String.split(original, "\n")
+    upd_lines = String.split(updated, "\n")
+
+    # Count leading blank lines in each
+    leading_orig = count_leading_blank(orig_lines)
+    leading_upd = count_leading_blank(upd_lines)
+
+    upd_lines =
+      if leading_upd > leading_orig do
+        Enum.drop(upd_lines, leading_upd - leading_orig)
+      else
+        upd_lines
+      end
+
+    # Count trailing blank lines in each
+    trailing_orig = count_trailing_blank(orig_lines)
+    trailing_upd = count_trailing_blank(upd_lines)
+
+    upd_lines =
+      if trailing_upd > trailing_orig do
+        Enum.take(upd_lines, length(upd_lines) - (trailing_upd - trailing_orig))
+      else
+        upd_lines
+      end
+
+    Enum.join(upd_lines, "\n")
+  end
+
   # Private helper for printable char check
   defp printable_char?(ch) when ch >= 0x20, do: true
   defp printable_char?(?\t), do: true
   defp printable_char?(?\n), do: true
   defp printable_char?(?\r), do: true
   defp printable_char?(_), do: false
+
+  defp count_leading_blank(lines) do
+    Enum.take_while(lines, &(String.trim(&1) == "")) |> length()
+  end
+
+  defp count_trailing_blank(lines) do
+    Enum.reverse(lines)
+    |> Enum.take_while(&(String.trim(&1) == ""))
+    |> length()
+  end
 end
