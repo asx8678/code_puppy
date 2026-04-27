@@ -25,8 +25,11 @@ defmodule CodePuppyControl.Plugins do
   namespace.
 
   ### User Plugins
-  `.ex` files under `~/.code_puppy/plugins/` that are compiled at runtime.
-  These must contain a module implementing `PluginBehaviour`.
+  `.ex` or `.exs` files under `~/.code_puppy_ex/plugins/` that are
+  compiled/evaluated at runtime.
+
+  Per ADR-006, `register_callbacks.ex` is preferred (compiled to BEAM).
+  `register_callbacks.exs` is supported as a fallback (evaluated as script).
 
   **SECURITY WARNING**: User plugins execute arbitrary Elixir code with full
   system privileges. Only load plugins from trusted sources.
@@ -40,7 +43,7 @@ defmodule CodePuppyControl.Plugins do
 
   ## Example Plugin Structure
 
-  A user plugin at `~/.code_puppy/plugins/my_plugin/register_callbacks.ex`:
+  A user plugin at `~/.code_puppy_ex/plugins/my_plugin/register_callbacks.ex`:
 
       defmodule CodePuppyControl.Plugins.MyPlugin do
         use CodePuppyControl.Plugins.PluginBehaviour

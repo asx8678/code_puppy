@@ -144,9 +144,9 @@ Port the tool layer.
 
 Port the plugin ecosystem.
 
-- Design Elixir plugin loader equivalent
-- Port callback system (`code_puppy/callbacks.py`)
-- Port pack-parallelism plugin
+- [x] Design Elixir plugin loader equivalent → ADR-006 accepted
+- [x] Port callback system (`code_puppy/callbacks.py`) → `CodePuppyControl.Callbacks` + `Hooks`
+- [ ] Port pack-parallelism plugin
 
 **Exit criteria**: Core plugins load in Elixir; callback hooks fire in order.
 
@@ -269,6 +269,7 @@ These gates must pass before each phase advances:
 - [ADR-001](ADR-001-elixir-python-worker-protocol.md) — Elixir ↔ Python worker protocol
 - [ADR-002](ADR-002-python-elixir-event-protocol.md) — Python → Elixir event protocol
 - [ADR-003](ADR-003-dual-home-config-isolation.md) — Dual-home config isolation
+- [ADR-006](ADR-006-elixir-plugin-loader.md) — Elixir plugin loader design (Phase F.1)
 - [ELIXIR-APP-NAMING.md](ELIXIR-APP-NAMING.md) — Elixir app naming decision
 - [ARCHITECTURE.md](../../ARCHITECTURE.md) — System architecture overview
 
