@@ -10,10 +10,71 @@ defmodule CodePuppyControl.Tools.UniversalConstructor.PathTraversalTest do
   4. Arbitrary UC tool names do not create atoms
   """
 
-  use ExUnit.Case, async: true
+  # async: false — we mutate PUP_EX_HOME (global env var) for filesystem
+  # isolation; async: true would race with other test modules.
+  use ExUnit.Case, async: false
 
   alias CodePuppyControl.Tools.UniversalConstructor.CreateAction
   alias CodePuppyControl.Tools.UniversalConstructor.Validator
+
+  # ---------------------------------------------------------------------------
+  # Sandbox: redirect all UC writes to a throwaway temp dir.
+  # Without this, CreateAction.execute/3 writes to the REAL
+  # ~/.code_puppy_ex/plugins/universal_constructor/ (code_puppy-mmk.2).
+  #
+  # We must also repoint the Registry GenServer's tools_dir because
+  # UniversalConstructor.run/1 calls Registry.ensure_tools_dir() which
+  # creates the directory from the Registry's *stored* tools_dir — not
+  # from Paths.universal_constructor_dir() (which reads PUP_EX_HOME).
+  # ---------------------------------------------------------------------------
+  setup_all do
+    tmp =
+      Path.join(
+        System.tmp_dir!(),
+        "uc_path_traversal_#{:erlang.unique_integer([:positive, :monotonic])}"
+      )
+
+    File.mkdir_p!(tmp)
+
+    prev_ex_home = System.get_env("PUP_EX_HOME")
+    System.put_env("PUP_EX_HOME", tmp)
+
+    # Repoint the Registry GenServer so ensure_tools_dir uses the sandbox
+    uc_registry = CodePuppyControl.Tools.UniversalConstructor.Registry
+
+    orig_tools_dir =
+      case Process.whereis(uc_registry) do
+        nil -> nil
+        _pid -> :sys.get_state(uc_registry).tools_dir
+      end
+
+    sandbox_uc_dir = CodePuppyControl.Config.Paths.universal_constructor_dir()
+
+    if Process.whereis(uc_registry) do
+      CodePuppyControl.Tools.UniversalConstructor.Registry.set_tools_dir(sandbox_uc_dir)
+    end
+
+    on_exit(fn ->
+      # Restore Registry tools_dir before env var so it points to the
+      # real path when env is restored.
+      if orig_tools_dir != nil and Process.whereis(uc_registry) do
+        try do
+          CodePuppyControl.Tools.UniversalConstructor.Registry.set_tools_dir(orig_tools_dir)
+        catch
+          :exit, _ -> :ok
+        end
+      end
+
+      case prev_ex_home do
+        nil -> System.delete_env("PUP_EX_HOME")
+        v -> System.put_env("PUP_EX_HOME", v)
+      end
+
+      File.rm_rf(tmp)
+    end)
+
+    :ok
+  end
 
   # ==========================================================================
   # Safe-Identifier Validation (CreateAction.validate_safe_identifier/1)
@@ -190,10 +251,14 @@ defmodule CodePuppyControl.Tools.UniversalConstructor.PathTraversalTest do
           "Safe test"
         )
 
-      # May fail due to write permissions in test, but should NOT fail
-      # due to identifier validation
-      unless result.success do
-        # If it fails, it should NOT be about path traversal / identifier
+      # With PUP_EX_HOME sandboxed, the file write should succeed;
+      # regardless, it must NOT fail due to identifier / path-traversal
+      # validation.
+      if result.success do
+        # Verify the file landed inside the sandbox, not the real home
+        uc_dir = CodePuppyControl.Config.Paths.universal_constructor_dir()
+        assert String.starts_with?(uc_dir, System.get_env("PUP_EX_HOME"))
+      else
         refute result.error =~ "traversal"
         refute result.error =~ "Identifier"
       end

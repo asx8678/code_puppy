@@ -15,10 +15,71 @@ defmodule CodePuppyControl.Tools.CpUniversalConstructorTest do
   - Exact shape parity with Python UniversalConstructorOutput
   """
 
-  use ExUnit.Case, async: true
+  # async: false — create-action tests mutate PUP_EX_HOME (global env var)
+  # for filesystem isolation; async: true would race with other modules.
+  use ExUnit.Case, async: false
 
   alias CodePuppyControl.Tools.CpUniversalConstructor
   alias CodePuppyControl.Tool.Registry
+
+  # ---------------------------------------------------------------------------
+  # Sandbox: redirect UC writes to a throwaway temp dir.
+  # Without this, "create" actions write to the REAL
+  # ~/.code_puppy_ex/plugins/universal_constructor/ (code_puppy-mmk.2).
+  #
+  # We must also repoint the Registry GenServer's tools_dir because
+  # UniversalConstructor.run/1 calls Registry.ensure_tools_dir() which
+  # creates the directory from the Registry's *stored* tools_dir — not
+  # from Paths.universal_constructor_dir() (which reads PUP_EX_HOME).
+  # ---------------------------------------------------------------------------
+  setup_all do
+    tmp =
+      Path.join(
+        System.tmp_dir!(),
+        "uc_cp_sandbox_#{:erlang.unique_integer([:positive, :monotonic])}"
+      )
+
+    File.mkdir_p!(tmp)
+
+    prev_ex_home = System.get_env("PUP_EX_HOME")
+    System.put_env("PUP_EX_HOME", tmp)
+
+    # Repoint the Registry GenServer so ensure_tools_dir uses the sandbox
+    uc_registry = CodePuppyControl.Tools.UniversalConstructor.Registry
+
+    orig_tools_dir =
+      case Process.whereis(uc_registry) do
+        nil -> nil
+        _pid -> :sys.get_state(uc_registry).tools_dir
+      end
+
+    sandbox_uc_dir = CodePuppyControl.Config.Paths.universal_constructor_dir()
+
+    if Process.whereis(uc_registry) do
+      CodePuppyControl.Tools.UniversalConstructor.Registry.set_tools_dir(sandbox_uc_dir)
+    end
+
+    on_exit(fn ->
+      # Restore Registry tools_dir before env var so it points to the
+      # real path when env is restored.
+      if orig_tools_dir != nil and Process.whereis(uc_registry) do
+        try do
+          CodePuppyControl.Tools.UniversalConstructor.Registry.set_tools_dir(orig_tools_dir)
+        catch
+          :exit, _ -> :ok
+        end
+      end
+
+      case prev_ex_home do
+        nil -> System.delete_env("PUP_EX_HOME")
+        v -> System.put_env("PUP_EX_HOME", v)
+      end
+
+      File.rm_rf(tmp)
+    end)
+
+    :ok
+  end
 
   # ── Tool contract ──────────────────────────────────────────────────────
 
