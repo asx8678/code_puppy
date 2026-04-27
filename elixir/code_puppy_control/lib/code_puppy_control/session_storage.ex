@@ -385,14 +385,15 @@ defmodule CodePuppyControl.SessionStorage do
   metadata so that on crash/restart, `SessionStorage.TerminalRecovery`
   can attempt to recreate the PTY session.
 
-  Requires the Store to be running; no-op otherwise.
+  Durably persists to SQLite — terminal metadata survives node crashes.
+  Returns `{:error, :session_not_found}` if the session does not exist.
   """
-  @spec register_terminal(session_name(), map()) :: :ok
+  @spec register_terminal(session_name(), map()) :: :ok | {:error, term()}
   def register_terminal(session_name, meta) do
     if store_available?() do
       Store.register_terminal(session_name, meta)
     else
-      :ok
+      {:error, :store_not_available}
     end
   end
 
@@ -400,14 +401,15 @@ defmodule CodePuppyControl.SessionStorage do
   Unregisters a terminal session from crash recovery tracking.
 
   Called when a terminal session is closed gracefully.
-  Requires the Store to be running; no-op otherwise.
+  Durably clears terminal metadata from SQLite.
+  Returns `{:error, :session_not_found}` if the session does not exist.
   """
-  @spec unregister_terminal(session_name()) :: :ok
+  @spec unregister_terminal(session_name()) :: :ok | {:error, term()}
   def unregister_terminal(session_name) do
     if store_available?() do
       Store.unregister_terminal(session_name)
     else
-      :ok
+      {:error, :store_not_available}
     end
   end
 

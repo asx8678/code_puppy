@@ -139,6 +139,82 @@ defmodule CodePuppyControl.SessionStorage.TerminalRecovery do
   end
 
   # ---------------------------------------------------------------------------
+  # Deferred Recovery with Retry (code_puppy-ctj.1 fix)
+  # ---------------------------------------------------------------------------
+
+  # PtyManager starts AFTER Store in the supervision tree, so recovery
+  # cannot run during Store.init. These functions implement the retry
+  # orchestration: check if PtyManager is up, recover if so, or schedule
+  # a retry with exponential backoff.
+
+  @max_recovery_retries 5
+  @recovery_base_delay_ms 200
+
+  @doc """
+  Starts deferred terminal recovery from the Store's ETS tables.
+
+  Checks if PtyManager is running. If yes, recovers immediately.
+  If not, schedules a retry with exponential backoff.
+
+  Called by Store's `handle_continue(:recover_terminals, _)`.
+  """
+  @spec deferred_recover_from_store() :: :ok
+  def deferred_recover_from_store do
+    attempt_recovery_from_store(1)
+    :ok
+  end
+
+  @doc """
+  Attempts terminal recovery from ETS tables, with retry scheduling.
+
+  Called by Store's `handle_info({:retry_terminal_recovery, attempt}, _)`.
+  """
+  @spec attempt_recovery_from_store(pos_integer()) :: :ok
+  def attempt_recovery_from_store(attempt) when attempt > @max_recovery_retries do
+    Logger.warning(
+      "TerminalRecovery: gave up after #{@max_recovery_retries} attempts — PtyManager unavailable"
+    )
+
+    :ok
+  end
+
+  def attempt_recovery_from_store(attempt) do
+    if Process.whereis(PtyManager) != nil do
+      # PtyManager is up — recover from ETS
+      terminal_entries =
+        :session_store_ets
+        |> :ets.tab2list()
+        |> Enum.filter(fn {_name, entry} -> entry.has_terminal end)
+        |> Enum.map(fn {_name, entry} -> entry end)
+
+      if length(terminal_entries) > 0 do
+        Logger.info(
+          "TerminalRecovery: starting deferred recovery for #{length(terminal_entries)} sessions"
+        )
+
+        recover_sessions(terminal_entries)
+      end
+    else
+      # PtyManager not up yet — schedule retry with exponential backoff
+      delay = @recovery_base_delay_ms * :math.pow(2, attempt - 1) |> round()
+
+      Logger.debug(
+        "TerminalRecovery: PtyManager not up, retry #{attempt}/#{@max_recovery_retries} in #{delay}ms"
+      )
+
+      store_pid = Process.whereis(Store)
+
+      if store_pid do
+        Process.send_after(store_pid, {:retry_terminal_recovery, attempt + 1}, delay)
+      else
+        Logger.warning("TerminalRecovery: Store not running, cannot schedule retry")
+      end
+    end
+
+    :ok
+  end
+
+  # ---------------------------------------------------------------------------
   # Private Helpers
   # ---------------------------------------------------------------------------
 
@@ -161,6 +237,8 @@ defmodule CodePuppyControl.SessionStorage.TerminalRecovery do
   end
 
   # Attempt to recreate a PTY session from saved metadata.
+  # (code_puppy-ctj.1 fix: use Map.put instead of map update syntax
+  # to avoid crash when terminal_meta has string keys from SQLite.)
   defp recreate_terminal(name, meta) do
     cols = Map.get(meta, :cols, Map.get(meta, "cols", 80))
     rows = Map.get(meta, :rows, Map.get(meta, "rows", 24))
@@ -185,8 +263,10 @@ defmodule CodePuppyControl.SessionStorage.TerminalRecovery do
             {:ok, _session} ->
               Logger.info("TerminalRecovery: recreated PTY for session #{name}")
 
-              # Re-register the terminal with the Store
-              new_meta = %{meta | attached_at: System.monotonic_time(:millisecond)}
+              # Re-register the terminal with the Store.
+              # Use Map.put (not map update) — meta may have string keys
+              # from SQLite deserialization.
+              new_meta = Map.put(meta, :attached_at, System.monotonic_time(:millisecond))
               Store.register_terminal(name, new_meta)
 
               broadcast_recovered(name, new_meta)

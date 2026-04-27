@@ -19,7 +19,7 @@ defmodule CodePuppyControl.Repo.Migrations.AddTerminalSessionFields do
 
   use Ecto.Migration
 
-  def change do
+  def up do
     alter table(:chat_sessions) do
       add(:has_terminal, :boolean, default: false, null: false)
       add(:terminal_meta, :map, default: nil)
@@ -27,8 +27,19 @@ defmodule CodePuppyControl.Repo.Migrations.AddTerminalSessionFields do
 
     # Index for fast crash-recovery queries: "find all sessions with
     # active terminals" is the hot path during Store initialization.
+    # Use execute(up, down) for proper rollback support.
     execute(
-      "CREATE INDEX IF NOT EXISTS chat_sessions_has_terminal_index ON chat_sessions(has_terminal)"
+      "CREATE INDEX IF NOT EXISTS chat_sessions_has_terminal_index ON chat_sessions(has_terminal)",
+      "DROP INDEX IF EXISTS chat_sessions_has_terminal_index"
     )
+  end
+
+  def down do
+    execute("DROP INDEX IF EXISTS chat_sessions_has_terminal_index")
+
+    alter table(:chat_sessions) do
+      remove(:terminal_meta)
+      remove(:has_terminal)
+    end
   end
 end

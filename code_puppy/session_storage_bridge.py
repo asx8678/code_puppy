@@ -171,7 +171,7 @@ def register_terminal(
 
     (code_puppy-ctj.1) Records terminal metadata so that on crash/restart,
     the Elixir SessionStorage.TerminalRecovery module can attempt to
-    recreate the PTY session.
+    recreate the PTY session. Durably persists to SQLite.
 
     Args:
         name: Session name (used as the storage key).
@@ -181,7 +181,7 @@ def register_terminal(
         shell: Shell executable path.
 
     Returns:
-        Dict with "registered" flag and session name.
+        Dict with "registered" flag and session name, or error dict.
     """
     transport = _get_transport()
     if transport is None:
@@ -200,13 +200,13 @@ def unregister_terminal(name: str) -> dict[str, Any]:
     """Unregister a terminal session from crash recovery tracking.
 
     (code_puppy-ctj.1) Called when a terminal session is closed gracefully.
-    Removes the terminal metadata from ETS tracking.
+    Durably clears terminal metadata from SQLite.
 
     Args:
         name: Session name to unregister.
 
     Returns:
-        Dict with "unregistered" flag and session name.
+        Dict with "unregistered" flag and session name, or error dict.
     """
     transport = _get_transport()
     if transport is None:

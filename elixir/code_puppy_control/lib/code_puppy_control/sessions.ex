@@ -185,7 +185,9 @@ defmodule CodePuppyControl.Sessions do
     if length(sessions) <= max_sessions do
       {:ok, []}
     else
-      to_delete = Enum.drop(sessions, max_sessions)
+      # (code_puppy-ctj.1 fix: take oldest to delete, not newest)
+      to_delete_count = length(sessions) - max_sessions
+      to_delete = Enum.take(sessions, to_delete_count)
       deleted_names = Enum.map(to_delete, & &1.name)
 
       Enum.each(to_delete, fn session ->
@@ -193,6 +195,33 @@ defmodule CodePuppyControl.Sessions do
       end)
 
       {:ok, deleted_names}
+    end
+  end
+
+  @doc """
+  Updates terminal metadata fields for an existing session.
+
+  Durably persists `has_terminal` and `terminal_meta` to SQLite without
+  requiring the full history. Returns an error if the session does not exist.
+
+  (code_puppy-ctj.1) This is the durable write path for terminal tracking —
+  `register_terminal` and `unregister_terminal` call this to ensure terminal
+  metadata survives crashes.
+  """
+  @spec update_terminal_meta(session_name(), boolean(), map() | nil) ::
+          {:ok, ChatSession.t()} | {:error, :not_found | term()}
+  def update_terminal_meta(name, has_terminal, terminal_meta) do
+    case Repo.get_by(ChatSession, name: name) do
+      nil ->
+        {:error, :not_found}
+
+      session ->
+      session
+        |> ChatSession.changeset(%{
+          has_terminal: has_terminal,
+          terminal_meta: normalize_terminal_meta(terminal_meta)
+        })
+        |> Repo.update()
     end
   end
 
@@ -213,6 +242,24 @@ defmodule CodePuppyControl.Sessions do
   end
 
   # Private helpers
+
+  # Normalize terminal_meta keys to atoms for consistent access.
+  # SQLite stores :map fields as JSON, which decodes with string keys.
+  # This ensures downstream code can use atom-key pattern matches.
+  defp normalize_terminal_meta(nil), do: nil
+
+  defp normalize_terminal_meta(meta) when is_map(meta) do
+    atom_keys = Map.new(meta, fn
+      {k, v} when is_binary(k) ->
+        {String.to_atom(k), v}
+      {k, v} when is_atom(k) ->
+        {k, v}
+    end)
+
+    atom_keys
+  end
+
+  defp normalize_terminal_meta(meta), do: meta
 
   defp now_iso do
     DateTime.utc_now() |> DateTime.to_iso8601()

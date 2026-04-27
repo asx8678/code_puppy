@@ -25,6 +25,7 @@ from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
+import time
 from typing import Any
 import warnings
 
@@ -60,7 +61,6 @@ def _compute_history_fingerprint(history: list) -> tuple[int, str]:
 def should_skip_autosave(history: list) -> bool:
     """Check if we should skip this autosave (no changes or too soon)."""
     global _last_autosave_len, _last_autosave_hash, _last_autosave_time
-    import time
     now = time.time()
     if now - _last_autosave_time < AUTOSAVE_DEBOUNCE_SECONDS:
         return True
@@ -73,7 +73,6 @@ def should_skip_autosave(history: list) -> bool:
 def mark_autosave_complete(history: list) -> None:
     """Update tracking state after successful autosave."""
     global _last_autosave_len, _last_autosave_hash, _last_autosave_time
-    import time
     _last_autosave_len, _last_autosave_hash = _compute_history_fingerprint(history)
     _last_autosave_time = time.time()
 
@@ -90,6 +89,12 @@ def register_terminal_session(
     the Elixir SessionStorage.TerminalRecovery module can attempt to
     recreate the PTY session. Also registers with the Elixir bridge if
     available.
+
+    This is the Python-side entry point for terminal tracking. It stores
+    metadata in the local ``_active_terminal`` dict (used by save_session
+    to pass has_terminal/terminal_meta to the Elixir Store) and also
+    calls session_storage_bridge.register_terminal for immediate durable
+    persistence.
     """
     global _active_terminal
     meta = {
@@ -97,7 +102,7 @@ def register_terminal_session(
         "cols": cols,
         "rows": rows,
         "shell": shell,
-        "attached_at": time.time() if 'time' in dir() else 0,
+        "attached_at": time.time(),
     }
     _active_terminal[name] = meta
 

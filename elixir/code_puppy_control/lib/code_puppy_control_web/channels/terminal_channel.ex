@@ -135,7 +135,8 @@ defmodule CodePuppyControlWeb.TerminalChannel do
             attached_at: System.monotonic_time(:millisecond)
           }
 
-          Store.register_terminal(session_id, terminal_meta)
+          # (code_puppy-ctj.1 fix: register_terminal now returns :ok | {:error, _}; log but don't crash on error
+          _ = Store.register_terminal(session_id, terminal_meta)
         end
 
         {:ok, %{session_id: session_id, cols: cols, rows: rows}, socket}
@@ -266,8 +267,9 @@ defmodule CodePuppyControlWeb.TerminalChannel do
 
       # (code_puppy-ctj.1) Unregister terminal from SessionStorage.Store
       # since the PTY session is being closed gracefully (not a crash).
+      # unregister_terminal now returns :ok | {:error, _}; discard result.
       if Process.whereis(Store) do
-        Store.unregister_terminal(pty_session_id)
+        _ = Store.unregister_terminal(pty_session_id)
       end
     end
 

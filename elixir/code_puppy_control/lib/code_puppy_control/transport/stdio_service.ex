@@ -2691,8 +2691,14 @@ defmodule CodePuppyControl.Transport.StdioService do
     }
 
     if store_available?() do
-      :ok = CodePuppyControl.SessionStorage.Store.register_terminal(name, meta)
-      Protocol.encode_response(%{"registered" => true, "name" => name}, id)
+      case CodePuppyControl.SessionStorage.Store.register_terminal(name, meta) do
+        :ok ->
+          Protocol.encode_response(%{"registered" => true, "name" => name}, id)
+        {:error, :session_not_found} ->
+          Protocol.encode_error(-32001, "Session not found: #{name}", nil, id)
+        {:error, reason} ->
+          Protocol.encode_error(-32000, "Failed to register terminal: #{inspect(reason)}", nil, id)
+      end
     else
       Protocol.encode_error(-32000, "Session Store not available", nil, id)
     end
@@ -2702,8 +2708,14 @@ defmodule CodePuppyControl.Transport.StdioService do
     name = params["name"]
 
     if store_available?() do
-      :ok = CodePuppyControl.SessionStorage.Store.unregister_terminal(name)
-      Protocol.encode_response(%{"unregistered" => true, "name" => name}, id)
+      case CodePuppyControl.SessionStorage.Store.unregister_terminal(name) do
+        :ok ->
+          Protocol.encode_response(%{"unregistered" => true, "name" => name}, id)
+        {:error, :session_not_found} ->
+          Protocol.encode_error(-32001, "Session not found: #{name}", nil, id)
+        {:error, reason} ->
+          Protocol.encode_error(-32000, "Failed to unregister terminal: #{inspect(reason)}", nil, id)
+      end
     else
       Protocol.encode_error(-32000, "Session Store not available", nil, id)
     end

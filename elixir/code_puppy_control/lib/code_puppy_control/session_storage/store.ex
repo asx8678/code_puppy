@@ -79,7 +79,6 @@ defmodule CodePuppyControl.SessionStorage.Store do
   Saves a session with write-through: SQLite → ETS → PubSub.
 
   Crash-survivability: SQLite write must succeed before ETS/PubSub.
-
   Options: `:compacted_hashes`, `:total_tokens`, `:auto_saved`, `:timestamp`,
   `:has_terminal`, `:terminal_meta`.
   """
@@ -218,17 +217,25 @@ defmodule CodePuppyControl.SessionStorage.Store do
   Registers a terminal session for crash recovery.
 
   Records metadata (cols, rows, shell, attached_at) so TerminalRecovery
-  can recreate the PTY on crash/restart.
+  can recreate the PTY on crash/restart. Durably persists to SQLite —
+  terminal metadata survives node crashes.
+
+  Returns `{:error, :session_not_found}` if the session does not exist.
   """
-  @spec register_terminal(session_name(), terminal_meta()) :: :ok
+  @spec register_terminal(session_name(), terminal_meta()) ::
+          :ok | {:error, :session_not_found | term()}
   def register_terminal(session_name, meta) do
     GenServer.call(__MODULE__, {:register_terminal, session_name, meta})
   end
 
   @doc """
   Unregisters a terminal session. Called on graceful close.
+
+  Durably clears terminal metadata from SQLite. Returns
+  `{:error, :session_not_found}` if the session does not exist.
   """
-  @spec unregister_terminal(session_name()) :: :ok
+  @spec unregister_terminal(session_name()) ::
+          :ok | {:error, :session_not_found | term()}
   def unregister_terminal(session_name) do
     GenServer.call(__MODULE__, {:unregister_terminal, session_name})
   end
@@ -306,21 +313,27 @@ defmodule CodePuppyControl.SessionStorage.Store do
     # Recovery: rebuild ETS from SQLite
     recovered = recover_from_disk()
 
-    # Terminal session recovery: identify sessions that had active terminals
-    # at crash time and trigger recovery
-    terminal_sessions = recover_terminal_sessions()
+    # Identify sessions that had active terminals at crash time.
+    # Terminal recovery is DEFERRED via :continue — PtyManager may not
+    # be started yet since it appears later in the supervision tree.
+    # (code_puppy-ctj.1 fix: recovery must run after PtyManager starts)
+    terminal_count =
+      @session_table
+      |> :ets.tab2list()
+      |> Enum.count(fn {_name, entry} -> entry.has_terminal end)
 
     Logger.info(
       "SessionStorage.Store initialized: #{recovered} sessions recovered, " <>
-        "#{length(terminal_sessions)} terminal sessions pending recovery"
+        "#{terminal_count} terminal sessions pending recovery (deferred)"
     )
 
     {:ok,
      %{
        session_table: session_table,
        terminal_table: terminal_table,
-       opts: opts
-     }}
+       opts: opts,
+       pending_terminal_recovery: terminal_count > 0
+     }, {:continue, :recover_terminals}}
   end
 
   @impl true
@@ -332,40 +345,26 @@ defmodule CodePuppyControl.SessionStorage.Store do
     has_terminal = Keyword.get(opts, :has_terminal, false)
     terminal_meta = Keyword.get(opts, :terminal_meta)
 
-    # 1. Persist to SQLite (durable — crash-survivability)
+    # 1. Persist to SQLite (durable). (code_puppy-ctj.1 fix: pass terminal fields)
     case Sessions.save_session(name, history,
-           compacted_hashes: compacted_hashes,
-           total_tokens: total_tokens,
-           auto_saved: auto_saved,
-           timestamp: timestamp
+           compacted_hashes: compacted_hashes, total_tokens: total_tokens,
+           auto_saved: auto_saved, timestamp: timestamp,
+           has_terminal: has_terminal, terminal_meta: terminal_meta
          ) do
       {:ok, session} ->
-        # 2. Update ETS cache (only after durable write succeeds)
-        entry =
-          build_entry(
-            name,
-            history,
-            compacted_hashes,
-            total_tokens,
-            auto_saved,
-            timestamp,
-            has_terminal,
-            terminal_meta
-          )
+    # 2. Update ETS cache (only after durable write succeeds)
+    entry = build_entry(name, history, compacted_hashes, total_tokens,
+             auto_saved, timestamp, has_terminal, terminal_meta)
+    :ets.insert(@session_table, {name, entry})
 
-        :ets.insert(@session_table, {name, entry})
+    # 3. Broadcast via PubSub
+    Phoenix.PubSub.broadcast(@pubsub, @sessions_topic,
+      {:session_saved, name, Map.drop(entry, [:history])})
 
-        # 3. Broadcast via PubSub
-        Phoenix.PubSub.broadcast(
-          @pubsub,
-          @sessions_topic,
-          {:session_saved, name, Map.drop(entry, [:history])}
-        )
-
-        # Step 4: Track terminal metadata if present
-        if has_terminal && terminal_meta do
-          :ets.insert(@terminal_table, {name, terminal_meta})
-        end
+    # 4: Track terminal metadata if present
+    if has_terminal && terminal_meta do
+      :ets.insert(@terminal_table, {name, terminal_meta})
+    end
 
         {:reply, {:ok, session_to_result(session)}, state}
 
@@ -398,6 +397,9 @@ defmodule CodePuppyControl.SessionStorage.Store do
 
   @impl true
   def handle_call({:cleanup_sessions, max_sessions}, _from, state) do
+    # Sort oldest-first by timestamp; delete the oldest entries that
+    # exceed max_sessions. (code_puppy-ctj.1 fix: previously used
+    # Enum.drop which incorrectly deleted NEWEST sessions)
     all_entries =
       @session_table
       |> :ets.tab2list()
@@ -407,7 +409,9 @@ defmodule CodePuppyControl.SessionStorage.Store do
     if length(all_entries) <= max_sessions do
       {:reply, {:ok, []}, state}
     else
-      to_delete = Enum.drop(all_entries, max_sessions)
+      # Keep the newest max_sessions, delete the oldest excess
+      to_delete_count = length(all_entries) - max_sessions
+      to_delete = Enum.take(all_entries, to_delete_count)
       deleted = Enum.map(to_delete, & &1.name)
       Enum.each(deleted, &Sessions.delete_session/1)
 
@@ -423,102 +427,93 @@ defmodule CodePuppyControl.SessionStorage.Store do
 
   @impl true
   def handle_call({:register_terminal, session_name, meta}, _from, state) do
-    # Update ETS tracking
-    :ets.insert(@terminal_table, {session_name, meta})
-
-    # Mark the session entry as having a terminal
+    # (code_puppy-ctj.1 fix: durable persist + error on missing session)
     case :ets.lookup(@session_table, session_name) do
       [{^session_name, entry}] ->
-        updated = %{entry | has_terminal: true, terminal_meta: meta}
-        :ets.insert(@session_table, {session_name, updated})
+        case Sessions.update_terminal_meta(session_name, true, meta) do
+          {:ok, _session} ->
+            :ets.insert(@terminal_table, {session_name, meta})
+            updated = %{entry | has_terminal: true, terminal_meta: meta}
+            :ets.insert(@session_table, {session_name, updated})
+            Phoenix.PubSub.broadcast(@pubsub, @terminal_topic, {:terminal_registered, session_name})
+            {:reply, :ok, state}
+
+          {:error, reason} ->
+            Logger.error("Store: durable register_terminal failed for #{session_name}: #{inspect(reason)}")
+            {:reply, {:error, reason}, state}
+        end
 
       [] ->
-        :ok
+        Logger.warning("Store: register_terminal for unknown session #{session_name}")
+        {:reply, {:error, :session_not_found}, state}
     end
-
-    # Broadcast terminal registration
-    Phoenix.PubSub.broadcast(
-      @pubsub,
-      @terminal_topic,
-      {:terminal_registered, session_name}
-    )
-
-    {:reply, :ok, state}
   end
 
   @impl true
   def handle_call({:unregister_terminal, session_name}, _from, state) do
-    # Remove from terminal tracking
-    :ets.delete(@terminal_table, session_name)
-
-    # Update session entry
+    # (code_puppy-ctj.1 fix: durable clear + error on missing session)
     case :ets.lookup(@session_table, session_name) do
       [{^session_name, entry}] ->
-        updated = %{entry | has_terminal: false, terminal_meta: nil}
-        :ets.insert(@session_table, {session_name, updated})
+        case Sessions.update_terminal_meta(session_name, false, nil) do
+          {:ok, _session} ->
+            :ets.delete(@terminal_table, session_name)
+            updated = %{entry | has_terminal: false, terminal_meta: nil}
+            :ets.insert(@session_table, {session_name, updated})
+            Phoenix.PubSub.broadcast(@pubsub, @terminal_topic, {:terminal_unregistered, session_name})
+            {:reply, :ok, state}
+
+          {:error, reason} ->
+            Logger.error("Store: durable unregister_terminal failed for #{session_name}: #{inspect(reason)}")
+            {:reply, {:error, reason}, state}
+        end
 
       [] ->
-        :ok
+        Logger.warning("Store: unregister_terminal for unknown session #{session_name}")
+        {:reply, {:error, :session_not_found}, state}
     end
-
-    # Broadcast terminal unregistration
-    Phoenix.PubSub.broadcast(
-      @pubsub,
-      @terminal_topic,
-      {:terminal_unregistered, session_name}
-    )
-
-    {:reply, :ok, state}
   end
+
+  # ---------------------------------------------------------------------------
+  # Deferred Terminal Recovery (code_puppy-ctj.1 fix)
+  # ---------------------------------------------------------------------------
+
+  @impl true
+  def handle_continue(:recover_terminals, %{pending_terminal_recovery: false} = state), do: {:noreply, state}
+  def handle_continue(:recover_terminals, state) do
+    TerminalRecovery.deferred_recover_from_store()
+    {:noreply, state}
+  end
+
+  @impl true
+  def handle_info({:retry_terminal_recovery, attempt}, state) do
+    TerminalRecovery.attempt_recovery_from_store(attempt)
+    {:noreply, state}
+  end
+  @impl true
+  def handle_info(_msg, state), do: {:noreply, state}
 
   # ---------------------------------------------------------------------------
   # Recovery
   # ---------------------------------------------------------------------------
 
-  # Rebuild ETS cache from SQLite on startup (crash recovery).
-  # Returns the number of sessions recovered.
+  # Rebuild ETS cache from SQLite on startup.
   defp recover_from_disk do
     case Sessions.list_sessions_with_metadata() do
       {:ok, sessions} ->
-        count =
-          Enum.reduce(sessions, 0, fn session, acc ->
-            entry = chat_session_to_entry(session)
-            :ets.insert(@session_table, {session.name, entry})
-            acc + 1
-          end)
-
+        count = Enum.reduce(sessions, 0, fn session, acc ->
+          entry = chat_session_to_entry(session)
+          :ets.insert(@session_table, {session.name, entry})
+          acc + 1
+        end)
         Logger.info("SessionStorage.Store: recovered #{count} sessions from SQLite")
         count
-
       {:error, reason} ->
-        Logger.warning(
-          "SessionStorage.Store: failed to recover sessions from SQLite: #{inspect(reason)}"
-        )
-
+        Logger.warning("SessionStorage.Store: failed to recover from SQLite: #{inspect(reason)}")
         0
     end
   end
 
-  # Identify terminal sessions that need recovery and hand off to
-  # TerminalRecovery module.
-  defp recover_terminal_sessions do
-    terminal_entries =
-      @session_table
-      |> :ets.tab2list()
-      |> Enum.filter(fn {_name, entry} -> entry.has_terminal end)
-      |> Enum.map(fn {_name, entry} -> entry end)
-
-    if length(terminal_entries) > 0 do
-      Logger.info(
-        "SessionStorage.Store: #{length(terminal_entries)} terminal sessions pending recovery"
-      )
-
-      # Delegate recovery to TerminalRecovery module (async)
-      TerminalRecovery.recover_sessions(terminal_entries)
-    end
-
-    terminal_entries
-  end
+  # Terminal recovery deferred via handle_continue — see above.
 
   # ---------------------------------------------------------------------------
   # Child Spec
@@ -538,71 +533,60 @@ defmodule CodePuppyControl.SessionStorage.Store do
 
   defp now_iso, do: DateTime.utc_now() |> DateTime.to_iso8601()
 
-  defp build_entry(
-         name,
-         history,
-         compacted_hashes,
-         total_tokens,
-         auto_saved,
-         timestamp,
-         has_terminal,
-         terminal_meta
-       ) do
+  defp build_entry(name, history, compacted_hashes, total_tokens, auto_saved, timestamp, has_terminal, terminal_meta) do
     %{
-      name: name,
-      history: history,
-      compacted_hashes: compacted_hashes,
-      total_tokens: total_tokens,
-      message_count: length(history),
-      auto_saved: auto_saved,
-      timestamp: timestamp,
-      has_terminal: has_terminal,
-      terminal_meta: terminal_meta,
+      name: name, history: history, compacted_hashes: compacted_hashes,
+      total_tokens: total_tokens, message_count: length(history),
+      auto_saved: auto_saved, timestamp: timestamp,
+      has_terminal: has_terminal, terminal_meta: terminal_meta,
       updated_at: System.monotonic_time(:millisecond)
     }
   end
 
-  # Convert a Sessions.ChatSession map to a session entry for ETS.
+  # Normalize terminal_meta keys from string to atom (SQLite JSON → atoms).
+  defp normalize_meta_keys(nil), do: nil
+  defp normalize_meta_keys(meta) when is_map(meta) do
+    Map.new(meta, fn
+      {k, v} when is_binary(k) -> {String.to_atom(k), v}
+      {k, v} when is_atom(k) -> {k, v}
+    end)
+  end
+  defp normalize_meta_keys(meta), do: meta
+
+  # Dual-key map accessor: atom key first, then string key fallback.
+  defp get_key(map, atom_key, string_key, default \\ nil) do
+    Map.get(map, atom_key, Map.get(map, string_key, default))
+  end
+
+  # Convert ChatSession map to ETS entry; normalizes string keys from SQLite.
   defp chat_session_to_entry(session) when is_map(session) do
+    raw_meta = get_key(session, :terminal_meta, "terminal_meta")
     %{
-      name: Map.get(session, :name, Map.get(session, "name", "")),
-      history: Map.get(session, :history, Map.get(session, "history", [])),
-      compacted_hashes:
-        Map.get(session, :compacted_hashes, Map.get(session, "compacted_hashes", [])),
-      total_tokens: Map.get(session, :total_tokens, Map.get(session, "total_tokens", 0)),
-      message_count: Map.get(session, :message_count, Map.get(session, "message_count", 0)),
-      auto_saved: Map.get(session, :auto_saved, Map.get(session, "auto_saved", false)),
-      timestamp: Map.get(session, :timestamp, Map.get(session, "timestamp", "")),
-      has_terminal: Map.get(session, :has_terminal, false),
-      terminal_meta: Map.get(session, :terminal_meta),
+      name: get_key(session, :name, "name", ""),
+      history: get_key(session, :history, "history", []),
+      compacted_hashes: get_key(session, :compacted_hashes, "compacted_hashes", []),
+      total_tokens: get_key(session, :total_tokens, "total_tokens", 0),
+      message_count: get_key(session, :message_count, "message_count", 0),
+      auto_saved: get_key(session, :auto_saved, "auto_saved", false),
+      timestamp: get_key(session, :timestamp, "timestamp", ""),
+      has_terminal: get_key(session, :has_terminal, "has_terminal", false),
+      terminal_meta: normalize_meta_keys(raw_meta),
       updated_at: System.monotonic_time(:millisecond)
     }
   end
 
-  # Convert session data from Sessions.load_session to an ETS entry.
+  # Convert session data from Sessions.load_session to ETS entry.
   defp session_data_to_entry(name, data) do
-    %{
-      name: name,
-      history: Map.get(data, :history, []),
-      compacted_hashes: Map.get(data, :compacted_hashes, []),
-      total_tokens: 0,
-      message_count: length(Map.get(data, :history, [])),
-      auto_saved: false,
-      timestamp: "",
-      has_terminal: false,
-      terminal_meta: nil,
-      updated_at: System.monotonic_time(:millisecond)
-    }
+    history = Map.get(data, :history, [])
+    %{name: name, history: history, compacted_hashes: Map.get(data, :compacted_hashes, []),
+      total_tokens: 0, message_count: length(history), auto_saved: false,
+      timestamp: "", has_terminal: false, terminal_meta: nil,
+      updated_at: System.monotonic_time(:millisecond)}
   end
 
-  # Convert a ChatSession struct to a result map matching Sessions API.
   defp session_to_result(session) do
-    %{
-      name: session.name,
-      message_count: session.message_count,
-      total_tokens: session.total_tokens,
-      auto_saved: session.auto_saved,
-      timestamp: session.timestamp
-    }
+    %{name: session.name, message_count: session.message_count,
+      total_tokens: session.total_tokens, auto_saved: session.auto_saved,
+      timestamp: session.timestamp}
   end
 end
