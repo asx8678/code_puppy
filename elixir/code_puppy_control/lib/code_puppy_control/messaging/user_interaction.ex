@@ -11,12 +11,13 @@ defmodule CodePuppyControl.Messaging.UserInteraction do
   | `UserInputRequest`       | `user_input_request/1`   |
   | `ConfirmationRequest`    | `confirmation_request/1` |
   | `SelectionRequest`       | `selection_request/1`     |
+  | `AskUserQuestionRequest` | `ask_user_question_request/1` |
 
   All constructors return `{:ok, map}` or `{:error, reason}` — never raise.
   Category defaults to `\"user_interaction\"`; providing a mismatched category is rejected.
   """
 
-  alias CodePuppyControl.Messaging.Validation
+  alias CodePuppyControl.Messaging.{Entries, Validation}
 
   @default_category "user_interaction"
 
@@ -169,6 +170,73 @@ defmodule CodePuppyControl.Messaging.UserInteraction do
 
       :error ->
         {:error, {:missing_required_field, key}}
+    end
+  end
+
+  # ── AskUserQuestionRequest ────────────────────────────────────────────────
+
+  @doc """
+  Builds an AskUserQuestionRequest internal map.
+
+  Mirrors the Python `AskUserQuestionInput` model from
+  `code_puppy/tools/ask_user_question/models.py`. Carries a batch
+  of structured questions with selectable options, supporting
+  both single- and multi-select.
+
+  ## Required fields
+
+  - `"prompt_id"` — string, unique ID for matching responses
+  - `"questions"` — list of QuestionEntry maps (1-10 questions)
+
+  ## Optional fields with defaults
+
+  - `"timeout"` — integer, inactivity timeout in seconds (default: `300`)
+  """
+  @spec ask_user_question_request(map()) :: {:ok, map()} | {:error, term()}
+  def ask_user_question_request(fields) when is_map(fields) do
+    with {:ok, category} <- Validation.validate_category_default(fields, @default_category),
+         {:ok, base} <- Validation.assemble_base(fields, category),
+         {:ok, prompt_id} <- Validation.require_string(fields, "prompt_id"),
+         {:ok, questions} <- validate_questions(fields),
+         {:ok, timeout} <- validate_timeout_seconds(fields) do
+      {:ok,
+       Map.merge(base, %{
+         "prompt_id" => prompt_id,
+         "questions" => questions,
+         "timeout" => timeout
+       })}
+    end
+  end
+
+  def ask_user_question_request(other), do: {:error, {:not_a_map, other}}
+
+  defp validate_questions(fields) do
+    case Map.fetch(fields, "questions") do
+      {:ok, list} when is_list(list) ->
+        with {:ok, validated} <-
+               Validation.validate_list(fields, "questions", &Entries.question_entry/1) do
+          count = length(validated)
+
+          cond do
+            count < 1 -> {:error, {:value_below_min, "questions", count, 1}}
+            count > 10 -> {:error, {:value_above_max, "questions", count, 10}}
+            true -> {:ok, validated}
+          end
+        end
+
+      {:ok, other} ->
+        {:error, {:invalid_field_type, "questions", other}}
+
+      :error ->
+        {:error, {:missing_required_field, "questions"}}
+    end
+  end
+
+  defp validate_timeout_seconds(fields) do
+    case Map.fetch(fields, "timeout") do
+      :error -> {:ok, 300}
+      {:ok, v} when is_integer(v) and v > 0 -> {:ok, v}
+      {:ok, other} -> {:error, {:invalid_field_type, "timeout", other}}
     end
   end
 end

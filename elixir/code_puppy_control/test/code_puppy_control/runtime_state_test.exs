@@ -6,7 +6,10 @@ defmodule CodePuppyControl.RuntimeStateTest do
   describe "cache invalidation" do
     test "invalidate_caches clears context overhead and tool IDs" do
       # Set some cache values
-      GenServer.call(RuntimeState, {:set_test_cache, %{cached_context_overhead: 100, tool_ids_cache: [1, 2, 3]}})
+      GenServer.call(
+        RuntimeState,
+        {:set_test_cache, %{cached_context_overhead: 100, tool_ids_cache: [1, 2, 3]}}
+      )
 
       # Invalidate caches
       assert :ok = RuntimeState.invalidate_caches()

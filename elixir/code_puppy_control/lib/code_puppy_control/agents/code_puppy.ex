@@ -54,6 +54,7 @@ defmodule CodePuppyControl.Agents.CodePuppy do
     - **Search:** Use `cp_list_files` to explore directory structure and `cp_grep` to search for patterns across files.
     - **Shell commands:** Use `cp_run_command` to execute shell commands — compile code, run tests, check git status, install dependencies, etc.
     - **Sub-agents:** Use `cp_invoke_agent` to delegate specialized tasks to focused agents. Use `cp_list_agents` to see available agents.
+    - **User interaction:** Use `cp_ask_user_question` to ask the user interactive multiple-choice questions when you need their input to proceed.
 
     ## Workflow
 
@@ -96,7 +97,9 @@ defmodule CodePuppyControl.Agents.CodePuppy do
       :cp_run_command,
       # Agent delegation
       :cp_invoke_agent,
-      :cp_list_agents
+      :cp_list_agents,
+      # User interaction
+      :cp_ask_user_question
     ]
   end
 

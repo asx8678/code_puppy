@@ -149,7 +149,10 @@ defmodule CodePuppyControl.Tool.Runner do
   # ── Dispatch ─────────────────────────────────────────────────────────────
 
   defp do_invoke(module, tool_name, args, context) do
-    timeout = Map.get(context, :timeout, @default_timeout_ms)
+    timeout =
+      Map.get(context, :timeout) ||
+        module_default_timeout(module) ||
+        @default_timeout_ms
 
     # Emit start telemetry
     start_time = System.monotonic_time(:millisecond)
@@ -254,6 +257,21 @@ defmodule CodePuppyControl.Tool.Runner do
       kind, reason ->
         Logger.warning("Tool #{tool_name} threw #{kind}: #{inspect(reason)}")
         {:error, "Tool #{tool_name} #{kind}: #{inspect(reason)}"}
+    end
+  end
+
+  # ── Module Timeout ────────────────────────────────────────────────────────
+
+  # Tools that need a different default timeout (e.g. interactive tools
+  # that wait for user input) can export `tool_timeout/0` returning a
+  # positive integer in milliseconds. When absent, returns nil and the
+  # runner falls back to @default_timeout_ms (60 s).
+  @spec module_default_timeout(module()) :: pos_integer() | nil
+  defp module_default_timeout(module) when is_atom(module) do
+    if function_exported?(module, :tool_timeout, 0) do
+      module.tool_timeout()
+    else
+      nil
     end
   end
 

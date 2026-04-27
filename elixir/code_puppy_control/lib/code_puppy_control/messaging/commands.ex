@@ -34,6 +34,7 @@ defmodule CodePuppyControl.Messaging.Commands do
   | `"user_input_response"`| `UserInputResponse`      | Respond to a user input prompt     |
   | `"confirmation_response"`| `ConfirmationResponse` | Respond to a confirmation prompt    |
   | `"selection_response"` | `SelectionResponse`       | Respond to a selection prompt      |
+  | `"ask_user_question_response"` | `AskUserQuestionResponse` | Respond to a batch question prompt |
 
   ## Validation
 
@@ -62,6 +63,7 @@ defmodule CodePuppyControl.Messaging.Commands do
           | :user_input_response
           | :confirmation_response
           | :selection_response
+          | :ask_user_question_response
 
   @type t ::
           CancelAgentCommand.t()
@@ -69,6 +71,7 @@ defmodule CodePuppyControl.Messaging.Commands do
           | UserInputResponse.t()
           | ConfirmationResponse.t()
           | SelectionResponse.t()
+          | AskUserQuestionResponse.t()
 
   # -- CancelAgentCommand ----------------------------------------------------
 
@@ -155,6 +158,35 @@ defmodule CodePuppyControl.Messaging.Commands do
           }
   end
 
+  # -- AskUserQuestionResponse -----------------------------------------------
+
+  defmodule AskUserQuestionResponse do
+    @moduledoc "Response to an AskUserQuestionRequest from the agent."
+
+    @enforce_keys [:command_type, :id, :timestamp, :prompt_id]
+    defstruct [
+      :command_type,
+      :id,
+      :timestamp,
+      :prompt_id,
+      :answers,
+      :cancelled,
+      :timed_out,
+      :error
+    ]
+
+    @type t :: %__MODULE__{
+            command_type: :ask_user_question_response,
+            id: String.t(),
+            timestamp: integer(),
+            prompt_id: String.t(),
+            answers: [map()] | nil,
+            cancelled: boolean() | nil,
+            timed_out: boolean() | nil,
+            error: String.t() | nil
+          }
+  end
+
   # ---------------------------------------------------------------------------
   # Command Type Mapping
   # ---------------------------------------------------------------------------
@@ -164,7 +196,8 @@ defmodule CodePuppyControl.Messaging.Commands do
     "interrupt_shell" => InterruptShellCommand,
     "user_input_response" => UserInputResponse,
     "confirmation_response" => ConfirmationResponse,
-    "selection_response" => SelectionResponse
+    "selection_response" => SelectionResponse,
+    "ask_user_question_response" => AskUserQuestionResponse
   }
 
   # Build reverse mapping at compile time using full module names
@@ -173,67 +206,37 @@ defmodule CodePuppyControl.Messaging.Commands do
                           |> Enum.map(fn {type_str, mod} -> {mod, type_str} end)
                           |> Map.new()
 
-  # Build allowed-fields map with full module keys at compile time.
-  @allowed_fields (
-                    fields_by_type = %{
-                      "cancel_agent" => ~w(command_type id timestamp reason),
-                      "interrupt_shell" => ~w(command_type id timestamp command_id),
-                      "user_input_response" => ~w(command_type id timestamp prompt_id value),
-                      "confirmation_response" =>
-                        ~w(command_type id timestamp prompt_id confirmed feedback),
-                      "selection_response" =>
-                        ~w(command_type id timestamp prompt_id selected_index selected_value)
-                    }
-
-                    for {type_str, fields} <- fields_by_type,
-                        into: %{} do
-                      {@command_type_to_module[type_str], MapSet.new(fields)}
-                    end
-                  )
-
   # ---------------------------------------------------------------------------
   # Constructors
   # ---------------------------------------------------------------------------
 
-  @doc """
-  Builds a `CancelAgentCommand`.
-
-  Omitting `id` or `timestamp` triggers auto-generation.
-  """
+  @doc "Builds a `CancelAgentCommand`. Omitting `id`/`timestamp` triggers auto-generation."
   @spec cancel_agent(keyword()) :: CancelAgentCommand.t()
   def cancel_agent(opts \\ []) do
     {id, ts} = fill_defaults(opts)
-    reason = Keyword.get(opts, :reason)
 
     %CancelAgentCommand{
       command_type: :cancel_agent,
       id: id,
       timestamp: ts,
-      reason: reason
+      reason: Keyword.get(opts, :reason)
     }
   end
 
-  @doc """
-  Builds an `InterruptShellCommand`.
-  """
+  @doc "Builds an `InterruptShellCommand`."
   @spec interrupt_shell(keyword()) :: InterruptShellCommand.t()
   def interrupt_shell(opts \\ []) do
     {id, ts} = fill_defaults(opts)
-    command_id = Keyword.get(opts, :command_id)
 
     %InterruptShellCommand{
       command_type: :interrupt_shell,
       id: id,
       timestamp: ts,
-      command_id: command_id
+      command_id: Keyword.get(opts, :command_id)
     }
   end
 
-  @doc """
-  Builds a `UserInputResponse`.
-
-  `prompt_id` and `value` are required.
-  """
+  @doc "Builds a `UserInputResponse`. `prompt_id` and `value` are required."
   @spec user_input_response(String.t(), String.t(), keyword()) :: UserInputResponse.t()
   def user_input_response(prompt_id, value, opts \\ []) do
     {id, ts} = fill_defaults(opts)
@@ -247,15 +250,10 @@ defmodule CodePuppyControl.Messaging.Commands do
     }
   end
 
-  @doc """
-  Builds a `ConfirmationResponse`.
-
-  `prompt_id` and `confirmed` are required.
-  """
+  @doc "Builds a `ConfirmationResponse`. `prompt_id` and `confirmed` are required."
   @spec confirmation_response(String.t(), boolean(), keyword()) :: ConfirmationResponse.t()
   def confirmation_response(prompt_id, confirmed, opts \\ []) do
     {id, ts} = fill_defaults(opts)
-    feedback = Keyword.get(opts, :feedback)
 
     %ConfirmationResponse{
       command_type: :confirmation_response,
@@ -263,7 +261,7 @@ defmodule CodePuppyControl.Messaging.Commands do
       timestamp: ts,
       prompt_id: prompt_id,
       confirmed: confirmed,
-      feedback: feedback
+      feedback: Keyword.get(opts, :feedback)
     }
   end
 
@@ -315,6 +313,28 @@ defmodule CodePuppyControl.Messaging.Commands do
     end
   end
 
+  @doc """
+  Builds an `AskUserQuestionResponse`.
+
+  `prompt_id` is required. `answers` is a list of answer maps.
+  """
+  @spec ask_user_question_response(String.t(), [map()], keyword()) ::
+          AskUserQuestionResponse.t()
+  def ask_user_question_response(prompt_id, answers, opts \\ []) do
+    {id, ts} = fill_defaults(opts)
+
+    %AskUserQuestionResponse{
+      command_type: :ask_user_question_response,
+      id: id,
+      timestamp: ts,
+      prompt_id: prompt_id,
+      answers: answers,
+      cancelled: Keyword.get(opts, :cancelled, false),
+      timed_out: Keyword.get(opts, :timed_out, false),
+      error: Keyword.get(opts, :error)
+    }
+  end
+
   # ---------------------------------------------------------------------------
   # Serialization: to_wire / from_wire
   # ---------------------------------------------------------------------------
@@ -345,6 +365,8 @@ defmodule CodePuppyControl.Messaging.Commands do
   Returns `{:ok, command}` on success or `{:error, reason}` on failure.
   Never raises — all validation errors are returned as tagged tuples.
 
+  Delegates to `Commands.Deserialization.from_wire/1`.
+
   ## Error Reasons
 
   | reason                       | meaning                                       |
@@ -353,25 +375,11 @@ defmodule CodePuppyControl.Messaging.Commands do
   | `:unknown_command_type`      | `command_type` value is not recognized         |
   | `:missing_command_type`      | `command_type` key absent                      |
   | `:extra_fields_not_allowed`  | Unknown fields present (forbid extra)         |
-  | `:invalid_selected_index`    | `selected_index` is negative or non-integer    |
   | `{:invalid_field_type, key}`  | A field has the wrong primitive type           |
   | `{:missing_required_field, key}` | A required field is absent                |
   """
   @spec from_wire(map()) :: {:ok, t()} | {:error, term()}
-  def from_wire(wire) when is_map(wire) do
-    with {:ok, type_str} <- fetch_command_type(wire),
-         {:ok, module} <- resolve_module(type_str),
-         :ok <- check_extra_fields(wire, module),
-         {:ok, cmd} <- build_struct(wire, module) do
-      {:ok, cmd}
-    end
-  end
-
-  def from_wire(_), do: {:error, :not_a_map}
-
-  # ---------------------------------------------------------------------------
-  # Private Helpers
-  # ---------------------------------------------------------------------------
+  defdelegate from_wire(wire), to: CodePuppyControl.Messaging.Commands.Deserialization
 
   defp fill_defaults(opts) do
     id = Keyword.get(opts, :id) || generate_id()
@@ -383,198 +391,7 @@ defmodule CodePuppyControl.Messaging.Commands do
     :crypto.strong_rand_bytes(16) |> Base.encode16(case: :lower)
   end
 
-  defp fetch_command_type(wire) do
-    case Map.fetch(wire, "command_type") do
-      {:ok, type} when is_binary(type) -> {:ok, type}
-      {:ok, _} -> {:error, :missing_command_type}
-      :error -> {:error, :missing_command_type}
-    end
-  end
-
-  defp resolve_module(type_str) do
-    case Map.fetch(@command_type_to_module, type_str) do
-      {:ok, module} -> {:ok, module}
-      :error -> {:error, :unknown_command_type}
-    end
-  end
-
-  defp check_extra_fields(wire, module) do
-    allowed = @allowed_fields[module]
-    extra = Map.keys(wire) |> MapSet.new() |> MapSet.difference(allowed)
-
-    if MapSet.size(extra) == 0 do
-      :ok
-    else
-      {:error, :extra_fields_not_allowed}
-    end
-  end
-
-  defp build_struct(wire, module) do
-    with {:ok, id} <- resolve_id(wire),
-         {:ok, ts} <- resolve_timestamp(wire),
-         {:ok, extra} <- extract_extra_fields(wire, module),
-         {:ok, struct} <- construct_module(module, id, ts, extra),
-         :ok <- validate_struct_fields(struct) do
-      {:ok, struct}
-    end
-  end
-
-  defp resolve_id(wire) do
-    case Map.fetch(wire, "id") do
-      {:ok, id} when is_binary(id) -> {:ok, id}
-      {:ok, _} -> {:error, {:invalid_field_type, "id"}}
-      :error -> {:ok, generate_id()}
-    end
-  end
-
-  defp resolve_timestamp(wire) do
-    case Map.fetch(wire, "timestamp") do
-      {:ok, ts} when is_integer(ts) and ts >= 0 -> {:ok, ts}
-      {:ok, _} -> {:error, {:invalid_field_type, "timestamp"}}
-      :error -> {:ok, System.system_time(:millisecond)}
-    end
-  end
-
-  # Extracts fields specific to each command module (excluding base fields).
-  defp extract_extra_fields(wire, CancelAgentCommand) do
-    case Map.fetch(wire, "reason") do
-      {:ok, r} when is_binary(r) or is_nil(r) -> {:ok, %{reason: r}}
-      {:ok, _} -> {:error, {:invalid_field_type, "reason"}}
-      :error -> {:ok, %{reason: nil}}
-    end
-  end
-
-  defp extract_extra_fields(wire, InterruptShellCommand) do
-    case Map.fetch(wire, "command_id") do
-      {:ok, c} when is_binary(c) or is_nil(c) -> {:ok, %{command_id: c}}
-      {:ok, _} -> {:error, {:invalid_field_type, "command_id"}}
-      :error -> {:ok, %{command_id: nil}}
-    end
-  end
-
-  defp extract_extra_fields(wire, UserInputResponse) do
-    with {:ok, pid} <- require_string(wire, "prompt_id"),
-         {:ok, val} <- require_string(wire, "value") do
-      {:ok, %{prompt_id: pid, value: val}}
-    end
-  end
-
-  defp extract_extra_fields(wire, ConfirmationResponse) do
-    with {:ok, pid} <- require_string(wire, "prompt_id"),
-         {:ok, confirmed} <- require_bool(wire, "confirmed"),
-         {:ok, feedback} <- optional_string(wire, "feedback") do
-      {:ok, %{prompt_id: pid, confirmed: confirmed, feedback: feedback}}
-    end
-  end
-
-  defp extract_extra_fields(wire, SelectionResponse) do
-    with {:ok, pid} <- require_string(wire, "prompt_id"),
-         {:ok, idx} <- require_non_neg_int(wire, "selected_index"),
-         {:ok, val} <- require_string(wire, "selected_value") do
-      {:ok, %{prompt_id: pid, selected_index: idx, selected_value: val}}
-    end
-  end
-
-  defp construct_module(CancelAgentCommand, id, ts, %{reason: reason}) do
-    {:ok,
-     %CancelAgentCommand{
-       command_type: :cancel_agent,
-       id: id,
-       timestamp: ts,
-       reason: reason
-     }}
-  end
-
-  defp construct_module(InterruptShellCommand, id, ts, %{command_id: command_id}) do
-    {:ok,
-     %InterruptShellCommand{
-       command_type: :interrupt_shell,
-       id: id,
-       timestamp: ts,
-       command_id: command_id
-     }}
-  end
-
-  defp construct_module(UserInputResponse, id, ts, %{prompt_id: pid, value: val}) do
-    {:ok,
-     %UserInputResponse{
-       command_type: :user_input_response,
-       id: id,
-       timestamp: ts,
-       prompt_id: pid,
-       value: val
-     }}
-  end
-
-  defp construct_module(ConfirmationResponse, id, ts, extra) do
-    {:ok,
-     %ConfirmationResponse{
-       command_type: :confirmation_response,
-       id: id,
-       timestamp: ts,
-       prompt_id: extra.prompt_id,
-       confirmed: extra.confirmed,
-       feedback: extra.feedback
-     }}
-  end
-
-  defp construct_module(SelectionResponse, id, ts, extra) do
-    {:ok,
-     %SelectionResponse{
-       command_type: :selection_response,
-       id: id,
-       timestamp: ts,
-       prompt_id: extra.prompt_id,
-       selected_index: extra.selected_index,
-       selected_value: extra.selected_value
-     }}
-  end
-
-  # Final validation pass on the constructed struct.
-  defp validate_struct_fields(%SelectionResponse{selected_index: idx}) do
-    if is_integer(idx) and idx >= 0, do: :ok, else: {:error, :invalid_selected_index}
-  end
-
-  defp validate_struct_fields(_), do: :ok
-
-  # -- Field type helpers ----------------------------------------------------
-
-  defp require_string(wire, key) do
-    case Map.fetch(wire, key) do
-      {:ok, v} when is_binary(v) -> {:ok, v}
-      {:ok, _} -> {:error, {:invalid_field_type, key}}
-      :error -> {:error, {:missing_required_field, key}}
-    end
-  end
-
-  defp require_bool(wire, key) do
-    case Map.fetch(wire, key) do
-      {:ok, v} when is_boolean(v) -> {:ok, v}
-      {:ok, _} -> {:error, {:invalid_field_type, key}}
-      :error -> {:error, {:missing_required_field, key}}
-    end
-  end
-
-  defp require_non_neg_int(wire, key) do
-    case Map.fetch(wire, key) do
-      {:ok, v} when is_integer(v) and v >= 0 -> {:ok, v}
-      {:ok, v} when is_integer(v) -> {:error, :invalid_selected_index}
-      {:ok, _} -> {:error, :invalid_selected_index}
-      :error -> {:error, {:missing_required_field, key}}
-    end
-  end
-
   defp validate_selected_index(idx) when is_integer(idx) and idx >= 0, do: :ok
 
   defp validate_selected_index(idx), do: {:error, {:invalid_selected_index, idx}}
-
-  # Validates an optional string-or-nil field.
-  # Returns `{:ok, value}` when present-and-valid or absent; errors on bad type.
-  defp optional_string(wire, key) do
-    case Map.fetch(wire, key) do
-      {:ok, v} when is_binary(v) or is_nil(v) -> {:ok, v}
-      {:ok, _} -> {:error, {:invalid_field_type, key}}
-      :error -> {:ok, nil}
-    end
-  end
 end
