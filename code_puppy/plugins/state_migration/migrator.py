@@ -132,9 +132,7 @@ class StateMigrator:
         for rel_path in self._walk_dir(self.source_home, ""):
             if is_forbidden(rel_path):
                 full = str(self.source_home / rel_path)
-                result.refused.append(
-                    (full, "forbidden by ADR-003 allowlist")
-                )
+                result.refused.append((full, "forbidden by ADR-003 allowlist"))
         return result
 
     # ── Import phases ────────────────────────────────────────────────────
@@ -147,7 +145,9 @@ class StateMigrator:
     ) -> MigrationResult:
         src = self.source_home / "extra_models.json"
         dst = self.target_home / "extra_models.json"
-        return self._import_single_file(src, dst, "extra_models.json", mode, force, result)
+        return self._import_single_file(
+            src, dst, "extra_models.json", mode, force, result
+        )
 
     def _import_models_json(
         self,
@@ -174,7 +174,9 @@ class StateMigrator:
         merged_json = json.dumps(merged, indent=2, sort_keys=True)
 
         if not force and dst.exists():
-            result.skipped.append((str(dst), "already exists; use --force to overwrite"))
+            result.skipped.append(
+                (str(dst), "already exists; use --force to overwrite")
+            )
             return result
 
         return self._maybe_write(dst, merged_json, mode, result)
@@ -212,7 +214,9 @@ class StateMigrator:
             return result
 
         if not force and existing_ui and dst.exists():
-            result.skipped.append((str(dst), "already exists; use --force to overwrite"))
+            result.skipped.append(
+                (str(dst), "already exists; use --force to overwrite")
+            )
             return result
 
         merged_config = {**existing_cfg, "ui": {**existing_ui, **safe_ui}}
@@ -232,7 +236,9 @@ class StateMigrator:
         if not src_dir.is_dir():
             return result
 
-        return self._import_directory(src_dir, dst_dir, ".json", "agents", mode, force, result)
+        return self._import_directory(
+            src_dir, dst_dir, ".json", "agents", mode, force, result
+        )
 
     def _import_skills(
         self,
@@ -290,7 +296,9 @@ class StateMigrator:
             return result
 
         if not force and dst.exists():
-            result.skipped.append((str(dst), "already exists; use --force to overwrite"))
+            result.skipped.append(
+                (str(dst), "already exists; use --force to overwrite")
+            )
             return result
 
         return self._maybe_write(dst, content, mode, result)
@@ -345,13 +353,16 @@ class StateMigrator:
         result: MigrationResult,
     ) -> MigrationResult:
         if not force and dst_dir.is_dir():
-            result.skipped.append((str(dst_dir), "already exists; use --force to overwrite"))
+            result.skipped.append(
+                (str(dst_dir), "already exists; use --force to overwrite")
+            )
             return result
 
-        copied, errors = self._walk_and_copy(src_dir, dst_dir, mode, force)
+        copied, errors, refused = self._walk_and_copy(src_dir, dst_dir, mode, force)
 
         result.copied.extend(copied)
         result.errors.extend(errors)
+        result.refused.extend(refused)
         return result
 
     def _walk_and_copy(
@@ -360,26 +371,38 @@ class StateMigrator:
         dst_dir: Path,
         mode: str,
         force: bool,
-    ) -> tuple[list[str], list[tuple[str, str]]]:
+    ) -> tuple[list[str], list[tuple[str, str]], list[tuple[str, str]]]:
         copied: list[str] = []
         errors: list[tuple[str, str]] = []
+        refused: list[tuple[str, str]] = []
 
         try:
             entries = sorted(src_dir.iterdir())
         except OSError as exc:
             errors.append((str(src_dir), str(exc)))
-            return copied, errors
+            return copied, errors, refused
 
         for entry in entries:
             dst_path = dst_dir / entry.name
 
             if entry.is_dir():
-                sub_copied, sub_errors = self._walk_and_copy(
+                # ADR-003: skip forbidden subdirectories
+                if is_forbidden(entry.name):
+                    refused.append((str(entry), "forbidden directory by ADR-003"))
+                    continue
+
+                sub_copied, sub_errors, sub_refused = self._walk_and_copy(
                     entry, dst_path, mode, force
                 )
                 copied.extend(sub_copied)
                 errors.extend(sub_errors)
+                refused.extend(sub_refused)
             elif entry.is_file():
+                # ADR-003: skip forbidden files
+                if is_forbidden(entry.name):
+                    refused.append((str(entry), "forbidden file by ADR-003"))
+                    continue
+
                 if not force and dst_path.exists():
                     continue
 
@@ -395,7 +418,7 @@ class StateMigrator:
                 elif write_result is not None:
                     errors.append((str(dst_path), write_result))
 
-        return copied, errors
+        return copied, errors, refused
 
     # ── Write helpers ────────────────────────────────────────────────────
 

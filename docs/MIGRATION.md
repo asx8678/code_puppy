@@ -53,7 +53,7 @@ mix pup_ex.import
 mix pup_ex.import --confirm
 
 # Overwrite existing files
-mix pup_import --confirm --force
+mix pup_ex.import --confirm --force
 ```
 
 > **Note:** Both commands use the same ADR-003 allowlist. The Python-side
@@ -64,11 +64,12 @@ mix pup_import --confirm --force
 | Variable | Purpose | Default |
 |----------|---------|---------|
 | `PUP_EX_HOME` | Override Elixir home destination | `~/.code_puppy_ex/` |
-| `PUP_HOME` | Override Python home source (deprecated) | `~/.code_puppy/` |
-| `PUPPY_HOME` | Override Python home source (legacy) | `~/.code_puppy/` |
+| `PUP_HOME` | Override Python home source (deprecated, takes precedence over `PUPPY_HOME`) | `~/.code_puppy/` |
+| `PUPPY_HOME` | Override Python home source (legacy, used only when `PUP_HOME` is not set) | `~/.code_puppy/` |
 
 > New variables use the `PUP_` prefix per project convention.
-> `PUPPY_HOME` is deprecated but still supported.
+> `PUPPY_HOME` is deprecated but still supported. When both `PUP_HOME` and
+> `PUPPY_HOME` are set, `PUP_HOME` takes precedence.
 
 ## What Gets Copied
 

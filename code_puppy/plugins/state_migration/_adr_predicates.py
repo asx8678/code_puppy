@@ -204,9 +204,7 @@ def deep_merge_preserving_existing(
     for key, value in existing.items():
         if key in merged:
             if isinstance(value, dict) and isinstance(merged[key], dict):
-                merged[key] = deep_merge_preserving_existing(
-                    value, merged[key]
-                )
+                merged[key] = deep_merge_preserving_existing(value, merged[key])
             else:
                 merged[key] = value
         else:

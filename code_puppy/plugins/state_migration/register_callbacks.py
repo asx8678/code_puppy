@@ -103,7 +103,12 @@ def _format_report(result: object) -> str:
         for path, reason in result.errors:
             lines.append(f"     • {path} — {reason}")
 
-    total = len(result.copied) + len(result.skipped) + len(result.refused) + len(result.errors)
+    total = (
+        len(result.copied)
+        + len(result.skipped)
+        + len(result.refused)
+        + len(result.errors)
+    )
     lines.append(
         f"  {total} items: {len(result.copied)} copied, "
         f"{len(result.skipped)} skipped, "
