@@ -25,11 +25,17 @@ from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
+import time
 from typing import Any
 import warnings
 
 # Import Elixir bridge (lazy-loaded)
 _use_elixir_storage: bool = os.environ.get("PUP_SESSION_USE_SQLITE", "1") == "1"
+
+# (code_puppy-ctj.1) Terminal session tracking state for crash recovery.
+# When a terminal session is created, we track it here so that the
+# session_storage_bridge can register it with the Elixir Store.
+_active_terminal: dict[str, dict[str, Any]] = {}
 
 # ----- ThreadPoolExecutor for async autosave -----
 # Single-threaded executor for background session saves to avoid blocking the main thread.
@@ -55,7 +61,6 @@ def _compute_history_fingerprint(history: list) -> tuple[int, str]:
 def should_skip_autosave(history: list) -> bool:
     """Check if we should skip this autosave (no changes or too soon)."""
     global _last_autosave_len, _last_autosave_hash, _last_autosave_time
-    import time
     now = time.time()
     if now - _last_autosave_time < AUTOSAVE_DEBOUNCE_SECONDS:
         return True
@@ -68,9 +73,77 @@ def should_skip_autosave(history: list) -> bool:
 def mark_autosave_complete(history: list) -> None:
     """Update tracking state after successful autosave."""
     global _last_autosave_len, _last_autosave_hash, _last_autosave_time
-    import time
     _last_autosave_len, _last_autosave_hash = _compute_history_fingerprint(history)
     _last_autosave_time = time.time()
+
+def register_terminal_session(
+    name: str,
+    session_id: str | None = None,
+    cols: int = 80,
+    rows: int = 24,
+    shell: str | None = None,
+) -> None:
+    """Register a terminal session for crash recovery tracking.
+
+    (code_puppy-ctj.1) Records terminal metadata so that on crash/restart,
+    the Elixir SessionStorage.TerminalRecovery module can attempt to
+    recreate the PTY session. Also registers with the Elixir bridge if
+    available.
+
+    This is the Python-side entry point for terminal tracking. It stores
+    metadata in the local ``_active_terminal`` dict (used by save_session
+    to pass has_terminal/terminal_meta to the Elixir Store) and also
+    calls session_storage_bridge.register_terminal for immediate durable
+    persistence.
+    """
+    global _active_terminal
+    meta = {
+        "session_id": session_id or name,
+        "cols": cols,
+        "rows": rows,
+        "shell": shell,
+        "attached_at": time.time(),
+    }
+    _active_terminal[name] = meta
+
+    # Register with Elixir bridge if available
+    if _use_elixir_for_session():
+        try:
+            from code_puppy import session_storage_bridge
+            session_storage_bridge.register_terminal(
+                name=name,
+                session_id=session_id or name,
+                cols=cols,
+                rows=rows,
+                shell=shell,
+            )
+        except Exception as exc:
+            logger.debug("Elixir terminal registration failed: %s", exc)
+
+
+def unregister_terminal_session(name: str) -> None:
+    """Unregister a terminal session from crash recovery tracking.
+
+    (code_puppy-ctj.1) Called when a terminal session is closed gracefully.
+    """
+    global _active_terminal
+    _active_terminal.pop(name, None)
+
+    if _use_elixir_for_session():
+        try:
+            from code_puppy import session_storage_bridge
+            session_storage_bridge.unregister_terminal(name=name)
+        except Exception as exc:
+            logger.debug("Elixir terminal unregistration failed: %s", exc)
+
+
+def get_active_terminals() -> dict[str, dict[str, Any]]:
+    """Return currently tracked terminal sessions.
+
+    (code_puppy-ctj.1) For diagnostics and crash recovery.
+    """
+    return dict(_active_terminal)
+
 
 def _autosave_shutdown():
     """Shutdown handler: flush pending saves before exit.
@@ -385,6 +458,9 @@ def save_session(
                 total_tokens=total_tokens,
                 auto_saved=auto_saved,
                 timestamp=timestamp,
+                # (code_puppy-ctj.1) Pass terminal metadata for crash recovery
+                has_terminal=session_name in _active_terminal,
+                terminal_meta=_active_terminal.get(session_name),
             )
 
             # Return metadata in expected format (without file paths for SQLite mode)

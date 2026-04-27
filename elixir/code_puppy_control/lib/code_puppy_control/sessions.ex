@@ -6,6 +6,9 @@ defmodule CodePuppyControl.Sessions do
   stored in SQLite via Ecto. Replaces Python session_storage.py functionality.
 
   This module implements : Migrate session_storage.py to Elixir/Ecto.
+
+  (code_puppy-ctj.1) Extended with `has_terminal` and `terminal_meta` fields
+  for terminal session crash recovery tracking.
   """
 
   require Logger
@@ -45,6 +48,14 @@ defmodule CodePuppyControl.Sessions do
           keyword()
         ) :: session_result()
   def save_session(name, history, opts \\ []) do
+    # (code_puppy-ctj.1 fix) When opts omit :has_terminal / :terminal_meta,
+    # preserve existing values from the database row instead of defaulting
+    # to false/nil — which would silently clear registered terminal recovery
+    # metadata. The Store layer resolves these before calling us, but direct
+    # callers (e.g. python_worker/port.ex) bypass the Store.
+    {has_terminal, terminal_meta} =
+      resolve_terminal_attrs(name, opts)
+
     attrs = %{
       name: name,
       history: history,
@@ -52,7 +63,10 @@ defmodule CodePuppyControl.Sessions do
       total_tokens: Keyword.get(opts, :total_tokens, 0),
       message_count: length(history),
       auto_saved: Keyword.get(opts, :auto_saved, false),
-      timestamp: Keyword.get(opts, :timestamp, now_iso())
+      timestamp: Keyword.get(opts, :timestamp, now_iso()),
+      # (code_puppy-ctj.1) Terminal session fields for crash recovery
+      has_terminal: has_terminal,
+      terminal_meta: terminal_meta
     }
 
     case Repo.get_by(ChatSession, name: name) do
@@ -179,7 +193,9 @@ defmodule CodePuppyControl.Sessions do
     if length(sessions) <= max_sessions do
       {:ok, []}
     else
-      to_delete = Enum.drop(sessions, max_sessions)
+      # (code_puppy-ctj.1 fix: take oldest to delete, not newest)
+      to_delete_count = length(sessions) - max_sessions
+      to_delete = Enum.take(sessions, to_delete_count)
       deleted_names = Enum.map(to_delete, & &1.name)
 
       Enum.each(to_delete, fn session ->
@@ -187,6 +203,33 @@ defmodule CodePuppyControl.Sessions do
       end)
 
       {:ok, deleted_names}
+    end
+  end
+
+  @doc """
+  Updates terminal metadata fields for an existing session.
+
+  Durably persists `has_terminal` and `terminal_meta` to SQLite without
+  requiring the full history. Returns an error if the session does not exist.
+
+  (code_puppy-ctj.1) This is the durable write path for terminal tracking —
+  `register_terminal` and `unregister_terminal` call this to ensure terminal
+  metadata survives crashes.
+  """
+  @spec update_terminal_meta(session_name(), boolean(), map() | nil) ::
+          {:ok, ChatSession.t()} | {:error, :not_found | term()}
+  def update_terminal_meta(name, has_terminal, terminal_meta) do
+    case Repo.get_by(ChatSession, name: name) do
+      nil ->
+        {:error, :not_found}
+
+      session ->
+      session
+        |> ChatSession.changeset(%{
+          has_terminal: has_terminal,
+          terminal_meta: normalize_terminal_meta(terminal_meta)
+        })
+        |> Repo.update()
     end
   end
 
@@ -207,6 +250,75 @@ defmodule CodePuppyControl.Sessions do
   end
 
   # Private helpers
+
+  # Whitelist of known terminal_meta keys — mirrors Store whitelist.
+  # We never call String.to_atom/1 on persisted JSON / user-influenced
+  # terminal_meta; only known keys are promoted to atoms.  Unknown string
+  # keys are preserved as strings.  (code_puppy-ctj.1 fix)
+  @terminal_meta_whitelist %{
+    "session_id" => :session_id,
+    "cols" => :cols,
+    "rows" => :rows,
+    "shell" => :shell,
+    "attached_at" => :attached_at
+  }
+
+  # (code_puppy-ctj.1 fix) Resolve terminal attrs from opts, preserving
+  # existing database values when the caller does not explicitly provide
+  # :has_terminal or :terminal_meta.  Returns {has_terminal, terminal_meta}.
+  @spec resolve_terminal_attrs(session_name(), keyword()) ::
+          {boolean(), map() | nil}
+  defp resolve_terminal_attrs(name, opts) do
+    has_terminal_explicit? = Keyword.has_key?(opts, :has_terminal)
+    terminal_meta_explicit? = Keyword.has_key?(opts, :terminal_meta)
+
+    if has_terminal_explicit? or terminal_meta_explicit? do
+      # At least one field is explicit — resolve both, falling back to
+      # existing DB values for anything not explicitly provided.
+      existing = get_existing_terminal_from_db(name)
+
+      has_terminal =
+        if has_terminal_explicit?,
+          do: Keyword.get(opts, :has_terminal),
+          else: (if terminal_meta_explicit?, do: true, else: elem(existing, 0))
+
+      terminal_meta =
+        if terminal_meta_explicit?,
+          do: Keyword.get(opts, :terminal_meta),
+          else: elem(existing, 1)
+
+      {has_terminal, terminal_meta}
+    else
+      # Neither field explicit — preserve existing DB values.
+      # For new sessions (no DB row), default to false/nil.
+      existing = get_existing_terminal_from_db(name)
+      existing
+    end
+  end
+
+  # Reads existing terminal state from the DB. Returns {false, nil}
+  # for unknown sessions (safe defaults for a new row).
+  @spec get_existing_terminal_from_db(session_name()) ::
+          {boolean(), map() | nil}
+  defp get_existing_terminal_from_db(name) do
+    case Repo.get_by(ChatSession, name: name) do
+      nil -> {false, nil}
+      session -> {session.has_terminal || false, session.terminal_meta}
+    end
+  end
+
+  defp normalize_terminal_meta(nil), do: nil
+
+  defp normalize_terminal_meta(meta) when is_map(meta) do
+    Map.new(meta, fn
+      {k, v} when is_binary(k) ->
+        {Map.get(@terminal_meta_whitelist, k, k), v}
+      {k, v} when is_atom(k) ->
+        {k, v}
+    end)
+  end
+
+  defp normalize_terminal_meta(meta), do: meta
 
   defp now_iso do
     DateTime.utc_now() |> DateTime.to_iso8601()

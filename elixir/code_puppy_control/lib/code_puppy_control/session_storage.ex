@@ -1,14 +1,44 @@
 defmodule CodePuppyControl.SessionStorage do
   @moduledoc """
-  File-based session CRUD, search, and export for Code Puppy.
+  Session CRUD, search, and export for Code Puppy with ETS caching,
+  Phoenix PubSub notifications, and disk crash-survivability.
 
-  All sessions stored as JSON under `~/.code_puppy_ex/sessions/`.
-  Never touches `~/.code_puppy/` — migration is via `SessionStorage.Migrator`.
+  ## Storage backends
+
+  When running inside the OTP supervision tree, this module delegates to
+  `SessionStorage.Store` which provides:
+
+    - **ETS hot cache** for O(1) reads
+    - **SQLite durable store** via `CodePuppyControl.Sessions`
+    - **PubSub events** on session mutations (saved, deleted, cleaned)
+    - **Terminal session recovery** after crashes
+
+  Outside the OTP app (e.g. standalone scripts), falls back to file-based
+  JSON storage via `SessionStorage.FileBackend`.
+
+  Never writes to `~/.code_puppy/` — migration is via `SessionStorage.Migrator`.
+
+  ## Crash-survivability
+
+  The write-through ordering (SQLite → ETS → PubSub) guarantees that a
+  crash mid-operation never leaves the cache ahead of disk. On restart,
+  the ETS cache is rebuilt from SQLite (see `SessionStorage.Store`).
+
+  ## Terminal session recovery
+
+  Sessions with active terminals are tracked in ETS with metadata
+  (cols, rows, shell). On crash recovery, `SessionStorage.TerminalRecovery`
+  attempts to recreate PTY sessions for tracked terminals.
+
+  (code_puppy-ctj.1): Port session_storage.py + session_storage_bridge.py
+  to Elixir with PubSub + ETS + disk crash-survivability.
   """
 
   require Logger
 
   alias CodePuppyControl.SessionStorage.Format
+  alias CodePuppyControl.SessionStorage.Store
+  alias CodePuppyControl.SessionStorage.FileBackend
 
   # ---------------------------------------------------------------------------
   # Types
@@ -44,24 +74,13 @@ defmodule CodePuppyControl.SessionStorage do
   @doc """
   Returns the base directory for Elixir session storage.
 
-  Defaults to `~/.code_puppy_ex/sessions/`. Override with `PUP_SESSION_DIR`
-  environment variable for testing or custom paths.
+  Delegates to `FileBackend.base_dir/0`.
   """
   @spec base_dir :: Path.t()
-  def base_dir do
-    raw =
-      case System.get_env("PUP_SESSION_DIR") do
-        nil -> "~/.code_puppy_ex/sessions"
-        dir -> dir
-      end
-
-    raw |> Path.expand() |> validate_storage_dir!()
-  end
+  defdelegate base_dir, to: FileBackend
 
   @doc """
   Ensures the session storage directory exists.
-
-  Creates `~/.code_puppy_ex/sessions/` (or `PUP_SESSION_DIR`) if missing.
   """
   @spec ensure_dir :: {:ok, Path.t()} | {:error, term()}
   def ensure_dir do
@@ -77,229 +96,37 @@ defmodule CodePuppyControl.SessionStorage do
   # CRUD Operations
   # ---------------------------------------------------------------------------
 
-  @doc "Saves a session (creates or updates).\n\nOptions: `:compacted_hashes`, `:total_tokens`, `:auto_saved`, `:timestamp`, `:base_dir`.\n"
+  @doc """
+  Saves a session (creates or updates).
+
+  When the OTP Store is running, delegates to Store for ETS caching +
+  PubSub notifications + SQLite persistence.
+  Falls back to file-based JSON storage otherwise.
+
+  Options: `:compacted_hashes`, `:total_tokens`, `:auto_saved`, `:timestamp`,
+  `:base_dir`, `:has_terminal`, `:terminal_meta`.
+  """
   @spec save_session(session_name(), history(), keyword()) ::
           {:ok, session_metadata()} | {:error, term()}
   def save_session(name, history, opts \\ []) do
-    dir = resolve_base_dir(opts)
-    compacted_hashes = Keyword.get(opts, :compacted_hashes, [])
-    total_tokens = Keyword.get(opts, :total_tokens, 0)
-    auto_saved = Keyword.get(opts, :auto_saved, false)
-    timestamp = Keyword.get(opts, :timestamp, now_iso())
-
-    with :ok <- File.mkdir_p(dir) do
-      paths = Format.build_paths(dir, name)
-      message_count = length(history)
-
-      payload = %{
-        "messages" => history,
-        "compacted_hashes" => compacted_hashes
-      }
-
-      metadata = %{
-        "session_name" => name,
-        "timestamp" => timestamp,
-        "message_count" => message_count,
-        "total_tokens" => total_tokens,
-        "auto_saved" => auto_saved
-      }
-
-      session_data = %{
-        "format" => Format.current_format(),
-        "payload" => payload,
-        "metadata" => metadata
-      }
-
-      with {:ok, session_tmp} <- write_tmp(paths.session_path, session_data),
-           {:ok, meta_tmp} <- write_tmp(paths.metadata_path, metadata) do
-        case rename_both(session_tmp, paths.session_path, meta_tmp, paths.metadata_path) do
-          :ok ->
-            {:ok,
-             %{
-               session_name: name,
-               timestamp: timestamp,
-               message_count: message_count,
-               total_tokens: total_tokens,
-               auto_saved: auto_saved
-             }}
-
-          {:error, reason} ->
-            _ = File.rm(session_tmp)
-            _ = File.rm(meta_tmp)
-            {:error, reason}
-        end
-      else
-        {:error, reason} -> {:error, reason}
-      end
+    if store_available?() and not Keyword.has_key?(opts, :base_dir) do
+      save_via_store(name, history, opts)
+    else
+      FileBackend.save_session(name, history, opts)
     end
   end
 
-  @doc "Loads session messages and compacted hashes. Options: `:base_dir`.\n"
-  @spec load_session(session_name(), keyword()) ::
-          {:ok, %{messages: history(), compacted_hashes: compacted_hashes()}}
-          | {:error, :not_found | term()}
-  def load_session(name, opts \\ []) do
-    dir = resolve_base_dir(opts)
-    paths = Format.build_paths(dir, name)
-
-    case File.read(paths.session_path) do
-      {:ok, raw} ->
-        case Jason.decode(raw) do
-          {:ok, %{"payload" => payload}} ->
-            messages = Map.get(payload, "messages", [])
-            hashes = Map.get(payload, "compacted_hashes", [])
-            {:ok, %{messages: messages, compacted_hashes: hashes}}
-
-          {:ok, data} when is_list(data) ->
-            # Legacy format: raw list of messages
-            {:ok, %{messages: data, compacted_hashes: []}}
-
-          {:ok, _other} ->
-            {:error, "Unexpected session data format"}
-
-          {:error, reason} ->
-            {:error, "JSON decode error: #{inspect(reason)}"}
-        end
-
-      {:error, :enoent} ->
-        {:error, :not_found}
-
-      {:error, reason} ->
-        {:error, reason}
-    end
-  end
-
-  @doc "Loads full session data including format and metadata. Options: `:base_dir`.\n"
-  @spec load_session_full(session_name(), keyword()) ::
-          {:ok, session_data()} | {:error, :not_found | term()}
-  def load_session_full(name, opts \\ []) do
-    dir = resolve_base_dir(opts)
-    paths = Format.build_paths(dir, name)
-
-    case File.read(paths.session_path) do
-      {:ok, raw} ->
-        case Jason.decode(raw) do
-          {:ok, data} -> {:ok, data}
-          {:error, reason} -> {:error, "JSON decode error: #{inspect(reason)}"}
-        end
-
-      {:error, :enoent} ->
-        {:error, :not_found}
-
-      {:error, reason} ->
-        {:error, reason}
-    end
-  end
-
-  @doc "Updates session metadata fields.\n\nOptions: `:auto_saved`, `:total_tokens`, `:timestamp`, `:base_dir`.\n"
-  @spec update_session(session_name(), keyword()) ::
-          {:ok, session_metadata()} | {:error, term()}
-  def update_session(name, opts \\ []) do
-    dir = resolve_base_dir(opts)
-    normalized = Format.normalize_name(name)
-
-    case load_session_full(normalized, base_dir: dir) do
-      {:ok, data} ->
-        metadata = Map.get(data, "metadata", %{})
-
-        updated_metadata =
-          metadata
-          |> maybe_put("auto_saved", Keyword.get(opts, :auto_saved))
-          |> maybe_put("total_tokens", Keyword.get(opts, :total_tokens))
-          |> maybe_put("timestamp", Keyword.get(opts, :timestamp))
-          |> Map.put("updated_at", now_iso())
-
-        updated_data = Map.put(data, "metadata", updated_metadata)
-
-        paths = Format.build_paths(dir, normalized)
-
-        with {:ok, session_tmp} <- write_tmp(paths.session_path, updated_data),
-             {:ok, meta_tmp} <- write_tmp(paths.metadata_path, updated_metadata) do
-          case rename_both(session_tmp, paths.session_path, meta_tmp, paths.metadata_path) do
-            :ok ->
-              {:ok, map_to_metadata(updated_metadata)}
-
-            {:error, reason} ->
-              _ = File.rm(session_tmp)
-              _ = File.rm(meta_tmp)
-              {:error, reason}
-          end
-        else
-          {:error, reason} -> {:error, reason}
-        end
-
-      {:error, :not_found} ->
-        {:error, :not_found}
-
-      {:error, reason} ->
-        {:error, reason}
-    end
-  end
-
-  @doc "Deletes a session by name (idempotent). Options: `:base_dir`.\n"
-  @spec delete_session(session_name(), keyword()) :: :ok | {:error, term()}
-  def delete_session(name, opts \\ []) do
-    dir = resolve_base_dir(opts)
-    paths = Format.build_paths(dir, name)
-
-    _ = File.rm(paths.session_path)
-    _ = File.rm(paths.metadata_path)
-
-    :ok
-  end
-
-  # ---------------------------------------------------------------------------
-  # Listing & Search
-  # ---------------------------------------------------------------------------
-
-  @doc "Lists all session names sorted alphabetically. Options: `:base_dir`.\n"
-  @spec list_sessions(keyword()) :: {:ok, [session_name()]} | {:error, term()}
-  def list_sessions(opts \\ []) do
-    dir = resolve_base_dir(opts)
-
-    case File.ls(dir) do
-      {:ok, files} ->
-        names =
-          files
-          |> Enum.filter(&String.ends_with?(&1, Format.session_ext()))
-          |> Enum.reject(&String.ends_with?(&1, Format.metadata_suffix()))
-          |> Enum.map(&Path.rootname(&1))
-          |> Enum.sort()
-
-        {:ok, names}
-
-      {:error, :enoent} ->
-        {:ok, []}
-
-      {:error, reason} ->
-        {:error, reason}
-    end
-  end
-
-  @doc "Lists sessions with metadata, sorted newest-first. Options: `:base_dir`.\n"
-  @spec list_sessions_with_metadata(keyword()) :: {:ok, [session_metadata()]} | {:error, term()}
-  def list_sessions_with_metadata(opts \\ []) do
-    dir = resolve_base_dir(opts)
-
-    case File.ls(dir) do
-      {:ok, files} ->
-        meta_files =
-          files
-          |> Enum.filter(&String.ends_with?(&1, Format.metadata_suffix()))
-
-        sessions =
-          meta_files
-          |> Enum.map(&load_metadata_file(Path.join(dir, &1)))
-          |> Enum.filter(&match?({:ok, _}, &1))
-          |> Enum.map(fn {:ok, meta} -> meta end)
-          |> Enum.sort_by(& &1.timestamp, :desc)
-
-        # newest first
-
-        {:ok, sessions}
-
-      {:error, :enoent} ->
-        {:ok, []}
+  defp save_via_store(name, history, opts) do
+    case Store.save_session(name, history, opts) do
+      {:ok, result} ->
+        {:ok,
+         %{
+           session_name: result.name,
+           timestamp: result[:timestamp] || now_iso(),
+           message_count: result.message_count,
+           total_tokens: result.total_tokens,
+           auto_saved: result[:auto_saved] || false
+         }}
 
       {:error, reason} ->
         {:error, reason}
@@ -307,43 +134,150 @@ defmodule CodePuppyControl.SessionStorage do
   end
 
   @doc """
+  Loads session messages and compacted hashes.
+
+  Uses ETS cache (via Store) when available, falls back to file-based.
+  Options: `:base_dir`.
+  """
+  @spec load_session(session_name(), keyword()) ::
+          {:ok, %{messages: history(), compacted_hashes: compacted_hashes()}}
+          | {:error, :not_found | term()}
+  def load_session(name, opts \\ []) do
+    if store_available?() and not Keyword.has_key?(opts, :base_dir) do
+      case Store.load_session(name) do
+        {:ok, %{history: history, compacted_hashes: hashes}} ->
+          {:ok, %{messages: history, compacted_hashes: hashes}}
+
+        {:error, reason} ->
+          {:error, reason}
+      end
+    else
+      FileBackend.load_session(name, opts)
+    end
+  end
+
+  @doc """
+  Loads full session data including format and metadata.
+
+  Uses ETS cache (via Store) when available, falls back to file-based.
+  Options: `:base_dir`.
+  """
+  @spec load_session_full(session_name(), keyword()) ::
+          {:ok, session_data()} | {:error, :not_found | term()}
+  def load_session_full(name, opts \\ []) do
+    if store_available?() and not Keyword.has_key?(opts, :base_dir) do
+      case Store.load_session_full(name) do
+        {:ok, entry} ->
+          {:ok,
+           %{
+             "format" => Format.current_format(),
+             "payload" => %{
+               "messages" => entry.history,
+               "compacted_hashes" => entry.compacted_hashes
+             },
+             "metadata" => %{
+               "session_name" => entry.name,
+               "timestamp" => entry.timestamp,
+               "message_count" => entry.message_count,
+               "total_tokens" => entry.total_tokens,
+               "auto_saved" => entry.auto_saved
+             }
+           }}
+
+        {:error, reason} ->
+          {:error, reason}
+      end
+    else
+      FileBackend.load_session_full(name, opts)
+    end
+  end
+
+  @doc """
+  Updates session metadata fields.
+
+  Options: `:auto_saved`, `:total_tokens`, `:timestamp`, `:base_dir`.
+  """
+  @spec update_session(session_name(), keyword()) ::
+          {:ok, session_metadata()} | {:error, term()}
+  def update_session(name, opts \\ []) do
+    FileBackend.update_session(name, opts)
+  end
+
+  @doc """
+  Deletes a session by name (idempotent).
+
+  When the Store is available, deletes from SQLite + ETS + PubSub.
+  Otherwise falls back to file-based deletion.
+  Options: `:base_dir`.
+  """
+  @spec delete_session(session_name(), keyword()) :: :ok | {:error, term()}
+  def delete_session(name, opts \\ []) do
+    if store_available?() and not Keyword.has_key?(opts, :base_dir) do
+      Store.delete_session(name)
+    else
+      FileBackend.delete_session(name, opts)
+    end
+  end
+
+  # ---------------------------------------------------------------------------
+  # Listing & Search
+  # ---------------------------------------------------------------------------
+
+  @doc """
+  Lists all session names sorted alphabetically.
+
+  When the Store is available, reads from ETS (no disk I/O).
+  Otherwise falls back to file-based listing.
+  Options: `:base_dir`.
+  """
+  @spec list_sessions(keyword()) :: {:ok, [session_name()]} | {:error, term()}
+  def list_sessions(opts \\ []) do
+    if store_available?() and not Keyword.has_key?(opts, :base_dir) do
+      Store.list_sessions()
+    else
+      FileBackend.list_sessions(opts)
+    end
+  end
+
+  @doc """
+  Lists sessions with metadata, sorted newest-first.
+
+  When the Store is available, reads from ETS.
+  Otherwise falls back to file-based listing.
+  Options: `:base_dir`.
+  """
+  @spec list_sessions_with_metadata(keyword()) :: {:ok, [session_metadata()]} | {:error, term()}
+  def list_sessions_with_metadata(opts \\ []) do
+    if store_available?() and not Keyword.has_key?(opts, :base_dir) do
+      case Store.list_sessions_with_metadata() do
+        {:ok, entries} -> {:ok, Enum.map(entries, &store_entry_to_metadata/1)}
+      end
+    else
+      FileBackend.list_sessions_with_metadata(opts)
+    end
+  end
+
+  @doc """
   Searches sessions by filters.
 
-  Options: `:name_pattern` (string/regex), `:auto_saved`, `:min_tokens`,
-  `:max_tokens`, `:since`, `:until` (ISO8601), `:base_dir`, `:limit` (default 100).
+  Options: `:name_pattern`, `:auto_saved`, `:min_tokens`, `:max_tokens`,
+  `:since`, `:until`, `:base_dir`, `:limit`.
   """
   @spec search_sessions(keyword()) :: {:ok, [session_metadata()]} | {:error, term()}
   def search_sessions(opts \\ []) do
-    limit = Keyword.get(opts, :limit, 100)
-    name_pattern = Keyword.get(opts, :name_pattern)
-    auto_saved = Keyword.get(opts, :auto_saved)
-    min_tokens = Keyword.get(opts, :min_tokens)
-    max_tokens = Keyword.get(opts, :max_tokens)
-    since = Keyword.get(opts, :since)
-    until = Keyword.get(opts, :until)
-
-    case list_sessions_with_metadata(opts) do
-      {:ok, sessions} ->
-        filtered =
-          sessions
-          |> filter_by_name(name_pattern)
-          |> filter_by_auto_saved(auto_saved)
-          |> filter_by_token_range(min_tokens, max_tokens)
-          |> filter_by_time_range(since, until)
-          |> Enum.take(limit)
-
-        {:ok, filtered}
-
-      {:error, reason} ->
-        {:error, reason}
-    end
+    FileBackend.search_sessions(opts)
   end
 
   # ---------------------------------------------------------------------------
   # Cleanup
   # ---------------------------------------------------------------------------
 
-  @doc "Cleans up old sessions, keeping only the most recent N. Options: `:base_dir`.\n"
+  @doc """
+  Cleans up old sessions, keeping only the most recent N.
+
+  When the Store is available, delegates for ETS + SQLite + PubSub.
+  Options: `:base_dir`.
+  """
   @spec cleanup_sessions(non_neg_integer(), keyword()) ::
           {:ok, [session_name()]} | {:error, term()}
   def cleanup_sessions(max_sessions, _opts \\ [])
@@ -351,18 +285,10 @@ defmodule CodePuppyControl.SessionStorage do
   def cleanup_sessions(max_sessions, _opts) when max_sessions <= 0, do: {:ok, []}
 
   def cleanup_sessions(max_sessions, opts) do
-    case list_sessions_with_metadata(opts) do
-      {:ok, sessions} ->
-        if length(sessions) <= max_sessions do
-          {:ok, []}
-        else
-          to_delete = Enum.drop(sessions, max_sessions)
-          deleted = delete_sessions(to_delete, opts)
-          {:ok, deleted}
-        end
-
-      {:error, reason} ->
-        {:error, reason}
+    if store_available?() and not Keyword.has_key?(opts, :base_dir) do
+      Store.cleanup_sessions(max_sessions)
+    else
+      FileBackend.cleanup_sessions(max_sessions, opts)
     end
   end
 
@@ -371,39 +297,21 @@ defmodule CodePuppyControl.SessionStorage do
   # ---------------------------------------------------------------------------
 
   @doc """
-  Exports a session to JSON.
-
-  Options: `:base_dir`, `:output_path` (write to file instead of returning string).
+  Exports a session to JSON. Options: `:base_dir`, `:output_path`.
   """
   @spec export_session(session_name(), keyword()) ::
           {:ok, String.t() | Path.t()} | {:error, term()}
   def export_session(name, opts \\ []) do
-    dir = resolve_base_dir(opts)
-
-    with {:ok, data} <- load_session_full(name, base_dir: dir) do
-      json = Jason.encode!(data, pretty: true)
-      write_or_return(json, Keyword.get(opts, :output_path))
-    end
+    FileBackend.export_session(name, opts)
   end
 
   @doc """
-  Exports all sessions as a JSON array.
-
-  Options: `:base_dir`, `:output_path` (write to file instead of returning string).
+  Exports all sessions as a JSON array. Options: `:base_dir`, `:output_path`.
   """
   @spec export_all_sessions(keyword()) ::
           {:ok, String.t() | Path.t()} | {:error, term()}
   def export_all_sessions(opts \\ []) do
-    with {:ok, names} <- list_sessions(opts) do
-      sessions =
-        names
-        |> Enum.map(&load_session_full(&1, opts))
-        |> Enum.filter(&match?({:ok, _}, &1))
-        |> Enum.map(fn {:ok, data} -> data end)
-
-      json = Jason.encode!(sessions, pretty: true)
-      write_or_return(json, Keyword.get(opts, :output_path))
-    end
+    FileBackend.export_all_sessions(opts)
   end
 
   # ---------------------------------------------------------------------------
@@ -414,29 +322,13 @@ defmodule CodePuppyControl.SessionStorage do
   Non-blocking version of `save_session/3`. Snapshots history immediately,
   submits the save to a background Task, and returns `:ok`.
 
-  Errors during the background save are logged but not raised — matches
-  Python's ThreadPoolExecutor pattern.
-
-  Uses `Task.start/1` (fire-and-forget) because `CodePuppyControl.TaskSupervisor`
-  is not currently in the app supervision tree. When/if a TaskSupervisor is added,
-  this should migrate to `Task.Supervisor.start_child/2` for proper supervision.
-
-  ## Options
-
-  Same as `save_session/3`.
+  Same options as `save_session/3`.
   """
   @spec save_session_async(session_name(), history(), keyword()) :: :ok
   def save_session_async(name, history, opts \\ []) do
-    # History is already immutable in Elixir — no list() snapshot needed
-    # unlike Python. The variable binding captures the current value.
     history_snapshot = history
 
-    # (code_puppy-dku) Lazy base_dir resolution: Keyword.fetch/2 avoids
-    # eagerly calling base_dir() when :base_dir is present in opts.
-    # safe_resolve_base_dir/1 also catches errors from base_dir()/0,
-    # preserving the fire-and-forget contract — errors are logged, not
-    # raised synchronously.
-    case safe_resolve_base_dir(opts) do
+    case FileBackend.safe_resolve_base_dir(opts) do
       {:ok, dir} ->
         opts_with_dir = Keyword.put(opts, :base_dir, dir)
 
@@ -463,9 +355,7 @@ defmodule CodePuppyControl.SessionStorage do
   end
 
   @doc """
-  Returns `true` if the autosave should be skipped — either because the
-  history is unchanged since the last save, or because the debounce
-  window (2 seconds) has not elapsed.
+  Returns `true` if the autosave should be skipped.
 
   Delegates to `CodePuppyControl.SessionStorage.AutosaveTracker`.
   """
@@ -475,8 +365,7 @@ defmodule CodePuppyControl.SessionStorage do
   end
 
   @doc """
-  Records that an autosave has completed. Updates the debounce state
-  with the history fingerprint and current timestamp.
+  Records that an autosave has completed.
 
   Delegates to `CodePuppyControl.SessionStorage.AutosaveTracker`.
   """
@@ -486,23 +375,125 @@ defmodule CodePuppyControl.SessionStorage do
   end
 
   # ---------------------------------------------------------------------------
+  # Terminal Session Tracking (code_puppy-ctj.1)
+  # ---------------------------------------------------------------------------
+
+  @doc """
+  Registers a terminal session for crash recovery tracking.
+
+  When a PTY terminal is attached to a session, this records the terminal
+  metadata so that on crash/restart, `SessionStorage.TerminalRecovery`
+  can attempt to recreate the PTY session.
+
+  Durably persists to SQLite — terminal metadata survives node crashes.
+  Returns `{:error, :session_not_found}` if the session does not exist.
+  """
+  @spec register_terminal(session_name(), map()) :: :ok | {:error, term()}
+  def register_terminal(session_name, meta) do
+    if store_available?() do
+      Store.register_terminal(session_name, meta)
+    else
+      {:error, :store_not_available}
+    end
+  end
+
+  @doc """
+  Unregisters a terminal session from crash recovery tracking.
+
+  Called when a terminal session is closed gracefully.
+  Durably clears terminal metadata from SQLite.
+  Returns `{:error, :session_not_found}` if the session does not exist.
+  """
+  @spec unregister_terminal(session_name()) :: :ok | {:error, term()}
+  def unregister_terminal(session_name) do
+    if store_available?() do
+      Store.unregister_terminal(session_name)
+    else
+      {:error, :store_not_available}
+    end
+  end
+
+  @doc """
+  Lists all tracked terminal sessions (for crash recovery diagnostics).
+
+  Returns an empty list if the Store is not running.
+  """
+  @spec list_terminal_sessions() :: [map()]
+  def list_terminal_sessions do
+    if store_available?() do
+      Store.list_terminal_sessions()
+    else
+      []
+    end
+  end
+
+  @doc """
+  Subscribes the calling process to session lifecycle events via PubSub.
+
+  Events: `{:session_saved, name, metadata}`, `{:session_deleted, name}`,
+  `{:sessions_cleaned, deleted_names}`.
+
+  No-op if the Store is not running.
+  """
+  @spec subscribe_sessions() :: :ok | {:error, term()}
+  def subscribe_sessions do
+    if store_available?() do
+      Store.subscribe_sessions()
+    else
+      :ok
+    end
+  end
+
+  @doc """
+  Subscribes the calling process to terminal recovery events via PubSub.
+
+  Events: `{:terminal_recovered, session_id, meta}`,
+  `{:terminal_recovery_failed, session_id, reason}`,
+  `{:terminal_registered, session_id}`,
+  `{:terminal_unregistered, session_id}`.
+
+  No-op if the Store is not running.
+  """
+  @spec subscribe_terminal() :: :ok | {:error, term()}
+  def subscribe_terminal do
+    if store_available?() do
+      Store.subscribe_terminal()
+    else
+      :ok
+    end
+  end
+
+  # ---------------------------------------------------------------------------
   # Utility
   # ---------------------------------------------------------------------------
 
-  @doc "Checks if a session exists. Options: `:base_dir`.\n"
+  @doc """
+  Checks if a session exists.
+
+  When the Store is available, checks ETS (O(1), no disk I/O).
+  Options: `:base_dir`.
+  """
   @spec session_exists?(session_name(), keyword()) :: boolean()
   def session_exists?(name, opts \\ []) do
-    dir = resolve_base_dir(opts)
-    paths = Format.build_paths(dir, name)
-    File.exists?(paths.session_path)
+    if store_available?() and not Keyword.has_key?(opts, :base_dir) do
+      Store.session_exists?(name)
+    else
+      FileBackend.session_exists?(name, opts)
+    end
   end
 
-  @doc "Returns the count of stored sessions. Options: `:base_dir`.\n"
+  @doc """
+  Returns the count of stored sessions.
+
+  When the Store is available, reads from ETS.
+  Options: `:base_dir`.
+  """
   @spec count_sessions(keyword()) :: non_neg_integer()
   def count_sessions(opts \\ []) do
-    case list_sessions(opts) do
-      {:ok, names} -> length(names)
-      {:error, _} -> 0
+    if store_available?() and not Keyword.has_key?(opts, :base_dir) do
+      Store.count_sessions()
+    else
+      FileBackend.count_sessions(opts)
     end
   end
 
@@ -510,189 +501,23 @@ defmodule CodePuppyControl.SessionStorage do
   # Private Helpers
   # ---------------------------------------------------------------------------
 
-  # (code_puppy-dku) Lazy base_dir resolution.  Keyword.get/3 eagerly
-  # evaluates its default argument even when the key is present, so
-  # `Keyword.get(opts, :base_dir, base_dir())` would call base_dir()/0
-  # on every invocation — including cases where the env is invalid,
-  # causing synchronous raises.  Keyword.fetch/2 only evaluates the
-  # fallback when the key is absent.
-  @spec resolve_base_dir(keyword()) :: Path.t()
-  defp resolve_base_dir(opts) do
-    case Keyword.fetch(opts, :base_dir) do
-      {:ok, dir} -> dir
-      :error -> base_dir()
-    end
+  @spec store_available?() :: boolean()
+  defp store_available? do
+    Process.whereis(Store) != nil
   end
 
-  # (code_puppy-dku) Safe variant for fire-and-forget callers.
-  # Catches errors from base_dir()/0 so that invalid env does not
-  # propagate as a synchronous exception.
-  @spec safe_resolve_base_dir(keyword()) :: {:ok, Path.t()} | {:error, term()}
-  defp safe_resolve_base_dir(opts) do
-    case Keyword.fetch(opts, :base_dir) do
-      {:ok, dir} ->
-        {:ok, dir}
-
-      :error ->
-        try do
-          {:ok, base_dir()}
-        rescue
-          e -> {:error, e}
-        end
-    end
+  @spec store_entry_to_metadata(map()) :: session_metadata()
+  defp store_entry_to_metadata(entry) do
+    %{
+      session_name: entry.name,
+      timestamp: entry.timestamp,
+      message_count: entry.message_count,
+      total_tokens: entry.total_tokens,
+      auto_saved: entry.auto_saved
+    }
   end
 
   defp now_iso do
     DateTime.utc_now() |> DateTime.to_iso8601()
-  end
-
-  defp validate_storage_dir!(dir) do
-    canonical = Path.expand(dir)
-    ex_home = Path.expand("~/.code_puppy_ex")
-
-    # PUP_TEST_SESSION_ROOT: test-only alternative root. Only honoured
-    # when the :allow_test_session_root Application env is set (configured
-    # exclusively in test.exs).  This prevents production from expanding
-    # allowed roots via env var.  (code_puppy-dku)
-    test_root =
-      if Application.get_env(:code_puppy_control, :allow_test_session_root, false) do
-        System.get_env("PUP_TEST_SESSION_ROOT")
-      end
-
-    allowed_roots = [ex_home] ++ if(test_root, do: [test_root], else: [])
-
-    # Canonicalize each allowed root and perform a path-boundary check
-    # (not raw String.starts_with?/2) to prevent prefix/sibling escapes
-    # e.g. /tmp/root2 matching /tmp/root.  (code_puppy-dku)
-    unless Enum.any?(allowed_roots, &path_under_root?(canonical, &1)) do
-      raise ArgumentError,
-            "Storage dir #{inspect(dir)} is outside ~/.code_puppy_ex/"
-    end
-
-    canonical
-  end
-
-  # Returns true if `path` is equal to or a proper descendant of `root`.
-  # Uses Path.split/1 + segment comparison to avoid prefix/sibling escapes
-  # where e.g. "/tmp/root2" would match String.starts_with?("/tmp/root").
-  # Both arguments MUST be pre-expanded (via Path.expand/1).  (code_puppy-dku)
-  @spec path_under_root?(Path.t(), Path.t()) :: boolean()
-  defp path_under_root?(path, root) do
-    path_segments = Path.split(path)
-    root_segments = Path.split(root)
-
-    length(path_segments) >= length(root_segments) and
-      Enum.take(path_segments, length(root_segments)) == root_segments
-  end
-
-  defp write_tmp(path, data) do
-    json = Jason.encode!(data, pretty: true)
-    tmp_path = path <> ".tmp.#{:erlang.unique_integer([:positive])}"
-
-    case File.write(tmp_path, json) do
-      :ok -> {:ok, tmp_path}
-      {:error, reason} -> {:error, reason}
-    end
-  end
-
-  defp rename_both(session_tmp, session_path, meta_tmp, meta_path) do
-    case File.rename(session_tmp, session_path) do
-      :ok ->
-        case File.rename(meta_tmp, meta_path) do
-          :ok ->
-            :ok
-
-          {:error, reason} ->
-            # Roll back the first rename
-            _ = File.rename(session_path, session_tmp)
-            {:error, reason}
-        end
-
-      {:error, reason} ->
-        {:error, reason}
-    end
-  end
-
-  defp load_metadata_file(path) do
-    case File.read(path) do
-      {:ok, raw} ->
-        case Jason.decode(raw) do
-          {:ok, data} -> {:ok, map_to_metadata(data)}
-          {:error, reason} -> {:error, reason}
-        end
-
-      {:error, reason} ->
-        {:error, reason}
-    end
-  end
-
-  defp map_to_metadata(data) when is_map(data) do
-    %{
-      session_name: Map.get(data, "session_name", Map.get(data, "name", "")),
-      timestamp: Map.get(data, "timestamp", ""),
-      message_count: Map.get(data, "message_count", 0),
-      total_tokens: Map.get(data, "total_tokens", 0),
-      auto_saved: Map.get(data, "auto_saved", false)
-    }
-  end
-
-  defp maybe_put(map, _key, nil), do: map
-  defp maybe_put(map, key, value), do: Map.put(map, key, value)
-
-  # Search filter helpers
-
-  defp filter_by_name(sessions, nil), do: sessions
-
-  defp filter_by_name(sessions, pattern) when is_binary(pattern) do
-    case Regex.compile(pattern, "i") do
-      {:ok, regex} -> filter_by_name(sessions, regex)
-      {:error, _} -> sessions
-    end
-  end
-
-  defp filter_by_name(sessions, %Regex{} = regex) do
-    Enum.filter(sessions, fn meta ->
-      Regex.match?(regex, meta.session_name)
-    end)
-  end
-
-  defp filter_by_auto_saved(sessions, nil), do: sessions
-
-  defp filter_by_auto_saved(sessions, flag) when is_boolean(flag) do
-    Enum.filter(sessions, &(&1.auto_saved == flag))
-  end
-
-  defp filter_by_token_range(sessions, nil, nil), do: sessions
-
-  defp filter_by_token_range(sessions, min, max) do
-    Enum.filter(sessions, fn meta ->
-      tokens = meta.total_tokens
-      (is_nil(min) or tokens >= min) and (is_nil(max) or tokens <= max)
-    end)
-  end
-
-  defp filter_by_time_range(sessions, nil, nil), do: sessions
-
-  defp filter_by_time_range(sessions, since, until) do
-    Enum.filter(sessions, fn meta ->
-      ts = meta.timestamp
-      (is_nil(since) or ts >= since) and (is_nil(until) or ts <= until)
-    end)
-  end
-
-  defp delete_sessions(sessions, opts) do
-    Enum.map(sessions, fn meta ->
-      _ = delete_session(meta.session_name, opts)
-      meta.session_name
-    end)
-  end
-
-  defp write_or_return(json, nil), do: {:ok, json}
-
-  defp write_or_return(json, path) do
-    with :ok <- File.mkdir_p(Path.dirname(path)),
-         :ok <- File.write(path, json) do
-      {:ok, path}
-    end
   end
 end
