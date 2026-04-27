@@ -419,8 +419,24 @@ defmodule CodePuppyControl.Tools.UniversalConstructor.Registry do
     end
   end
 
+  # Known safe function-name atoms used as fallback candidates.
+  # Only :run and :execute are ever atomized; user-controlled tool_name
+  # is matched via String.to_existing_atom/1 (bounded) to avoid atom-table
+  # exhaustion (code_puppy-mmk.2).
+  @safe_fallback_atoms [:run, :execute]
+
   defp find_main_function_name(module, tool_name) when is_atom(module) do
-    candidates = [String.to_atom(tool_name), :run, :execute]
+    # Try String.to_existing_atom first — this only succeeds if the atom
+    # already exists in the table (e.g. from compilation).  If the tool_name
+    # has never been atomized, this raises and we skip to fallbacks.
+    tool_atom =
+      try do
+        String.to_existing_atom(tool_name)
+      rescue
+        ArgumentError -> nil
+      end
+
+    candidates = if tool_atom, do: [tool_atom | @safe_fallback_atoms], else: @safe_fallback_atoms
 
     Enum.find_value(candidates, fn name ->
       if function_exported?(module, name, 1) do

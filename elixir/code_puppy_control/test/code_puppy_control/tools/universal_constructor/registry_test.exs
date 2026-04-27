@@ -274,4 +274,38 @@ defmodule CodePuppyControl.Tools.UniversalConstructor.RegistryTest do
       assert length(tools) == 0
     end
   end
+
+  # ==========================================================================
+  # Atom Safety Regression Tests (code_puppy-mmk.2)
+  # ==========================================================================
+  describe "atom safety (code_puppy-mmk.2)" do
+    test "find_main_function_name does not create new atoms for arbitrary names" do
+      # A unique name that has never been an atom
+      unique_name = "never_atom_#{:erlang.unique_integer([:positive])}"
+
+      # Verify it's not already an atom
+      assert_raise ArgumentError, fn -> String.to_existing_atom(unique_name) end
+
+      # Create a simple compiled module to test against
+      code = """
+      defmodule AtomSafetyTestTool do
+        @uc_tool %{name: "atom_safety", description: "Test"}
+        def run(_), do: :ok
+      end
+      """
+
+      File.write!(Path.join(@test_dir, "atom_safety.ex"), code)
+      Registry.reload()
+
+      # The registry uses find_main_function_name internally; no new atoms
+      # should be created for the unique_name when looking up a tool.
+      # (We can't directly call the private function, but we verify that
+      # getting a non-existent tool function doesn't create atoms.)
+      result = Registry.get_tool_function(unique_name)
+      assert result == nil
+
+      # Verify the atom was NOT created
+      assert_raise ArgumentError, fn -> String.to_existing_atom(unique_name) end
+    end
+  end
 end

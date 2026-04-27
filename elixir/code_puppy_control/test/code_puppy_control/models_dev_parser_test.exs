@@ -12,8 +12,6 @@ defmodule CodePuppyControl.ModelsDevParserTest do
   # Test Data
   # ============================================================================
 
-  @test_json_path Path.join(__DIR__, "../support/models_dev_parser_test_data.json")
-
   defp test_provider_data do
     %{
       "id" => "test-provider",
@@ -126,34 +124,44 @@ defmodule CodePuppyControl.ModelsDevParserTest do
   # Setup
   # ============================================================================
 
-  defp write_test_data do
+  defp write_test_data(temp_path) do
     test_data = %{
       "test-provider" => test_provider_data(),
       "another-provider" => another_provider_data()
     }
 
-    File.mkdir_p!(Path.dirname(@test_json_path))
-    File.write!(@test_json_path, Jason.encode!(test_data))
+    File.mkdir_p!(Path.dirname(temp_path))
+    File.write!(temp_path, Jason.encode!(test_data))
   end
 
-  # FIX: Use unique names per test instance to avoid GenServer naming collisions
+  # FIX (code_puppy-mmk.2): Use temp files instead of writing to the shared
+  # fixture, preventing test pollution of models_dev_parser_test_data.json.
   setup do
-    # Write fresh test data for each test
-    write_test_data()
+    # Create a per-test temp file so we never modify the repo fixture
+    temp_path =
+      Path.join(
+        System.tmp_dir!(),
+        "models_dev_parser_test_#{:erlang.unique_integer([:positive])}.json"
+      )
+
+    write_test_data(temp_path)
 
     # Generate unique name for this test instance
     name = :"test_registry_#{:erlang.unique_integer([:positive])}"
 
-    {:ok, pid} = Registry.start_link(json_path: @test_json_path, name: name)
+    {:ok, pid} = Registry.start_link(json_path: temp_path, name: name)
 
     on_exit(fn ->
       # Ensure registry is stopped
       if Process.alive?(pid) do
         GenServer.stop(pid)
       end
+
+      # Clean up temp file
+      File.rm(temp_path)
     end)
 
-    {:ok, %{registry: pid}}
+    {:ok, %{registry: pid, temp_path: temp_path}}
   end
 
   # ============================================================================
@@ -482,7 +490,10 @@ defmodule CodePuppyControl.ModelsDevParserTest do
       assert config["metadata"]["open_weights"] == false
     end
 
-    test "to_config/2 with known provider uses type mapping", %{registry: _setup_registry} do
+    test "to_config/2 with known provider uses type mapping", %{
+      registry: _setup_registry,
+      temp_path: temp_path
+    } do
       # Create a provider with a known ID from the mapping
       provider_data = %{
         "anthropic" => %{
@@ -502,11 +513,11 @@ defmodule CodePuppyControl.ModelsDevParserTest do
         }
       }
 
-      File.write!(@test_json_path, Jason.encode!(provider_data))
+      File.write!(temp_path, Jason.encode!(provider_data))
 
       # Start registry with new data using a unique name
       name = :"mapping_test_registry_#{:erlang.unique_integer([:positive])}"
-      {:ok, new_registry} = Registry.start_link(json_path: @test_json_path, name: name)
+      {:ok, new_registry} = Registry.start_link(json_path: temp_path, name: name)
 
       model = Registry.get_model(new_registry, "anthropic", "claude-3-opus")
       assert model != nil
@@ -537,7 +548,10 @@ defmodule CodePuppyControl.ModelsDevParserTest do
   # ============================================================================
 
   describe "error handling" do
-    test "handles missing provider fields gracefully", %{registry: _setup_registry} do
+    test "handles missing provider fields gracefully", %{
+      registry: _setup_registry,
+      temp_path: temp_path
+    } do
       bad_data = %{
         "bad-provider" => %{
           # Missing "name" and "env"
@@ -545,9 +559,9 @@ defmodule CodePuppyControl.ModelsDevParserTest do
         }
       }
 
-      File.write!(@test_json_path, Jason.encode!(bad_data))
+      File.write!(temp_path, Jason.encode!(bad_data))
       name = :"bad_provider_test_#{:erlang.unique_integer([:positive])}"
-      {:ok, registry} = Registry.start_link(json_path: @test_json_path, name: name)
+      {:ok, registry} = Registry.start_link(json_path: temp_path, name: name)
 
       # Should have 0 providers since the only one was malformed
       assert Registry.get_providers(registry) == []
@@ -555,7 +569,10 @@ defmodule CodePuppyControl.ModelsDevParserTest do
       GenServer.stop(registry)
     end
 
-    test "handles missing model name gracefully", %{registry: _setup_registry} do
+    test "handles missing model name gracefully", %{
+      registry: _setup_registry,
+      temp_path: temp_path
+    } do
       bad_data = %{
         "test-provider" => %{
           "id" => "test-provider",
@@ -574,9 +591,9 @@ defmodule CodePuppyControl.ModelsDevParserTest do
         }
       }
 
-      File.write!(@test_json_path, Jason.encode!(bad_data))
+      File.write!(temp_path, Jason.encode!(bad_data))
       name = :"bad_model_test_#{:erlang.unique_integer([:positive])}"
-      {:ok, registry} = Registry.start_link(json_path: @test_json_path, name: name)
+      {:ok, registry} = Registry.start_link(json_path: temp_path, name: name)
 
       # Should have 1 model (the good one)
       models = Registry.get_models(registry)
@@ -586,7 +603,10 @@ defmodule CodePuppyControl.ModelsDevParserTest do
       GenServer.stop(registry)
     end
 
-    test "handles negative context length gracefully", %{registry: _setup_registry} do
+    test "handles negative context length gracefully", %{
+      registry: _setup_registry,
+      temp_path: temp_path
+    } do
       bad_data = %{
         "test-provider" => %{
           "id" => "test-provider",
@@ -604,9 +624,9 @@ defmodule CodePuppyControl.ModelsDevParserTest do
         }
       }
 
-      File.write!(@test_json_path, Jason.encode!(bad_data))
+      File.write!(temp_path, Jason.encode!(bad_data))
       name = :"neg_context_test_#{:erlang.unique_integer([:positive])}"
-      {:ok, registry} = Registry.start_link(json_path: @test_json_path, name: name)
+      {:ok, registry} = Registry.start_link(json_path: temp_path, name: name)
 
       # Model should be skipped due to negative context
       assert Registry.get_models(registry) == []
