@@ -27,6 +27,22 @@ defmodule CodePuppyControl.Tools.CpFileOps do
   Refs: code_puppy-4s8.7 (Phase C CI gate), code_puppy-mmk.1 (Phase E)
   """
 
+  alias CodePuppyControl.FileOps.Security
+
+  @doc """
+  Validates `path` against `Security.validate_path/2` and returns
+  `:ok` or `{:deny, reason}` for use in `permission_check/2` implementations.
+
+  Deduplicates the common pattern shared across all three submodules.
+  """
+  @spec validate_path_for_permission(String.t(), String.t()) :: :ok | {:deny, String.t()}
+  def validate_path_for_permission(path, operation) do
+    case Security.validate_path(path, operation) do
+      {:ok, _} -> :ok
+      {:error, reason} -> {:deny, reason}
+    end
+  end
+
   defmodule CpListFiles do
     @moduledoc """
     Lists files and directories within a project.
@@ -39,8 +55,6 @@ defmodule CodePuppyControl.Tools.CpFileOps do
     """
 
     use CodePuppyControl.Tool
-
-    alias CodePuppyControl.FileOps.Security
 
     @impl true
     def name, do: :cp_list_files
@@ -72,12 +86,10 @@ defmodule CodePuppyControl.Tools.CpFileOps do
 
     @impl true
     def permission_check(args, _context) do
-      directory = Map.get(args, "directory", ".")
-
-      case Security.validate_path(directory, "list") do
-        {:ok, _} -> :ok
-        {:error, reason} -> {:deny, reason}
-      end
+      CodePuppyControl.Tools.CpFileOps.validate_path_for_permission(
+        Map.get(args, "directory", "."),
+        "list"
+      )
     end
 
     @impl true
@@ -104,8 +116,6 @@ defmodule CodePuppyControl.Tools.CpFileOps do
     """
 
     use CodePuppyControl.Tool
-
-    alias CodePuppyControl.FileOps.Security
 
     @impl true
     def name, do: :cp_read_file
@@ -141,12 +151,10 @@ defmodule CodePuppyControl.Tools.CpFileOps do
 
     @impl true
     def permission_check(args, _context) do
-      path = Map.get(args, "file_path", "")
-
-      case Security.validate_path(path, "read") do
-        {:ok, _} -> :ok
-        {:error, reason} -> {:deny, reason}
-      end
+      CodePuppyControl.Tools.CpFileOps.validate_path_for_permission(
+        Map.get(args, "file_path", ""),
+        "read"
+      )
     end
 
     @impl true
@@ -181,8 +189,6 @@ defmodule CodePuppyControl.Tools.CpFileOps do
 
     use CodePuppyControl.Tool
 
-    alias CodePuppyControl.FileOps.Security
-
     @impl true
     def name, do: :cp_grep
 
@@ -213,12 +219,10 @@ defmodule CodePuppyControl.Tools.CpFileOps do
 
     @impl true
     def permission_check(args, _context) do
-      directory = Map.get(args, "directory", ".")
-
-      case Security.validate_path(directory, "search") do
-        {:ok, _} -> :ok
-        {:error, reason} -> {:deny, reason}
-      end
+      CodePuppyControl.Tools.CpFileOps.validate_path_for_permission(
+        Map.get(args, "directory", "."),
+        "search"
+      )
     end
 
     @impl true
