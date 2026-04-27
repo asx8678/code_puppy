@@ -8,19 +8,46 @@ defmodule CodePuppyControl.Tools.Skills do
   - `activate_skill` — Activate a skill by loading its full SKILL.md instructions
 
   Skills are discovered from configured skill directories (typically
-  `~/.code_puppy/skills/` and `./skills/`). Each skill must have a SKILL.md file.
+  `~/.code_puppy_ex/skills/` and `./skills/`). Each skill must have a SKILL.md file.
 
   ## Design
 
-  This is a lightweight port — it scans the filesystem for SKILL.md files
-  and returns their metadata. The full Python skill system (plugins, discovery,
-  metadata parsing) is out of scope for this port.
+  This module ports behavior from `code_puppy/tools/skills_tools.py`. It
+  respects the `skills_enabled` config flag and `disabled_skills` list, emits
+  events via `EventBus`, and returns output shapes matching the Python
+  `SkillListOutput` / `SkillActivateOutput` contracts (with `error` field).
+
+  ## Config keys in `puppy.cfg`
+
+  - `skills_enabled` — master toggle (default `true`)
+  - `disabled_skills` — comma-separated list of skill names to exclude
   """
 
   require Logger
 
   alias CodePuppyControl.Config.Paths
   alias CodePuppyControl.Tool.Registry
+
+  # ── Config helpers ─────────────────────────────────────────────────────
+
+  @doc "Returns true if skills integration is enabled (default true)."
+  @spec skills_enabled?() :: boolean()
+  def skills_enabled?, do: CodePuppyControl.Config.Debug.skills_enabled?()
+
+  @doc "Returns the list of disabled skill names from config."
+  @spec disabled_skills() :: [String.t()]
+  def disabled_skills do
+    case CodePuppyControl.Config.Loader.get_value("disabled_skills") do
+      nil -> []
+      "" -> []
+      val when is_binary(val) ->
+        val
+        |> String.split(",", trim: true)
+        |> Enum.map(&String.trim/1)
+        |> Enum.reject(&(&1 == ""))
+      _ -> []
+    end
+  end
 
   defmodule ListSkills do
     @moduledoc "List available skills, optionally filtered by search query."
@@ -55,19 +82,68 @@ defmodule CodePuppyControl.Tools.Skills do
     @impl true
     def invoke(args, _context) do
       query = Map.get(args, "query")
+
+      # Check if skills are enabled (matches Python behavior)
+      unless CodePuppyControl.Tools.Skills.skills_enabled?() do
+        {:ok,
+         %{
+           skills: [],
+           total_count: 0,
+           query: query,
+           error: "Skills integration is disabled. Enable it with /set skills_enabled=true"
+         }}
+      else
+        do_invoke(query)
+      end
+    end
+
+    defp do_invoke(query) do
+      disabled = CodePuppyControl.Tools.Skills.disabled_skills()
       skill_dirs = get_skill_dirs()
 
-      skills =
-        skill_dirs
-        |> discover_skills()
-        |> filter_skills(query)
+      try do
+        skills =
+          skill_dirs
+          |> discover_skills()
+          |> Enum.reject(fn skill -> skill.name in disabled end)
+          |> filter_skills(query)
 
-      {:ok,
-       %{
-         skills: skills,
-         total_count: length(skills),
-         query: query
-       }}
+        # Emit event via EventBus
+        emit_list_event(skills, query)
+
+        {:ok,
+         %{
+           skills: skills,
+           total_count: length(skills),
+           query: query,
+           error: nil
+         }}
+      rescue
+        e ->
+          Logger.error("Failed to discover skills: #{inspect(e)}")
+
+          {:ok,
+           %{
+             skills: [],
+             total_count: 0,
+             query: query,
+             error: "Failed to discover skills: #{Exception.message(e)}"
+           }}
+      end
+    end
+
+    defp emit_list_event(skills, query) do
+      event = %{
+        type: "tool_output",
+        tool: "list_skills",
+        data: %{
+          skills: Enum.map(skills, &Map.take(&1, [:name, :description, :path, :tags])),
+          query: query,
+          total_count: length(skills)
+        }
+      }
+
+      CodePuppyControl.EventBus.broadcast_event(event)
     end
 
     defp get_skill_dirs do
@@ -104,11 +180,14 @@ defmodule CodePuppyControl.Tools.Skills do
             name: Path.basename(skill_dir),
             description: extract_description(content),
             path: skill_dir,
-            tags: extract_tags(content)
+            tags: extract_tags(content),
+            version: extract_version(content),
+            author: extract_author(content)
           }
 
         {:error, _} ->
-          %{name: Path.basename(skill_dir), description: "", path: skill_dir, tags: []}
+          %{name: Path.basename(skill_dir), description: "", path: skill_dir, tags: [],
+            version: nil, author: nil}
       end
     end
 
@@ -133,6 +212,20 @@ defmodule CodePuppyControl.Tools.Skills do
 
         _ ->
           []
+      end
+    end
+
+    defp extract_version(content) do
+      case Regex.run(~r/version:\s*"?([^"\n]+)"?/, content) do
+        [_, version] -> String.trim(version)
+        _ -> nil
+      end
+    end
+
+    defp extract_author(content) do
+      case Regex.run(~r/author:\s*"?([^"\n]+)"?/, content) do
+        [_, author] -> String.trim(author)
+        _ -> nil
       end
     end
 
@@ -182,14 +275,28 @@ defmodule CodePuppyControl.Tools.Skills do
     def invoke(args, _context) do
       skill_name = Map.get(args, "skill_name", "")
 
+      # Check if skills are enabled (matches Python behavior)
+      unless CodePuppyControl.Tools.Skills.skills_enabled?() do
+        {:error, "Skills integration is disabled. Enable it with /set skills_enabled=true"}
+      else
+        do_invoke(skill_name)
+      end
+    end
+
+    defp do_invoke(skill_name) do
       case find_skill(skill_name) do
         {:ok, skill_path, content, resources} ->
+          # Emit activation event
+          content_preview = String.slice(content, 0, 200)
+          emit_activate_event(skill_name, skill_path, content_preview, length(resources))
+
           {:ok,
            %{
              skill_name: skill_name,
              content: content,
              resources: resources,
-             skill_path: skill_path
+             skill_path: skill_path,
+             error: nil
            }}
 
         {:error, reason} ->
@@ -197,10 +304,26 @@ defmodule CodePuppyControl.Tools.Skills do
       end
     end
 
+    defp emit_activate_event(skill_name, skill_path, content_preview, resource_count) do
+      event = %{
+        type: "tool_output",
+        tool: "activate_skill",
+        data: %{
+          skill_name: skill_name,
+          skill_path: skill_path,
+          content_preview: content_preview,
+          resource_count: resource_count,
+          success: true
+        }
+      }
+
+      CodePuppyControl.EventBus.broadcast_event(event)
+    end
+
     defp find_skill(skill_name) do
       skill_dirs = get_skill_dirs()
 
-      Enum.reduce_while(skill_dirs, {:error, "Skill '#{skill_name}' not found"}, fn dir, acc ->
+      Enum.reduce_while(skill_dirs, {:error, "Skill '#{skill_name}' not found. Use list_skills to see available skills."}, fn dir, acc ->
         skill_dir = Path.join(dir, skill_name)
         skill_md = Path.join(skill_dir, "SKILL.md")
 
