@@ -10,7 +10,21 @@ defmodule CodePuppyControl.Tools.CpFileOps do
   internal tool module names, matching the naming convention used in
   `CodePuppyControl.Agents.CodePuppy.allowed_tools/0`.
 
-  Refs: code_puppy-4s8.7 (Phase C CI gate)
+  ## Permission Gating (Phase E — code_puppy-mmk.1)
+
+  Each submodule implements `permission_check/2` as a **hard gate**
+  that validates file paths via `FileOps.Security.validate_path/2`.
+  Sensitive paths (SSH keys, cloud credentials, system secrets) are
+  **always** denied at this layer — no policy override can bypass it.
+
+  The Tool.Runner then applies a **second layer**: the FilePermission
+  callback chain (policy engine + plugin callbacks). Together these
+  form a two-layer permission stack:
+
+  1. **Tool `permission_check/2`** — hard gate (sensitive-path deny)
+  2. **FilePermission callback chain** — policy gate (allow/deny/ask)
+
+  Refs: code_puppy-4s8.7 (Phase C CI gate), code_puppy-mmk.1 (Phase E)
   """
 
   defmodule CpListFiles do
@@ -18,9 +32,15 @@ defmodule CodePuppyControl.Tools.CpFileOps do
     Lists files and directories within a project.
 
     Delegates to `CodePuppyControl.FileOps.Lister.list_files/2`.
+
+    Permission check validates the directory path against sensitive-path
+    rules (hard gate). The Tool.Runner then applies the FilePermission
+    callback chain (policy gate) as a second layer.
     """
 
     use CodePuppyControl.Tool
+
+    alias CodePuppyControl.FileOps.Security
 
     @impl true
     def name, do: :cp_list_files
@@ -51,6 +71,16 @@ defmodule CodePuppyControl.Tools.CpFileOps do
     end
 
     @impl true
+    def permission_check(args, _context) do
+      directory = Map.get(args, "directory", ".")
+
+      case Security.validate_path(directory, "list") do
+        {:ok, _} -> :ok
+        {:error, reason} -> {:deny, reason}
+      end
+    end
+
+    @impl true
     def invoke(args, _context) do
       directory = Map.get(args, "directory", ".")
       recursive = Map.get(args, "recursive", true)
@@ -67,9 +97,15 @@ defmodule CodePuppyControl.Tools.CpFileOps do
     Reads file contents with optional line-range selection.
 
     Delegates to `CodePuppyControl.FileOps.Reader.read_file/2`.
+
+    Permission check validates the file path against sensitive-path
+    rules (hard gate). The Tool.Runner then applies the FilePermission
+    callback chain (policy gate) as a second layer.
     """
 
     use CodePuppyControl.Tool
+
+    alias CodePuppyControl.FileOps.Security
 
     @impl true
     def name, do: :cp_read_file
@@ -104,6 +140,16 @@ defmodule CodePuppyControl.Tools.CpFileOps do
     end
 
     @impl true
+    def permission_check(args, _context) do
+      path = Map.get(args, "file_path", "")
+
+      case Security.validate_path(path, "read") do
+        {:ok, _} -> :ok
+        {:error, reason} -> {:deny, reason}
+      end
+    end
+
+    @impl true
     def invoke(args, _context) do
       path = Map.get(args, "file_path", "")
 
@@ -127,9 +173,15 @@ defmodule CodePuppyControl.Tools.CpFileOps do
     Recursively searches for text patterns across files.
 
     Delegates to `CodePuppyControl.FileOps.Grep.grep/3`.
+
+    Permission check validates the directory path against sensitive-path
+    rules (hard gate). The Tool.Runner then applies the FilePermission
+    callback chain (policy gate) as a second layer.
     """
 
     use CodePuppyControl.Tool
+
+    alias CodePuppyControl.FileOps.Security
 
     @impl true
     def name, do: :cp_grep
@@ -157,6 +209,16 @@ defmodule CodePuppyControl.Tools.CpFileOps do
         },
         "required" => ["search_string"]
       }
+    end
+
+    @impl true
+    def permission_check(args, _context) do
+      directory = Map.get(args, "directory", ".")
+
+      case Security.validate_path(directory, "search") do
+        {:ok, _} -> :ok
+        {:error, reason} -> {:deny, reason}
+      end
     end
 
     @impl true
