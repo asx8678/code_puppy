@@ -89,14 +89,25 @@ defmodule CodePuppyControl.Auth.ClaudeOAuth.TokenRefreshHeartbeat do
 
   @doc """
   Check if a heartbeat is running for the given session.
+
+  Cleans up stale ETS entries when the heartbeat pid is dead.
   """
   @spec heartbeat_alive?(String.t()) :: boolean()
   def heartbeat_alive?(session_id \\ "default") do
     ensure_table()
 
     case :ets.lookup(@table, session_id) do
-      [{^session_id, pid, _owner}] -> Process.alive?(pid)
-      [] -> false
+      [{^session_id, pid, _owner}] ->
+        if Process.alive?(pid) do
+          true
+        else
+          # Cleanup stale ETS entry when pid is dead
+          :ets.delete(@table, session_id)
+          false
+        end
+
+      [] ->
+        false
     end
   rescue
     _ -> false
