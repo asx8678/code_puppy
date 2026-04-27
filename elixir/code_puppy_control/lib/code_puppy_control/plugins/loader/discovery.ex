@@ -162,4 +162,43 @@ defmodule CodePuppyControl.Plugins.Loader.Discovery do
   def loaded_modules do
     :code.all_loaded() |> Enum.map(fn {mod, _} -> mod end)
   end
+
+  # ── Application Module Enumeration ─────────────────────────────
+
+  @doc """
+  Actively loads all modules belonging to the given OTP application
+  via `Code.ensure_loaded?/1`, then returns the list of modules
+  that were successfully loaded.
+
+  This is necessary because `:code.all_loaded/0` only returns modules
+  that have been *incidentally* loaded (referenced by other code).
+  Compiled builtin plugins may not appear in `:code.all_loaded/0`
+  if no other module has referenced them yet.
+
+  Falls back to `:code.all_loaded/0` if `Application.spec/2` returns
+  no modules (e.g. in some release contexts).
+  """
+  @spec ensure_app_modules_loaded(atom()) :: [module()]
+  def ensure_app_modules_loaded(app) do
+    case Application.spec(app, :modules) do
+      nil ->
+        Logger.debug("Application spec for #{app} returned no modules; " <>
+          "falling back to :code.all_loaded/0")
+        loaded_modules()
+
+      modules when is_list(modules) ->
+        Enum.each(modules, fn mod ->
+          unless Code.ensure_loaded?(mod) do
+            Logger.debug("Failed to ensure_loaded #{inspect(mod)}; skipping")
+          end
+        end)
+
+        # After ensuring, re-scan all_loaded for completeness
+        loaded_modules()
+
+      other ->
+        Logger.debug("Application spec for #{app} returned unexpected: #{inspect(other)}")
+        loaded_modules()
+    end
+  end
 end

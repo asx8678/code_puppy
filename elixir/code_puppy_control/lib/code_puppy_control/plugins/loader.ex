@@ -13,8 +13,16 @@ defmodule CodePuppyControl.Plugins.Loader do
   ### Builtin Compiled Plugins
   Modules in `CodePuppyControl.Plugins.*` that implement
   `CodePuppyControl.Plugins.PluginBehaviour`. Discovered at runtime
-  by scanning `:code.all_loaded/0` for modules declaring
-  `@behaviour PluginBehaviour`.
+  in three phases:
+
+  1. **Application module loading** — `Application.spec/2` enumerates
+     all modules in `:code_puppy_control`; `Code.ensure_loaded?/1`
+     loads each one so they appear in `:code.all_loaded/0`.
+  2. **Behaviour scan** — `:code.all_loaded/0` is filtered for modules
+     declaring `@behaviour PluginBehaviour`.
+  3. **Explicit registry fallback** — `@builtin_plugin_modules` is
+     checked as a safety net for release contexts where
+     `Application.spec/2` may be unavailable.
 
   ### Builtin `priv/plugins/` Plugins
   `.ex` or `.exs` files under `priv/plugins/<name>/register_callbacks.*`.
@@ -62,6 +70,26 @@ defmodule CodePuppyControl.Plugins.Loader do
   alias CodePuppyControl.Config.Isolation
   alias CodePuppyControl.Config.Paths
   alias CodePuppyControl.Plugins.Loader.Discovery
+
+  # ── Explicit Builtin Plugin Registry ─────────────────────────────
+  # Safety net: these modules are always proactively loaded regardless
+  # of whether Application.spec/2 or :code.all_loaded/0 discovers them.
+  # Add new compiled PluginBehaviour modules here when they are created.
+  # This ensures OAuth and other critical plugins activate without
+  # relying on incidental prior loading.
+  @builtin_plugin_modules [
+    CodePuppyControl.Plugins.ChatGptOAuth,
+    CodePuppyControl.Plugins.ClaudeCodeOAuth,
+    CodePuppyControl.Plugins.Motd,
+    CodePuppyControl.Plugins.CostEstimator,
+    CodePuppyControl.Plugins.ErrorClassifier,
+    CodePuppyControl.Plugins.GitAutoCommit,
+    CodePuppyControl.Plugins.FastPuppy,
+    CodePuppyControl.Plugins.FileMentions,
+    CodePuppyControl.Plugins.LoopDetection,
+    CodePuppyControl.Plugins.AgentMemory,
+    CodePuppyControl.Plugins.AgentTrace
+  ]
 
   # ── Public API ──────────────────────────────────────────────────
 
@@ -168,6 +196,10 @@ defmodule CodePuppyControl.Plugins.Loader do
     Discovery.load_and_register_plugin_file(file_path, type, &register_plugin/2)
   end
 
+  @doc "Ensures all modules for the given OTP application are loaded."
+  @spec ensure_app_modules_loaded(atom()) :: [module()]
+  def ensure_app_modules_loaded(app), do: Discovery.ensure_app_modules_loaded(app)
+
   # ── File Loading ─────────────────────────────────────────────────
 
   @spec load_plugin_file(String.t()) :: {:ok, atom()} | {:error, term()}
@@ -190,7 +222,14 @@ defmodule CodePuppyControl.Plugins.Loader do
       |> Enum.map(& &1.name)
       |> normalize_names()
 
-    # Discover compiled modules implementing PluginBehaviour
+    # Phase 1: Proactively load all application modules so that
+    # compiled PluginBehaviour implementations are visible to
+    # :code.all_loaded/0. Without this, modules like ChatGptOAuth
+    # and ClaudeCodeOAuth may be absent from :code.all_loaded/0
+    # if nothing else has referenced them yet.
+    _ = Discovery.ensure_app_modules_loaded(:code_puppy_control)
+
+    # Phase 2: Scan all loaded modules for PluginBehaviour implementations
     module_names =
       :code.all_loaded()
       |> Enum.map(fn {mod, _} -> mod end)
@@ -201,10 +240,27 @@ defmodule CodePuppyControl.Plugins.Loader do
         mod.name()
       end)
 
+    # Phase 3: Safety net — explicitly ensure builtin plugin modules from
+    # the registry are loaded. This catches any modules that Phase 1/2
+    # missed (e.g. in release contexts where Application.spec/2 is
+    # unavailable or incomplete).
+    # Normalize names to strings for robust dedup (name/0 may return atom or string).
+    phase2_names = MapSet.new(module_names, &to_string/1)
+
+    registry_names =
+      @builtin_plugin_modules
+      |> Enum.filter(&Discovery.plugin_behaviour?/1)
+      |> Enum.reject(&already_loaded?(&1, loaded_names))
+      |> Enum.reject(fn mod -> MapSet.member?(phase2_names, to_string(mod.name())) end)
+      |> Enum.map(fn mod ->
+        register_plugin(mod, :builtin)
+        mod.name()
+      end)
+
     # Discover builtin plugins in priv/plugins/
     priv_names = load_priv_plugins(loaded_names)
 
-    module_names ++ priv_names
+    Enum.uniq(module_names ++ registry_names ++ priv_names)
   end
 
   @spec load_priv_plugins(MapSet.t()) :: [atom()]
