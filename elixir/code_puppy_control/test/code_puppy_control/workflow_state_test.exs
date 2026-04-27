@@ -2,13 +2,16 @@ defmodule CodePuppyControl.WorkflowStateTest do
   use ExUnit.Case, async: false
 
   alias CodePuppyControl.WorkflowState
+  alias CodePuppyControl.Workflow.State, as: WorkflowStateNew
 
   # async: false because WorkflowState is a named singleton Agent.
+  # Tests verify the backward-compatible facade delegates correctly
+  # to CodePuppyControl.Workflow.State.
 
   setup do
-    # Start the WorkflowState agent if not already running
-    case Process.whereis(WorkflowState) do
-      nil -> start_supervised!({WorkflowState, name: WorkflowState})
+    # Start the Workflow.State agent (which WorkflowState now delegates to)
+    case Process.whereis(WorkflowStateNew) do
+      nil -> start_supervised!({WorkflowStateNew, name: WorkflowStateNew})
       _pid -> :ok
     end
 
@@ -54,6 +57,27 @@ defmodule CodePuppyControl.WorkflowStateTest do
       assert :did_edit_file in names
       assert :did_create_file in names
       assert :did_run_tests in names
+      # TODO(code-puppy-ctj.3): did_make_api_call was missing from old WorkflowState
+      assert :did_make_api_call in names
+    end
+  end
+
+  describe "delegation to Workflow.State" do
+    test "set_flag delegates and works through both modules" do
+      WorkflowState.set_flag(:did_generate_code)
+      assert WorkflowState.has_flag?(:did_generate_code)
+      assert WorkflowStateNew.has_flag?(:did_generate_code)
+    end
+
+    test "reset delegates to Workflow.State" do
+      WorkflowState.set_flag(:did_generate_code)
+      WorkflowState.reset()
+      refute WorkflowStateNew.has_flag?(:did_generate_code)
+    end
+
+    test "metadata operations delegate to Workflow.State" do
+      WorkflowState.put_metadata("test", "value")
+      assert WorkflowStateNew.get_metadata("test") == "value"
     end
   end
 
@@ -93,6 +117,12 @@ defmodule CodePuppyControl.WorkflowStateTest do
 
     test "has_flag? returns false for unknown flags" do
       refute WorkflowState.has_flag?(:nonexistent_flag)
+    end
+
+    # String flag support (new via Workflow.State delegation)
+    test "set_flag accepts string flags" do
+      WorkflowState.set_flag("did_generate_code")
+      assert WorkflowState.has_flag?(:did_generate_code)
     end
   end
 
@@ -216,6 +246,77 @@ defmodule CodePuppyControl.WorkflowStateTest do
       assert m.metadata["key"] == "val"
       assert m.start_time != nil
       assert is_binary(m.summary)
+    end
+  end
+
+  # ── Increment Counter (new feature from Python port) ──────────────
+
+  describe "increment_counter/2" do
+    test "increments counter in metadata" do
+      assert WorkflowStateNew.increment_counter("edits") == 1
+      assert WorkflowStateNew.increment_counter("edits") == 2
+    end
+  end
+
+  # ── Plan Detection (new feature from Python port) ──────────────────
+
+  describe "detect_and_mark_plan_from_response/2" do
+    test "detects numbered plans" do
+      response = "1. First\n2. Second"
+      assert WorkflowStateNew.detect_and_mark_plan_from_response(response) == true
+      assert WorkflowStateNew.has_flag?(:did_create_plan)
+    end
+  end
+
+  # ── Facade struct compatibility (code-puppy-ctj.3) ────────────────
+
+  describe "facade struct compatibility (code-puppy-ctj.3)" do
+    test "new/0 returns %WorkflowState{} struct, not %Workflow.State{}" do
+      state = WorkflowState.new()
+      assert %WorkflowState{} = state
+      assert MapSet.size(state.flags) == 0
+      assert state.metadata == %{}
+      assert state.start_time != nil
+    end
+
+    test "get/0 returns %WorkflowState{} struct" do
+      state = WorkflowState.get()
+      assert %WorkflowState{} = state
+    end
+
+    test "reset/0 returns %WorkflowState{} struct" do
+      result = WorkflowState.reset()
+      assert %WorkflowState{} = result
+      assert MapSet.size(result.flags) == 0
+    end
+
+    test "facade struct has same field names as internal struct" do
+      facade_state = WorkflowState.new()
+      internal_state = WorkflowStateNew.new()
+
+      # Both have the same field names
+      assert Map.from_struct(facade_state) |> Map.keys() |> Enum.sort() ==
+               Map.from_struct(internal_state) |> Map.keys() |> Enum.sort()
+    end
+  end
+
+  # ── Per-run key delegation (code-puppy-ctj.3) ────────────────────
+
+  describe "per-run key delegation (code-puppy-ctj.3)" do
+    test "get_run_key delegates to Workflow.State" do
+      assert WorkflowState.get_run_key() == "default"
+    end
+
+    test "set_run_key delegates to Workflow.State" do
+      WorkflowState.set_run_key("facade-test")
+      assert WorkflowState.get_run_key() == "facade-test"
+      WorkflowState.clear_run_key()
+    end
+
+    test "clear_run_key delegates to Workflow.State" do
+      WorkflowState.set_run_key("temp-key")
+      WorkflowState.clear_run_key()
+      assert WorkflowState.get_run_key() == "default"
     end
   end
 end

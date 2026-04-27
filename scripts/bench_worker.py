@@ -18,7 +18,7 @@ Supported Methods:
 
 Usage:
     python bench_worker.py
-    
+
     # Or with Elixir Port:
     Port.open({:spawn, "python3 bench_worker.py"}, [:binary])
 
@@ -42,6 +42,7 @@ from enum import IntEnum
 
 class ExitCode(IntEnum):
     """Exit codes for the worker."""
+
     NORMAL = 0
     ERROR = 1
     INTENTIONAL_CRASH = 42
@@ -50,9 +51,10 @@ class ExitCode(IntEnum):
 @dataclass
 class WorkerStats:
     """Statistics for the worker session."""
+
     requests_handled: int = 0
     start_time_ns: int = field(default_factory=lambda: time.perf_counter_ns())
-    
+
     @property
     def elapsed_ms(self) -> float:
         """Return elapsed time in milliseconds."""
@@ -63,10 +65,10 @@ class WorkerStats:
 def read_message() -> Optional[dict[str, Any]]:
     """
     Read a JSON-RPC message from stdin using Content-Length framing.
-    
+
     Returns:
         Parsed message dict or None if EOF/error
-        
+
     Protocol:
         Content-Length: <bytes>\r\n
         \r\n
@@ -82,37 +84,39 @@ def read_message() -> Optional[dict[str, Any]]:
             header_bytes += byte
             if header_bytes.endswith(b"\r\n"):
                 break
-        
+
         if not header_bytes.startswith(b"Content-Length:"):
             # Protocol error - skip to next line and try again
             return read_message()
-            
+
         try:
             length = int(header_bytes.split(b":", 1)[1].strip())
-        except (ValueError, IndexError):
-            log_error(f"Invalid Content-Length header: {header_bytes.decode('utf-8', errors='replace')}")
+        except ValueError, IndexError:
+            log_error(
+                f"Invalid Content-Length header: {header_bytes.decode('utf-8', errors='replace')}"
+            )
             return None
-        
+
         # Read empty separator line (\r\n)
         sep = sys.stdin.buffer.read(2)
         if sep != b"\r\n":
             # Malformed message, but try to continue
             pass
-        
+
         # Read the JSON body (exact number of bytes)
         body_bytes = sys.stdin.buffer.read(length)
         if len(body_bytes) < length:
             log_error(f"Incomplete read: expected {length}, got {len(body_bytes)}")
             return None
-            
+
         # Parse JSON
         try:
-            body = body_bytes.decode('utf-8')
+            body = body_bytes.decode("utf-8")
             return json.loads(body)
         except (json.JSONDecodeError, UnicodeDecodeError) as e:
             log_error(f"JSON decode error: {e}")
             return None
-            
+
     except Exception as e:
         log_error(f"Error reading message: {e}")
         return None
@@ -121,28 +125,24 @@ def read_message() -> Optional[dict[str, Any]]:
 def write_message(msg: dict[str, Any]) -> None:
     """
     Write a JSON-RPC message to stdout with Content-Length framing.
-    
+
     Args:
         msg: The message dict to send
-        
+
     Format:
         Content-Length: <bytes>\r\n\r\n<json body>
     """
-    body = json.dumps(msg, separators=(',', ':'), ensure_ascii=False)
-    body_bytes = body.encode('utf-8')
-    framed = f"Content-Length: {len(body_bytes)}\r\n\r\n".encode('utf-8') + body_bytes
-    
+    body = json.dumps(msg, separators=(",", ":"), ensure_ascii=False)
+    body_bytes = body.encode("utf-8")
+    framed = f"Content-Length: {len(body_bytes)}\r\n\r\n".encode("utf-8") + body_bytes
+
     sys.stdout.buffer.write(framed)
     sys.stdout.buffer.flush()
 
 
 def send_response(result: Any, msg_id: Any) -> None:
     """Send a JSON-RPC success response."""
-    response = {
-        "jsonrpc": "2.0",
-        "id": msg_id,
-        "result": result
-    }
+    response = {"jsonrpc": "2.0", "id": msg_id, "result": result}
     write_message(response)
 
 
@@ -151,10 +151,7 @@ def send_error(code: int, message: str, msg_id: Any, data: Any = None) -> None:
     error = {
         "jsonrpc": "2.0",
         "id": msg_id,
-        "error": {
-            "code": code,
-            "message": message
-        }
+        "error": {"code": code, "message": message},
     }
     if data is not None:
         error["error"]["data"] = data
@@ -163,11 +160,7 @@ def send_error(code: int, message: str, msg_id: Any, data: Any = None) -> None:
 
 def send_notification(method: str, params: dict[str, Any]) -> None:
     """Send a JSON-RPC notification (no response expected)."""
-    notification = {
-        "jsonrpc": "2.0",
-        "method": method,
-        "params": params
-    }
+    notification = {"jsonrpc": "2.0", "method": method, "params": params}
     write_message(notification)
 
 
@@ -185,10 +178,11 @@ def log_error(msg: str) -> None:
 # Method Handlers
 # ============================================================================
 
+
 def handle_initialize(params: dict[str, Any], msg_id: Any, stats: WorkerStats) -> bool:
     """
     Handle initialize request.
-    
+
     Returns worker capabilities and signals ready state.
     """
     result = {
@@ -197,8 +191,8 @@ def handle_initialize(params: dict[str, Any], msg_id: Any, stats: WorkerStats) -
         "timestamp_ns": time.perf_counter_ns(),
         "capabilities": {
             "methods": ["initialize", "echo", "sleep", "crash", "shutdown", "stats"],
-            "protocol_version": "2.0"
-        }
+            "protocol_version": "2.0",
+        },
     }
     send_response(result, msg_id)
     return True
@@ -207,13 +201,13 @@ def handle_initialize(params: dict[str, Any], msg_id: Any, stats: WorkerStats) -
 def handle_echo(params: dict[str, Any], msg_id: Any, stats: WorkerStats) -> bool:
     """
     Handle echo request.
-    
+
     Echoes back the params with additional timing info.
     """
     result = {
         "echo": params,
         "received_ns": time.perf_counter_ns(),
-        "requests_served": stats.requests_handled
+        "requests_served": stats.requests_handled,
     }
     send_response(result, msg_id)
     return True
@@ -222,21 +216,21 @@ def handle_echo(params: dict[str, Any], msg_id: Any, stats: WorkerStats) -> bool
 def handle_sleep(params: dict[str, Any], msg_id: Any, stats: WorkerStats) -> bool:
     """
     Handle sleep request.
-    
+
     Params:
         duration: float - seconds to sleep (default: 0.1)
     """
     duration = params.get("duration", 0.1)
-    
+
     # Use the most precise sleep available
     start = time.perf_counter()
     time.sleep(duration)
     actual_duration = time.perf_counter() - start
-    
+
     result = {
         "requested_duration": duration,
         "actual_duration": actual_duration,
-        "timestamp_ns": time.perf_counter_ns()
+        "timestamp_ns": time.perf_counter_ns(),
     }
     send_response(result, msg_id)
     return True
@@ -245,23 +239,19 @@ def handle_sleep(params: dict[str, Any], msg_id: Any, stats: WorkerStats) -> boo
 def handle_crash(params: dict[str, Any], msg_id: Any, stats: WorkerStats) -> bool:
     """
     Handle crash request.
-    
+
     Intentionally crashes the worker for fault recovery testing.
     Sends response before crashing if 'graceful' param is true.
     """
     graceful = params.get("graceful", False)
     exit_code = params.get("exit_code", ExitCode.INTENTIONAL_CRASH)
     delay = params.get("delay", 0.0)
-    
+
     if graceful:
-        result = {
-            "crashing": True,
-            "exit_code": exit_code,
-            "pid": os.getpid()
-        }
+        result = {"crashing": True, "exit_code": exit_code, "pid": os.getpid()}
         send_response(result, msg_id)
         time.sleep(delay)
-    
+
     # Crash the process
     log_info(f"Intentional crash requested (exit_code={exit_code})")
     sys.exit(exit_code)
@@ -272,7 +262,7 @@ def handle_stats(params: dict[str, Any], msg_id: Any, stats: WorkerStats) -> boo
     result = {
         "requests_handled": stats.requests_handled,
         "elapsed_ms": stats.elapsed_ms,
-        "pid": os.getpid()
+        "pid": os.getpid(),
     }
     send_response(result, msg_id)
     return True
@@ -281,7 +271,7 @@ def handle_stats(params: dict[str, Any], msg_id: Any, stats: WorkerStats) -> boo
 def handle_shutdown(params: dict[str, Any], msg_id: Any, stats: WorkerStats) -> bool:
     """
     Handle shutdown request.
-    
+
     Gracefully shuts down the worker.
     Returns False to signal exit.
     """
@@ -289,7 +279,7 @@ def handle_shutdown(params: dict[str, Any], msg_id: Any, stats: WorkerStats) -> 
         "status": "shutting_down",
         "requests_handled": stats.requests_handled,
         "elapsed_ms": stats.elapsed_ms,
-        "pid": os.getpid()
+        "pid": os.getpid(),
     }
     send_response(result, msg_id)
     return False
@@ -297,10 +287,7 @@ def handle_shutdown(params: dict[str, Any], msg_id: Any, stats: WorkerStats) -> 
 
 def handle_ping(params: dict[str, Any], msg_id: Any, stats: WorkerStats) -> bool:
     """Handle ping request for health checks."""
-    result = {
-        "status": "ok",
-        "timestamp_ns": time.perf_counter_ns()
-    }
+    result = {"status": "ok", "timestamp_ns": time.perf_counter_ns()}
     send_response(result, msg_id)
     return True
 
@@ -323,20 +310,20 @@ HANDLERS: dict[str, callable] = {
 def dispatch(msg: dict[str, Any], stats: WorkerStats) -> bool:
     """
     Dispatch a JSON-RPC message to the appropriate handler.
-    
+
     Args:
         msg: The parsed JSON-RPC message
         stats: Worker statistics tracker
-        
+
     Returns:
         True to continue, False to exit
     """
     method = msg.get("method", "")
     params = msg.get("params", {})
     msg_id = msg.get("id")  # May be None for notifications
-    
+
     handler = HANDLERS.get(method)
-    
+
     if handler:
         try:
             return handler(params, msg_id, stats)
@@ -355,14 +342,15 @@ def dispatch(msg: dict[str, Any], stats: WorkerStats) -> bool:
 
 def setup_signal_handlers() -> None:
     """Setup signal handlers for graceful shutdown."""
+
     def handle_sigterm(signum, frame):
         log_info("Received SIGTERM, exiting")
         sys.exit(0)
-    
+
     def handle_sigint(signum, frame):
         log_info("Received SIGINT, exiting")
         sys.exit(0)
-    
+
     signal.signal(signal.SIGTERM, handle_sigterm)
     signal.signal(signal.SIGINT, handle_sigint)
 
@@ -370,32 +358,31 @@ def setup_signal_handlers() -> None:
 def main() -> int:
     """
     Main entry point for the benchmark worker.
-    
+
     Returns:
         Exit code (0 for success)
     """
     setup_signal_handlers()
-    
+
     stats = WorkerStats()
     log_info(f"Worker started (PID: {os.getpid()})")
-    
+
     # Send initial ready notification
-    send_notification("system.ready", {
-        "status": "ready",
-        "pid": os.getpid(),
-        "timestamp_ns": time.perf_counter_ns()
-    })
-    
+    send_notification(
+        "system.ready",
+        {"status": "ready", "pid": os.getpid(), "timestamp_ns": time.perf_counter_ns()},
+    )
+
     running = True
     while running:
         msg = read_message()
         if msg is None:
             log_info("EOF received, exiting normally")
             break
-        
+
         stats.requests_handled += 1
         running = dispatch(msg, stats)
-    
+
     log_info(f"Worker exiting (handled {stats.requests_handled} requests)")
     return ExitCode.NORMAL
 
@@ -406,7 +393,8 @@ if __name__ == "__main__":
     except Exception as e:
         log_error(f"Fatal error: {e}")
         import traceback
+
         traceback.print_exc()
         exit_code = ExitCode.ERROR
-    
+
     sys.exit(exit_code)

@@ -74,7 +74,8 @@ defmodule CodePuppyControl.Application do
       CodePuppyControl.SessionStorage.AutosaveTracker,
       CodePuppyControl.RuntimeState,
       # Workflow state tracking for /flags command
-      {CodePuppyControl.WorkflowState, name: CodePuppyControl.WorkflowState},
+      # TODO(code-puppy-ctj.3): Migrated from WorkflowState to Workflow.State
+      {CodePuppyControl.Workflow.State, name: CodePuppyControl.Workflow.State},
       # Callback registry (ETS-backed GenServer) — must start before
       # any component triggers or registers callbacks (e.g. plugin loader,
       # security checks, slash commands).
@@ -159,6 +160,18 @@ defmodule CodePuppyControl.Application do
         e ->
           require Logger
           Logger.warning("Failed to register built-in slash commands: #{inspect(e)}")
+      end
+
+      # Wire workflow-state callback handlers AFTER the Callbacks.Registry
+      # is started. This ensures flags like :did_execute_shell and
+      # :did_generate_code are set automatically based on tool calls and
+      # agent lifecycle events. Failures are logged but non-fatal.
+      try do
+        CodePuppyControl.Workflow.State.register_callback_handlers()
+      rescue
+        e ->
+          require Logger
+          Logger.warning("Failed to register workflow-state callbacks: #{inspect(e)}")
       end
     end
 
