@@ -292,13 +292,26 @@ defmodule CodePuppyControl.Tools.UniversalConstructor.Validator do
   4. First public function (not starting with _)
 
   """
+  # Known safe function-name atoms used as fallback candidates.
+  # Only :run and :execute are ever atomized; user-controlled tool_name
+  # is matched as a string to avoid atom-table exhaustion (code_puppy-mmk.2).
+  @safe_fallback_atoms [:run, :execute]
+
   @spec find_main_function(list(function_info()), String.t()) :: function_info() | nil
   def find_main_function(functions, tool_name) when is_list(functions) do
-    candidates = [String.to_atom(tool_name), :run, :execute]
+    # 1. Try matching the tool name as a STRING against function names,
+    #    converting the atom to string for comparison.  This avoids calling
+    #    String.to_atom/1 on user-controlled input.
+    by_name = Enum.find(functions, fn f -> Atom.to_string(f.name) == tool_name end)
 
-    Enum.find_value(candidates, fn name ->
-      Enum.find(functions, fn f -> f.name == name end)
-    end)
+    if by_name do
+      by_name
+    else
+      # 2. Fall back to known safe atoms only
+      Enum.find_value(@safe_fallback_atoms, fn name ->
+        Enum.find(functions, fn f -> f.name == name end)
+      end)
+    end
   end
 
   # ============================================================================

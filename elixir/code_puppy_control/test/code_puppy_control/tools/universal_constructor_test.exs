@@ -10,10 +10,65 @@ defmodule CodePuppyControl.Tools.UniversalConstructorTest do
   and skipped when the application is not fully started.
   """
 
-  use ExUnit.Case, async: true
+  # async: false — integration test mutates PUP_EX_HOME (global env var)
+  # for filesystem isolation; async: true would race with other modules.
+  use ExUnit.Case, async: false
 
   alias CodePuppyControl.Tools.UniversalConstructor
   alias CodePuppyControl.Tools.UniversalConstructor.Models
+
+  # ---------------------------------------------------------------------------
+  # Sandbox: redirect UC writes to a throwaway temp dir.
+  # UniversalConstructor.run/1 calls Registry.ensure_tools_dir() which
+  # creates the real ~/.code_puppy_ex/plugins/universal_constructor/.
+  # (code_puppy-mmk.2)
+  # ---------------------------------------------------------------------------
+  setup_all do
+    tmp =
+      Path.join(
+        System.tmp_dir!(),
+        "uc_main_sandbox_#{:erlang.unique_integer([:positive, :monotonic])}"
+      )
+
+    File.mkdir_p!(tmp)
+
+    prev_ex_home = System.get_env("PUP_EX_HOME")
+    System.put_env("PUP_EX_HOME", tmp)
+
+    # Repoint the Registry GenServer so ensure_tools_dir uses the sandbox
+    uc_registry = CodePuppyControl.Tools.UniversalConstructor.Registry
+
+    orig_tools_dir =
+      case Process.whereis(uc_registry) do
+        nil -> nil
+        _pid -> :sys.get_state(uc_registry).tools_dir
+      end
+
+    sandbox_uc_dir = CodePuppyControl.Config.Paths.universal_constructor_dir()
+
+    if Process.whereis(uc_registry) do
+      CodePuppyControl.Tools.UniversalConstructor.Registry.set_tools_dir(sandbox_uc_dir)
+    end
+
+    on_exit(fn ->
+      if orig_tools_dir != nil and Process.whereis(uc_registry) do
+        try do
+          CodePuppyControl.Tools.UniversalConstructor.Registry.set_tools_dir(orig_tools_dir)
+        catch
+          :exit, _ -> :ok
+        end
+      end
+
+      case prev_ex_home do
+        nil -> System.delete_env("PUP_EX_HOME")
+        v -> System.put_env("PUP_EX_HOME", v)
+      end
+
+      File.rm_rf(tmp)
+    end)
+
+    :ok
+  end
 
   # Integration tests requiring the Registry GenServer are tagged
   describe "run/1 - integration tests (require full app)" do

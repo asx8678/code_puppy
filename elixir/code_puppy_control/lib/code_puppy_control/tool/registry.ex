@@ -387,7 +387,19 @@ defmodule CodePuppyControl.Tool.Registry do
       CodePuppyControl.Tools.CpFileMods.CpEditFile,
       CodePuppyControl.Tools.CpFileMods.CpDeleteFile,
       CodePuppyControl.Tools.CpFileMods.CpDeleteSnippet,
-      CodePuppyControl.Tools.CpAskUserQuestion
+      CodePuppyControl.Tools.CpAskUserQuestion,
+      # Phase E: skills, scheduler, universal constructor (code_puppy-mmk.2)
+      CodePuppyControl.Tools.CpSkillOps.CpListSkills,
+      CodePuppyControl.Tools.CpSkillOps.CpActivateSkill,
+      CodePuppyControl.Tools.CpSchedulerOps.CpSchedulerListTasks,
+      CodePuppyControl.Tools.CpSchedulerOps.CpSchedulerCreateTask,
+      CodePuppyControl.Tools.CpSchedulerOps.CpSchedulerDeleteTask,
+      CodePuppyControl.Tools.CpSchedulerOps.CpSchedulerToggleTask,
+      CodePuppyControl.Tools.CpSchedulerOps.CpSchedulerStatus,
+      CodePuppyControl.Tools.CpSchedulerOps.CpSchedulerRunTask,
+      CodePuppyControl.Tools.CpSchedulerOps.CpSchedulerViewLog,
+      CodePuppyControl.Tools.CpSchedulerOps.CpSchedulerForceCheck,
+      CodePuppyControl.Tools.CpUniversalConstructor
     ]
 
     Enum.filter(candidates, fn mod ->

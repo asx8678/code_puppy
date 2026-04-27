@@ -306,6 +306,38 @@ defmodule CodePuppyControl.Tools.UniversalConstructor.ValidatorTest do
 
       assert result == nil
     end
+
+    # Regression: code_puppy-mmk.2 — arbitrary tool names must NOT create atoms
+    test "does not create new atoms for arbitrary tool_name values" do
+      # Generate a name that is practically guaranteed NOT to exist as an atom.
+      # If String.to_atom were used, this would leak a new atom.
+      unique_name = "never_an_atom_#{:erlang.unique_integer([:positive])}"
+
+      # Ensure it's not already an atom
+      assert_raise ArgumentError, fn -> String.to_existing_atom(unique_name) end
+
+      functions = [
+        %{name: :run, arity: 1}
+      ]
+
+      # This call should NOT create the atom; it should fall through to :run
+      result = Validator.find_main_function(functions, unique_name)
+      assert result.name == :run
+
+      # Verify the atom was NOT created
+      assert_raise ArgumentError, fn -> String.to_existing_atom(unique_name) end
+    end
+
+    test "matches function by string comparison even when atom exists" do
+      # :run already exists as an atom, so matching it by name "run" works
+      functions = [
+        %{name: :run, arity: 1},
+        %{name: :execute, arity: 1}
+      ]
+
+      result = Validator.find_main_function(functions, "run")
+      assert result.name == :run
+    end
   end
 
   describe "safe_parse_literal_map/1" do

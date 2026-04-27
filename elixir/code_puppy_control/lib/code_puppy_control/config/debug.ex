@@ -60,6 +60,10 @@ defmodule CodePuppyControl.Config.Debug do
   @spec agent_memory_enabled?() :: boolean()
   def agent_memory_enabled?, do: truthy?("enable_agent_memory", false)
 
+  @doc "Return `true` if skills integration is enabled (default `true`)."
+  @spec skills_enabled?() :: boolean()
+  def skills_enabled?, do: truthy?("skills_enabled", true)
+
   @doc "Return `true` if HTTP/2 is enabled (default `false`)."
   @spec http2_enabled?() :: boolean()
   def http2_enabled?, do: truthy?("http2", false)
