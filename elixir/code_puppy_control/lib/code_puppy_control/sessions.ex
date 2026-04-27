@@ -243,20 +243,27 @@ defmodule CodePuppyControl.Sessions do
 
   # Private helpers
 
-  # Normalize terminal_meta keys to atoms for consistent access.
-  # SQLite stores :map fields as JSON, which decodes with string keys.
-  # This ensures downstream code can use atom-key pattern matches.
+  # Whitelist of known terminal_meta keys — mirrors Store whitelist.
+  # We never call String.to_atom/1 on persisted JSON / user-influenced
+  # terminal_meta; only known keys are promoted to atoms.  Unknown string
+  # keys are preserved as strings.  (code_puppy-ctj.1 fix)
+  @terminal_meta_whitelist %{
+    "session_id" => :session_id,
+    "cols" => :cols,
+    "rows" => :rows,
+    "shell" => :shell,
+    "attached_at" => :attached_at
+  }
+
   defp normalize_terminal_meta(nil), do: nil
 
   defp normalize_terminal_meta(meta) when is_map(meta) do
-    atom_keys = Map.new(meta, fn
+    Map.new(meta, fn
       {k, v} when is_binary(k) ->
-        {String.to_atom(k), v}
+        {Map.get(@terminal_meta_whitelist, k, k), v}
       {k, v} when is_atom(k) ->
         {k, v}
     end)
-
-    atom_keys
   end
 
   defp normalize_terminal_meta(meta), do: meta

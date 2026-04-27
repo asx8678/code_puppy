@@ -126,6 +126,9 @@ defmodule CodePuppyControlWeb.TerminalChannel do
         # (code_puppy-ctj.1) Register terminal with SessionStorage.Store
         # for crash recovery tracking. This ensures that on restart,
         # TerminalRecovery can attempt to recreate the PTY.
+        # register_terminal now creates a minimal durable session row if
+        # no session exists yet, so terminal metadata is never silently lost.
+        # A later save_session will overwrite with full history.
         if Process.whereis(Store) do
           terminal_meta = %{
             session_id: session_id,
@@ -135,8 +138,18 @@ defmodule CodePuppyControlWeb.TerminalChannel do
             attached_at: System.monotonic_time(:millisecond)
           }
 
-          # (code_puppy-ctj.1 fix: register_terminal now returns :ok | {:error, _}; log but don't crash on error
-          _ = Store.register_terminal(session_id, terminal_meta)
+          # (code_puppy-ctj.1 fix: register_terminal now creates a minimal
+          # session row if absent, so this should rarely fail.  Log warning
+          # visibly on error rather than silently discarding the result.
+          case Store.register_terminal(session_id, terminal_meta) do
+            :ok -> :ok
+            {:error, reason} ->
+              Logger.warning(
+                "TerminalChannel: register_terminal failed for #{session_id}: #{inspect(reason)}. """
+                Terminal metadata will be persisted on next save_session.
+                """
+              )
+          end
         end
 
         {:ok, %{session_id: session_id, cols: cols, rows: rows}, socket}
@@ -267,9 +280,15 @@ defmodule CodePuppyControlWeb.TerminalChannel do
 
       # (code_puppy-ctj.1) Unregister terminal from SessionStorage.Store
       # since the PTY session is being closed gracefully (not a crash).
-      # unregister_terminal now returns :ok | {:error, _}; discard result.
+      # Log warning on error rather than silently discarding the result.
       if Process.whereis(Store) do
-        _ = Store.unregister_terminal(pty_session_id)
+        case Store.unregister_terminal(pty_session_id) do
+          :ok -> :ok
+          {:error, reason} ->
+            Logger.warning(
+              "TerminalChannel: unregister_terminal failed for #{pty_session_id}: #{inspect(reason)}"
+            )
+        end
       end
     end
 

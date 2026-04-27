@@ -72,8 +72,15 @@ def save_session(
     total_tokens: int = 0,
     auto_saved: bool = False,
     timestamp: str | None = None,
+    has_terminal: bool = False,
+    terminal_meta: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
-    """Save session via Elixir bridge."""
+    """Save session via Elixir bridge.
+
+    (code_puppy-ctj.1 fix) Now accepts has_terminal and terminal_meta
+    parameters and forwards them to transport.session_save, matching
+    the session_storage.py call site and elixir_transport.py signature.
+    """
     transport = _get_transport()
     if transport is None:
         raise RuntimeError("Elixir transport not available")
@@ -85,6 +92,8 @@ def save_session(
         total_tokens=total_tokens,
         auto_saved=auto_saved,
         timestamp=timestamp,
+        has_terminal=has_terminal,
+        terminal_meta=terminal_meta,
     )
 
 

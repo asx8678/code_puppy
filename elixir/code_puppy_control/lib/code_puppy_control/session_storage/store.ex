@@ -220,10 +220,16 @@ defmodule CodePuppyControl.SessionStorage.Store do
   can recreate the PTY on crash/restart. Durably persists to SQLite —
   terminal metadata survives node crashes.
 
-  Returns `{:error, :session_not_found}` if the session does not exist.
+  If no session row exists yet (common when TerminalChannel.join fires
+  before any chat message has been saved), a minimal session row is
+  created in SQLite and ETS so the terminal metadata is not silently
+  lost.  A subsequent save_session call will overwrite this row with
+  full history.  (code_puppy-ctj.1 fix)
+
+  Returns `{:error, reason}` only if the SQLite write itself fails.
   """
   @spec register_terminal(session_name(), terminal_meta()) ::
-          :ok | {:error, :session_not_found | term()}
+          :ok | {:error, term()}
   def register_terminal(session_name, meta) do
     GenServer.call(__MODULE__, {:register_terminal, session_name, meta})
   end
@@ -444,8 +450,25 @@ defmodule CodePuppyControl.SessionStorage.Store do
         end
 
       [] ->
-        Logger.warning("Store: register_terminal for unknown session #{session_name}")
-        {:reply, {:error, :session_not_found}, state}
+        # (code_puppy-ctj.1 fix) No ETS entry — create a minimal durable session
+        # row in SQLite + ETS so the terminal metadata is not silently lost.
+        # This handles the common path where TerminalChannel.join fires before
+        # any chat message has been saved.  The next save_session call will
+        # update this row with full history.
+        case Sessions.save_session(session_name, [],
+               has_terminal: true, terminal_meta: meta) do
+          {:ok, _session} ->
+            entry = build_entry(session_name, [], [], 0, false, now_iso(), true, meta)
+            :ets.insert(@session_table, {session_name, entry})
+            :ets.insert(@terminal_table, {session_name, meta})
+            Phoenix.PubSub.broadcast(@pubsub, @terminal_topic, {:terminal_registered, session_name})
+            Logger.info("Store: register_terminal created minimal session row for #{session_name}")
+            {:reply, :ok, state}
+
+          {:error, reason} ->
+            Logger.error("Store: register_terminal failed to create session for #{session_name}: #{inspect(reason)}")
+            {:reply, {:error, reason}, state}
+        end
     end
   end
 
@@ -543,12 +566,25 @@ defmodule CodePuppyControl.SessionStorage.Store do
     }
   end
 
-  # Normalize terminal_meta keys from string to atom (SQLite JSON → atoms).
+  # Whitelist of known terminal_meta keys.  We never call String.to_atom/1
+  # on persisted JSON / user-influenced data — only known keys are promoted
+  # to atoms; unknown string keys are preserved as strings so downstream code
+  # can still read them via dual-key access (get_key).  (code_puppy-ctj.1 fix)
+  @terminal_meta_whitelist %{
+    "session_id" => :session_id,
+    "cols" => :cols,
+    "rows" => :rows,
+    "shell" => :shell,
+    "attached_at" => :attached_at
+  }
+
   defp normalize_meta_keys(nil), do: nil
   defp normalize_meta_keys(meta) when is_map(meta) do
     Map.new(meta, fn
-      {k, v} when is_binary(k) -> {String.to_atom(k), v}
-      {k, v} when is_atom(k) -> {k, v}
+      {k, v} when is_binary(k) ->
+        {Map.get(@terminal_meta_whitelist, k, k), v}
+      {k, v} when is_atom(k) ->
+        {k, v}
     end)
   end
   defp normalize_meta_keys(meta), do: meta
