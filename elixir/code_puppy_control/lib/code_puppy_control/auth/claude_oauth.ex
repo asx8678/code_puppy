@@ -345,14 +345,17 @@ defmodule CodePuppyControl.Auth.ClaudeOAuth do
   end
 
   @doc """
-  Load Claude models, filtering to only the latest per family.
+  Load Claude models, filtered to only the latest per family.
 
   Returns only the most recent haiku, sonnet, and opus models
   (default: 1 per family, opus up to 6). Useful for status display
   where showing every dated snapshot is noise.
+
+  Renamed from `load_models_filtered` to clarify that filtering
+  is specifically by latest-per-family, not a generic filter.
   """
-  @spec load_models_filtered() :: {:ok, map()}
-  def load_models_filtered do
+  @spec load_latest_models() :: {:ok, map()}
+  def load_latest_models do
     {:ok, all_models} = load_models()
 
     if map_size(all_models) == 0 do

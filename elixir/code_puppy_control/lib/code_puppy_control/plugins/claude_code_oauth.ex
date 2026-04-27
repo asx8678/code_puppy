@@ -14,7 +14,7 @@ defmodule CodePuppyControl.Plugins.ClaudeCodeOAuth do
   - `:agent_run_end` — Stop heartbeat when agent run completes
   - `:custom_command` — `/claude-code-auth`, `/claude-code-status`, `/claude-code-logout`
   - `:custom_command_help` — Help text for custom commands
-  - `:register_model_type` — Register `claude_code` model type handler
+  - `:register_model_types` — Register `claude_code` model type handler
   """
 
   use CodePuppyControl.Plugins.PluginBehaviour
@@ -37,7 +37,7 @@ defmodule CodePuppyControl.Plugins.ClaudeCodeOAuth do
     Callbacks.register(:startup, &__MODULE__._on_startup/0)
     Callbacks.register(:custom_command, &__MODULE__._handle_custom_command/2)
     Callbacks.register(:custom_command_help, &__MODULE__._custom_help/0)
-    Callbacks.register(:register_model_type, &__MODULE__._register_model_types/0)
+    Callbacks.register(:register_model_types, &__MODULE__._register_model_types/0)
     Callbacks.register(:agent_run_start, &__MODULE__._on_agent_run_start/3)
     Callbacks.register(:agent_run_end, &__MODULE__._on_agent_run_end/6)
     :ok
@@ -89,9 +89,13 @@ defmodule CodePuppyControl.Plugins.ClaudeCodeOAuth do
   end
 
   @doc false
-  def _on_agent_run_end(_agent_name, _model_name, session_id, _success, _error, _metadata) do
-    key = session_id || "default"
-    TokenRefreshHeartbeat.stop_heartbeat(key)
+  def _on_agent_run_end(_agent_name, model_name, session_id, _success, _error, _metadata) do
+    # Only stop heartbeat for Claude Code models (mirrors the start gate)
+    if model_name && String.starts_with?(model_name, "claude-code") do
+      key = session_id || "default"
+      TokenRefreshHeartbeat.stop_heartbeat(key)
+    end
+
     :ok
   rescue
     _ -> :ok
@@ -138,7 +142,7 @@ defmodule CodePuppyControl.Plugins.ClaudeCodeOAuth do
             end
 
             # Show configured Claude Code models
-            {:ok, filtered} = ClaudeOAuth.load_models_filtered()
+            {:ok, filtered} = ClaudeOAuth.load_latest_models()
 
             claude_models =
               filtered

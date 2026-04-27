@@ -143,7 +143,11 @@ defmodule CodePuppyControl.Auth.ClaudeOAuth.TokenRefreshHeartbeat do
   @impl true
   def handle_cast(:stop, state) do
     if state.timer_ref, do: Process.cancel_timer(state.timer_ref)
-    Logger.debug("TokenRefreshHeartbeat stopped for session=#{state.session_id} (refreshed #{state.refresh_count} times)")
+
+    Logger.debug(
+      "TokenRefreshHeartbeat stopped for session=#{state.session_id} (refreshed #{state.refresh_count} times)"
+    )
+
     {:stop, :normal, state}
   end
 
@@ -161,7 +165,10 @@ defmodule CodePuppyControl.Auth.ClaudeOAuth.TokenRefreshHeartbeat do
       new_state = attempt_refresh(state, now)
       {:noreply, schedule_next(new_state)}
     else
-      Logger.debug("TokenRefreshHeartbeat: skipping refresh — last refresh was #{now - state.last_refresh}s ago")
+      Logger.debug(
+        "TokenRefreshHeartbeat: skipping refresh — last refresh was #{now - state.last_refresh}s ago"
+      )
+
       {:noreply, schedule_next(state)}
     end
   end

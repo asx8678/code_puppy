@@ -16,7 +16,7 @@ defmodule CodePuppyControl.Plugins.ChatGptOAuth do
   - `:startup` — Proactively refresh tokens at boot
   - `:custom_command` — `/chatgpt-auth`, `/chatgpt-status`, `/chatgpt-logout`
   - `:custom_command_help` — Help text for custom commands
-  - `:register_model_type` — Register `chatgpt_oauth` model type handler
+  - `:register_model_types` — Register `chatgpt_oauth` model type handler
   """
 
   use CodePuppyControl.Plugins.PluginBehaviour
@@ -38,7 +38,7 @@ defmodule CodePuppyControl.Plugins.ChatGptOAuth do
     Callbacks.register(:startup, &__MODULE__.on_startup/0)
     Callbacks.register(:custom_command, &__MODULE__.handle_custom_command/2)
     Callbacks.register(:custom_command_help, &__MODULE__.custom_help/0)
-    Callbacks.register(:register_model_type, &__MODULE__.register_model_types/0)
+    Callbacks.register(:register_model_types, &__MODULE__.register_model_types/0)
     :ok
   end
 
@@ -131,15 +131,20 @@ defmodule CodePuppyControl.Plugins.ChatGptOAuth do
         else
           config = ChatGptOAuth.config()
 
-          %{type: "chatgpt_oauth", name: model_name, api_key: access_token,
-            base_url: Map.get(model_config, "custom_endpoint", %{}) |> Map.get("url", config.api_base_url),
+          %{
+            type: "chatgpt_oauth",
+            name: model_name,
+            api_key: access_token,
+            base_url:
+              Map.get(model_config, "custom_endpoint", %{}) |> Map.get("url", config.api_base_url),
             account_id: account_id,
             extra_headers: [
               {"ChatGPT-Account-Id", account_id},
               {"originator", config.originator},
               {"User-Agent", user_agent_string(config)},
               {"accept", "application/json"}
-            ]}
+            ]
+          }
         end
 
       {:error, _reason} ->
