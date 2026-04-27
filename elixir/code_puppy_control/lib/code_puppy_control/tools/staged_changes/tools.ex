@@ -3,7 +3,23 @@ defmodule CodePuppyControl.Tools.StagedChanges.Tools do
   Tool modules for the staged changes system.
 
   Split from staged_changes.ex to keep the main module under the 600-line cap.
-  These tools are registered by `StagedChanges.register_all/0`.
+
+  ## Slash-Only Decision (code-puppy-ctj.5)
+
+  These tools are **NOT** exposed to agents via the Tool.Registry default_modules
+  list. They are slash-only — accessible only through the `/staged` command.
+
+  **Rationale:** Staging is a user-review mechanism. Allowing agents to invoke
+  `apply_staged_changes` directly would bypass human review. The tools exist
+  for internal dispatch and testing only. If agent-accessible staging is needed
+  in the future, it must go through an explicit allowlist gate in the agent's
+  tool list — never through the registry default_modules.
+
+  ## Security
+
+  Each tool that stages a file change validates the target path against
+  `FileOps.Security.validate_path/2` (via `StagedChanges.add_*` calls).
+  Apply/reject operations route through `SafeWrite` + `FileLock`.
   """
 
   alias CodePuppyControl.Tools.StagedChanges
@@ -98,6 +114,35 @@ defmodule CodePuppyControl.Tools.StagedChanges.Tools do
       StagedChanges.add_delete_snippet(
         Map.get(args, "file_path", ""),
         Map.get(args, "snippet", ""),
+        Map.get(args, "description", "")
+      )
+    end
+  end
+
+  defmodule StageDeleteFileTool do
+    @moduledoc false
+    use CodePuppyControl.Tool
+
+    @impl true
+    def name, do: :stage_delete_file
+    @impl true
+    def description, do: "Stage a file deletion."
+    @impl true
+    def parameters do
+      %{
+        "type" => "object",
+        "properties" => %{
+          "file_path" => %{"type" => "string"},
+          "description" => %{"type" => "string"}
+        },
+        "required" => ["file_path"]
+      }
+    end
+
+    @impl true
+    def invoke(args, _ctx) do
+      StagedChanges.add_delete_file(
+        Map.get(args, "file_path", ""),
         Map.get(args, "description", "")
       )
     end

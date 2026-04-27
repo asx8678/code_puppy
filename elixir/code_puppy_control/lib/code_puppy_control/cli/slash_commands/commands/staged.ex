@@ -58,13 +58,22 @@ defmodule CodePuppyControl.CLI.SlashCommands.Commands.Staged do
 
   defp do_on do
     StagedChanges.enable()
-    IO.puts(IO.ANSI.green() <> "    Staging mode enabled - file edits will be staged for review" <> IO.ANSI.reset())
+
+    IO.puts(
+      IO.ANSI.green() <>
+        "    Staging mode enabled - file edits will be staged for review" <> IO.ANSI.reset()
+    )
+
     show_summary()
   end
 
   defp do_off do
     StagedChanges.disable()
-    IO.puts(IO.ANSI.yellow() <> "    Staging mode disabled - file edits will be applied immediately" <> IO.ANSI.reset())
+
+    IO.puts(
+      IO.ANSI.yellow() <>
+        "    Staging mode disabled - file edits will be applied immediately" <> IO.ANSI.reset()
+    )
   end
 
   defp do_diff do
@@ -74,7 +83,12 @@ defmodule CodePuppyControl.CLI.SlashCommands.Commands.Staged do
       IO.puts(IO.ANSI.faint() <> "    No staged changes to diff" <> IO.ANSI.reset())
     else
       IO.puts("")
-      IO.puts(IO.ANSI.bright() <> IO.ANSI.magenta() <> "Combined Diff of Staged Changes:" <> IO.ANSI.reset())
+
+      IO.puts(
+        IO.ANSI.bright() <>
+          IO.ANSI.magenta() <> "Combined Diff of Staged Changes:" <> IO.ANSI.reset()
+      )
+
       IO.puts("")
       IO.puts(diff)
     end
@@ -87,7 +101,12 @@ defmodule CodePuppyControl.CLI.SlashCommands.Commands.Staged do
       IO.puts(IO.ANSI.faint() <> "    No staged changes to preview" <> IO.ANSI.reset())
     else
       IO.puts("")
-      IO.puts(IO.ANSI.bright() <> IO.ANSI.magenta() <> "Preview of Staged Changes by File:" <> IO.ANSI.reset())
+
+      IO.puts(
+        IO.ANSI.bright() <>
+          IO.ANSI.magenta() <> "Preview of Staged Changes by File:" <> IO.ANSI.reset()
+      )
+
       IO.puts("")
 
       Enum.each(preview, fn {file_path, diff} ->
@@ -99,6 +118,7 @@ defmodule CodePuppyControl.CLI.SlashCommands.Commands.Staged do
           diff
           |> String.split("\n")
           |> Enum.each(&IO.puts("    #{&1}"))
+
           IO.puts("    ```")
         else
           IO.puts(IO.ANSI.faint() <> "    No diff available" <> IO.ANSI.reset())
@@ -126,7 +146,9 @@ defmodule CodePuppyControl.CLI.SlashCommands.Commands.Staged do
         IO.puts(IO.ANSI.faint() <> "    No staged changes to apply" <> IO.ANSI.reset())
 
       {:ok, n} ->
-        IO.puts(IO.ANSI.green() <> "    Applied #{n} staged changes successfully" <> IO.ANSI.reset())
+        IO.puts(
+          IO.ANSI.green() <> "    Applied #{n} staged changes successfully" <> IO.ANSI.reset()
+        )
 
       {:error, msg} ->
         IO.puts(IO.ANSI.red() <> "    Error applying changes: #{msg}" <> IO.ANSI.reset())
@@ -171,7 +193,13 @@ defmodule CodePuppyControl.CLI.SlashCommands.Commands.Staged do
     status_color = if summary.enabled, do: IO.ANSI.green(), else: IO.ANSI.red()
 
     IO.puts("")
-    IO.puts(IO.ANSI.bright() <> IO.ANSI.magenta() <> "    Staged Changes" <> IO.ANSI.reset() <> " (#{status_color}#{status}#{IO.ANSI.reset()})")
+
+    IO.puts(
+      IO.ANSI.bright() <>
+        IO.ANSI.magenta() <>
+        "    Staged Changes" <> IO.ANSI.reset() <> " (#{status_color}#{status}#{IO.ANSI.reset()})"
+    )
+
     IO.puts("")
 
     total = summary.total
@@ -179,7 +207,9 @@ defmodule CodePuppyControl.CLI.SlashCommands.Commands.Staged do
     if total == 0 do
       IO.puts(IO.ANSI.faint() <> "    No pending staged changes" <> IO.ANSI.reset())
     else
-      IO.puts("    #{IO.ANSI.bright()}#{total}#{IO.ANSI.reset()} pending change#{if total != 1, do: "s", else: ""}")
+      IO.puts(
+        "    #{IO.ANSI.bright()}#{total}#{IO.ANSI.reset()} pending change#{if total != 1, do: "s", else: ""}"
+      )
 
       # By type
       by_type = summary.by_type
@@ -198,7 +228,10 @@ defmodule CodePuppyControl.CLI.SlashCommands.Commands.Staged do
 
       if length(files) > 0 do
         IO.puts("")
-        IO.puts("    #{IO.ANSI.bright()}Files affected:#{IO.ANSI.reset()} #{IO.ANSI.cyan()}#{length(files)}#{IO.ANSI.reset()}")
+
+        IO.puts(
+          "    #{IO.ANSI.bright()}Files affected:#{IO.ANSI.reset()} #{IO.ANSI.cyan()}#{length(files)}#{IO.ANSI.reset()}"
+        )
 
         Enum.take(files, 5)
         |> Enum.each(fn f ->
@@ -220,12 +253,22 @@ defmodule CodePuppyControl.CLI.SlashCommands.Commands.Staged do
 
   defp print_usage do
     IO.puts("")
-    IO.puts(IO.ANSI.yellow() <> "    Usage: /staged [on|off|diff|preview|clear|apply|reject|save|load|status]" <> IO.ANSI.reset())
+
+    IO.puts(
+      IO.ANSI.yellow() <>
+        "    Usage: /staged [on|off|diff|preview|clear|apply|reject|save|load|status]" <>
+        IO.ANSI.reset()
+    )
+
     IO.puts("")
   end
 
   defp print_usage_hint do
-    IO.puts(IO.ANSI.faint() <> "    Commands: /staged on|off|diff|preview|clear|apply|reject|save|load" <> IO.ANSI.reset())
+    IO.puts(
+      IO.ANSI.faint() <>
+        "    Commands: /staged on|off|diff|preview|clear|apply|reject|save|load" <>
+        IO.ANSI.reset()
+    )
   end
 
   @spec extract_args(String.t()) :: String.t()

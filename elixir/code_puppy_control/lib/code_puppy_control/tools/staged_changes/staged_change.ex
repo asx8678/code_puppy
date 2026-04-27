@@ -4,6 +4,17 @@ defmodule CodePuppyControl.Tools.StagedChanges.StagedChange do
 
   Validates that `applied` and `rejected` are not both `true`,
   matching the Python `__post_init__` guard.
+
+  ## Serialization
+
+  `from_map/1` safely handles:
+  - Python-persisted uppercase change_type values (`"CREATE"`, `"REPLACE"`, etc.)
+  - Unknown or missing change_type values
+  - Missing optional fields (defaults applied)
+  - Malformed applied/rejected values (coerced to boolean)
+  - Both applied+rejected=true (treated as rejected to be safe)
+
+  Returns `{:ok, change}` or `{:error, reason}` — never raises on bad input.
   """
 
   @derive Jason.Encoder
@@ -23,6 +34,21 @@ defmodule CodePuppyControl.Tools.StagedChanges.StagedChange do
   ]
 
   @type t :: %__MODULE__{}
+
+  # Safe allowlist mapping for change_type strings to atoms.
+  # Supports both Python-persisted uppercase (CREATE, REPLACE, etc.)
+  # and Elixir-internal lowercase (create, replace, etc.).
+  # No unsafe atom creation — only these atoms can ever be produced.
+  @change_type_map %{
+    "create" => :create,
+    "CREATE" => :create,
+    "replace" => :replace,
+    "REPLACE" => :replace,
+    "delete_snippet" => :delete_snippet,
+    "DELETE_SNIPPET" => :delete_snippet,
+    "delete_file" => :delete_file,
+    "DELETE_FILE" => :delete_file
+  }
 
   @doc """
   Create a new StagedChange with validation.
@@ -64,27 +90,95 @@ defmodule CodePuppyControl.Tools.StagedChanges.StagedChange do
 
   @doc """
   Deserialize change from map (matches Python `from_dict`).
-  """
-  @spec from_map(map()) :: t()
-  def from_map(data) when is_map(data) do
-    type_atom =
-      case data["change_type"] do
-        t when is_atom(t) -> t
-        t when is_binary(t) -> String.to_existing_atom(t)
-      end
 
-    %__MODULE__{
-      change_id: data["change_id"],
-      change_type: type_atom,
-      file_path: data["file_path"],
-      content: data["content"],
-      old_str: data["old_str"],
-      new_str: data["new_str"],
-      snippet: data["snippet"],
-      created_at: data["created_at"],
-      description: data["description"] || "",
-      applied: data["applied"] || false,
-      rejected: data["rejected"] || false
-    }
+  Robust against malformed input:
+  - Handles Python-persisted uppercase change_type (`"CREATE"`, `"REPLACE"`, etc.)
+  - Handles unknown change_type → `{:error, reason}`
+  - Handles missing required fields → `{:error, reason}`
+  - Handles malformed applied/rejected → coerced to boolean
+  - Handles applied+rejected=true → treated as rejected (safe default)
+  - Never raises on bad input, never crashes the caller
+
+  Returns `{:ok, change}` or `{:error, reason}`.
+  """
+  @spec from_map(map()) :: {:ok, t()} | {:error, String.t()}
+  def from_map(data) when is_map(data) do
+    with {:ok, change_id} <- require_field(data, "change_id"),
+         {:ok, change_type} <- parse_change_type(data["change_type"]),
+         {:ok, file_path} <- require_field(data, "file_path") do
+      applied = to_bool(data["applied"])
+      rejected = to_bool(data["rejected"])
+
+      # If both are true, treat as rejected (safe: never auto-apply a
+      # change that was explicitly rejected)
+      {applied, rejected} =
+        if applied and rejected do
+          {false, true}
+        else
+          {applied, rejected}
+        end
+
+      {:ok,
+       %__MODULE__{
+         change_id: change_id,
+         change_type: change_type,
+         file_path: file_path,
+         content: data["content"],
+         old_str: data["old_str"],
+         new_str: data["new_str"],
+         snippet: data["snippet"],
+         created_at: data["created_at"],
+         description: data["description"] || "",
+         applied: applied,
+         rejected: rejected
+       }}
+    end
   end
+
+  @doc """
+  Returns the safe change_type allowlist map.
+  Useful for tests and validation.
+  """
+  @spec change_type_map() :: %{String.t() => atom()}
+  def change_type_map, do: @change_type_map
+
+  # ── Private helpers ──────────────────────────────────────────────────────
+
+  defp require_field(data, key) do
+    case Map.get(data, key) do
+      nil -> {:error, "missing required field: #{key}"}
+      "" -> {:error, "empty required field: #{key}"}
+      value -> {:ok, value}
+    end
+  end
+
+  defp parse_change_type(nil), do: {:error, "missing required field: change_type"}
+
+  defp parse_change_type(type) when is_atom(type) do
+    if type in [:create, :replace, :delete_snippet, :delete_file] do
+      {:ok, type}
+    else
+      {:error, "unknown change_type atom: #{inspect(type)}"}
+    end
+  end
+
+  defp parse_change_type(type) when is_binary(type) do
+    case Map.get(@change_type_map, type) do
+      nil -> {:error, "unknown change_type string: #{inspect(type)}"}
+      atom -> {:ok, atom}
+    end
+  end
+
+  defp parse_change_type(other), do: {:error, "invalid change_type: #{inspect(other)}"}
+
+  # Coerce various truthy/falsy values to boolean.
+  # Handles: true/false, "true"/"false", 1/0, nil → false
+  defp to_bool(true), do: true
+  defp to_bool(false), do: false
+  defp to_bool(nil), do: false
+  defp to_bool("true"), do: true
+  defp to_bool("false"), do: false
+  defp to_bool(1), do: true
+  defp to_bool(0), do: false
+  defp to_bool(_), do: false
 end

@@ -14,8 +14,13 @@ defmodule CodePuppyControl.Tools.StagedChangesTest do
 
   setup do
     case StagedChanges.start_link([]) do
-      {:ok, _pid} -> :ok
-      {:error, {:already_started, _pid}} -> StagedChanges.clear(); StagedChanges.disable(); :ok
+      {:ok, _pid} ->
+        :ok
+
+      {:error, {:already_started, _pid}} ->
+        StagedChanges.clear()
+        StagedChanges.disable()
+        :ok
     end
 
     on_exit(fn ->
@@ -108,10 +113,51 @@ defmodule CodePuppyControl.Tools.StagedChangesTest do
       assert StagedChanges.count() == 0
     end
 
-    test "remove_change removes specific change" do
+    test "remove_change returns true when found, false when not" do
       {:ok, c} = StagedChanges.add_create("/tmp/test.txt", "content", "test")
-      StagedChanges.remove_change(c.change_id)
+      assert StagedChanges.remove_change(c.change_id) == true
       assert StagedChanges.count() == 0
+      # Already removed — should return false
+      assert StagedChanges.remove_change(c.change_id) == false
+      # Non-existent ID — should return false
+      assert StagedChanges.remove_change("nonexistent_id") == false
+    end
+  end
+
+  # ── Security: sensitive path blocking ───────────────────────────────────
+
+  describe "sensitive path blocking" do
+    test "add_create rejects sensitive SSH key paths" do
+      home = System.user_home!()
+      assert {:error, _} = StagedChanges.add_create(Path.join(home, ".ssh/id_rsa"), "key")
+    end
+
+    test "add_create rejects /etc/passwd" do
+      assert {:error, _} = StagedChanges.add_create("/etc/passwd", "hacked")
+    end
+
+    test "add_replace rejects sensitive paths" do
+      assert {:error, _} = StagedChanges.add_replace("/etc/shadow", "old", "new")
+    end
+
+    test "add_delete_snippet rejects sensitive paths" do
+      assert {:error, _} = StagedChanges.add_delete_snippet("/etc/sudoers", "line")
+    end
+
+    test "add_delete_file rejects sensitive paths" do
+      assert {:error, _} = StagedChanges.add_delete_file("/etc/passwd")
+    end
+
+    test "add_create allows normal project paths" do
+      assert {:ok, _} = StagedChanges.add_create("/tmp/project/main.py", "print('hi')")
+    end
+
+    test "add_create rejects .pem files" do
+      assert {:error, _} = StagedChanges.add_create("/tmp/evil.pem", "cert data")
+    end
+
+    test "add_create rejects .env files" do
+      assert {:error, _} = StagedChanges.add_create("/tmp/project/.env", "SECRET=abc")
     end
   end
 
@@ -142,17 +188,32 @@ defmodule CodePuppyControl.Tools.StagedChangesTest do
   describe "StagedChange validation" do
     test "raises when both applied and rejected are true" do
       assert_raise ArgumentError, "StagedChange cannot be both applied and rejected", fn ->
-        StagedChange.new(change_id: "t", change_type: :create, file_path: "/tmp/x", applied: true, rejected: true)
+        StagedChange.new(
+          change_id: "t",
+          change_type: :create,
+          file_path: "/tmp/x",
+          applied: true,
+          rejected: true
+        )
       end
     end
 
     test "allows applied=true, rejected=false" do
-      c = StagedChange.new(change_id: "t", change_type: :create, file_path: "/tmp/x", applied: true)
+      c =
+        StagedChange.new(change_id: "t", change_type: :create, file_path: "/tmp/x", applied: true)
+
       assert c.applied == true
     end
 
     test "allows applied=false, rejected=true" do
-      c = StagedChange.new(change_id: "t", change_type: :create, file_path: "/tmp/x", rejected: true)
+      c =
+        StagedChange.new(
+          change_id: "t",
+          change_type: :create,
+          file_path: "/tmp/x",
+          rejected: true
+        )
+
       assert c.rejected == true
     end
   end
@@ -164,27 +225,166 @@ defmodule CodePuppyControl.Tools.StagedChangesTest do
       assert map["change_id"] == original.change_id
       assert map["change_type"] == "create"
       assert map["content"] == "data"
-      restored = StagedChange.from_map(map)
+      assert {:ok, restored} = StagedChange.from_map(map)
       assert restored.change_id == original.change_id
       assert restored.change_type == :create
       assert restored.content == "data"
     end
 
     test "from_map handles atom change_type" do
-      c = StagedChange.from_map(%{"change_id" => "a", "change_type" => :replace, "file_path" => "/tmp/x"})
+      assert {:ok, c} =
+               StagedChange.from_map(%{
+                 "change_id" => "a",
+                 "change_type" => :replace,
+                 "file_path" => "/tmp/x"
+               })
+
       assert c.change_type == :replace
     end
 
     test "from_map handles missing optional fields with defaults" do
-      c = StagedChange.from_map(%{"change_id" => "a", "change_type" => "create", "file_path" => "/tmp/x"})
+      assert {:ok, c} =
+               StagedChange.from_map(%{
+                 "change_id" => "a",
+                 "change_type" => "create",
+                 "file_path" => "/tmp/x"
+               })
+
       assert c.description == "" and c.applied == false and c.rejected == false
+    end
+
+    test "from_map handles Python uppercase CREATE" do
+      assert {:ok, c} =
+               StagedChange.from_map(%{
+                 "change_id" => "a",
+                 "change_type" => "CREATE",
+                 "file_path" => "/tmp/x"
+               })
+
+      assert c.change_type == :create
+    end
+
+    test "from_map handles Python uppercase REPLACE" do
+      assert {:ok, c} =
+               StagedChange.from_map(%{
+                 "change_id" => "a",
+                 "change_type" => "REPLACE",
+                 "file_path" => "/tmp/x"
+               })
+
+      assert c.change_type == :replace
+    end
+
+    test "from_map handles Python uppercase DELETE_SNIPPET" do
+      assert {:ok, c} =
+               StagedChange.from_map(%{
+                 "change_id" => "a",
+                 "change_type" => "DELETE_SNIPPET",
+                 "file_path" => "/tmp/x"
+               })
+
+      assert c.change_type == :delete_snippet
+    end
+
+    test "from_map handles Python uppercase DELETE_FILE" do
+      assert {:ok, c} =
+               StagedChange.from_map(%{
+                 "change_id" => "a",
+                 "change_type" => "DELETE_FILE",
+                 "file_path" => "/tmp/x"
+               })
+
+      assert c.change_type == :delete_file
+    end
+
+    test "from_map returns error for unknown change_type string" do
+      assert {:error, _} =
+               StagedChange.from_map(%{
+                 "change_id" => "a",
+                 "change_type" => "EVIL_TYPE",
+                 "file_path" => "/tmp/x"
+               })
+    end
+
+    test "from_map returns error for unknown change_type atom" do
+      assert {:error, _} =
+               StagedChange.from_map(%{
+                 "change_id" => "a",
+                 "change_type" => :evil_type,
+                 "file_path" => "/tmp/x"
+               })
+    end
+
+    test "from_map returns error for missing change_id" do
+      assert {:error, _} =
+               StagedChange.from_map(%{"change_type" => "create", "file_path" => "/tmp/x"})
+    end
+
+    test "from_map returns error for missing file_path" do
+      assert {:error, _} = StagedChange.from_map(%{"change_id" => "a", "change_type" => "create"})
+    end
+
+    test "from_map returns error for missing change_type" do
+      assert {:error, _} = StagedChange.from_map(%{"change_id" => "a", "file_path" => "/tmp/x"})
+    end
+
+    test "from_map returns error for empty change_id" do
+      assert {:error, _} =
+               StagedChange.from_map(%{
+                 "change_id" => "",
+                 "change_type" => "create",
+                 "file_path" => "/tmp/x"
+               })
+    end
+
+    test "from_map handles applied+rejected=true as rejected (safe default)" do
+      assert {:ok, c} =
+               StagedChange.from_map(%{
+                 "change_id" => "a",
+                 "change_type" => "create",
+                 "file_path" => "/tmp/x",
+                 "applied" => true,
+                 "rejected" => true
+               })
+
+      assert c.applied == false
+      assert c.rejected == true
+    end
+
+    test "from_map coerces string boolean values" do
+      assert {:ok, c} =
+               StagedChange.from_map(%{
+                 "change_id" => "a",
+                 "change_type" => "create",
+                 "file_path" => "/tmp/x",
+                 "applied" => "true",
+                 "rejected" => "false"
+               })
+
+      assert c.applied == true
+      assert c.rejected == false
+    end
+
+    test "from_map coerces integer boolean values" do
+      assert {:ok, c} =
+               StagedChange.from_map(%{
+                 "change_id" => "a",
+                 "change_type" => "create",
+                 "file_path" => "/tmp/x",
+                 "applied" => 1,
+                 "rejected" => 0
+               })
+
+      assert c.applied == true
+      assert c.rejected == false
     end
   end
 
   # ── Combined diff ───────────────────────────────────────────────────────
 
   describe "get_combined_diff" do
-    test "returns empty string when no changes", do: assert(StagedChanges.get_combined_diff() == "")
+    test "returns empty string when no changes",
+      do: assert(StagedChanges.get_combined_diff() == "")
 
     test "returns diff for staged create" do
       StagedChanges.add_create("/tmp/test.txt", "hello\nworld\n", "create test")
@@ -296,6 +496,92 @@ defmodule CodePuppyControl.Tools.StagedChangesTest do
       assert StagedChanges.load_from_disk("nonexistent_session_12345") == false
     end
 
+    test "load_from_disk returns false for malformed JSON" do
+      stage_dir = Path.join(System.tmp_dir!(), "code_puppy_staged")
+      File.mkdir_p!(stage_dir)
+      sid = StagedChanges.session_id()
+      bad_path = Path.join(stage_dir, "#{sid}_bad.json")
+      File.write!(bad_path, "not valid json {{{")
+      assert StagedChanges.load_from_disk("#{sid}_bad") == false
+      File.rm(bad_path)
+    end
+
+    test "load_from_disk skips malformed entries, loads valid ones" do
+      StagedChanges.add_create("/tmp/good_change.txt", "good", "good change")
+      {:ok, path} = StagedChanges.save_to_disk()
+      {:ok, raw} = File.read(path)
+      {:ok, data} = Jason.decode(raw)
+      # Inject a malformed entry (missing change_id)
+      bad_entry = %{"change_type" => "create", "file_path" => "/tmp/bad.txt"}
+      # Also inject an entry with unknown change_type
+      evil_entry = %{"change_id" => "z", "change_type" => "EVIL", "file_path" => "/tmp/evil.txt"}
+      corrupted_data = Map.update!(data, "changes", &(&1 ++ [bad_entry, evil_entry]))
+      File.write!(path, Jason.encode!(corrupted_data))
+      StagedChanges.clear()
+      assert StagedChanges.load_from_disk() == true
+      # Only the valid change should be loaded
+      assert StagedChanges.count() == 1
+      File.rm(path)
+    end
+
+    test "load_from_disk handles Python uppercase change_types in persisted JSON" do
+      stage_dir = Path.join(System.tmp_dir!(), "code_puppy_staged")
+      File.mkdir_p!(stage_dir)
+      original_sid = StagedChanges.session_id()
+      # Save current session so we can restore it after (load_from_disk changes session_id)
+      {:ok, _original_path} = StagedChanges.save_to_disk()
+      python_path = Path.join(stage_dir, "#{original_sid}_py.json")
+      # Simulate a Python-persisted JSON with uppercase change_type
+      python_data = %{
+        "session_id" => "#{original_sid}_py",
+        "enabled" => true,
+        "changes" => [
+          %{
+            "change_id" => "py_upper_1",
+            "change_type" => "CREATE",
+            "file_path" => "/tmp/from_python.txt",
+            "content" => "hello from python",
+            "old_str" => nil,
+            "new_str" => nil,
+            "snippet" => nil,
+            "created_at" => 1_700_000_000,
+            "description" => "Python create",
+            "applied" => false,
+            "rejected" => false
+          },
+          %{
+            "change_id" => "py_upper_2",
+            "change_type" => "DELETE_FILE",
+            "file_path" => "/tmp/delete_me.txt",
+            "content" => nil,
+            "old_str" => nil,
+            "new_str" => nil,
+            "snippet" => nil,
+            "created_at" => 1_700_000_001,
+            "description" => "Python delete",
+            "applied" => false,
+            "rejected" => false
+          }
+        ],
+        "saved_at" => 1_700_000_000
+      }
+
+      File.write!(python_path, Jason.encode!(python_data))
+      StagedChanges.clear()
+      assert StagedChanges.load_from_disk("#{original_sid}_py") == true
+      changes = StagedChanges.get_staged_changes()
+      assert length(changes) == 2
+      types = Enum.map(changes, & &1.change_type) |> Enum.sort()
+      assert :create in types
+      assert :delete_file in types
+      # Restore session state so other tests aren't affected
+      StagedChanges.clear()
+      StagedChanges.disable()
+      # Restore original session_id by loading the saved state
+      StagedChanges.load_from_disk(original_sid)
+      File.rm(python_path)
+    end
+
     test "save file is valid JSON" do
       StagedChanges.add_create("/tmp/json_test.txt", "json content", "json test")
       {:ok, path} = StagedChanges.save_to_disk()
@@ -340,7 +626,7 @@ defmodule CodePuppyControl.Tools.StagedChangesTest do
       StagedChanges.add_create(path, "data", "test")
       StagedChanges.apply_all()
       assert StagedChanges.count() == 0
-      assert Enum.any?(StagedChanges.get_staged_changes(include_applied: true), &(&1.applied))
+      assert Enum.any?(StagedChanges.get_staged_changes(include_applied: true), & &1.applied)
       File.rm(path)
     end
 
@@ -420,6 +706,27 @@ defmodule CodePuppyControl.Tools.StagedChangesTest do
     test "combined diff output format matches Python (comment header)" do
       StagedChanges.add_create("/tmp/parity.txt", "content\n", "parity test")
       assert StagedChanges.get_combined_diff() =~ ~r/^# .+ \([0-9a-f]{32}\)/
+    end
+  end
+
+  # ── Safe apply: symlink protection via SafeWrite ────────────────────────
+
+  describe "safe apply" do
+    test "apply_all uses SafeWrite (symlink-safe) for creates" do
+      path = Path.join(@tmp_dir, "staged_safe_#{:rand.uniform(100_000)}.txt")
+      StagedChanges.add_create(path, "safe content", "safe test")
+      assert {:ok, 1} = StagedChanges.apply_all()
+      assert File.read!(path) == "safe content"
+      File.rm(path)
+    end
+
+    test "apply_all uses SafeWrite (symlink-safe) for replaces" do
+      path = Path.join(@tmp_dir, "staged_safe_rpl_#{:rand.uniform(100_000)}.txt")
+      File.write!(path, "original content")
+      StagedChanges.add_replace(path, "original", "replaced", "safe replace")
+      assert {:ok, 1} = StagedChanges.apply_all()
+      assert File.read!(path) == "replaced content"
+      File.rm(path)
     end
   end
 end

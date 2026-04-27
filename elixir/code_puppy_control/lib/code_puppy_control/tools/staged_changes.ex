@@ -6,6 +6,24 @@ defmodule CodePuppyControl.Tools.StagedChanges do
   intercept, store, diff, preview, apply/reject, persist/restore.
 
   GenServer manages ETS table `:staged_changes` for concurrent reads.
+
+  ## Security
+
+  - All staging operations validate paths via `FileOps.Security.validate_path/2`
+    to block sensitive paths (SSH keys, cloud credentials, /etc, etc.)
+  - Apply operations route through `FileModifications.SafeWrite` and
+    `FileModifications.FileLock` for symlink-safe atomic writes and
+    per-file concurrency serialization
+  - Staged tools are **slash-only** — not exposed to agents (see `Tools` module)
+
+  ## Tool Exposure Decision (code-puppy-ctj.5)
+
+  Staged change tool modules are intentionally **NOT** registered in the
+  Tool.Registry default_modules list. They are slash-only — accessible only
+  through the `/staged` command, not as agent-callable tools. This is a
+  deliberate design choice: staging is a **user-review mechanism**, and
+  allowing agents to invoke staged tools directly would bypass the human
+  review intent. The `register_all/0` function exists for testing only.
   """
 
   use GenServer
@@ -13,6 +31,8 @@ defmodule CodePuppyControl.Tools.StagedChanges do
   alias CodePuppyControl.Text.{Diff, ReplaceEngine}
   alias CodePuppyControl.Tool.Registry
   alias CodePuppyControl.Tools.StagedChanges.StagedChange
+  alias CodePuppyControl.FileOps.Security
+  alias CodePuppyControl.Tools.FileModifications.{SafeWrite, FileLock}
 
   @table :staged_changes
   @stage_dir Path.join(System.tmp_dir!(), "code_puppy_staged")
@@ -34,24 +54,36 @@ defmodule CodePuppyControl.Tools.StagedChanges do
 
   @doc """
   Stage a file creation.
+
+  Validates the file path against sensitive path rules.
+  Returns `{:ok, change}` or `{:error, reason}`.
   """
   def add_create(fp, content, desc \\ ""),
     do: GenServer.call(__MODULE__, {:add_create, fp, content, desc})
 
   @doc """
   Stage a text replacement.
+
+  Validates the file path against sensitive path rules.
+  Returns `{:ok, change}` or `{:error, reason}`.
   """
   def add_replace(fp, old, new, desc \\ ""),
     do: GenServer.call(__MODULE__, {:add_replace, fp, old, new, desc})
 
   @doc """
   Stage a snippet deletion.
+
+  Validates the file path against sensitive path rules.
+  Returns `{:ok, change}` or `{:error, reason}`.
   """
   def add_delete_snippet(fp, snip, desc \\ ""),
     do: GenServer.call(__MODULE__, {:add_delete_snippet, fp, snip, desc})
 
   @doc """
   Stage a file deletion (DELETE_FILE change type).
+
+  Validates the file path against sensitive path rules.
+  Returns `{:ok, change}` or `{:error, reason}`.
   """
   def add_delete_file(fp, desc \\ ""),
     do: GenServer.call(__MODULE__, {:add_delete_file, fp, desc})
@@ -105,6 +137,9 @@ defmodule CodePuppyControl.Tools.StagedChanges do
 
   @doc """
   Remove a specific change by ID.
+
+  Returns `true` if the change was found and removed, `false` otherwise.
+  This provides boolean parity with the expected remove-change semantics.
   """
   def remove_change(id), do: GenServer.call(__MODULE__, {:remove_change, id})
 
@@ -202,7 +237,7 @@ defmodule CodePuppyControl.Tools.StagedChanges do
     GenServer.call(__MODULE__, :save_to_disk)
   end
 
-  @doc "Load staged changes from disk."
+  @doc "Load staged changes from disk. Returns `true` on success, `false` on failure."
   def load_from_disk(session_id \\ nil) do
     GenServer.call(__MODULE__, {:load_from_disk, session_id})
   end
@@ -213,8 +248,8 @@ defmodule CodePuppyControl.Tools.StagedChanges do
   @doc """
   Register all staged changes tool modules with the Tool Registry.
 
-  Tool modules are defined in `CodePuppyControl.Tools.StagedChanges.Tools`
-  to keep this module under the 600-line cap.
+  **NOTE:** This function is for testing only. Staged change tools are
+  **slash-only** — not exposed to agents. See module doc for rationale.
   """
   def register_all do
     alias CodePuppyControl.Tools.StagedChanges.Tools
@@ -224,6 +259,7 @@ defmodule CodePuppyControl.Tools.StagedChanges do
       Tools.StageCreateTool,
       Tools.StageReplaceTool,
       Tools.StageDeleteSnippetTool,
+      Tools.StageDeleteFileTool,
       Tools.GetStagedDiffTool,
       Tools.ApplyStagedTool,
       Tools.RejectStagedTool
@@ -277,36 +313,59 @@ defmodule CodePuppyControl.Tools.StagedChanges do
 
   @impl true
   def handle_call({:add_create, fp, content, desc}, _, s) do
-    c = mk(:create, fp, content: content, description: desc)
-    :ets.insert(@table, {c.change_id, c})
-    {:reply, {:ok, c}, s}
+    with {:ok, _} <- validate_staged_path(fp, "stage_create") do
+      c = mk(:create, fp, content: content, description: desc)
+      :ets.insert(@table, {c.change_id, c})
+      {:reply, {:ok, c}, s}
+    else
+      {:error, reason} -> {:reply, {:error, reason}, s}
+    end
   end
 
   @impl true
   def handle_call({:add_replace, fp, old, new, desc}, _, s) do
-    c = mk(:replace, fp, old_str: old, new_str: new, description: desc)
-    :ets.insert(@table, {c.change_id, c})
-    {:reply, {:ok, c}, s}
+    with {:ok, _} <- validate_staged_path(fp, "stage_replace") do
+      c = mk(:replace, fp, old_str: old, new_str: new, description: desc)
+      :ets.insert(@table, {c.change_id, c})
+      {:reply, {:ok, c}, s}
+    else
+      {:error, reason} -> {:reply, {:error, reason}, s}
+    end
   end
 
   @impl true
   def handle_call({:add_delete_snippet, fp, snip, desc}, _, s) do
-    c = mk(:delete_snippet, fp, snippet: snip, description: desc)
-    :ets.insert(@table, {c.change_id, c})
-    {:reply, {:ok, c}, s}
+    with {:ok, _} <- validate_staged_path(fp, "stage_delete_snippet") do
+      c = mk(:delete_snippet, fp, snippet: snip, description: desc)
+      :ets.insert(@table, {c.change_id, c})
+      {:reply, {:ok, c}, s}
+    else
+      {:error, reason} -> {:reply, {:error, reason}, s}
+    end
   end
 
   @impl true
   def handle_call({:add_delete_file, fp, desc}, _, s) do
-    c = mk(:delete_file, fp, description: desc)
-    :ets.insert(@table, {c.change_id, c})
-    {:reply, {:ok, c}, s}
+    with {:ok, _} <- validate_staged_path(fp, "stage_delete_file") do
+      c = mk(:delete_file, fp, description: desc)
+      :ets.insert(@table, {c.change_id, c})
+      {:reply, {:ok, c}, s}
+    else
+      {:error, reason} -> {:reply, {:error, reason}, s}
+    end
   end
 
   @impl true
   def handle_call({:remove_change, id}, _, s) do
-    :ets.delete(@table, id)
-    {:reply, :ok, s}
+    # Return boolean: true if found and deleted, false if not found
+    case :ets.lookup(@table, id) do
+      [{^id, _}] ->
+        :ets.delete(@table, id)
+        {:reply, true, s}
+
+      [] ->
+        {:reply, false, s}
+    end
   end
 
   @impl true
@@ -390,10 +449,26 @@ defmodule CodePuppyControl.Tools.StagedChanges do
       {:ok, raw} ->
         case Jason.decode(raw) do
           {:ok, data} ->
-            loaded_changes =
-              data
-              |> Map.get("changes", [])
-              |> Enum.map(&StagedChange.from_map/1)
+            # Robust deserialization: skip malformed entries instead of crashing
+            raw_changes = Map.get(data, "changes", [])
+
+            {loaded_changes, skipped} =
+              Enum.reduce(raw_changes, {[], 0}, fn entry, {acc, skip_count} ->
+                case StagedChange.from_map(entry) do
+                  {:ok, c} ->
+                    {[c | acc], skip_count}
+
+                  {:error, reason} ->
+                    Logger.warning("Skipping malformed staged change: #{reason}")
+                    {acc, skip_count + 1}
+                end
+              end)
+
+            loaded_changes = Enum.reverse(loaded_changes)
+
+            if skipped > 0 do
+              Logger.warning("Skipped #{skipped} malformed staged changes during load")
+            end
 
             # Rebuild ETS from loaded changes
             :ets.delete_all_objects(@table)
@@ -407,11 +482,10 @@ defmodule CodePuppyControl.Tools.StagedChanges do
 
             Logger.info("Loaded #{length(loaded_changes)} staged changes from #{load_path}")
 
-            {:reply, true,
-             %{s | session_id: new_session_id, enabled: new_enabled}}
+            {:reply, true, %{s | session_id: new_session_id, enabled: new_enabled}}
 
           {:error, reason} ->
-            Logger.error("Failed to parse staged changes JSON: #{reason}")
+            Logger.error("Failed to parse staged changes JSON: #{inspect(reason)}")
             {:reply, false, s}
         end
 
@@ -433,6 +507,10 @@ defmodule CodePuppyControl.Tools.StagedChanges do
 
   defp ensure_stage_dir do
     File.mkdir_p!(@stage_dir)
+  end
+
+  defp validate_staged_path(fp, operation) do
+    Security.validate_path(fp, operation)
   end
 
   defp mk(type, fp, opts) do
@@ -462,38 +540,47 @@ defmodule CodePuppyControl.Tools.StagedChanges do
 
   defp id, do: :crypto.strong_rand_bytes(16) |> Base.encode16(case: :lower)
 
-  # ── Apply logic ─────────────────────────────────────────────────────────
+  # ── Apply logic (routed through SafeWrite + FileLock) ───────────────────
 
   defp do_apply(%StagedChange{change_type: :create} = c) do
-    File.mkdir_p(Path.dirname(c.file_path))
-    File.write(c.file_path, c.content || "")
+    FileLock.with_lock(c.file_path, fn ->
+      SafeWrite.safe_write(c.file_path, c.content || "")
+    end)
+    |> normalize_safe_write_result()
   end
 
   defp do_apply(%StagedChange{change_type: :replace} = c) do
-    case File.read(c.file_path) do
-      {:ok, content} ->
-        case ReplaceEngine.replace_in_content(content, [{c.old_str || "", c.new_str || ""}]) do
-          {:ok, %{modified: m}} -> File.write(c.file_path, m)
-          {:error, %{reason: r}} -> {:error, r}
-        end
+    FileLock.with_lock(c.file_path, fn ->
+      case File.read(c.file_path) do
+        {:ok, content} ->
+          case ReplaceEngine.replace_in_content(content, [{c.old_str || "", c.new_str || ""}]) do
+            {:ok, %{modified: m}} -> SafeWrite.safe_write(c.file_path, m)
+            {:error, %{reason: r}} -> {:error, r}
+          end
 
-      e ->
-        e
-    end
+        e ->
+          e
+      end
+    end)
+    |> normalize_result()
   end
 
   defp do_apply(%StagedChange{change_type: :delete_snippet} = c) do
-    case File.read(c.file_path) do
-      {:ok, content} ->
-        snip = c.snippet || ""
+    FileLock.with_lock(c.file_path, fn ->
+      case File.read(c.file_path) do
+        {:ok, content} ->
+          snip = c.snippet || ""
 
-        if String.contains?(content, snip),
-          do: File.write(c.file_path, String.replace(content, snip, "", global: false)),
-          else: {:error, "Snippet not found"}
+          if String.contains?(content, snip),
+            do:
+              SafeWrite.safe_write(c.file_path, String.replace(content, snip, "", global: false)),
+            else: {:error, "Snippet not found"}
 
-      e ->
-        e
-    end
+        e ->
+          e
+      end
+    end)
+    |> normalize_result()
   end
 
   defp do_apply(%StagedChange{change_type: :delete_file} = c) do
@@ -505,6 +592,25 @@ defmodule CodePuppyControl.Tools.StagedChanges do
   end
 
   defp do_apply(_), do: {:error, "Unsupported change type"}
+
+  # Normalize SafeWrite results to :ok / {:error, reason}
+  defp normalize_safe_write_result(:ok), do: :ok
+
+  defp normalize_safe_write_result({:error, reason}),
+    do: {:error, "SafeWrite failed: #{reason}"}
+
+  # Normalize FileLock results (may wrap in {:error, exception} on raise)
+  defp normalize_result(:ok), do: :ok
+  defp normalize_result({:ok, _}), do: :ok
+
+  defp normalize_result({:error, reason}) when is_binary(reason),
+    do: {:error, reason}
+
+  defp normalize_result({:error, %_{__exception__: true} = exception}),
+    do: {:error, Exception.message(exception)}
+
+  defp normalize_result({:error, reason}),
+    do: {:error, inspect(reason)}
 
   # ── Diff generation (with file cache) ───────────────────────────────────
 

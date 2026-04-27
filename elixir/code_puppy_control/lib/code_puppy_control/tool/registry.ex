@@ -349,12 +349,9 @@ defmodule CodePuppyControl.Tool.Registry do
       CodePuppyControl.Tools.SubagentContext.GetContext,
       CodePuppyControl.Tools.SubagentContext.PushContext,
       CodePuppyControl.Tools.SubagentContext.PopContext,
-      CodePuppyControl.Tools.StagedChanges.Tools.StageCreateTool,
-      CodePuppyControl.Tools.StagedChanges.Tools.StageReplaceTool,
-      CodePuppyControl.Tools.StagedChanges.Tools.StageDeleteSnippetTool,
-      CodePuppyControl.Tools.StagedChanges.Tools.GetStagedDiffTool,
-      CodePuppyControl.Tools.StagedChanges.Tools.ApplyStagedTool,
-      CodePuppyControl.Tools.StagedChanges.Tools.RejectStagedTool,
+      # Staged change tools are SLASH-ONLY — not exposed to agents.
+      # See code-puppy-ctj.5 decision: staging is a user-review mechanism.
+      # Register via StagedChanges.register_all/0 for testing only.
       CodePuppyControl.Tools.ProcessRunner.ListProcesses,
       CodePuppyControl.Tools.ProcessRunner.KillProcess,
       CodePuppyControl.Tools.ProcessRunner.KillAllProcesses
