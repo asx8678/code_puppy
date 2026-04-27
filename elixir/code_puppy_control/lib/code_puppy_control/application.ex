@@ -74,7 +74,8 @@ defmodule CodePuppyControl.Application do
       CodePuppyControl.SessionStorage.AutosaveTracker,
       CodePuppyControl.RuntimeState,
       # Workflow state tracking for /flags command
-      {CodePuppyControl.WorkflowState, name: CodePuppyControl.WorkflowState},
+      # TODO(code-puppy-ctj.3): Migrated from WorkflowState to Workflow.State
+      {CodePuppyControl.Workflow.State, name: CodePuppyControl.Workflow.State},
       # Callback registry (ETS-backed GenServer) — must start before
       # any component triggers or registers callbacks (e.g. plugin loader,
       # security checks, slash commands).
