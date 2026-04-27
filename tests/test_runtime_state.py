@@ -13,8 +13,6 @@ from __future__ import annotations
 import os
 from unittest.mock import MagicMock, patch
 
-import pytest
-
 # We mock the transport since these tests verify the Python→Elixir routing,
 # not the Elixir GenServer itself.
 
@@ -244,11 +242,51 @@ class TestFinalizeAutosaveSessionTransport:
         transport = _mock_transport()
         transport._send_request.return_value = {"autosave_id": "20250101_120000"}
         with patch("code_puppy.runtime_state._get_transport", return_value=transport):
-            result = runtime_state.finalize_autosave_session()
-            assert result == "20250101_120000"
-            transport._send_request.assert_called_once_with(
-                "runtime_finalize_autosave_session", {}
-            )
+            with patch("code_puppy.config.auto_save_session_if_enabled") as mock_save:
+                result = runtime_state.finalize_autosave_session()
+                assert result == "20250101_120000"
+                # Python autosave is called before transport finalize/rotation
+                mock_save.assert_called_once()
+                transport._send_request.assert_called_once_with(
+                    "runtime_finalize_autosave_session", {}
+                )
+
+    def test_finalize_normal_path_calls_python_autosave_before_transport(self):
+        """In the normal (non-degraded) path, Python auto_save must be
+        invoked BEFORE the transport finalize/rotation call.
+
+        This is the parity guarantee: whether Elixir is available or not,
+        the Python-side autosave callback fires first so the snapshot
+        is persisted before the session ID rotates.
+        """
+        from code_puppy import runtime_state
+
+        transport = _mock_transport()
+        transport._send_request.return_value = {"autosave_id": "20250101_120000"}
+        call_order = []
+
+        def _record_transport_call(method, params):
+            call_order.append(("transport", method))
+            return {"autosave_id": "20250101_120000"}
+
+        transport._send_request.side_effect = _record_transport_call
+
+        with patch("code_puppy.runtime_state._get_transport", return_value=transport):
+            with patch(
+                "code_puppy.config.auto_save_session_if_enabled",
+                side_effect=lambda: call_order.append(("python_autosave", None)),
+            ) as mock_save:
+                result = runtime_state.finalize_autosave_session()
+                assert result == "20250101_120000"
+                # Python autosave must appear before transport finalize
+                mock_save.assert_called_once()
+                assert call_order[0] == ("python_autosave", None), (
+                    f"Expected python_autosave first, got: {call_order}"
+                )
+                assert call_order[1] == (
+                    "transport",
+                    "runtime_finalize_autosave_session",
+                ), f"Expected transport finalize second, got: {call_order}"
 
     def test_finalize_degraded_mode_calls_python_autosave(self):
         """In degraded mode, finalize still calls auto_save before rotation."""

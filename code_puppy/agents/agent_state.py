@@ -154,5 +154,6 @@ class AgentRuntimeState:
         if self.token_ledger is None:
             # TODO(token-audit-5.1): Consider global ledger for cross-agent accounting
             from code_puppy.token_ledger import TokenLedger
+
             self.token_ledger = TokenLedger()
         return self.token_ledger
