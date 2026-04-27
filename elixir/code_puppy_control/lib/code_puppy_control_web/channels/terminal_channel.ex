@@ -46,6 +46,7 @@ defmodule CodePuppyControlWeb.TerminalChannel do
   require Logger
 
   alias CodePuppyControl.PtyManager
+  alias CodePuppyControl.SessionStorage.Store
 
   @default_cols 80
   @default_rows 24
@@ -121,6 +122,21 @@ defmodule CodePuppyControlWeb.TerminalChannel do
 
         # Notify client that the PTY session is ready (must be sent after join)
         send(self(), {:session_started, session_id})
+
+        # (code_puppy-ctj.1) Register terminal with SessionStorage.Store
+        # for crash recovery tracking. This ensures that on restart,
+        # TerminalRecovery can attempt to recreate the PTY.
+        if Process.whereis(Store) do
+          terminal_meta = %{
+            session_id: session_id,
+            cols: cols,
+            rows: rows,
+            shell: shell,
+            attached_at: System.monotonic_time(:millisecond)
+          }
+
+          Store.register_terminal(session_id, terminal_meta)
+        end
 
         {:ok, %{session_id: session_id, cols: cols, rows: rows}, socket}
 
@@ -247,6 +263,12 @@ defmodule CodePuppyControlWeb.TerminalChannel do
       # the process when terminate is called outside normal lifecycle.
       PtyManager.unsubscribe(pty_session_id)
       PtyManager.close_session(pty_session_id)
+
+      # (code_puppy-ctj.1) Unregister terminal from SessionStorage.Store
+      # since the PTY session is being closed gracefully (not a crash).
+      if Process.whereis(Store) do
+        Store.unregister_terminal(pty_session_id)
+      end
     end
 
     :ok

@@ -3,6 +3,10 @@
 This module provides the bridge between Python session_storage.py and
 Elixir Ecto-backed session storage. It uses ElixirTransport when available
 and falls back to the legacy file-based implementation.
+
+(code_puppy-ctj.1) Extended with terminal session tracking methods that
+route through SessionStorage.Store (ETS + PubSub + SQLite) for crash
+survivability and real-time notifications.
 """
 
 from __future__ import annotations
@@ -154,3 +158,74 @@ def session_count() -> int:
         raise RuntimeError("Elixir transport not available")
 
     return transport.session_count()
+
+
+def register_terminal(
+    name: str,
+    session_id: str | None = None,
+    cols: int = 80,
+    rows: int = 24,
+    shell: str | None = None,
+) -> dict[str, Any]:
+    """Register a terminal session for crash recovery tracking.
+
+    (code_puppy-ctj.1) Records terminal metadata so that on crash/restart,
+    the Elixir SessionStorage.TerminalRecovery module can attempt to
+    recreate the PTY session.
+
+    Args:
+        name: Session name (used as the storage key).
+        session_id: Terminal session identifier (defaults to name).
+        cols: Terminal width in columns.
+        rows: Terminal height in rows.
+        shell: Shell executable path.
+
+    Returns:
+        Dict with "registered" flag and session name.
+    """
+    transport = _get_transport()
+    if transport is None:
+        raise RuntimeError("Elixir transport not available")
+
+    return transport.session_register_terminal(
+        name=name,
+        session_id=session_id or name,
+        cols=cols,
+        rows=rows,
+        shell=shell,
+    )
+
+
+def unregister_terminal(name: str) -> dict[str, Any]:
+    """Unregister a terminal session from crash recovery tracking.
+
+    (code_puppy-ctj.1) Called when a terminal session is closed gracefully.
+    Removes the terminal metadata from ETS tracking.
+
+    Args:
+        name: Session name to unregister.
+
+    Returns:
+        Dict with "unregistered" flag and session name.
+    """
+    transport = _get_transport()
+    if transport is None:
+        raise RuntimeError("Elixir transport not available")
+
+    return transport.session_unregister_terminal(name=name)
+
+
+def list_terminals() -> list[dict[str, Any]]:
+    """List all tracked terminal sessions.
+
+    (code_puppy-ctj.1) Returns terminal metadata for crash recovery
+    diagnostics.
+
+    Returns:
+        List of terminal metadata dicts.
+    """
+    transport = _get_transport()
+    if transport is None:
+        raise RuntimeError("Elixir transport not available")
+
+    return transport.session_list_terminals()

@@ -6,6 +6,9 @@ defmodule CodePuppyControl.Sessions do
   stored in SQLite via Ecto. Replaces Python session_storage.py functionality.
 
   This module implements : Migrate session_storage.py to Elixir/Ecto.
+
+  (code_puppy-ctj.1) Extended with `has_terminal` and `terminal_meta` fields
+  for terminal session crash recovery tracking.
   """
 
   require Logger
@@ -52,7 +55,10 @@ defmodule CodePuppyControl.Sessions do
       total_tokens: Keyword.get(opts, :total_tokens, 0),
       message_count: length(history),
       auto_saved: Keyword.get(opts, :auto_saved, false),
-      timestamp: Keyword.get(opts, :timestamp, now_iso())
+      timestamp: Keyword.get(opts, :timestamp, now_iso()),
+      # (code_puppy-ctj.1) Terminal session fields for crash recovery
+      has_terminal: Keyword.get(opts, :has_terminal, false),
+      terminal_meta: Keyword.get(opts, :terminal_meta)
     }
 
     case Repo.get_by(ChatSession, name: name) do

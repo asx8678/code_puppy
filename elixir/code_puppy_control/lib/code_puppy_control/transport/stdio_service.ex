@@ -67,6 +67,11 @@ defmodule CodePuppyControl.Transport.StdioService do
   - `session_cleanup` - Clean up old sessions keeping N most recent
   - `session_exists` - Check if session exists
   - `session_count` - Get total session count
+
+  ### Session Storage - Terminal Tracking (code_puppy-ctj.1)
+  - `session_register_terminal` - Register a terminal session for crash recovery
+  - `session_unregister_terminal` - Unregister a terminal session
+  - `session_list_terminals` - List all tracked terminal sessions
   - `agent.list` - List all available agents
   - `agent.get_info` - Get info about a specific agent
   - `agent.context.filter` - Filter context for sub-agent (remove parent-specific keys)
@@ -2448,7 +2453,10 @@ defmodule CodePuppyControl.Transport.StdioService do
     end
   end
 
-  # Session Storage API (SQLite/Ecto backed)
+  # Session Storage API (ETS-cached + SQLite-backed + PubSub)
+  # (code_puppy-ctj.1) Routes through SessionStorage.Store for ETS caching
+  # and PubSub notifications when the Store is available; falls back to
+  # direct Sessions calls otherwise.
 
   defp handle_request("session_save", params, id) do
     name = params["name"]
@@ -2458,107 +2466,261 @@ defmodule CodePuppyControl.Transport.StdioService do
       compacted_hashes: params["compacted_hashes"] || [],
       total_tokens: params["total_tokens"] || 0,
       auto_saved: params["auto_saved"] || false,
-      timestamp: params["timestamp"]
+      timestamp: params["timestamp"],
+      has_terminal: params["has_terminal"] || false,
+      terminal_meta: params["terminal_meta"]
     ]
 
-    case CodePuppyControl.Sessions.save_session(name, history, opts) do
-      {:ok, session} ->
-        Protocol.encode_response(
-          %{
-            "success" => true,
-            "name" => session.name,
-            "message_count" => session.message_count,
-            "total_tokens" => session.total_tokens
-          },
-          id
-        )
+    if store_available?() do
+      case CodePuppyControl.SessionStorage.Store.save_session(name, history, opts) do
+        {:ok, result} ->
+          Protocol.encode_response(
+            %{
+              "success" => true,
+              "name" => result.name,
+              "message_count" => result.message_count,
+              "total_tokens" => result.total_tokens
+            },
+            id
+          )
 
-      {:error, changeset} ->
-        errors = traverse_changeset_errors(changeset)
-        Protocol.encode_error(-32000, "Session save failed: #{inspect(errors)}", nil, id)
+        {:error, reason} ->
+          Protocol.encode_error(-32000, "Session save failed: #{inspect(reason)}", nil, id)
+      end
+    else
+      case CodePuppyControl.Sessions.save_session(name, history, opts) do
+        {:ok, session} ->
+          Protocol.encode_response(
+            %{
+              "success" => true,
+              "name" => session.name,
+              "message_count" => session.message_count,
+              "total_tokens" => session.total_tokens
+            },
+            id
+          )
+
+        {:error, changeset} ->
+          errors = traverse_changeset_errors(changeset)
+          Protocol.encode_error(-32000, "Session save failed: #{inspect(errors)}", nil, id)
+      end
     end
   end
 
   defp handle_request("session_load", params, id) do
     name = params["name"]
 
-    case CodePuppyControl.Sessions.load_session(name) do
-      {:ok, %{history: history, compacted_hashes: hashes}} ->
-        Protocol.encode_response(
-          %{
-            "history" => history,
-            "compacted_hashes" => hashes
-          },
-          id
-        )
+    if store_available?() do
+      case CodePuppyControl.SessionStorage.Store.load_session(name) do
+        {:ok, %{history: history, compacted_hashes: hashes}} ->
+          Protocol.encode_response(
+            %{"history" => history, "compacted_hashes" => hashes},
+            id
+          )
 
-      {:error, :not_found} ->
-        Protocol.encode_error(-32000, "Session not found: #{name}", nil, id)
+        {:error, :not_found} ->
+          Protocol.encode_error(-32000, "Session not found: #{name}", nil, id)
 
-      {:error, reason} ->
-        Protocol.encode_error(-32000, "Session load failed: #{inspect(reason)}", nil, id)
+        {:error, reason} ->
+          Protocol.encode_error(-32000, "Session load failed: #{inspect(reason)}", nil, id)
+      end
+    else
+      case CodePuppyControl.Sessions.load_session(name) do
+        {:ok, %{history: history, compacted_hashes: hashes}} ->
+          Protocol.encode_response(
+            %{"history" => history, "compacted_hashes" => hashes},
+            id
+          )
+
+        {:error, :not_found} ->
+          Protocol.encode_error(-32000, "Session not found: #{name}", nil, id)
+
+        {:error, reason} ->
+          Protocol.encode_error(-32000, "Session load failed: #{inspect(reason)}", nil, id)
+      end
     end
   end
 
   defp handle_request("session_load_full", params, id) do
     name = params["name"]
 
-    case CodePuppyControl.Sessions.load_session_full(name) do
-      {:ok, session} ->
-        Protocol.encode_response(
-          %{
-            "name" => session.name,
-            "history" => session.history || [],
-            "compacted_hashes" => session.compacted_hashes || [],
-            "message_count" => session.message_count,
-            "total_tokens" => session.total_tokens,
-            "auto_saved" => session.auto_saved,
-            "timestamp" => session.timestamp,
-            "created_at" => if(session.inserted_at, do: DateTime.to_iso8601(session.inserted_at)),
-            "updated_at" => if(session.updated_at, do: DateTime.to_iso8601(session.updated_at))
-          },
-          id
-        )
+    if store_available?() do
+      case CodePuppyControl.SessionStorage.Store.load_session_full(name) do
+        {:ok, entry} ->
+          Protocol.encode_response(
+            %{
+              "name" => entry.name,
+              "history" => entry.history || [],
+              "compacted_hashes" => entry.compacted_hashes || [],
+              "message_count" => entry.message_count,
+              "total_tokens" => entry.total_tokens,
+              "auto_saved" => entry.auto_saved,
+              "timestamp" => entry.timestamp,
+              "has_terminal" => entry.has_terminal,
+              "terminal_meta" => entry.terminal_meta
+            },
+            id
+          )
 
-      {:error, :not_found} ->
-        Protocol.encode_error(-32000, "Session not found: #{name}", nil, id)
+        {:error, :not_found} ->
+          Protocol.encode_error(-32000, "Session not found: #{name}", nil, id)
 
-      {:error, reason} ->
-        Protocol.encode_error(-32000, "Session load failed: #{inspect(reason)}", nil, id)
+        {:error, reason} ->
+          Protocol.encode_error(-32000, "Session load failed: #{inspect(reason)}", nil, id)
+      end
+    else
+      case CodePuppyControl.Sessions.load_session_full(name) do
+        {:ok, session} ->
+          Protocol.encode_response(
+            %{
+              "name" => session.name,
+              "history" => session.history || [],
+              "compacted_hashes" => session.compacted_hashes || [],
+              "message_count" => session.message_count,
+              "total_tokens" => session.total_tokens,
+              "auto_saved" => session.auto_saved,
+              "timestamp" => session.timestamp,
+              "created_at" =>
+                if(session.inserted_at, do: DateTime.to_iso8601(session.inserted_at)),
+              "updated_at" => if(session.updated_at, do: DateTime.to_iso8601(session.updated_at))
+            },
+            id
+          )
+
+        {:error, :not_found} ->
+          Protocol.encode_error(-32000, "Session not found: #{name}", nil, id)
+
+        {:error, reason} ->
+          Protocol.encode_error(-32000, "Session load failed: #{inspect(reason)}", nil, id)
+      end
     end
   end
 
   defp handle_request("session_list", _params, id) do
-    {:ok, names} = CodePuppyControl.Sessions.list_sessions()
-    Protocol.encode_response(%{"sessions" => names}, id)
+    if store_available?() do
+      {:ok, names} = CodePuppyControl.SessionStorage.Store.list_sessions()
+      Protocol.encode_response(%{"sessions" => names}, id)
+    else
+      {:ok, names} = CodePuppyControl.Sessions.list_sessions()
+      Protocol.encode_response(%{"sessions" => names}, id)
+    end
   end
 
   defp handle_request("session_list_with_metadata", _params, id) do
-    {:ok, sessions} = CodePuppyControl.Sessions.list_sessions_with_metadata()
-    Protocol.encode_response(%{"sessions" => sessions}, id)
+    if store_available?() do
+      {:ok, entries} = CodePuppyControl.SessionStorage.Store.list_sessions_with_metadata()
+
+      sessions =
+        Enum.map(entries, fn e ->
+          %{
+            "name" => e.name,
+            "message_count" => e.message_count,
+            "total_tokens" => e.total_tokens,
+            "auto_saved" => e.auto_saved,
+            "timestamp" => e.timestamp,
+            "has_terminal" => e.has_terminal,
+            "terminal_meta" => e.terminal_meta
+          }
+        end)
+
+      Protocol.encode_response(%{"sessions" => sessions}, id)
+    else
+      {:ok, sessions} = CodePuppyControl.Sessions.list_sessions_with_metadata()
+      Protocol.encode_response(%{"sessions" => sessions}, id)
+    end
   end
 
   defp handle_request("session_delete", params, id) do
     name = params["name"]
-    :ok = CodePuppyControl.Sessions.delete_session(name)
+
+    if store_available?() do
+      :ok = CodePuppyControl.SessionStorage.Store.delete_session(name)
+    else
+      :ok = CodePuppyControl.Sessions.delete_session(name)
+    end
+
     Protocol.encode_response(%{"deleted" => true, "name" => name}, id)
   end
 
   defp handle_request("session_cleanup", params, id) do
     max_sessions = params["max_sessions"] || 10
-    {:ok, deleted} = CodePuppyControl.Sessions.cleanup_sessions(max_sessions)
-    Protocol.encode_response(%{"deleted" => deleted, "count" => length(deleted)}, id)
+
+    if store_available?() do
+      {:ok, deleted} = CodePuppyControl.SessionStorage.Store.cleanup_sessions(max_sessions)
+      Protocol.encode_response(%{"deleted" => deleted, "count" => length(deleted)}, id)
+    else
+      {:ok, deleted} = CodePuppyControl.Sessions.cleanup_sessions(max_sessions)
+      Protocol.encode_response(%{"deleted" => deleted, "count" => length(deleted)}, id)
+    end
   end
 
   defp handle_request("session_exists", params, id) do
     name = params["name"]
-    exists = CodePuppyControl.Sessions.session_exists?(name)
+
+    exists =
+      if store_available?() do
+        CodePuppyControl.SessionStorage.Store.session_exists?(name)
+      else
+        CodePuppyControl.Sessions.session_exists?(name)
+      end
+
     Protocol.encode_response(%{"exists" => exists}, id)
   end
 
   defp handle_request("session_count", _params, id) do
-    count = CodePuppyControl.Sessions.count_sessions()
+    count =
+      if store_available?() do
+        CodePuppyControl.SessionStorage.Store.count_sessions()
+      else
+        CodePuppyControl.Sessions.count_sessions()
+      end
+
     Protocol.encode_response(%{"count" => count}, id)
+  end
+
+  # (code_puppy-ctj.1) Terminal session tracking via PubSub + ETS
+  defp handle_request("session_register_terminal", params, id) do
+    name = params["name"]
+
+    meta = %{
+      session_id: params["session_id"] || name,
+      cols: params["cols"] || 80,
+      rows: params["rows"] || 24,
+      shell: params["shell"],
+      attached_at: System.monotonic_time(:millisecond)
+    }
+
+    if store_available?() do
+      :ok = CodePuppyControl.SessionStorage.Store.register_terminal(name, meta)
+      Protocol.encode_response(%{"registered" => true, "name" => name}, id)
+    else
+      Protocol.encode_error(-32000, "Session Store not available", nil, id)
+    end
+  end
+
+  defp handle_request("session_unregister_terminal", params, id) do
+    name = params["name"]
+
+    if store_available?() do
+      :ok = CodePuppyControl.SessionStorage.Store.unregister_terminal(name)
+      Protocol.encode_response(%{"unregistered" => true, "name" => name}, id)
+    else
+      Protocol.encode_error(-32000, "Session Store not available", nil, id)
+    end
+  end
+
+  defp handle_request("session_list_terminals", _params, id) do
+    if store_available?() do
+      terminals = CodePuppyControl.SessionStorage.Store.list_terminal_sessions()
+      Protocol.encode_response(%{"terminals" => terminals}, id)
+    else
+      Protocol.encode_response(%{"terminals" => []}, id)
+    end
+  end
+
+  # (code_puppy-ctj.1) Check if the SessionStorage.Store GenServer is running
+  defp store_available? do
+    Process.whereis(CodePuppyControl.SessionStorage.Store) != nil
   end
 
   # --- Workflow methods (: DBOS replacement) ---

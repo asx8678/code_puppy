@@ -655,6 +655,8 @@ class ElixirTransport:
         total_tokens: int = 0,
         auto_saved: bool = False,
         timestamp: str | None = None,
+        has_terminal: bool = False,
+        terminal_meta: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         """
         Save a chat session to the database.
@@ -666,6 +668,8 @@ class ElixirTransport:
             total_tokens: Total token count
             auto_saved: Whether this was auto-saved
             timestamp: ISO8601 timestamp (defaults to now)
+            has_terminal: Whether session has an active terminal (code_puppy-ctj.1)
+            terminal_meta: Terminal metadata for crash recovery (code_puppy-ctj.1)
 
         Returns:
             Dict with success, name, message_count, total_tokens fields
@@ -679,9 +683,12 @@ class ElixirTransport:
             "compacted_hashes": compacted_hashes or [],
             "total_tokens": total_tokens,
             "auto_saved": auto_saved,
+            "has_terminal": has_terminal,
         }
         if timestamp:
             params["timestamp"] = timestamp
+        if terminal_meta:
+            params["terminal_meta"] = terminal_meta
 
         return self._send_request("session_save", params)
 
@@ -788,6 +795,38 @@ class ElixirTransport:
         """
         result = self._send_request("session_count", {})
         return result.get("count", 0)
+
+    # ============================================================================
+    # Terminal Session Tracking (code_puppy-ctj.1)
+    # ============================================================================
+
+    def session_register_terminal(
+        self,
+        name: str,
+        session_id: str | None = None,
+        cols: int = 80,
+        rows: int = 24,
+        shell: str | None = None,
+    ) -> dict[str, Any]:
+        """Register a terminal session for crash recovery tracking."""
+        params: dict[str, Any] = {
+            "name": name,
+            "session_id": session_id or name,
+            "cols": cols,
+            "rows": rows,
+        }
+        if shell:
+            params["shell"] = shell
+        return self._send_request("session_register_terminal", params)
+
+    def session_unregister_terminal(self, name: str) -> dict[str, Any]:
+        """Unregister a terminal session from crash recovery tracking."""
+        return self._send_request("session_unregister_terminal", {"name": name})
+
+    def session_list_terminals(self) -> list[dict[str, Any]]:
+        """List all tracked terminal sessions."""
+        result = self._send_request("session_list_terminals", {})
+        return result.get("terminals", [])
 
     # ============================================================================
     # Context Manager Support
