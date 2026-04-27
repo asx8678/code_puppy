@@ -60,7 +60,10 @@ def _set_reentrancy_depth(depth: int) -> None:
 def _log_release_failure(task: asyncio.Task) -> None:
     """Done-callback for fire-and-forget Elixir release tasks.
 
-    Logs cancellation or exceptions so failures aren't silently swallowed.
+    Logs cancellation, exceptions, or non-ok responses so failures
+    aren't silently swallowed.  Without this, a call_elixir_run_limiter
+    returning {status: timeout, fallback: true} would complete
+    "successfully" with no warning — causing a silent slot leak.
     """
     try:
         if task.cancelled():
@@ -69,6 +72,13 @@ def _log_release_failure(task: asyncio.Task) -> None:
             logger.warning(
                 "RunLimiter: Elixir release failed: %s", task.exception()
             )
+        else:
+            result = task.result()
+            if isinstance(result, dict) and result.get("status") != "ok":
+                logger.warning(
+                    "RunLimiter: Elixir release returned non-ok response: %s",
+                    result,
+                )
     except Exception:
         pass  # Best-effort logging, never crash
 

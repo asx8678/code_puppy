@@ -330,13 +330,13 @@ defmodule CodePuppyControl.Plugins.PackParallelismTest do
 
   describe "handle_jsonrpc_acquire/1" do
     test "returns ok on success" do
-      result = PackParallelism.handle_jsonrpc_acquire(%{})
+      result = PackParallelism.JSONRPC.handle_jsonrpc_acquire(%{})
       assert result["status"] == "ok"
       PackParallelism.release()
     end
 
     test "converts seconds to milliseconds" do
-      result = PackParallelism.handle_jsonrpc_acquire(%{"timeout" => 1})
+      result = PackParallelism.JSONRPC.handle_jsonrpc_acquire(%{"timeout" => 1})
       assert result["status"] == "ok"
       PackParallelism.release()
     end
@@ -345,14 +345,14 @@ defmodule CodePuppyControl.Plugins.PackParallelismTest do
   describe "handle_jsonrpc_release/1" do
     test "returns ok" do
       :ok = PackParallelism.acquire()
-      result = PackParallelism.handle_jsonrpc_release(%{})
+      result = PackParallelism.JSONRPC.handle_jsonrpc_release(%{})
       assert result["status"] == "ok"
     end
   end
 
   describe "handle_jsonrpc_status/1" do
     test "returns status dict" do
-      result = PackParallelism.handle_jsonrpc_status(%{})
+      result = PackParallelism.JSONRPC.handle_jsonrpc_status(%{})
       assert result["status"] == "ok"
       assert Map.has_key?(result, "limit")
       assert Map.has_key?(result, "active")
@@ -362,13 +362,13 @@ defmodule CodePuppyControl.Plugins.PackParallelismTest do
 
   describe "handle_jsonrpc_set_limit/1" do
     test "sets limit successfully" do
-      result = PackParallelism.handle_jsonrpc_set_limit(%{"limit" => 4})
+      result = PackParallelism.JSONRPC.handle_jsonrpc_set_limit(%{"limit" => 4})
       assert result["status"] == "ok"
       assert result["limit"] == 4
     end
 
     test "rejects invalid limit" do
-      result = PackParallelism.handle_jsonrpc_set_limit(%{"limit" => 0})
+      result = PackParallelism.JSONRPC.handle_jsonrpc_set_limit(%{"limit" => 0})
       assert result["status"] == "error"
     end
   end
@@ -376,7 +376,7 @@ defmodule CodePuppyControl.Plugins.PackParallelismTest do
   describe "handle_jsonrpc_reset/1" do
     test "resets state and returns previous" do
       :ok = PackParallelism.acquire()
-      result = PackParallelism.handle_jsonrpc_reset(%{})
+      result = PackParallelism.JSONRPC.handle_jsonrpc_reset(%{})
       assert result["status"] == "ok"
       assert Map.has_key?(result, "previous")
       assert result["previous"]["active"] == 1

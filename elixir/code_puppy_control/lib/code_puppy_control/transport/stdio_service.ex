@@ -2657,27 +2657,27 @@ defmodule CodePuppyControl.Transport.StdioService do
   # Python bridge_controller entirely.
 
   defp handle_request("run_limiter.acquire", params, id) do
-    result = CodePuppyControl.Plugins.PackParallelism.handle_jsonrpc_acquire(params)
+    result = CodePuppyControl.Plugins.PackParallelism.JSONRPC.handle_jsonrpc_acquire(params)
     Protocol.encode_response(result, id)
   end
 
   defp handle_request("run_limiter.release", params, id) do
-    result = CodePuppyControl.Plugins.PackParallelism.handle_jsonrpc_release(params)
+    result = CodePuppyControl.Plugins.PackParallelism.JSONRPC.handle_jsonrpc_release(params)
     Protocol.encode_response(result, id)
   end
 
   defp handle_request("run_limiter.status", params, id) do
-    result = CodePuppyControl.Plugins.PackParallelism.handle_jsonrpc_status(params)
+    result = CodePuppyControl.Plugins.PackParallelism.JSONRPC.handle_jsonrpc_status(params)
     Protocol.encode_response(result, id)
   end
 
   defp handle_request("run_limiter.set_limit", params, id) do
-    result = CodePuppyControl.Plugins.PackParallelism.handle_jsonrpc_set_limit(params)
+    result = CodePuppyControl.Plugins.PackParallelism.JSONRPC.handle_jsonrpc_set_limit(params)
     Protocol.encode_response(result, id)
   end
 
   defp handle_request("run_limiter.reset", params, id) do
-    result = CodePuppyControl.Plugins.PackParallelism.handle_jsonrpc_reset(params)
+    result = CodePuppyControl.Plugins.PackParallelism.JSONRPC.handle_jsonrpc_reset(params)
     Protocol.encode_response(result, id)
   end
 
