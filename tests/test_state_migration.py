@@ -639,7 +639,204 @@ class TestNestedForbiddenInSkills:
 
 
 # ---------------------------------------------------------------------------
-# PUP_HOME / PUPPY_HOME precedence (docs-alignment tests)
+# python_home_dir() source resolver (unit tests)
+# ---------------------------------------------------------------------------
+
+
+def _clean_env(**overrides: str) -> dict[str, str]:
+    """Build a clean env dict with only the specified overrides.
+
+    Removes PUP_HOME, PUPPY_HOME, PUP_EX_HOME, PUP_RUNTIME so tests
+    can control exactly which variables are present.
+    """
+    env: dict[str, str] = {}
+    for key in ("PUP_HOME", "PUPPY_HOME", "PUP_EX_HOME", "PUP_RUNTIME"):
+        if key in overrides:
+            env[key] = overrides.pop(key)
+    env.update(overrides)
+    return env
+
+
+class TestPythonHomeDir:
+    """Verify python_home_dir() honours PUP_HOME → PUPPY_HOME →
+    ~/.code_puppy/ precedence and never consults PUP_EX_HOME.
+    """
+
+    def test_pup_home_first(self, tmp_path: Path) -> None:
+        """PUP_HOME is the highest-precedence source."""
+        from code_puppy.config_paths import python_home_dir
+
+        pup_home = str(tmp_path / "pup_home")
+        env = _clean_env(PUP_HOME=pup_home)
+        with patch.dict(os.environ, env, clear=True):
+            assert str(python_home_dir()) == pup_home
+
+    def test_puppy_home_when_no_pup_home(self, tmp_path: Path) -> None:
+        """PUPPY_HOME is used when PUP_HOME is absent."""
+        from code_puppy.config_paths import python_home_dir
+
+        puppy_home = str(tmp_path / "puppy_home")
+        env = _clean_env(PUPPY_HOME=puppy_home)
+        with patch.dict(os.environ, env, clear=True):
+            assert str(python_home_dir()) == puppy_home
+
+    def test_pup_home_beats_puppy_home(self, tmp_path: Path) -> None:
+        """When both PUP_HOME and PUPPY_HOME are set, PUP_HOME wins."""
+        from code_puppy.config_paths import python_home_dir
+
+        pup_home = str(tmp_path / "pup_home")
+        puppy_home = str(tmp_path / "puppy_home")
+        env = _clean_env(PUP_HOME=pup_home, PUPPY_HOME=puppy_home)
+        with patch.dict(os.environ, env, clear=True):
+            assert str(python_home_dir()) == pup_home
+
+    def test_default_when_no_env(self) -> None:
+        """Without env vars, falls back to ~/.code_puppy/."""
+        from code_puppy.config_paths import python_home_dir
+
+        with patch.dict(os.environ, _clean_env(), clear=True):
+            result = python_home_dir()
+            assert str(result).endswith(".code_puppy")
+
+    def test_never_uses_pup_ex_home(self, tmp_path: Path) -> None:
+        """PUP_EX_HOME must not influence source resolution."""
+        from code_puppy.config_paths import python_home_dir
+
+        pup_ex = str(tmp_path / "elixir_home")
+        pup_home = str(tmp_path / "python_home")
+        env = _clean_env(PUP_HOME=pup_home, PUP_EX_HOME=pup_ex)
+        with patch.dict(os.environ, env, clear=True):
+            result = python_home_dir()
+            # Source must be PUP_HOME, NOT PUP_EX_HOME
+            assert str(result) == pup_home
+            assert str(result) != pup_ex
+
+    def test_pup_ex_home_alone_not_used_as_source(self, tmp_path: Path) -> None:
+        """Only PUP_EX_HOME set → source still defaults to ~/.code_puppy/."""
+        from code_puppy.config_paths import python_home_dir
+
+        pup_ex = str(tmp_path / "elixir_home")
+        env = _clean_env(PUP_EX_HOME=pup_ex)
+        with patch.dict(os.environ, env, clear=True):
+            result = python_home_dir()
+            assert str(result) != pup_ex
+            assert str(result).endswith(".code_puppy")
+
+
+# ---------------------------------------------------------------------------
+# StateMigrator default source_home resolution (integration tests)
+# ---------------------------------------------------------------------------
+
+
+class TestSourceHomeDefaultResolution:
+    """Verify that StateMigrator(target_home=...) without explicit
+    source_home resolves via python_home_dir() precedence.
+
+    These tests instantiate StateMigrator with only target_home, so the
+    default source resolver runs and we verify the correct env var wins.
+    """
+
+    def test_source_from_pup_home(self, tmp_path: Path) -> None:
+        """PUP_HOME is the default source when no source_home given."""
+        pup_home = tmp_path / "pup_home_src"
+        pup_home.mkdir()
+        (pup_home / "extra_models.json").write_text(
+            json.dumps({"pup-model": {"provider": "test"}}), encoding="utf-8"
+        )
+        target = tmp_path / "target"
+        target.mkdir()
+
+        env = _clean_env(PUP_HOME=str(pup_home))
+        with patch.dict(os.environ, env, clear=True):
+            migrator = StateMigrator(target_home=target)
+            assert str(migrator.source_home) == str(pup_home)
+
+    def test_source_from_puppy_home_only(self, tmp_path: Path) -> None:
+        """PUPPY_HOME is used as source when PUP_HOME is absent."""
+        puppy_home = tmp_path / "puppy_home_src"
+        puppy_home.mkdir()
+        (puppy_home / "extra_models.json").write_text(
+            json.dumps({"puppy-model": {"provider": "test"}}), encoding="utf-8"
+        )
+        target = tmp_path / "target"
+        target.mkdir()
+
+        env = _clean_env(PUPPY_HOME=str(puppy_home))
+        with patch.dict(os.environ, env, clear=True):
+            migrator = StateMigrator(target_home=target)
+            assert str(migrator.source_home) == str(puppy_home)
+
+    def test_pup_home_wins_over_puppy_home(self, tmp_path: Path) -> None:
+        """Both set: source_home == PUP_HOME, not PUPPY_HOME."""
+        pup_home = tmp_path / "pup_home_wins"
+        puppy_home = tmp_path / "puppy_home_loses"
+        pup_home.mkdir()
+        (pup_home / "extra_models.json").write_text("{}", encoding="utf-8")
+        puppy_home.mkdir()
+        target = tmp_path / "target"
+        target.mkdir()
+
+        env = _clean_env(PUP_HOME=str(pup_home), PUPPY_HOME=str(puppy_home))
+        with patch.dict(os.environ, env, clear=True):
+            migrator = StateMigrator(target_home=target)
+            assert str(migrator.source_home) == str(pup_home)
+            assert str(migrator.source_home) != str(puppy_home)
+
+    def test_pup_ex_home_alongside_pup_home_source_stays_pup_home(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        """PUP_EX_HOME + PUP_HOME: source uses PUP_HOME; target uses PUP_EX_HOME."""
+        pup_home = tmp_path / "python_src"
+        pup_home.mkdir()
+        (pup_home / "extra_models.json").write_text(
+            json.dumps({"migrated": True}), encoding="utf-8"
+        )
+        pup_ex = tmp_path / "elixir_target"
+        pup_ex.mkdir()
+
+        env = _clean_env(PUP_HOME=str(pup_home), PUP_EX_HOME=str(pup_ex))
+        with patch.dict(os.environ, env, clear=True):
+            migrator = StateMigrator(target_home=target) if False else None  # noqa
+            # We explicitly test the no-target_home path too
+            migrator = StateMigrator()
+            # Source must be PUP_HOME, NEVER PUP_EX_HOME
+            assert str(migrator.source_home) == str(pup_home)
+            # Target must be PUP_EX_HOME (default target resolution)
+            assert str(migrator.target_home) == str(pup_ex)
+
+    def test_pup_ex_home_not_used_as_source(self, tmp_path: Path) -> None:
+        """PUP_EX_HOME alone must not become source_home default."""
+        pup_ex = tmp_path / "elixir_only"
+        pup_ex.mkdir()
+
+        env = _clean_env(PUP_EX_HOME=str(pup_ex))
+        with patch.dict(os.environ, env, clear=True):
+            # No explicit target_home — default target resolution uses PUP_EX_HOME
+            migrator = StateMigrator()
+            # Source must fall back to ~/.code_puppy/, not PUP_EX_HOME
+            assert str(migrator.source_home) != str(pup_ex)
+            assert str(migrator.source_home).endswith(".code_puppy")
+            # Target must use PUP_EX_HOME
+            assert str(migrator.target_home) == str(pup_ex)
+
+    def test_explicit_source_home_overrides_env(self, tmp_path: Path) -> None:
+        """An explicit source_home kwarg always wins, regardless of env."""
+        explicit = tmp_path / "explicit_source"
+        explicit.mkdir()
+        pup_home = tmp_path / "env_source"
+        pup_home.mkdir()
+        target = tmp_path / "target"
+        target.mkdir()
+
+        env = _clean_env(PUP_HOME=str(pup_home))
+        with patch.dict(os.environ, env, clear=True):
+            migrator = StateMigrator(source_home=explicit, target_home=target)
+            assert str(migrator.source_home) == str(explicit)
+
+
+# ---------------------------------------------------------------------------
+# PUP_HOME / PUPPY_HOME precedence (docs-alignment tests for home_dir)
 # ---------------------------------------------------------------------------
 
 
@@ -699,7 +896,7 @@ class TestPupHomePrecedence:
         self,
         tmp_path: Path,
     ) -> None:
-        """StateMigrator with PUP_HOME should use it as source."""
+        """StateMigrator with explicit PUP_HOME source works correctly."""
         custom = tmp_path / "custom_source"
         custom.mkdir()
         (custom / "extra_models.json").write_text(

@@ -21,7 +21,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from code_puppy.config_paths import (
-    legacy_home_dir,
+    python_home_dir,
     safe_mkdir_p,
     safe_write,
 )
@@ -65,10 +65,12 @@ class StateMigrator:
     Parameters
     ----------
     source_home:
-        Path to the Python pup's home (defaults to ``legacy_home_dir()``).
+        Path to the Python pup's home (defaults to :func:`python_home_dir`,
+        which honours ``PUP_HOME`` → ``PUPPY_HOME`` → ``~/.code_puppy/``
+        precedence).  Never uses ``PUP_EX_HOME`` as source.
     target_home:
-        Path to the Elixir pup-ex home (defaults to ``home_dir()`` when
-        ``PUP_EX_HOME`` is set, otherwise ``~/.code_puppy_ex/``).
+        Path to the Elixir pup-ex home (defaults to ``PUP_EX_HOME`` when
+        set, otherwise ``~/.code_puppy_ex/``).
     """
 
     def __init__(
@@ -76,7 +78,7 @@ class StateMigrator:
         source_home: Path | str | None = None,
         target_home: Path | str | None = None,
     ) -> None:
-        self.source_home = Path(source_home) if source_home else legacy_home_dir()
+        self.source_home = Path(source_home) if source_home else python_home_dir()
         if target_home:
             self.target_home = Path(target_home)
         else:

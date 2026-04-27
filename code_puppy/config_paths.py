@@ -132,7 +132,35 @@ def legacy_home_dir() -> Path:
     This is **read-only** — only the import task may use it for copying
     files.  Any write targeting this path when running as pup-ex will
     raise :class:`ConfigIsolationViolation`.
+
+    .. deprecated::
+        Prefer :func:`python_home_dir` which honours ``PUP_HOME`` /
+        ``PUPPY_HOME`` precedence.  This function always returns the
+        hardcoded ``~/.code_puppy/`` path regardless of environment
+        variables.
     """
+    return Path.home() / _LEGACY_HOME_NAME
+
+
+def python_home_dir() -> Path:
+    """Return the Python pup's home directory for **read-only** source
+    resolution.
+
+    Precedence (per ADR-003 / MIGRATION.md):
+
+    1. ``PUP_HOME`` — if set, always wins.
+    2. ``PUPPY_HOME`` — legacy fallback.
+    3. ``~/.code_puppy/`` — built-in default.
+
+    Unlike :func:`home_dir`, this function **never** consults
+    ``PUP_EX_HOME`` or :func:`is_pup_ex`.  It is intended exclusively
+    for source-path resolution during migration (``/migrate``), where
+    the source is always the Python pup home.
+    """
+    for env_var in ("PUP_HOME", "PUPPY_HOME"):
+        val = os.environ.get(env_var)
+        if val:
+            return Path(val).expanduser().resolve()
     return Path.home() / _LEGACY_HOME_NAME
 
 
