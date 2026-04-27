@@ -2,6 +2,7 @@ defmodule CodePuppyControl.Workflow.StateTest do
   use ExUnit.Case, async: false
 
   alias CodePuppyControl.Workflow.State
+  alias CodePuppyControl.Workflow.State.{CallbackHandlers, RunKey, Store}
 
   # async: false because Workflow.State is a named singleton Agent.
 
@@ -12,8 +13,12 @@ defmodule CodePuppyControl.Workflow.StateTest do
       _pid -> :ok
     end
 
-    # Reset to clean state before each test
-    State.reset()
+    # Reset to clean state before each test (clear all run keys + session index)
+    for key <- State.run_keys(), do: State.delete_run(key)
+
+    # Re-init the default run
+    Store.reset(run_key: "default")
+    State.clear_run_key()
     :ok
   end
 
@@ -403,12 +408,21 @@ defmodule CodePuppyControl.Workflow.StateTest do
     end
   end
 
-  # ── Callback integration ───────────────────────────────────────────
+  # ── Callback integration (via facade _on_* helpers) ────────────────
 
   describe "callback handlers" do
     test "_on_delete_file sets did_delete_file flag" do
+      # When context is nil, defaults to "default" run key
       State._on_delete_file(nil)
       assert State.has_flag?(:did_delete_file)
+    end
+
+    test "_on_delete_file uses session_id from context" do
+      ctx = %{"session_id" => "sess-del"}
+      State._on_delete_file(ctx)
+      assert State.has_flag?(:did_delete_file, run_key: "sess-del")
+      # Default should NOT have the flag
+      refute State.has_flag?(:did_delete_file)
     end
 
     test "_on_run_shell_command sets did_execute_shell flag" do
@@ -428,24 +442,38 @@ defmodule CodePuppyControl.Workflow.StateTest do
       assert State.has_flag?(:did_check_lint)
     end
 
-    test "_on_agent_run_start resets and stores metadata" do
+    test "_on_agent_run_start resets and stores metadata under session_id" do
+      # Set a flag on "default" — it should NOT be affected by run_start
+      # because run_start now creates a new run namespace.
       State.set_flag(:did_generate_code)
-      State._on_agent_run_start("code-puppy", "claude-3.5")
-      refute State.has_flag?(:did_generate_code)
-      assert State.get_metadata("agent_name") == "code-puppy"
-      assert State.get_metadata("model_name") == "claude-3.5"
+
+      # Start with a session_id — flags land under that session key
+      State._on_agent_run_start("code-puppy", "claude-3.5", "sess-start-test")
+
+      # The "default" run still has its flag (not reset)
+      assert State.has_flag?(:did_generate_code)
+
+      # The new session has metadata but no old flags
+      refute State.has_flag?(:did_generate_code, run_key: "sess-start-test")
+      assert Store.get_metadata("agent_name", nil, run_key: "sess-start-test") == "code-puppy"
+      assert Store.get_metadata("model_name", nil, run_key: "sess-start-test") == "claude-3.5"
     end
 
     test "_on_agent_run_end sets error flag on failure" do
-      State._on_agent_run_end("code-puppy", "claude-3.5", nil, false, nil, nil)
-      assert State.has_flag?(:did_encounter_error)
-      assert State.get_metadata("success") == false
+      # Must start first so session index is populated
+      State._on_agent_run_start("code-puppy", "claude-3.5", "sess-end-fail")
+      State._on_agent_run_end("code-puppy", "claude-3.5", "sess-end-fail", false, nil, nil)
+
+      assert State.has_flag?(:did_encounter_error, run_key: "sess-end-fail")
+      assert Store.get_metadata("success", nil, run_key: "sess-end-fail") == false
     end
 
     test "_on_agent_run_end does not set error flag on success" do
-      State._on_agent_run_end("code-puppy", "claude-3.5", nil, true, nil, nil)
-      refute State.has_flag?(:did_encounter_error)
-      assert State.get_metadata("success") == true
+      State._on_agent_run_start("code-puppy", "claude-3.5", "sess-end-ok")
+      State._on_agent_run_end("code-puppy", "claude-3.5", "sess-end-ok", true, nil, nil)
+
+      refute State.has_flag?(:did_encounter_error, run_key: "sess-end-ok")
+      assert Store.get_metadata("success", nil, run_key: "sess-end-ok") == true
     end
 
     test "_on_pre_tool_call tracks context loading" do
@@ -473,6 +501,15 @@ defmodule CodePuppyControl.Workflow.StateTest do
     test "_on_pre_tool_call tracks api calls" do
       State._on_pre_tool_call("invoke_agent", %{}, nil)
       assert State.has_flag?(:did_make_api_call)
+    end
+
+    test "_on_pre_tool_call uses session_id from context" do
+      ctx = %{"session_id" => "sess-tool"}
+      State._on_pre_tool_call("create_file", %{}, ctx)
+      assert State.has_flag?(:did_create_file, run_key: "sess-tool")
+      assert State.has_flag?(:did_generate_code, run_key: "sess-tool")
+      # Default should NOT have the flag
+      refute State.has_flag?(:did_create_file)
     end
   end
 
@@ -604,7 +641,7 @@ defmodule CodePuppyControl.Workflow.StateTest do
         CodePuppyControl.Callbacks.trigger_raw(:agent_run_start, [
           "test-agent",
           "claude-3.5",
-          "session-123"
+          "session-arity"
         ])
 
       assert is_list(results)
@@ -621,7 +658,7 @@ defmodule CodePuppyControl.Workflow.StateTest do
         CodePuppyControl.Callbacks.trigger_raw(:agent_run_end, [
           "test-agent",
           "claude-3.5",
-          "session-123",
+          "session-arity-end",
           true,
           nil,
           nil
@@ -655,7 +692,7 @@ defmodule CodePuppyControl.Workflow.StateTest do
 
   describe "per-run isolation (code-puppy-ctj.3)" do
     test "two concurrent runs do not reset or leak each other's state" do
-      # Simulate Run A setting flags on run key "run-a"
+      # Simulate Run A setting flags on run key "run-a" (via process dict)
       State.set_run_key("run-a")
       State.set_flag(:did_generate_code)
       State.put_metadata("agent_name", "agent-a")
@@ -682,19 +719,21 @@ defmodule CodePuppyControl.Workflow.StateTest do
       State.clear_run_key()
     end
 
-    test "_on_agent_run_start derives per-run key from session_id" do
-      # Two simulated agent starts should not clobber each other
-      State.set_run_key("first-run")
+    test "_on_agent_run_start creates isolated run keyed by session_id" do
+      # Set a flag on the default run
       State.set_flag(:did_generate_code)
 
-      # Simulate second run starting (with session_id)
+      # Start a run with session_id — creates isolated namespace
       State._on_agent_run_start("agent-b", "model-b", "session-b")
-      # After _on_agent_run_start, the process is now on run key "session-b"
-      assert State.get_run_key() == "session-b"
 
-      # First run should still have its flag
-      State.set_run_key("first-run")
+      # Default run's flag is NOT affected (old bug: process dict reset clobbered it)
       assert State.has_flag?(:did_generate_code)
+
+      # The new session has its own namespace
+      refute State.has_flag?(:did_generate_code, run_key: "session-b")
+
+      # Process dict is NOT changed (no side effects on caller)
+      assert State.get_run_key() == "default"
 
       # Clean up
       State.clear_run_key()
@@ -744,6 +783,235 @@ defmodule CodePuppyControl.Workflow.StateTest do
       assert State.has_flag?(:did_execute_shell)
 
       State.clear_run_key()
+    end
+  end
+
+  # ── Async-Safe Regression (code-puppy-ctj.3) ──────────────────────
+  #
+  # These tests verify that when callbacks are triggered via
+  # Callbacks.trigger_async (which spawns Tasks that do NOT inherit
+  # the process dictionary), flags land under the correct run keys
+  # rather than the default run key.
+
+  describe "async-safe callback isolation regression (code-puppy-ctj.3)" do
+    setup do
+      CodePuppyControl.Callbacks.clear(:agent_run_start)
+      CodePuppyControl.Callbacks.clear(:agent_run_end)
+      CodePuppyControl.Callbacks.clear(:pre_tool_call)
+      CodePuppyControl.Callbacks.clear(:run_shell_command)
+      CodePuppyControl.Callbacks.clear(:delete_file)
+
+      State.register_callback_handlers()
+
+      on_exit(fn ->
+        State.unregister_callback_handlers()
+        CodePuppyControl.Callbacks.clear(:agent_run_start)
+        CodePuppyControl.Callbacks.clear(:agent_run_end)
+        CodePuppyControl.Callbacks.clear(:pre_tool_call)
+        CodePuppyControl.Callbacks.clear(:run_shell_command)
+        CodePuppyControl.Callbacks.clear(:delete_file)
+      end)
+
+      :ok
+    end
+
+    test "agent_run_start via trigger_async stores flags under session_id run key" do
+      # Fire agent_run_start via trigger_async (simulates real usage)
+      {:ok, _} =
+        CodePuppyControl.Callbacks.trigger_async(:agent_run_start, [
+          "async-agent",
+          "async-model",
+          "async-sess-1"
+        ])
+
+      # Small delay to let the async Task complete
+      Process.sleep(50)
+
+      # Flags should be under "async-sess-1", NOT under "default"
+      refute State.has_flag?(:did_generate_code, run_key: "async-sess-1")
+
+      # Metadata should be stored under the session-keyed run
+      assert Store.get_metadata("agent_name", nil, run_key: "async-sess-1") == "async-agent"
+      assert Store.get_metadata("model_name", nil, run_key: "async-sess-1") == "async-model"
+
+      # Default run should NOT have the metadata (old bug: process dict leaked)
+      assert Store.get_metadata("agent_name", nil) == nil
+    end
+
+    test "agent_run_end via trigger_async stores flags under correct run key" do
+      # Start a run first to populate the session index
+      CallbackHandlers.on_agent_run_start("end-agent", "end-model", "async-sess-end")
+
+      # Fire agent_run_end via trigger_async
+      {:ok, _} =
+        CodePuppyControl.Callbacks.trigger_async(:agent_run_end, [
+          "end-agent",
+          "end-model",
+          "async-sess-end",
+          false,
+          "oops",
+          nil
+        ])
+
+      Process.sleep(50)
+
+      # Error flag should be under the session key, not "default"
+      assert State.has_flag?(:did_encounter_error, run_key: "async-sess-end")
+      # Default should not have the flag
+      refute State.has_flag?(:did_encounter_error)
+    end
+
+    test "pre_tool_call via trigger_async with context session_id" do
+      # Fire pre_tool_call with a context containing session_id
+      {:ok, _} =
+        CodePuppyControl.Callbacks.trigger_async(:pre_tool_call, [
+          "create_file",
+          %{},
+          %{"session_id" => "async-tool-sess"}
+        ])
+
+      Process.sleep(50)
+
+      # Flags should be under "async-tool-sess", NOT under "default"
+      assert State.has_flag?(:did_create_file, run_key: "async-tool-sess")
+      assert State.has_flag?(:did_generate_code, run_key: "async-tool-sess")
+      refute State.has_flag?(:did_create_file)
+    end
+
+    test "concurrent runs via trigger_async do not clobber each other" do
+      # Fire two agent_run_starts concurrently
+      {:ok, _} =
+        CodePuppyControl.Callbacks.trigger_async(:agent_run_start, [
+          "agent-a",
+          "model-a",
+          "concurrent-sess-a"
+        ])
+
+      {:ok, _} =
+        CodePuppyControl.Callbacks.trigger_async(:agent_run_start, [
+          "agent-b",
+          "model-b",
+          "concurrent-sess-b"
+        ])
+
+      # While those are in flight, also set a flag on "default"
+      State.set_flag(:did_load_context)
+
+      Process.sleep(100)
+
+      # Each session should have its own metadata
+      assert Store.get_metadata("agent_name", nil, run_key: "concurrent-sess-a") == "agent-a"
+      assert Store.get_metadata("agent_name", nil, run_key: "concurrent-sess-b") == "agent-b"
+
+      # Default should still have its flag (not clobbered by resets)
+      assert State.has_flag?(:did_load_context)
+
+      # Now fire tool calls for each session
+      {:ok, _} =
+        CodePuppyControl.Callbacks.trigger_async(:pre_tool_call, [
+          "create_file",
+          %{},
+          %{"session_id" => "concurrent-sess-a"}
+        ])
+
+      {:ok, _} =
+        CodePuppyControl.Callbacks.trigger_async(:pre_tool_call, [
+          "agent_run_shell_command",
+          %{},
+          %{"session_id" => "concurrent-sess-b"}
+        ])
+
+      Process.sleep(100)
+
+      # Flags should be isolated per run
+      assert State.has_flag?(:did_create_file, run_key: "concurrent-sess-a")
+      refute State.has_flag?(:did_execute_shell, run_key: "concurrent-sess-a")
+
+      assert State.has_flag?(:did_execute_shell, run_key: "concurrent-sess-b")
+      refute State.has_flag?(:did_create_file, run_key: "concurrent-sess-b")
+
+      # Default should NOT have any of the session flags
+      refute State.has_flag?(:did_create_file)
+      refute State.has_flag?(:did_execute_shell)
+    end
+
+    test "run_key derivation from context with atom key" do
+      # Context can use atom keys (Elixir convention)
+      run_key = RunKey.derive_run_key(context: %{session_id: "atom-sess"})
+      assert run_key == "atom-sess"
+    end
+
+    test "run_key derivation from context with string key" do
+      # Context can use string keys (JSON-RPC convention)
+      run_key = RunKey.derive_run_key(context: %{"session_id" => "string-sess"})
+      assert run_key == "string-sess"
+    end
+
+    test "run_key derivation falls back to default when no session_id" do
+      run_key = RunKey.derive_run_key(context: %{})
+      assert run_key == "default"
+
+      run_key = RunKey.derive_run_key(context: nil)
+      assert run_key == "default"
+
+      run_key = RunKey.derive_run_key([])
+      assert run_key == "default"
+    end
+
+    test "session index lookup works end-to-end" do
+      # Register a session
+      RunKey.register_session("idx-sess-1", "run-idx-1")
+
+      # Look it up
+      assert RunKey.lookup_session("idx-sess-1") == {:ok, "run-idx-1"}
+
+      # Unregister
+      RunKey.unregister_session("idx-sess-1")
+      assert RunKey.lookup_session("idx-sess-1") == :error
+    end
+  end
+
+  # ── Explicit run_key option for Store ops ───────────────────────────
+
+  describe "explicit run_key option (code-puppy-ctj.3)" do
+    test "set_flag/has_flag? with explicit run_key" do
+      Store.set_flag(:did_generate_code, run_key: "explicit-rk")
+      assert Store.has_flag?(:did_generate_code, run_key: "explicit-rk")
+      refute Store.has_flag?(:did_generate_code)
+    end
+
+    test "put_metadata/get_metadata with explicit run_key" do
+      Store.put_metadata("key", "value", run_key: "meta-rk")
+      assert Store.get_metadata("key", nil, run_key: "meta-rk") == "value"
+      assert Store.get_metadata("key", nil) == nil
+    end
+
+    test "increment_counter with explicit run_key" do
+      assert Store.increment_counter("c", 1, run_key: "counter-rk") == 1
+      assert Store.increment_counter("c", 2, run_key: "counter-rk") == 3
+      # Default should not have the counter
+      assert Store.get_metadata("c", nil) == nil
+    end
+
+    test "reset with explicit run_key only affects that run" do
+      Store.set_flag(:did_generate_code, run_key: "reset-rk-a")
+      Store.set_flag(:did_execute_shell, run_key: "reset-rk-b")
+
+      Store.reset(run_key: "reset-rk-a")
+
+      refute Store.has_flag?(:did_generate_code, run_key: "reset-rk-a")
+      assert Store.has_flag?(:did_execute_shell, run_key: "reset-rk-b")
+    end
+
+    test "active_count and summary with explicit run_key" do
+      Store.set_flag(:did_generate_code, run_key: "count-rk")
+      Store.set_flag(:did_execute_shell, run_key: "count-rk")
+
+      assert Store.active_count(run_key: "count-rk") == 2
+      assert Store.active_count() == 0
+
+      summary = Store.summary(run_key: "count-rk")
+      assert summary =~ "Did generate code"
     end
   end
 end
