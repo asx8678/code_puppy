@@ -35,7 +35,11 @@ defmodule CodePuppyControl.PtyManager.Stub do
 
   @pty_manager_name CodePuppyControl.PtyManager
 
-  defstruct sessions: %{}, calls: %{}, custom_pty_id: nil
+  defstruct sessions: %{},
+            calls: %{},
+            custom_pty_id: nil,
+            auto_response: nil,
+            simulated_sessions: MapSet.new()
 
   # ---------------------------------------------------------------------------
   # Client API — GenServer start
@@ -95,6 +99,28 @@ defmodule CodePuppyControl.PtyManager.Stub do
     GenServer.call(@pty_manager_name, {:stub_set_custom_pty_id, custom_id})
   end
 
+  @doc """
+  Configure auto-response for PTY lifecycle simulation.
+
+  When set, any `write/2` call that contains "exit" will trigger an
+  asynchronous simulation: the stub sends `{:pty_output, session_id, output}`
+  followed by `{:pty_exit, session_id, exit_status}` to the session's
+  subscriber after a short delay.  Each session is simulated at most once.
+
+  Pass `nil` as `output` to disable auto-response.
+
+  ## Example
+
+      PtyManager.Stub.set_auto_response("hello world\r\n", :normal)
+      ExecutorPty.execute("echo hello", timeout: 2)
+      # The collector receives the simulated output + exit,
+      # so stdout includes "hello world".
+  """
+  @spec set_auto_response(binary() | nil, term()) :: :ok
+  def set_auto_response(output, exit_status \\ :normal) do
+    GenServer.call(@pty_manager_name, {:stub_set_auto_response, output, exit_status})
+  end
+
   # ---------------------------------------------------------------------------
   # GenServer callbacks
   # ---------------------------------------------------------------------------
@@ -118,6 +144,7 @@ defmodule CodePuppyControl.PtyManager.Stub do
 
     session = %{
       session_id: pty_id,
+      os_pid: 99_999,
       cols: cols,
       rows: rows,
       shell: shell,
@@ -138,6 +165,40 @@ defmodule CodePuppyControl.PtyManager.Stub do
 
   @impl true
   def handle_call({:write, session_id, data}, _from, state) do
+    # Auto-simulate PTY lifecycle when configured.
+    # On the write that contains "exit" (ExecutorPty sends "exit $?\n"
+    # as its second write), spawn a process that delivers the
+    # configured output + exit to the subscriber after a tiny delay.
+    # Each session is simulated at most once.
+    state =
+      if state.auto_response &&
+           is_binary(data) &&
+           String.contains?(data, "exit") &&
+           not MapSet.member?(state.simulated_sessions, session_id) do
+        session = Map.get(state.sessions, session_id)
+
+        if session && session.subscriber do
+          subscriber = session.subscriber
+          output = state.auto_response.output
+          exit_status = state.auto_response.exit_status
+
+          spawn(fn ->
+            # Tiny delay so the write call returns before
+            # messages hit the collector's mailbox.
+            Process.sleep(5)
+            send(subscriber, {:pty_output, session_id, output})
+            Process.sleep(5)
+            send(subscriber, {:pty_exit, session_id, exit_status})
+          end)
+
+          %{state | simulated_sessions: MapSet.put(state.simulated_sessions, session_id)}
+        else
+          state
+        end
+      else
+        state
+      end
+
     state = %{
       state
       | calls:
@@ -249,6 +310,16 @@ defmodule CodePuppyControl.PtyManager.Stub do
   @impl true
   def handle_call(:stub_clear_all, _from, _state) do
     {:reply, :ok, %__MODULE__{}}
+  end
+
+  @impl true
+  def handle_call({:stub_set_auto_response, nil, _exit_status}, _from, state) do
+    {:reply, :ok, %{state | auto_response: nil}}
+  end
+
+  @impl true
+  def handle_call({:stub_set_auto_response, output, exit_status}, _from, state) do
+    {:reply, :ok, %{state | auto_response: %{output: output, exit_status: exit_status}}}
   end
 
   @impl true

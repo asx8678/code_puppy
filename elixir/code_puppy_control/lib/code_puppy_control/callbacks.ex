@@ -143,6 +143,38 @@ defmodule CodePuppyControl.Callbacks do
     end
   end
 
+  @doc """
+  Triggers all callbacks registered for the given hook and returns
+  the **raw unmerged results list**.
+
+  Unlike `trigger/2`, which merges results according to the hook's
+  declared merge strategy, `trigger_raw/2` returns the list of
+  individual callback results in registration order — with crashed
+  callbacks replaced by `:callback_failed` sentinels.
+
+  This is essential for fail-closed security hooks (e.g.
+  `run_shell_command`) where merge semantics can silently discard
+  `:callback_failed` sentinels when mixed with `nil` or
+  `%{blocked: false}` results.
+
+  Returns `[]` if no callbacks are registered.
+
+  ## Examples
+
+      CodePuppyControl.Callbacks.trigger_raw(:run_shell_command, [context, cmd, cwd])
+      #=> [%{blocked: true}, :callback_failed, nil]
+  """
+  @spec trigger_raw(atom(), [term()]) :: [term()]
+  def trigger_raw(hook_name, args \\ []) when is_atom(hook_name) and is_list(args) do
+    callbacks = Registry.get_callbacks(hook_name)
+
+    if callbacks == [] do
+      []
+    else
+      execute_callbacks(hook_name, callbacks, args)
+    end
+  end
+
   # ── Python-Compatible Alias ─────────────────────────────────────
 
   @doc """
