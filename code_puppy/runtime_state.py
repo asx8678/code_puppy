@@ -9,12 +9,20 @@ with no Python-side caching.
 - **Autosave session ID**: Runtime-only session identifier (per-process)
 - **Session model name**: Session-local model name cached after first read from config
 - **Session start time**: When the current session began
+- **Ephemeral caches**: System prompt, tool defs, context overhead, model name, etc.
 
 ## Migration Note
 
 This module has been migrated from a dual-path implementation (Elixir-first
-with Python fallback) to a pure thin wrapper that routes exclusively to
+with python fallback) to a pure thin wrapper that routes exclusively to
 Elixir. The public API remains unchanged for backward compatibility.
+
+## Cache Invalidation
+
+Cache invalidation operations (invalidate_caches, invalidate_all_token_caches,
+invalidate_system_prompt_cache) are routed to the Elixir RuntimeState
+GenServer via the transport. These mirror the per-agent invalidation in
+AgentRuntimeState but operate on the global singleton.
 """
 
 import os
@@ -240,26 +248,38 @@ def finalize_autosave_session() -> str:
     This function is best-effort and never raises: autosave rotation is not
     a critical-path operation, so any failure (transport dead, disk full,
     etc.) falls back to a timestamp-based ID so the caller can keep running.
+
+    Routes through the Elixir RuntimeState which handles the auto-save
+    callback internally before rotating the ID.
     """
-    from code_puppy.config import auto_save_session_if_enabled
-
     try:
-        auto_save_session_if_enabled()
-    except Exception as exc:
-        import logging
-        logging.getLogger(__name__).warning(
-            "auto_save_session_if_enabled failed during finalize: %s", exc
-        )
+        transport = _get_transport()
+        result = transport._send_request("runtime_finalize_autosave_session", {})
+        return result["autosave_id"]
+    except (ElixirTransportError, OSError, BrokenPipeError, ConnectionError, TimeoutError) as exc:
+        if _degraded():
+            import logging
+            from code_puppy.config import auto_save_session_if_enabled
+            from datetime import datetime
 
-    try:
-        return rotate_autosave_id()
-    except Exception as exc:
-        import logging
-        from datetime import datetime
-        logging.getLogger(__name__).warning(
-            "rotate_autosave_id failed during finalize; using timestamp fallback: %s", exc
-        )
-        return datetime.now().strftime("%Y%m%d_%H%M%S_fallback")
+            logging.getLogger(__name__).warning(
+                "Elixir transport unavailable during finalize_autosave_session; "
+                "using degraded Python-local path: %s",
+                exc,
+            )
+            try:
+                auto_save_session_if_enabled()
+            except Exception as save_exc:
+                logging.getLogger(__name__).warning(
+                    "auto_save_session_if_enabled failed during degraded finalize: %s",
+                    save_exc,
+                )
+
+            try:
+                return rotate_autosave_id()
+            except Exception:
+                return datetime.now().strftime("%Y%m%d_%H%M%S_fallback")
+        raise
 
 
 def get_state() -> dict[str, Any]:
@@ -293,6 +313,71 @@ def get_state() -> dict[str, Any]:
                     "session_model": _SESSION_MODEL,
                     "session_start_time": datetime.now().isoformat() + "Z",
                 }
+        raise
+
+
+# =============================================================================
+# Cache Invalidation
+# =============================================================================
+
+
+def invalidate_caches() -> None:
+    """Invalidate ephemeral caches. Call when model/tool config changes.
+
+    Clears context overhead and tool ID caches. For a full reset
+    including session-scoped caches, use invalidate_all_token_caches().
+    """
+    try:
+        transport = _get_transport()
+        transport._send_request("runtime_invalidate_caches", {})
+    except (ElixirTransportError, OSError, BrokenPipeError, ConnectionError, TimeoutError) as exc:
+        if _degraded():
+            import logging
+            logging.getLogger(__name__).warning(
+                "Elixir transport unavailable during invalidate_caches: %s", exc
+            )
+            return
+        raise
+
+
+def invalidate_all_token_caches() -> None:
+    """Invalidate ALL token-related caches as a group.
+
+    Must be called when any of these change:
+    - System prompt (custom prompts, /prompts command)
+    - Tool definitions (agent reload, MCP changes)
+    - Model (model switch)
+    - Puppy rules file (AGENTS.md changes)
+    """
+    try:
+        transport = _get_transport()
+        transport._send_request("runtime_invalidate_all_token_caches", {})
+    except (ElixirTransportError, OSError, BrokenPipeError, ConnectionError, TimeoutError) as exc:
+        if _degraded():
+            import logging
+            logging.getLogger(__name__).warning(
+                "Elixir transport unavailable during invalidate_all_token_caches: %s", exc
+            )
+            return
+        raise
+
+
+def invalidate_system_prompt_cache() -> None:
+    """Invalidate cached system prompt when plugin state changes.
+
+    Also invalidates context overhead since the system prompt
+    contributes to overhead estimation.
+    """
+    try:
+        transport = _get_transport()
+        transport._send_request("runtime_invalidate_system_prompt_cache", {})
+    except (ElixirTransportError, OSError, BrokenPipeError, ConnectionError, TimeoutError) as exc:
+        if _degraded():
+            import logging
+            logging.getLogger(__name__).warning(
+                "Elixir transport unavailable during invalidate_system_prompt_cache: %s", exc
+            )
+            return
         raise
 
 

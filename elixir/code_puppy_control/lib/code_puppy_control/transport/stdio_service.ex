@@ -753,6 +753,121 @@ defmodule CodePuppyControl.Transport.StdioService do
     Protocol.encode_response(result, id)
   end
 
+  # runtime_finalize_autosave_session - Persist snapshot and rotate to fresh session
+  defp handle_request("runtime_finalize_autosave_session", _params, id) do
+    new_id = CodePuppyControl.RuntimeState.finalize_autosave_session()
+    Protocol.encode_response(%{"autosave_id" => new_id}, id)
+  end
+
+  # runtime_invalidate_caches - Invalidate ephemeral caches (context overhead, tool IDs)
+  defp handle_request("runtime_invalidate_caches", _params, id) do
+    :ok = CodePuppyControl.RuntimeState.invalidate_caches()
+    Protocol.encode_response(%{"reset" => true}, id)
+  end
+
+  # runtime_invalidate_all_token_caches - Invalidate ALL token-related caches
+  defp handle_request("runtime_invalidate_all_token_caches", _params, id) do
+    :ok = CodePuppyControl.RuntimeState.invalidate_all_token_caches()
+    Protocol.encode_response(%{"reset" => true}, id)
+  end
+
+  # runtime_invalidate_system_prompt_cache - Invalidate system prompt + context overhead
+  defp handle_request("runtime_invalidate_system_prompt_cache", _params, id) do
+    :ok = CodePuppyControl.RuntimeState.invalidate_system_prompt_cache()
+    Protocol.encode_response(%{"reset" => true}, id)
+  end
+
+  # runtime_get_cached_system_prompt - Get cached system prompt
+  defp handle_request("runtime_get_cached_system_prompt", _params, id) do
+    prompt = CodePuppyControl.RuntimeState.get_cached_system_prompt()
+    Protocol.encode_response(%{"cached_system_prompt" => prompt}, id)
+  end
+
+  # runtime_set_cached_system_prompt - Set cached system prompt
+  defp handle_request("runtime_set_cached_system_prompt", params, id) do
+    prompt = params["prompt"]
+    :ok = CodePuppyControl.RuntimeState.set_cached_system_prompt(prompt)
+    Protocol.encode_response(%{"cached_system_prompt" => prompt}, id)
+  end
+
+  # runtime_get_cached_tool_defs - Get cached tool definitions
+  defp handle_request("runtime_get_cached_tool_defs", _params, id) do
+    defs = CodePuppyControl.RuntimeState.get_cached_tool_defs()
+    Protocol.encode_response(%{"cached_tool_defs" => defs}, id)
+  end
+
+  # runtime_set_cached_tool_defs - Set cached tool definitions
+  defp handle_request("runtime_set_cached_tool_defs", params, id) do
+    defs = params["tool_defs"]
+    :ok = CodePuppyControl.RuntimeState.set_cached_tool_defs(defs)
+    Protocol.encode_response(%{"cached_tool_defs" => defs}, id)
+  end
+
+  # runtime_get_model_name_cache - Get cached model name
+  defp handle_request("runtime_get_model_name_cache", _params, id) do
+    name = CodePuppyControl.RuntimeState.get_model_name_cache()
+    Protocol.encode_response(%{"model_name_cache" => name}, id)
+  end
+
+  # runtime_set_model_name_cache - Set cached model name
+  defp handle_request("runtime_set_model_name_cache", params, id) do
+    name = params["model_name"]
+    :ok = CodePuppyControl.RuntimeState.set_model_name_cache(name)
+    Protocol.encode_response(%{"model_name_cache" => name}, id)
+  end
+
+  # runtime_get_delayed_compaction_requested - Get delayed compaction flag
+  defp handle_request("runtime_get_delayed_compaction_requested", _params, id) do
+    value = CodePuppyControl.RuntimeState.get_delayed_compaction_requested()
+    Protocol.encode_response(%{"delayed_compaction_requested" => value}, id)
+  end
+
+  # runtime_set_delayed_compaction_requested - Set delayed compaction flag
+  defp handle_request("runtime_set_delayed_compaction_requested", params, id) do
+    value = params["value"]
+    :ok = CodePuppyControl.RuntimeState.set_delayed_compaction_requested(value)
+    Protocol.encode_response(%{"delayed_compaction_requested" => value}, id)
+  end
+
+  # runtime_get_tool_ids_cache - Get tool IDs cache
+  defp handle_request("runtime_get_tool_ids_cache", _params, id) do
+    cache = CodePuppyControl.RuntimeState.get_tool_ids_cache()
+    Protocol.encode_response(%{"tool_ids_cache" => cache}, id)
+  end
+
+  # runtime_set_tool_ids_cache - Set tool IDs cache
+  defp handle_request("runtime_set_tool_ids_cache", params, id) do
+    cache = params["cache"]
+    :ok = CodePuppyControl.RuntimeState.set_tool_ids_cache(cache)
+    Protocol.encode_response(%{"tool_ids_cache" => cache}, id)
+  end
+
+  # runtime_get_cached_context_overhead - Get cached context overhead
+  defp handle_request("runtime_get_cached_context_overhead", _params, id) do
+    value = CodePuppyControl.RuntimeState.get_cached_context_overhead()
+    Protocol.encode_response(%{"cached_context_overhead" => value}, id)
+  end
+
+  # runtime_set_cached_context_overhead - Set cached context overhead
+  defp handle_request("runtime_set_cached_context_overhead", params, id) do
+    value = params["value"]
+    :ok = CodePuppyControl.RuntimeState.set_cached_context_overhead(value)
+    Protocol.encode_response(%{"cached_context_overhead" => value}, id)
+  end
+
+  # runtime_get_resolved_model_components_cache - Get resolved model components cache
+  defp handle_request("runtime_get_resolved_model_components_cache", _params, id) do
+    cache = CodePuppyControl.RuntimeState.get_resolved_model_components_cache()
+    Protocol.encode_response(%{"resolved_model_components_cache" => cache}, id)
+  end
+
+  # runtime_set_resolved_model_components_cache - Set resolved model components cache
+  defp handle_request("runtime_set_resolved_model_components_cache", params, id) do
+    cache = params["cache"]
+    :ok = CodePuppyControl.RuntimeState.set_resolved_model_components_cache(cache)
+    Protocol.encode_response(%{"resolved_model_components_cache" => cache}, id)
+  end
+
   # ============================================================================
   # Agent Model Pinning Operations
   # ============================================================================
