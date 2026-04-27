@@ -576,6 +576,19 @@ defmodule CodePuppyControl.Tools.CpAskUserQuestionTest do
   # ===========================================================================
 
   describe "tool registry integration" do
+    setup do
+      # Ensure the tool is registered regardless of test execution order.
+      # Other tests (e.g. runner_test) clear the global Registry, so we
+      # explicitly register our tool and clean up afterwards.
+      :ok = CodePuppyControl.Tool.Registry.register(CpAskUserQuestion)
+
+      on_exit(fn ->
+        CodePuppyControl.Tool.Registry.unregister(:cp_ask_user_question)
+      end)
+
+      :ok
+    end
+
     test "cp_ask_user_question is registered in tool registry" do
       assert CodePuppyControl.Tool.Registry.registered?(:cp_ask_user_question)
     end
@@ -721,7 +734,9 @@ defmodule CodePuppyControl.Tools.CpAskUserQuestionTest do
     end
 
     test "timeout response is returned when no matching response arrives" do
-      # Invoke the tool with a very short timeout
+      # Invoke the tool with a very short timeout (200 ms → reports 0 seconds)
+      timeout_ms = 200
+
       result =
         CpAskUserQuestion.invoke(
           %{
@@ -733,13 +748,21 @@ defmodule CodePuppyControl.Tools.CpAskUserQuestionTest do
               }
             ]
           },
-          %{run_id: "timeout-test-run-#{:erlang.unique_integer([:positive])}", timeout: 100}
+          %{
+            run_id: "timeout-test-run-#{:erlang.unique_integer([:positive])}",
+            timeout: timeout_ms
+          }
         )
 
       assert {:ok, response} = result
       assert response["timed_out"] == true
       assert response["cancelled"] == false
       assert response["answers"] == []
+      # Timeout message must report the *configured* timeout, not monotonic time
+      expected_seconds = div(timeout_ms, 1000)
+
+      assert response["error"] ==
+               "Interaction timed out after #{expected_seconds} seconds of inactivity"
     end
   end
 
@@ -769,20 +792,24 @@ defmodule CodePuppyControl.Tools.CpAskUserQuestionTest do
         )
 
       # Should not crash, should timeout cleanly
-      assert {:ok, %{"timed_out" => true}} = result
+      assert {:ok, %{"timed_out" => true} = response} = result
+      # Verify the timeout message reports the *configured* timeout
+      expected_seconds = div(50, 1000)
+
+      assert response["error"] ==
+               "Interaction timed out after #{expected_seconds} seconds of inactivity"
     end
 
     test "immediate response after broadcast is received" do
       run_id = "immediate-run-#{:erlang.unique_integer([:positive])}"
-      _prompt_id = nil
-
-      # We'll invoke the tool in a separate process and immediately send a response
       test_pid = self()
 
-      # Start a process that will invoke the tool and send back the result
+      # Subscribe to the run topic BEFORE spawning the tool process so we
+      # reliably capture the request event (which carries the prompt_id).
+      :ok = EventBus.subscribe_run(run_id)
+
       invoke_pid =
         spawn(fn ->
-          # Generate a prompt_id by calling the tool
           result =
             CpAskUserQuestion.invoke(
               %{
@@ -794,65 +821,50 @@ defmodule CodePuppyControl.Tools.CpAskUserQuestionTest do
                   }
                 ]
               },
-              %{run_id: run_id, timeout: 2000}
+              %{run_id: run_id, timeout: 3000}
             )
 
           send(test_pid, {:tool_result, result})
         end)
 
-      # Give the tool a moment to subscribe and broadcast
-      Process.sleep(50)
+      # Wait for the tool's request event to extract the generated prompt_id.
+      # The wire event from broadcast_message has the prompt_id inside
+      # ["payload"]["prompt_id"].
+      prompt_id =
+        receive do
+          {:event, %{"payload" => %{"prompt_id" => pid}}} ->
+            pid
+        after
+          1_000 ->
+            flunk("Did not receive request event from tool within 1s")
+        end
 
-      # Now send a response via the event bus
-      # We need to figure out the prompt_id that was generated.
-      # Since it's random, we subscribe and watch for the request event
-      # to extract the prompt_id.
-      :ok = EventBus.subscribe_run(run_id)
+      # Immediately send a matching response — the tool process is already
+      # subscribed and spinning, so it should pick this up without timeout.
+      cmd =
+        Commands.ask_user_question_response(prompt_id, [
+          %{"question_header" => "Choice", "selected_options" => ["A"]}
+        ])
 
-      receive do
-        {:event, %{"type" => _, "prompt_id" => pid}} ->
-          # Found the prompt_id from the request
-          cmd =
-            Commands.ask_user_question_response(pid, [
-              %{"question_header" => "Choice", "selected_options" => ["A"]}
-            ])
+      :ok = EventBus.broadcast_command(run_id, nil, cmd, store: false)
 
-          :ok = EventBus.broadcast_command(run_id, nil, cmd, store: false)
-
-        {:event, event} when is_map(event) ->
-          # The request event might come as a wire event with payload
-          pid = event["payload"]["prompt_id"]
-
-          if pid do
-            cmd =
-              Commands.ask_user_question_response(pid, [
-                %{"question_header" => "Choice", "selected_options" => ["A"]}
-              ])
-
-            :ok = EventBus.broadcast_command(run_id, nil, cmd, store: false)
-          end
-      after
-        500 ->
-          # If we didn't catch the event, the test still passes if the
-          # tool times out cleanly (race resistance is the point)
-          :ok
-      end
-
-      # Wait for the tool to complete (either matched or timed out)
+      # The tool MUST return the matching response, NOT a timeout.
       receive do
         {:tool_result, {:ok, %{"answers" => [_ | _]} = result}} ->
           assert result["cancelled"] == false
           assert result["timed_out"] == false
+          assert result["error"] == nil
 
-        {:tool_result, {:ok, %{"timed_out" => true}}} ->
-          # Timing is tricky in tests; timeout is acceptable
-          :ok
+        {:tool_result, {:ok, %{"timed_out" => true} = result}} ->
+          flunk("Tool timed out instead of receiving the immediate response: #{inspect(result)}")
       after
-        3000 ->
-          flunk("Tool invocation did not complete within timeout")
+        5_000 ->
+          flunk("Tool invocation did not complete within 5s")
       end
 
-      # Clean up the invoke process
+      # Clean up the invoke process and subscription
+      :ok = EventBus.unsubscribe_run(run_id)
+
       if Process.alive?(invoke_pid) do
         Process.exit(invoke_pid, :kill)
       end

@@ -144,16 +144,19 @@ defmodule CodePuppyControl.Tools.CpAskUserQuestion do
   # Unrelated / mismatched events are ignored (not terminal errors).
   # The after-clause guarantees timeout; the deadline prevents unrelated
   # events from resetting the timer indefinitely.
+  #
+  # `timeout_ms` is carried separately from `deadline` so the timeout
+  # response can report the *configured* duration, not monotonic time.
   defp wait_for_response(run_id, prompt_id, timeout_ms) do
     deadline = System.monotonic_time(:millisecond) + timeout_ms
-    spin_wait(run_id, prompt_id, deadline)
+    spin_wait(run_id, prompt_id, deadline, timeout_ms)
   end
 
-  defp spin_wait(run_id, prompt_id, deadline) do
+  defp spin_wait(run_id, prompt_id, deadline, timeout_ms) do
     remaining = deadline - System.monotonic_time(:millisecond)
 
     if remaining <= 0 do
-      {:ok, build_timeout_response(div(deadline - remaining, 1000))}
+      {:ok, build_timeout_response(div(timeout_ms, 1000))}
     else
       result =
         receive do
@@ -172,12 +175,11 @@ defmodule CodePuppyControl.Tools.CpAskUserQuestion do
             :continue
         after
           remaining ->
-            {:ok,
-             build_timeout_response(div(deadline - System.monotonic_time(:millisecond), 1000))}
+            {:ok, build_timeout_response(div(timeout_ms, 1000))}
         end
 
       case result do
-        :continue -> spin_wait(run_id, prompt_id, deadline)
+        :continue -> spin_wait(run_id, prompt_id, deadline, timeout_ms)
         final -> final
       end
     end
