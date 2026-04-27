@@ -273,7 +273,9 @@ class TestHandleRunStart:
     @pytest.mark.asyncio
     async def test_config_prompt_accepted(self, controller):
         """run.start with prompt under config succeeds."""
-        with patch("asyncio.create_task"):
+        # Side-effect closes the unawaited coroutine to prevent
+        # RuntimeWarning during GC (code_puppy-mmk.4).
+        with patch("asyncio.create_task", side_effect=lambda coro: coro.close()):
             result = await controller._handle_run_start(
                 {
                     "agent_name": "test-agent",

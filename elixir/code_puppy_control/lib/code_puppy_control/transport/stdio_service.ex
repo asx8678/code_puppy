@@ -943,7 +943,7 @@ defmodule CodePuppyControl.Transport.StdioService do
   # Agent Tools (Phase E: code_puppy-mmk.4)
   # ============================================================================
 
-   # agent_tools.list - List available agents (matches Python ListAgentsOutput)
+  # agent_tools.list - List available agents (matches Python ListAgentsOutput)
   defp handle_request("agent_tools.list", _params, id) do
     result = CodePuppyControl.Tools.AgentInvocation.list_agents()
 
@@ -1010,7 +1010,12 @@ defmodule CodePuppyControl.Transport.StdioService do
             )
 
           {:error, reason} ->
-            Protocol.encode_error(-32000, "Headless invocation failed: #{inspect(reason)}", nil, id)
+            Protocol.encode_error(
+              -32000,
+              "Headless invocation failed: #{inspect(reason)}",
+              nil,
+              id
+            )
         end
     end
   end
