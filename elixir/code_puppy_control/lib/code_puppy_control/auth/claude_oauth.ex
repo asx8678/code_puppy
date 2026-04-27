@@ -7,6 +7,10 @@ defmodule CodePuppyControl.Auth.ClaudeOAuth do
   token persistence, and model registry management for Claude Code
   OAuth-authenticated sessions.
 
+  Model registry, filtering, and entry construction are delegated to
+  `CodePuppyControl.Auth.ClaudeOAuth.Models` to keep this module
+  under the 600-line hard cap.
+
   All file writes go through `CodePuppyControl.Config.Isolation.safe_write!/2`
   to comply with ADR-003 dual-home isolation.
 
@@ -21,6 +25,7 @@ defmodule CodePuppyControl.Auth.ClaudeOAuth do
 
   alias CodePuppyControl.Config.Paths
   alias CodePuppyControl.Config.Isolation
+  alias CodePuppyControl.Auth.ClaudeOAuth.Models
 
   # ── OAuth Endpoints ─────────────────────────────────────────────────────
 
@@ -52,16 +57,6 @@ defmodule CodePuppyControl.Auth.ClaudeOAuth do
 
   @token_refresh_buffer_seconds 300
   @min_refresh_buffer_seconds 30
-
-  # ── Blocked Models ────────────────────────────────────────────────────
-
-  @blocked_models MapSet.new([])
-
-  # ── Model name regex patterns ─────────────────────────────────────────
-
-  @model_modern_re ~r/^claude-(haiku|sonnet|opus)-(\d+)(?:-(\d+))?(?:-(\d+))?$/
-  @model_dot_re ~r/^claude-(haiku|sonnet|opus)-(\d+)\.(\d+)(?:-(\d+))?$/
-  @model_legacy_re ~r/^claude-(\d+)-(haiku|sonnet|opus)(?:-(\d+))?$/
 
   # ── Config Access ─────────────────────────────────────────────────────
 
@@ -235,207 +230,32 @@ defmodule CodePuppyControl.Auth.ClaudeOAuth do
     end
   end
 
-  # ── Public API: Model Filtering ────────────────────────────────────────
+  # ── Public API: Model Registry (delegated to Models) ──────────────────
 
-  @doc """
-  Filter model names to keep only the latest per family (haiku, sonnet, opus).
+  @doc "Filter model names to keep only the latest per family. Delegates to `Models.filter_latest_models/2`."
+  @spec filter_latest_models([String.t()], Models.max_per_family()) :: [String.t()]
+  def filter_latest_models(models, max_per_family \\ 2),
+    do: Models.filter_latest_models(models, max_per_family)
 
-  `max_per_family` can be an integer (applies to all) or a map with
-  family keys (missing keys fall back to `"default"`, then `2`).
-  """
-  @spec filter_latest_models([String.t()], max_per_family()) :: [String.t()]
-  def filter_latest_models(models, max_per_family \\ 2)
-  def filter_latest_models([], _), do: []
-
-  def filter_latest_models(models, max_per_family) when is_list(models) do
-    models
-    |> Enum.reduce(%{}, fn name, acc ->
-      case parse_model_name(name) do
-        nil ->
-          acc
-
-        {family, major, minor, date} ->
-          Map.update(acc, family, [{name, major, minor, date}], fn existing ->
-            [{name, major, minor, date} | existing]
-          end)
-      end
-    end)
-    |> Enum.flat_map(fn {family, entries} ->
-      limit = resolve_limit(family, max_per_family)
-
-      entries
-      |> Enum.sort_by(fn {_, major, minor, date} -> {major, minor, date} end, :desc)
-      |> Enum.take(limit)
-      |> Enum.map(fn {name, _, _, _} -> name end)
-    end)
-  end
-
-  # ── Public API: Model Registry ─────────────────────────────────────────
-
-  @doc "Load Claude models from the overlay JSON file, filtering blocked ones."
+  @doc "Load Claude models from the overlay JSON file, filtering blocked ones. Delegates to `Models.load_models/0`."
   @spec load_models() :: {:ok, map()}
-  def load_models do
-    path = claude_models_path()
+  def load_models, do: Models.load_models()
 
-    case File.read(path) do
-      {:ok, data} ->
-        case Jason.decode(data) do
-          {:ok, models} when is_map(models) ->
-            {:ok, filter_blocked_models(models)}
-
-          {:error, reason} ->
-            Logger.error("Failed to parse Claude models: #{inspect(reason)}")
-            {:ok, %{}}
-        end
-
-      {:error, :enoent} ->
-        {:ok, %{}}
-
-      {:error, reason} ->
-        Logger.error("Failed to load Claude models: #{inspect(reason)}")
-        {:ok, %{}}
-    end
-  end
-
-  @doc "Save Claude models to the overlay JSON file (0o600 permissions)."
+  @doc "Save Claude models to the overlay JSON file. Delegates to `Models.save_models/1`."
   @spec save_models(map()) :: :ok
-  def save_models(models) when is_map(models) do
-    path = claude_models_path()
-    json = Jason.encode!(models, pretty: true)
-    Isolation.safe_write!(path, json)
-    File.chmod(path, 0o600)
-    :ok
-  end
+  def save_models(models), do: Models.save_models(models)
 
-  @doc """
-  Add model names to the registry, overwriting existing entries.
-
-  Creates `-long` variants for models in `long_context_models/0`.
-  Returns `{:ok, count}` or `{:error, reason}`.
-  """
+  @doc "Add model names to the registry. Delegates to `Models.add_models/1`."
   @spec add_models([String.t()]) :: {:ok, non_neg_integer()} | {:error, term()}
-  def add_models(model_names) when is_list(model_names) do
-    filtered = Enum.reject(model_names, &blocked_model?/1)
-    access_token = current_access_token()
+  def add_models(model_names), do: Models.add_models(model_names)
 
-    {models, added} =
-      Enum.reduce(filtered, {%{}, 0}, fn name, {acc, count} ->
-        prefixed = "#{@prefix}#{name}"
-        entry = build_model_entry(name, @default_context_length, access_token)
-        new_acc = Map.put(acc, prefixed, entry)
+  @doc "Load Claude models filtered to only the latest per family. Delegates to `Models.load_latest_models/0`."
+  @spec load_latest_models() :: {:ok, map()}
+  def load_latest_models, do: Models.load_latest_models()
 
-        if name in @long_context_models do
-          long_prefixed = "#{@prefix}#{name}-long"
-          long_entry = build_model_entry(name, @long_context_length, access_token)
-          {Map.put(new_acc, long_prefixed, long_entry), count + 2}
-        else
-          {new_acc, count + 1}
-        end
-      end)
-
-    try do
-      save_models(models)
-      Logger.info("Added #{added} Claude Code models")
-      {:ok, added}
-    rescue
-      e ->
-        Logger.error("Error adding models: #{inspect(e)}")
-        {:error, e}
-    end
-  end
-
-  @doc "Remove all Claude Code OAuth models. Returns `{:ok, count}` or `{:error, reason}`."
+  @doc "Remove all Claude Code OAuth models. Delegates to `Models.remove_models/0`."
   @spec remove_models() :: {:ok, non_neg_integer()} | {:error, term()}
-  def remove_models do
-    case load_models() do
-      {:ok, all_models} ->
-        to_remove =
-          all_models
-          |> Enum.filter(fn {_, cfg} -> cfg["oauth_source"] == "claude-code-plugin" end)
-          |> Enum.map(fn {name, _} -> name end)
-
-        if to_remove == [] do
-          {:ok, 0}
-        else
-          try do
-            save_models(Map.drop(all_models, to_remove))
-            Logger.info("Removed #{length(to_remove)} Claude Code models")
-            {:ok, length(to_remove)}
-          rescue
-            e ->
-              Logger.error("Error removing models: #{inspect(e)}")
-              {:error, e}
-          end
-        end
-    end
-  end
-
-  # ── Private: Model Parsing ─────────────────────────────────────────────
-
-  @spec parse_model_name(String.t()) :: {String.t(), integer(), integer(), integer()} | nil
-  defp parse_model_name(name) do
-    cond do
-      match = Regex.run(@model_modern_re, name) ->
-        [_, family, major_s, g3, g4] = pad_match(match, 5)
-        {major, minor, date} = parse_modern_groups(major_s, g3, g4)
-        {family, major, minor, date}
-
-      match = Regex.run(@model_dot_re, name) ->
-        [_, family, major_s, minor_s, date_s] = pad_match(match, 5)
-        major = String.to_integer(major_s)
-        minor = String.to_integer(minor_s)
-        date = if date_s == "", do: 99_999_999, else: String.to_integer(date_s)
-        {family, major, minor, date}
-
-      match = Regex.run(@model_legacy_re, name) ->
-        [_, major_s, family, date_s] = pad_match(match, 4)
-        major = String.to_integer(major_s)
-        date = if date_s == "", do: 99_999_999, else: String.to_integer(date_s)
-        {family, major, 0, date}
-
-      true ->
-        nil
-    end
-  end
-
-  defp pad_match(match, desired_len) do
-    match ++ List.duplicate("", desired_len - length(match))
-  end
-
-  defp parse_modern_groups(major_s, g3, g4) do
-    major = String.to_integer(major_s)
-
-    cond do
-      g3 == "" -> {major, 0, 99_999_999}
-      g4 != "" -> {major, String.to_integer(g3), String.to_integer(g4)}
-      String.length(g3) >= 6 -> {major, 0, String.to_integer(g3)}
-      true -> {major, String.to_integer(g3), 99_999_999}
-    end
-  end
-
-  # ── Private: Blocked Models ────────────────────────────────────────────
-
-  defp blocked_model?(name) when is_binary(name) do
-    stripped = name |> String.trim_leading(@prefix) |> String.trim_trailing("-long")
-    MapSet.member?(@blocked_models, name) or MapSet.member?(@blocked_models, stripped)
-  end
-
-  defp blocked_model?(_), do: false
-
-  defp filter_blocked_models(models) do
-    {kept, dropped} =
-      Enum.reduce(models, {%{}, []}, fn {key, val}, {kept_acc, drop_acc} ->
-        if blocked_model?(key),
-          do: {kept_acc, [key | drop_acc]},
-          else: {Map.put(kept_acc, key, val), drop_acc}
-      end)
-
-    if dropped != [] do
-      Logger.info("Filtered blocked Claude Code models: #{inspect(Enum.reverse(dropped))}")
-    end
-
-    kept
-  end
+  def remove_models, do: Models.remove_models()
 
   # ── Private: Token Helpers ─────────────────────────────────────────────
 
@@ -452,42 +272,6 @@ defmodule CodePuppyControl.Auth.ClaudeOAuth do
   end
 
   defp calculate_refresh_buffer(_), do: @token_refresh_buffer_seconds
-
-  # ── Private: Model Entry Builder ──────────────────────────────────────
-
-  defp current_access_token do
-    case load_tokens() do
-      {:ok, %{"access_token" => access_token}} when is_binary(access_token) -> access_token
-      _ -> ""
-    end
-  end
-
-  defp build_model_entry(model_name, context_length, access_token) do
-    settings =
-      base_supported_settings() ++
-        if String.contains?(String.downcase(model_name), "opus"), do: ["effort"], else: []
-
-    %{
-      "type" => "claude_code",
-      "name" => model_name,
-      "custom_endpoint" => %{
-        "url" => @api_base_url,
-        "api_key" => access_token,
-        "headers" => %{
-          "anthropic-beta" => "oauth-2025-04-20,interleaved-thinking-2025-05-14",
-          "x-app" => "cli",
-          "User-Agent" => "claude-cli/2.0.61 (external, cli)"
-        }
-      },
-      "context_length" => context_length,
-      "oauth_source" => "claude-code-plugin",
-      "supported_settings" => settings
-    }
-  end
-
-  defp base_supported_settings do
-    ["temperature", "extended_thinking", "budget_tokens", "interleaved_thinking"]
-  end
 
   # ── Private: HTTP ─────────────────────────────────────────────────────
 
@@ -519,16 +303,6 @@ defmodule CodePuppyControl.Auth.ClaudeOAuth do
     end
   end
 
-  # ── Private: Max Per Family ────────────────────────────────────────────
-
-  @type max_per_family :: pos_integer() | %{String.t() => pos_integer()}
-
-  defp resolve_limit(_, max) when is_integer(max), do: max
-
-  defp resolve_limit(family, max) when is_map(max) do
-    Map.get(max, family, Map.get(max, "default", 2))
-  end
-
   # ── Public API: Token Refresh & Model Token Updates ───────────────────
 
   @doc """
@@ -555,34 +329,8 @@ defmodule CodePuppyControl.Auth.ClaudeOAuth do
     CodePuppyControl.Auth.ClaudeOAuth.Flow.refresh_access_token()
   end
 
-  @doc """
-  Update the access token in all saved Claude Code model entries.
-
-  This preserves the Python plugin semantic where the live OAuth access token
-  is stored in `custom_endpoint.api_key` for `oauth_source == "claude-code-plugin"`.
-  """
+  @doc "Update the access token in all saved Claude Code model entries. Delegates to `Models.update_model_tokens/1`."
   @spec update_model_tokens(String.t()) :: :ok | {:error, term()}
-  def update_model_tokens(access_token) when is_binary(access_token) do
-    {:ok, models} = load_models()
-
-    updated =
-      models
-      |> Enum.map(fn {name, config} ->
-        if config["oauth_source"] == "claude-code-plugin" do
-          custom_endpoint = Map.get(config, "custom_endpoint", %{})
-          updated_endpoint = Map.put(custom_endpoint, "api_key", access_token)
-          {name, Map.put(config, "custom_endpoint", updated_endpoint)}
-        else
-          {name, config}
-        end
-      end)
-      |> Map.new()
-
-    try do
-      save_models(updated)
-      :ok
-    rescue
-      e -> {:error, e}
-    end
-  end
+  def update_model_tokens(access_token) when is_binary(access_token),
+    do: Models.update_model_tokens(access_token)
 end
