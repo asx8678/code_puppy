@@ -219,7 +219,7 @@ defmodule CodePuppyControl.Callbacks.RunShellCommandTest do
 
       result = RunShellCommand.check("echo hello")
       assert result.allowed == false
-      assert match?({:denied, reason}, result.decision)
+      assert match?({:denied, _}, result.decision)
       assert result.reason =~ "blocked by security plugin"
 
       Callbacks.unregister(:run_shell_command, raise_cb)

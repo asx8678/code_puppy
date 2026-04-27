@@ -7,9 +7,10 @@ defmodule CodePuppyControl.Callbacks.FilePermission do
 
   ## Pipeline
 
-  1. **PolicyEngine** — `check_explicit/2` for the tool name (derived
-     from `operation`). If an explicit rule matches, its decision is
-     returned immediately.
+  1. **PolicyEngine** — `check/2` for the tool name (derived from
+     `operation`). If a rule matches, its decision is returned
+     immediately. If no rule matches, the default decision (typically
+     `:ask_user`) is returned, ensuring fail-closed behavior.
   2. **Callback hook** — `Callbacks.trigger_raw(:file_permission, ...)`
      fires all registered plugin callbacks. Results are inspected for
      denials or crashes.
@@ -30,8 +31,8 @@ defmodule CodePuppyControl.Callbacks.FilePermission do
   - `%Deny{}` — Explicitly deny with reason
   - `%Allow{}` — Explicitly allow
 
-  Any callback returning `:callback_failed` (crash sentinel) is treated
-  as a denial per fail-closed semantics.
+  Any callback returning `:callback_failed` or `{:callback_failed, _}`
+  (crash sentinels) is treated as a denial per fail-closed semantics.
 
   ## Security
 
@@ -181,10 +182,15 @@ defmodule CodePuppyControl.Callbacks.FilePermission do
       #   false / %Deny{} — deny
       #   nil — no opinion (abstain)
       #   :callback_failed — crash sentinel → deny
+      # Fail-closed: any callback returning :callback_failed or
+      # {:callback_failed, _} is treated as a denial — we cannot
+      # determine the callback's intent, so we deny to be safe.
+      # This matches RunShellCommand's fail-closed handling.
       blocked =
         Enum.any?(results, fn
           false -> true
           :callback_failed -> true
+          {:callback_failed, _} -> true
           %Deny{} -> true
           _ -> false
         end)

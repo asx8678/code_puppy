@@ -218,6 +218,11 @@ defmodule CodePuppyControl.Tool.Runner do
     :edit_file,
     :delete_file,
     :delete_snippet,
+    :cp_create_file,
+    :cp_replace_in_file,
+    :cp_edit_file,
+    :cp_delete_file,
+    :cp_delete_snippet,
     :cp_read_file,
     :cp_list_files,
     :cp_grep
@@ -281,12 +286,19 @@ defmodule CodePuppyControl.Tool.Runner do
     end
   end
 
-  # Map tool atoms to file operation verbs for the callback chain
+  # Map tool atoms to file operation verbs for the callback chain.
+  # cp_* variants are the agent-facing mutation wrappers (see CpFileMods)
+  # and map to the same operations as their unprefixed counterparts.
   defp file_operation_from_tool(:create_file), do: "create"
   defp file_operation_from_tool(:replace_in_file), do: "write"
   defp file_operation_from_tool(:edit_file), do: "edit"
   defp file_operation_from_tool(:delete_file), do: "delete"
   defp file_operation_from_tool(:delete_snippet), do: "delete"
+  defp file_operation_from_tool(:cp_create_file), do: "create"
+  defp file_operation_from_tool(:cp_replace_in_file), do: "write"
+  defp file_operation_from_tool(:cp_edit_file), do: "edit"
+  defp file_operation_from_tool(:cp_delete_file), do: "delete"
+  defp file_operation_from_tool(:cp_delete_snippet), do: "delete"
   defp file_operation_from_tool(:cp_read_file), do: "read"
   defp file_operation_from_tool(:cp_list_files), do: "list"
   defp file_operation_from_tool(:cp_grep), do: "search"

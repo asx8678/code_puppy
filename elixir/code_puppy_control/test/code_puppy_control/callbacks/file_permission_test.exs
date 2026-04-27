@@ -230,6 +230,18 @@ defmodule CodePuppyControl.Callbacks.FilePermissionTest do
 
       Callbacks.unregister(:file_permission, fail_cb)
     end
+
+    test "callback returning {:callback_failed, reason} denies the operation (fail-closed)" do
+      # Tuple-form crash sentinel (matches RunShellCommand behavior)
+      fail_cb = fn _ctx, _path, _op, _, _, _ -> {:callback_failed, :timeout} end
+      Callbacks.register(:file_permission, fail_cb)
+
+      result = FilePermission.check(%{}, "lib/foo.ex", "create")
+      assert %Deny{reason: reason} = result
+      assert reason =~ "blocked by security plugin"
+
+      Callbacks.unregister(:file_permission, fail_cb)
+    end
   end
 
   describe "check/7 — mixed callback results" do
@@ -311,6 +323,20 @@ defmodule CodePuppyControl.Callbacks.FilePermissionTest do
 
       result = FilePermission.check(%{}, "lib/foo.ex", "create")
       assert %Deny{} = result
+
+      Callbacks.unregister(:file_permission, fail_cb)
+      Callbacks.unregister(:file_permission, allow_cb)
+    end
+
+    test "one callback returns {:callback_failed, _}, one returns true → deny (fail-closed)" do
+      fail_cb = fn _ctx, _path, _op, _, _, _ -> {:callback_failed, :timeout} end
+      allow_cb = fn _ctx, _path, _op, _, _, _ -> true end
+      Callbacks.register(:file_permission, fail_cb)
+      Callbacks.register(:file_permission, allow_cb)
+
+      result = FilePermission.check(%{}, "lib/foo.ex", "create")
+      assert %Deny{reason: reason} = result
+      assert reason =~ "blocked by security plugin"
 
       Callbacks.unregister(:file_permission, fail_cb)
       Callbacks.unregister(:file_permission, allow_cb)

@@ -74,7 +74,6 @@ defmodule CodePuppyControl.Tools.CommandRunner.Security do
   - `command` - Shell command string
   - `opts` - Options:
     - `:cwd` - Working directory (for policy context)
-    - `:timeout` - Timeout value (for policy context)
     - `:context` - Additional context map for callbacks
 
   ## Returns
