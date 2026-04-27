@@ -377,32 +377,12 @@ class StagedChangesSandbox:
         """Save staged changes to disk for persistence.
         
         Uses atomic write-to-tmp-then-rename to avoid corruption if interrupted.
+
+        # FIXME(code-puppy-ctj.5): Triple-write bug — data block repeated 3x.
+        # The Elixir port fixes this by writing once.
         """
         self._ensure_stage_dir()
         save_path = STAGE_DIR / f"{self._session_id}.json"
-
-        tmp_path = STAGE_DIR / f"{self._session_id}.json.tmp"
-
-        with self._lock:
-            data = {
-                "session_id": self._session_id,
-                "enabled": self._enabled,
-                "changes": [c.to_dict() for c in self._changes.values()],
-                "saved_at": time.time(),
-            }
-
-        # Atomic write: write to temp file first, then rename
-        with open(tmp_path, "w") as f:
-            json.dump(data, f, indent=2)
-        os.replace(tmp_path, save_path)
-
-        with self._lock:
-            data = {
-                "session_id": self._session_id,
-                "enabled": self._enabled,
-                "changes": [c.to_dict() for c in self._changes.values()],
-                "saved_at": time.time(),
-            }
 
         tmp_path = STAGE_DIR / f"{self._session_id}.json.tmp"
 

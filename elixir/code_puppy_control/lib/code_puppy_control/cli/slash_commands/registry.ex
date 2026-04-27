@@ -315,6 +315,16 @@ defmodule CodePuppyControl.CLI.SlashCommands.Registry do
         category: "session",
         detailed_help:
           "Loads the most recent autosaved session into the current REPL state. If multiple autosaves exist, shows a numbered list and loads the most recent one by default, or lets you pick by number. Alias: /resume."
+      ),
+      # Staged changes command
+      CommandInfo.new(
+        name: "staged",
+        description: "Show or manage staged changes for safe edit application",
+        handler: &Commands.Staged.handle_staged/2,
+        usage: "/staged [on|off|diff|preview|clear|apply|reject|save|load|status]",
+        category: "edit",
+        detailed_help:
+          "View and manage staged file changes. Staging mode intercepts file edits for review before applying. Subcommands: on, off, diff, preview, clear, apply, reject, save, load, status."
       )
     ]
 
