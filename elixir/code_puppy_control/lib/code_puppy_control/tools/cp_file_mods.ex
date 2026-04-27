@@ -6,9 +6,9 @@ defmodule CodePuppyControl.Tools.CpFileMods do
   `:cp_`-prefixed names so the CodePuppy agent's `allowed_tools/0`
   resolves correctly through the Tool Registry.
 
-  Each wrapper delegates `invoke/2` to the underlying tool module,
-  preserving full tool functionality including permission checks
-  and schema validation.
+  Each wrapper delegates both `permission_check/2` and `invoke/2` to the
+  underlying tool module, preserving full tool functionality including
+  security checks and schema validation.
 
   Refs: code_puppy-4s8.7 (Phase C CI gate)
   """
@@ -27,6 +27,10 @@ defmodule CodePuppyControl.Tools.CpFileMods do
     @impl true
     def parameters,
       do: CodePuppyControl.Tools.FileModifications.CreateFile.parameters()
+
+    @impl true
+    def permission_check(args, context),
+      do: CodePuppyControl.Tools.FileModifications.CreateFile.permission_check(args, context)
 
     @impl true
     def invoke(args, context),
@@ -49,6 +53,10 @@ defmodule CodePuppyControl.Tools.CpFileMods do
       do: CodePuppyControl.Tools.FileModifications.ReplaceInFile.parameters()
 
     @impl true
+    def permission_check(args, context),
+      do: CodePuppyControl.Tools.FileModifications.ReplaceInFile.permission_check(args, context)
+
+    @impl true
     def invoke(args, context),
       do: CodePuppyControl.Tools.FileModifications.ReplaceInFile.invoke(args, context)
   end
@@ -67,6 +75,10 @@ defmodule CodePuppyControl.Tools.CpFileMods do
     @impl true
     def parameters,
       do: CodePuppyControl.Tools.FileModifications.EditFile.parameters()
+
+    @impl true
+    def permission_check(args, context),
+      do: CodePuppyControl.Tools.FileModifications.EditFile.permission_check(args, context)
 
     @impl true
     def invoke(args, context),
@@ -89,6 +101,10 @@ defmodule CodePuppyControl.Tools.CpFileMods do
       do: CodePuppyControl.Tools.FileModifications.DeleteFile.parameters()
 
     @impl true
+    def permission_check(args, context),
+      do: CodePuppyControl.Tools.FileModifications.DeleteFile.permission_check(args, context)
+
+    @impl true
     def invoke(args, context),
       do: CodePuppyControl.Tools.FileModifications.DeleteFile.invoke(args, context)
   end
@@ -107,6 +123,10 @@ defmodule CodePuppyControl.Tools.CpFileMods do
     @impl true
     def parameters,
       do: CodePuppyControl.Tools.FileModifications.DeleteSnippet.parameters()
+
+    @impl true
+    def permission_check(args, context),
+      do: CodePuppyControl.Tools.FileModifications.DeleteSnippet.permission_check(args, context)
 
     @impl true
     def invoke(args, context),

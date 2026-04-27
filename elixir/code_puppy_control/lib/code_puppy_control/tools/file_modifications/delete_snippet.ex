@@ -9,13 +9,15 @@ defmodule CodePuppyControl.Tools.FileModifications.DeleteSnippet do
 
   - Path validated via `FileOps.Security`
   - Permission check via `PolicyEngine`
+  - `FileLock.with_lock/2` serializes concurrent mutations
   """
 
   use CodePuppyControl.Tool
 
   require Logger
 
-  alias CodePuppyControl.{FileOps.Security, Text.Diff}
+  alias CodePuppyControl.{FileOps.Security, Text.Diff, Text.EOL}
+  alias CodePuppyControl.Tools.FileModifications.{SafeWrite, DiffEmitter, Validation, FileLock}
 
   @impl true
   def name, do: :delete_snippet
@@ -59,7 +61,9 @@ defmodule CodePuppyControl.Tools.FileModifications.DeleteSnippet do
     snippet = Map.get(args, "snippet", "")
 
     with {:ok, expanded_path} <- Security.validate_path(file_path, "delete snippet from") do
-      do_delete_snippet(expanded_path, snippet)
+      FileLock.with_lock(expanded_path, fn ->
+        do_delete_snippet(expanded_path, snippet)
+      end)
     end
   end
 
@@ -68,24 +72,57 @@ defmodule CodePuppyControl.Tools.FileModifications.DeleteSnippet do
   defp do_delete_snippet(file_path, snippet) do
     case File.read(file_path) do
       {:ok, content} ->
-        if String.contains?(content, snippet) do
-          modified = String.replace(content, snippet, "", global: false)
+        # Strip BOM for matching (LLM output never has BOM)
+        {content_no_bom, bom} = EOL.strip_bom(content)
+
+        if String.contains?(content_no_bom, snippet) do
+          modified = String.replace(content_no_bom, snippet, "", global: false)
+          # Strip LLM-hallucinated blank lines
+          modified = EOL.strip_added_blank_lines(content_no_bom, modified)
 
           diff =
-            Diff.unified_diff(content, modified,
+            Diff.unified_diff(content_no_bom, modified,
               from_file: "a/#{Path.basename(file_path)}",
               to_file: "b/#{Path.basename(file_path)}"
             )
 
-          case File.write(file_path, modified) do
+          # Restore BOM on write
+          final_content = EOL.restore_bom(modified, bom)
+
+          case SafeWrite.safe_write(file_path, final_content) do
             :ok ->
-              {:ok,
+              # Emit diff for UI display
+              DiffEmitter.emit_diff(file_path, :modify, diff)
+
+              result = %{
+                success: true,
+                path: file_path,
+                message: "Snippet removed successfully",
+                changed: true,
+                diff: diff
+              }
+
+              # Post-edit syntax validation (advisory only)
+              result = Validation.maybe_attach_warning(result, file_path)
+
+              {:ok, result}
+
+            {:error, :symlink_detected} ->
+              {:error,
                %{
-                 success: true,
+                 success: false,
                  path: file_path,
-                 message: "Snippet removed successfully",
-                 changed: true,
-                 diff: diff
+                 message: "Refusing to write to symlink (security: symlink attack prevention)",
+                 changed: false
+               }}
+
+            {:error, reason} when is_binary(reason) ->
+              {:error,
+               %{
+                 success: false,
+                 path: file_path,
+                 message: reason,
+                 changed: false
                }}
 
             {:error, reason} ->
@@ -93,7 +130,7 @@ defmodule CodePuppyControl.Tools.FileModifications.DeleteSnippet do
                %{
                  success: false,
                  path: file_path,
-                 message: "Failed to write file: #{:file.format_error(reason)}",
+                 message: "Failed to write file: #{inspect(reason)}",
                  changed: false
                }}
           end

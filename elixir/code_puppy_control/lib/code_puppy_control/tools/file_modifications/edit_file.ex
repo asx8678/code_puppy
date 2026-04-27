@@ -23,11 +23,8 @@ defmodule CodePuppyControl.Tools.FileModifications.EditFile do
 
   require Logger
 
-  alias CodePuppyControl.Tools.FileModifications.{
-    CreateFile,
-    ReplaceInFile,
-    DeleteSnippet
-  }
+  alias CodePuppyControl.FileOps.Security
+  alias CodePuppyControl.Tools.FileModifications.{CreateFile, ReplaceInFile, DeleteSnippet}
 
   @impl true
   def name, do: :edit_file
@@ -78,6 +75,30 @@ defmodule CodePuppyControl.Tools.FileModifications.EditFile do
       },
       "required" => ["file_path"]
     }
+  end
+
+  @impl true
+  def permission_check(args, context) do
+    # Delegate to the underlying tool based on payload type
+    file_path = Map.get(args, "file_path", "")
+
+    cond do
+      Map.has_key?(args, "content") ->
+        CreateFile.permission_check(%{"file_path" => file_path}, context)
+
+      Map.has_key?(args, "replacements") ->
+        ReplaceInFile.permission_check(%{"file_path" => file_path}, context)
+
+      Map.has_key?(args, "delete_snippet") ->
+        DeleteSnippet.permission_check(%{"file_path" => file_path}, context)
+
+      true ->
+        # No payload — default check on file_path alone
+        case Security.validate_path(file_path, "edit") do
+          {:ok, _} -> :ok
+          {:error, reason} -> {:deny, reason}
+        end
+    end
   end
 
   @impl true
