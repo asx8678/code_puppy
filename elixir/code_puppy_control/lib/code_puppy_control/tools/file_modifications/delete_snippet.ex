@@ -9,6 +9,7 @@ defmodule CodePuppyControl.Tools.FileModifications.DeleteSnippet do
 
   - Path validated via `FileOps.Security`
   - Permission check via `PolicyEngine`
+  - `FileLock.with_lock/2` serializes concurrent mutations
   """
 
   use CodePuppyControl.Tool
@@ -16,7 +17,7 @@ defmodule CodePuppyControl.Tools.FileModifications.DeleteSnippet do
   require Logger
 
   alias CodePuppyControl.{FileOps.Security, Text.Diff, Text.EOL}
-  alias CodePuppyControl.Tools.FileModifications.{SafeWrite, DiffEmitter, Validation}
+  alias CodePuppyControl.Tools.FileModifications.{SafeWrite, DiffEmitter, Validation, FileLock}
 
   @impl true
   def name, do: :delete_snippet
@@ -60,7 +61,9 @@ defmodule CodePuppyControl.Tools.FileModifications.DeleteSnippet do
     snippet = Map.get(args, "snippet", "")
 
     with {:ok, expanded_path} <- Security.validate_path(file_path, "delete snippet from") do
-      do_delete_snippet(expanded_path, snippet)
+      FileLock.with_lock(expanded_path, fn ->
+        do_delete_snippet(expanded_path, snippet)
+      end)
     end
   end
 

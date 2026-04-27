@@ -69,8 +69,11 @@ defmodule CodePuppyControl.Tools.FileModifications.ReplaceInFileEnhancedTest do
 
   describe "invoke/2 with symlink protection" do
     test "refuses to replace in a symlink" do
-      target = Path.join(@tmp_dir, "replace_symlink_target_#{:erlang.unique_integer([:positive])}.txt")
-      link = Path.join(@tmp_dir, "replace_symlink_link_#{:erlang.unique_integer([:positive])}.txt")
+      target =
+        Path.join(@tmp_dir, "replace_symlink_target_#{:erlang.unique_integer([:positive])}.txt")
+
+      link =
+        Path.join(@tmp_dir, "replace_symlink_link_#{:erlang.unique_integer([:positive])}.txt")
 
       File.write!(target, "foo bar baz")
       File.ln_s!(target, link)

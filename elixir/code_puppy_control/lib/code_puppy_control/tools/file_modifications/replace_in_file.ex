@@ -13,6 +13,7 @@ defmodule CodePuppyControl.Tools.FileModifications.ReplaceInFile do
 
   - Path validated via `FileOps.Security`
   - Permission check via `PolicyEngine`
+  - `FileLock.with_lock/2` serializes concurrent mutations
 
   ## Important: replacements is a LIST
 
@@ -24,8 +25,8 @@ defmodule CodePuppyControl.Tools.FileModifications.ReplaceInFile do
 
   require Logger
 
-  alias CodePuppyControl.{FileOps.Security, Text.ReplaceEngine, Text.EOL}
-  alias CodePuppyControl.Tools.FileModifications.{SafeWrite, DiffEmitter, Validation}
+  alias CodePuppyControl.{FileOps.Security, Text.ReplaceEngine, Text.EOL, Text.Diff}
+  alias CodePuppyControl.Tools.FileModifications.{SafeWrite, DiffEmitter, Validation, FileLock}
 
   @impl true
   def name, do: :replace_in_file
@@ -89,7 +90,9 @@ defmodule CodePuppyControl.Tools.FileModifications.ReplaceInFile do
 
     with {:ok, expanded_path} <- Security.validate_path(file_path, "replace text in"),
          {:ok, replacements} <- validate_replacements(raw_replacements) do
-      do_replace(expanded_path, replacements)
+      FileLock.with_lock(expanded_path, fn ->
+        do_replace(expanded_path, replacements)
+      end)
     end
   end
 
@@ -132,8 +135,8 @@ defmodule CodePuppyControl.Tools.FileModifications.ReplaceInFile do
         {content_no_bom, bom} = EOL.strip_bom(content)
 
         case ReplaceEngine.replace_in_content(content_no_bom, replacements) do
-          {:ok, %{modified: modified, diff: diff}} ->
-            # Strip LLM-hallucinated blank lines
+          {:ok, %{modified: modified}} ->
+            # Strip LLM-hallucinated blank lines FIRST, then compute diff
             modified_stripped = EOL.strip_added_blank_lines(content_no_bom, modified)
 
             if modified_stripped == content_no_bom do
@@ -146,6 +149,13 @@ defmodule CodePuppyControl.Tools.FileModifications.ReplaceInFile do
                  diff: ""
                }}
             else
+              # Regenerate diff AFTER strip_added_blank_lines so it matches written content
+              diff =
+                Diff.unified_diff(content_no_bom, modified_stripped,
+                  from_file: "a/#{Path.basename(file_path)}",
+                  to_file: "b/#{Path.basename(file_path)}"
+                )
+
               # Restore BOM on write
               final_content = EOL.restore_bom(modified_stripped, bom)
 
@@ -172,7 +182,8 @@ defmodule CodePuppyControl.Tools.FileModifications.ReplaceInFile do
                    %{
                      success: false,
                      path: file_path,
-                     message: "Refusing to write to symlink (security: symlink attack prevention)",
+                     message:
+                       "Refusing to write to symlink (security: symlink attack prevention)",
                      changed: false
                    }}
 

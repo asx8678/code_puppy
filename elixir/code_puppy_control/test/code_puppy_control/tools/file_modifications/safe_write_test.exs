@@ -18,7 +18,9 @@ defmodule CodePuppyControl.Tools.FileModifications.SafeWriteTest do
     end
 
     test "overwrites existing file content" do
-      path = Path.join(@tmp_dir, "safe_write_overwrite_#{:erlang.unique_integer([:positive])}.txt")
+      path =
+        Path.join(@tmp_dir, "safe_write_overwrite_#{:erlang.unique_integer([:positive])}.txt")
+
       File.write!(path, "original")
 
       assert :ok = SafeWrite.safe_write(path, "updated")

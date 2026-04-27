@@ -13,10 +13,13 @@ defmodule CodePuppyControl.Tools.FileModifications do
   Supporting modules:
 
   - `SafeWrite` — symlink-safe file writing (O_NOFOLLOW equivalent)
-  - `FileLock` — per-file locking for concurrent mutation serialization
-  - `Validation` — post-edit syntax validation (advisory only)
-  - `Permissions` — user rejection and policy denial responses
+  - `FileLock` — per-file locking for concurrent mutation serialization (`:global.trans/3`)
+  - `Validation` — post-edit syntax validation (advisory only, Elixir/Erlang/JSON only)
   - `DiffEmitter` — structured diff message emission for UI display
+
+  > **Note:** User rejection / policy denial responses are handled directly by each
+  > tool's `permission_check/2` callback via `FileOps.Security.validate_path/2`. There
+  > is no separate Permissions module.
 
   ## Usage
 
@@ -57,7 +60,6 @@ defmodule CodePuppyControl.Tools.FileModifications do
       __MODULE__.SafeWrite,
       __MODULE__.FileLock,
       __MODULE__.Validation,
-      __MODULE__.Permissions,
       __MODULE__.DiffEmitter
     ]
   end

@@ -1,5 +1,5 @@
 defmodule CodePuppyControl.Tools.FileModifications.DeleteFileTest do
-  @moduledoc "Tests for the DeleteFile tool."
+  @moduledoc "Tests for the DeleteFile tool (stat-based, no deleted_content)."
 
   use ExUnit.Case, async: true
 
@@ -33,30 +33,25 @@ defmodule CodePuppyControl.Tools.FileModifications.DeleteFileTest do
       assert not File.exists?(path)
     end
 
-    test "includes deleted content in result" do
-      path = Path.join(@tmp_dir, "delete_content_test_#{:rand.uniform(10000)}.txt")
+    test "does NOT return deleted_content (large-file safety)" do
+      path = Path.join(@tmp_dir, "delete_no_content_#{:rand.uniform(10000)}.txt")
       File.write!(path, "important content")
 
       args = %{"file_path" => path}
 
       assert {:ok, result} = DeleteFile.invoke(args, %{})
-      assert result.deleted_content == "important content"
-
-      # File is deleted, no cleanup needed
+      refute Map.has_key?(result, :deleted_content)
     end
 
-    test "generates diff showing removed content" do
+    test "generates summary diff (lines/bytes)" do
       path = Path.join(@tmp_dir, "delete_diff_test_#{:rand.uniform(10000)}.txt")
       File.write!(path, "line 1\nline 2\n")
 
       args = %{"file_path" => path}
 
       assert {:ok, result} = DeleteFile.invoke(args, %{})
-      # Now generates summary diff (lines/bytes), not full content diff
       assert result.diff =~ "lines"
       assert result.diff =~ "bytes"
-
-      # File is deleted, no cleanup needed
     end
 
     test "fails on non-existent file" do

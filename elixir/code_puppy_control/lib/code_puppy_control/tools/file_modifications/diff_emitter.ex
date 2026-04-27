@@ -11,8 +11,11 @@ defmodule CodePuppyControl.Tools.FileModifications.DiffEmitter do
 
   - Parses unified diff into structured `DiffLine` objects
   - Emits via `CodePuppyControl.EventBus` for TUI consumption
-  - Skips emission if diff was already shown during permission prompt
   - Empty diffs are silently skipped
+
+  > **Note:** The Python implementation skips emission when the diff was
+  > already shown during a permission prompt. The Elixir permission layer
+  > does not have a pre-view prompt, so this skip behavior is not applicable.
   """
 
   require Logger
@@ -91,11 +94,11 @@ defmodule CodePuppyControl.Tools.FileModifications.DiffEmitter do
     # Emit to event bus (if available)
     case Process.whereis(CodePuppyControl.EventBus) do
       nil ->
-        # Event bus not started — log instead
-        Logger.debug("DiffEmitter: EventBus not available, skipping diff emission for #{file_path}")
+        Logger.debug(
+          "DiffEmitter: EventBus not available, skipping diff emission for #{file_path}"
+        )
 
       _pid ->
-        # Use broadcast_event for structured event delivery
         if function_exported?(CodePuppyControl.EventBus, :broadcast_event, 2) do
           CodePuppyControl.EventBus.broadcast_event(event)
         end

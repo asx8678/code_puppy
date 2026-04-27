@@ -45,8 +45,14 @@ defmodule CodePuppyControl.Tools.FileModifications.DeleteSnippetEnhancedTest do
 
   describe "invoke/2 with symlink protection" do
     test "refuses to delete snippet from a symlink" do
-      target = Path.join(@tmp_dir, "del_snippet_symlink_target_#{:erlang.unique_integer([:positive])}.txt")
-      link = Path.join(@tmp_dir, "del_snippet_symlink_link_#{:erlang.unique_integer([:positive])}.txt")
+      target =
+        Path.join(
+          @tmp_dir,
+          "del_snippet_symlink_target_#{:erlang.unique_integer([:positive])}.txt"
+        )
+
+      link =
+        Path.join(@tmp_dir, "del_snippet_symlink_link_#{:erlang.unique_integer([:positive])}.txt")
 
       File.write!(target, "foo bar baz")
       File.ln_s!(target, link)
@@ -68,7 +74,9 @@ defmodule CodePuppyControl.Tools.FileModifications.DeleteSnippetEnhancedTest do
 
   describe "invoke/2 with post-edit validation" do
     test "attaches syntax warning for invalid Elixir after deletion" do
-      path = Path.join(@tmp_dir, "del_snippet_validation_#{:erlang.unique_integer([:positive])}.ex")
+      path =
+        Path.join(@tmp_dir, "del_snippet_validation_#{:erlang.unique_integer([:positive])}.ex")
+
       File.write!(path, "defmodule Foo do\n  BAD SYNTAX\n  def bar, do: :baz\nend")
 
       args = %{
@@ -99,7 +107,8 @@ defmodule CodePuppyControl.Tools.FileModifications.DeleteSnippetEnhancedTest do
       assert result.success == true
       content = File.read!(path)
       # Should not have surplus blank lines from the deletion
-      assert content == "line 1\nline 3" or content == "line 1line 3" or not String.contains?(content, "line 2")
+      assert content == "line 1\nline 3" or content == "line 1line 3" or
+               not String.contains?(content, "line 2")
 
       File.rm(path)
     end

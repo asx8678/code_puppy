@@ -31,7 +31,9 @@ defmodule CodePuppyControl.Tools.FileModifications.DiffEmitterTest do
 
       lines = DiffEmitter.parse_diff_lines(diff)
 
-      hunk_lines = Enum.filter(lines, &(&1.type == :context and String.starts_with?(&1.content, "@@")))
+      hunk_lines =
+        Enum.filter(lines, &(&1.type == :context and String.starts_with?(&1.content, "@@")))
+
       assert length(hunk_lines) >= 1
     end
 
@@ -41,14 +43,18 @@ defmodule CodePuppyControl.Tools.FileModifications.DiffEmitterTest do
     end
 
     test "handles context lines" do
-      diff = "--- a/test.txt\n+++ b/test.txt\n@@ -1,3 +1,3 @@\n context line\n-old\n+new\n context line"
+      diff =
+        "--- a/test.txt\n+++ b/test.txt\n@@ -1,3 +1,3 @@\n context line\n-old\n+new\n context line"
 
       lines = DiffEmitter.parse_diff_lines(diff)
 
       context_lines =
-        Enum.filter(lines, &(&1.type == :context and not String.starts_with?(&1.content, "@@") and
-                            not String.starts_with?(&1.content, "---") and
-                            not String.starts_with?(&1.content, "+++")))
+        Enum.filter(
+          lines,
+          &(&1.type == :context and not String.starts_with?(&1.content, "@@") and
+              not String.starts_with?(&1.content, "---") and
+              not String.starts_with?(&1.content, "+++"))
+        )
 
       assert length(context_lines) >= 1
     end

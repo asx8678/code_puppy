@@ -88,7 +88,9 @@ defmodule CodePuppyControl.Tools.FileModifications.CreateFileEnhancedTest do
 
   describe "invoke/2 with symlink protection" do
     test "refuses to overwrite a symlink" do
-      target = Path.join(@tmp_dir, "create_symlink_target_#{:erlang.unique_integer([:positive])}.txt")
+      target =
+        Path.join(@tmp_dir, "create_symlink_target_#{:erlang.unique_integer([:positive])}.txt")
+
       link = Path.join(@tmp_dir, "create_symlink_link_#{:erlang.unique_integer([:positive])}.txt")
 
       File.write!(target, "target content")
@@ -110,8 +112,14 @@ defmodule CodePuppyControl.Tools.FileModifications.CreateFileEnhancedTest do
     end
 
     test "refuses to create a new file at a symlink path" do
-      target = Path.join(@tmp_dir, "create_symlink_new_target_#{:erlang.unique_integer([:positive])}.txt")
-      link = Path.join(@tmp_dir, "create_symlink_new_link_#{:erlang.unique_integer([:positive])}.txt")
+      target =
+        Path.join(
+          @tmp_dir,
+          "create_symlink_new_target_#{:erlang.unique_integer([:positive])}.txt"
+        )
+
+      link =
+        Path.join(@tmp_dir, "create_symlink_new_link_#{:erlang.unique_integer([:positive])}.txt")
 
       File.write!(target, "target content")
       File.ln_s!(target, link)

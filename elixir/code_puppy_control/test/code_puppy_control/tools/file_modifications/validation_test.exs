@@ -1,5 +1,5 @@
 defmodule CodePuppyControl.Tools.FileModifications.ValidationTest do
-  @moduledoc "Tests for Validation — post-edit syntax validation."
+  @moduledoc "Tests for Validation — post-edit syntax validation (Elixir, Erlang, JSON only)."
 
   use ExUnit.Case, async: true
 
@@ -20,12 +20,16 @@ defmodule CodePuppyControl.Tools.FileModifications.ValidationTest do
       assert Validation.validatable_extension?("/tmp/file.json") == true
     end
 
-    test "recognizes Python/JS/TS/Rust extensions" do
-      assert Validation.validatable_extension?("/tmp/file.py") == true
-      assert Validation.validatable_extension?("/tmp/file.js") == true
-      assert Validation.validatable_extension?("/tmp/file.ts") == true
-      assert Validation.validatable_extension?("/tmp/file.tsx") == true
-      assert Validation.validatable_extension?("/tmp/file.rs") == true
+    test "does NOT advertise validation for extensions without parsers" do
+      # These have no actual validation logic in this module
+      assert Validation.validatable_extension?("/tmp/file.py") == false
+      assert Validation.validatable_extension?("/tmp/file.js") == false
+      assert Validation.validatable_extension?("/tmp/file.ts") == false
+      assert Validation.validatable_extension?("/tmp/file.tsx") == false
+      assert Validation.validatable_extension?("/tmp/file.rs") == false
+      assert Validation.validatable_extension?("/tmp/file.yaml") == false
+      assert Validation.validatable_extension?("/tmp/file.yml") == false
+      assert Validation.validatable_extension?("/tmp/file.toml") == false
     end
 
     test "rejects non-code extensions" do
@@ -35,7 +39,6 @@ defmodule CodePuppyControl.Tools.FileModifications.ValidationTest do
     end
 
     test "is case-insensitive" do
-      # Extension comparison uses downcase
       assert Validation.validatable_extension?("/tmp/file.EX") == true
     end
   end
@@ -43,36 +46,51 @@ defmodule CodePuppyControl.Tools.FileModifications.ValidationTest do
   describe "maybe_attach_warning/2" do
     test "skips validation for failed operations" do
       result = %{success: false, path: "/tmp/test.ex", message: "failed"}
+
       assert Validation.maybe_attach_warning(result, "/tmp/test.ex") == result
     end
 
     test "passes through for non-validatable extensions" do
       result = %{success: true, path: "/tmp/test.txt"}
+
       assert Validation.maybe_attach_warning(result, "/tmp/test.txt") == result
     end
 
+    test "passes through for code extensions without parsers (fail-open)" do
+      result = %{success: true, path: "/tmp/test.py"}
+
+      assert Validation.maybe_attach_warning(result, "/tmp/test.py") == result
+    end
+
     test "adds syntax_warning for invalid Elixir syntax" do
-      # Write invalid Elixir to a temp file to test validation
-      path = Path.join(System.tmp_dir!(), "validation_test_#{:erlang.unique_integer([:positive])}.ex")
-      File.write!(path, "defmodule Foo do\n  def bar(\nend")  # Missing closing paren
+      path =
+        Path.join(
+          System.tmp_dir!(),
+          "validation_test_#{:erlang.unique_integer([:positive])}.ex"
+        )
+
+      File.write!(path, "defmodule Foo do\n  def bar(\nend")
 
       result = %{success: true, path: path}
       result = Validation.maybe_attach_warning(result, path)
 
-      # Should have a syntax_warning key
       assert Map.has_key?(result, :syntax_warning)
 
       File.rm(path)
     end
 
     test "does not add warning for valid Elixir syntax" do
-      path = Path.join(System.tmp_dir!(), "validation_valid_test_#{:erlang.unique_integer([:positive])}.ex")
+      path =
+        Path.join(
+          System.tmp_dir!(),
+          "validation_valid_test_#{:erlang.unique_integer([:positive])}.ex"
+        )
+
       File.write!(path, "def foo, do: :bar")
 
       result = %{success: true, path: path}
       result = Validation.maybe_attach_warning(result, path)
 
-      # Should NOT have a syntax_warning key for valid code
       refute Map.has_key?(result, :syntax_warning)
 
       File.rm(path)
@@ -80,8 +98,10 @@ defmodule CodePuppyControl.Tools.FileModifications.ValidationTest do
   end
 
   describe "validate_file/2" do
-    test "returns :ok for non-validatable extensions" do
+    test "returns :ok for non-validatable extensions (fail-open)" do
       assert {:ok, :valid} = Validation.validate_file("/tmp/test.txt", "anything")
+      assert {:ok, :valid} = Validation.validate_file("/tmp/test.py", "print('hi')")
+      assert {:ok, :valid} = Validation.validate_file("/tmp/test.js", "var x = 1")
     end
 
     test "validates valid Elixir code" do
@@ -89,8 +109,13 @@ defmodule CodePuppyControl.Tools.FileModifications.ValidationTest do
     end
 
     test "detects invalid Elixir code" do
-      assert {:warning, msg} = Validation.validate_file("/tmp/test.ex", "defmodule Foo do\n  def bar(\nend")
-      assert msg =~ "Syntax error" or msg =~ "syntax"
+      assert {:warning, msg} =
+               Validation.validate_file(
+                 "/tmp/test.ex",
+                 "defmodule Foo do\n  def bar(\nend"
+               )
+
+      assert msg =~ "Syntax error"
     end
 
     test "validates valid JSON" do
@@ -100,6 +125,22 @@ defmodule CodePuppyControl.Tools.FileModifications.ValidationTest do
     test "detects invalid JSON" do
       assert {:warning, msg} = Validation.validate_file("/tmp/test.json", "{invalid json")
       assert msg =~ "Invalid JSON"
+    end
+
+    test "validates valid Erlang code" do
+      assert {:ok, :valid} =
+               Validation.validate_file(
+                 "/tmp/test.erl",
+                 "-module(test).\n-export([foo/0]).\nfoo() -> ok."
+               )
+    end
+
+    test "detects Erlang scan errors" do
+      # 0x is an illegal integer token in Erlang
+      assert {:warning, msg} =
+               Validation.validate_file("/tmp/test.erl", "0x\n")
+
+      assert msg =~ "scan error" or msg =~ "Erlang"
     end
   end
 

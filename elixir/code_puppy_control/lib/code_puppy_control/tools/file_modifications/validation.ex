@@ -2,11 +2,22 @@ defmodule CodePuppyControl.Tools.FileModifications.Validation do
   @moduledoc """
   Post-edit syntax validation for file modifications.
 
-  Port of `code_puppy/tools/file_modifications.py:_maybe_attach_syntax_warning`.
-
   Validates file syntax after a successful edit operation and attaches
   advisory warnings to the result. The edit is NEVER blocked by validation
   failures — this is purely advisory for the agent to self-correct.
+
+  ## Supported formats
+
+  Only file types with **actual** validation logic are listed as validatable:
+
+  - `.ex` / `.exs` — Full AST validation via `Code.string_to_quoted/2`
+  - `.erl` / `.hrl` — Token-level validation via `:erl_scan.string/1`
+  - `.json` — Decoded via `Jason.decode/1`
+
+  All other extensions (`.py`, `.js`, `.ts`, `.tsx`, `.rs`, `.yaml`, `.yml`,
+  `.toml`) return `{:ok, :valid}` immediately — no validation is performed
+  for these types. They are NOT listed in `validatable_extensions/0` to avoid
+  false advertising.
 
   ## Design
 
@@ -20,28 +31,22 @@ defmodule CodePuppyControl.Tools.FileModifications.Validation do
 
   @validation_timeout_ms 500
 
-  # File extensions that support syntax validation
-  @validatable_extensions ~w(.ex .exs .erl .hrl .py .js .ts .tsx .rs .json .yaml .yml .toml)
+  # Only extensions that have ACTUAL validation logic implemented
+  @validatable_extensions ~w(.ex .exs .erl .hrl .json)
 
   @doc """
   Attach a syntax warning to the result if validation detects issues.
 
-  This function mutates the result map in-place by adding a `:syntax_warning`
-  key if post-edit validation finds syntax errors. The edit operation itself
+  This function adds a `:syntax_warning` key to the result map if
+  post-edit validation finds syntax errors. The edit operation itself
   is NOT blocked — this is purely advisory.
 
   ## Returns
 
   The result map, potentially with a `:syntax_warning` key added.
-
-  ## Examples
-
-      iex> Validation.maybe_attach_warning(%{success: true, path: "/tmp/test.ex"}, "/tmp/test.ex")
-      %{success: true, path: "/tmp/test.ex"}
   """
   @spec maybe_attach_warning(map(), Path.t()) :: map()
   def maybe_attach_warning(result, file_path) do
-    # Only validate successful operations
     unless result[:success] == true do
       result
     else
@@ -50,12 +55,22 @@ defmodule CodePuppyControl.Tools.FileModifications.Validation do
   end
 
   @doc """
-  Check if a file extension is validatable.
+  Check if a file extension has actual validation support.
+
+  Only returns `true` for extensions with real validation logic
+  (Elixir, Erlang, JSON). Other code extensions (.py, .js, .ts, .tsx, .rs)
+  are NOT validatable — no parser is available in this module.
 
   ## Examples
 
       iex> Validation.validatable_extension?("/tmp/file.ex")
       true
+
+      iex> Validation.validatable_extension?("/tmp/file.json")
+      true
+
+      iex> Validation.validatable_extension?("/tmp/file.py")
+      false
 
       iex> Validation.validatable_extension?("/tmp/file.txt")
       false
@@ -80,13 +95,17 @@ defmodule CodePuppyControl.Tools.FileModifications.Validation do
   Validate file content for syntax errors.
 
   Returns `{:ok, :valid}` or `{:warning, message}`.
-  Always returns `{:ok, :valid}` if validation is disabled or the
-  extension is not validatable (fail-open guarantee).
+  Always returns `{:ok, :valid}` if validation is disabled, the extension
+  is not validatable, or the extension lacks actual validation logic.
+  This is the fail-open guarantee.
 
   ## Examples
 
       iex> Validation.validate_file("/tmp/test.ex", "def foo, do: :bar")
-      {:ok, :valid}  # or {:warning, "message"} if syntax errors found
+      {:ok, :valid}
+
+      iex> Validation.validate_file("/tmp/test.py", "print('hello')")
+      {:ok, :valid}
   """
   @spec validate_file(Path.t(), String.t()) :: {:ok, :valid} | {:warning, String.t()}
   def validate_file(file_path, content) do
@@ -155,24 +174,37 @@ defmodule CodePuppyControl.Tools.FileModifications.Validation do
     end
   end
 
-  # Elixir validation
+  # Elixir validation — full AST parse
   defp validate_extension(ext, content) when ext in ~w(.ex .exs) do
     case Code.string_to_quoted(content, file: "validation_check") do
-      {:ok, _} -> {:ok, :valid}
+      {:ok, _} ->
+        {:ok, :valid}
+
       {:error, {meta, error_msg, token}} ->
         line = Keyword.get(meta, :line, 0)
         {:warning, "Syntax error on line #{line}: #{error_msg} #{token}"}
     end
   end
 
-  # Erlang validation (basic)
+  # Erlang validation — token-level scan
+  # :erl_scan.string/1 returns {:ok, tokens, end_location} on success
+  # or {:error, {location, module, info}, end_location} on failure
+  # location can be an integer (line) or a tuple {line, col}
   defp validate_extension(ext, content) when ext in ~w(.erl .hrl) do
-    # Basic check: try to scan tokens
-    try do
-      :erl_scan.string(String.to_charlist(content))
-      {:ok, :valid}
-    rescue
-      _ -> {:warning, "Erlang tokenization failed — possible syntax error"}
+    charlist = String.to_charlist(content)
+
+    case :erl_scan.string(charlist) do
+      {:ok, _tokens, _end_location} ->
+        {:ok, :valid}
+
+      {:error, {location, _module, info}, _end_location} ->
+        line =
+          case location do
+            {l, _col} -> l
+            l when is_integer(l) -> l
+          end
+
+        {:warning, "Erlang scan error at line #{line}: #{inspect(info)}"}
     end
   end
 
@@ -184,22 +216,11 @@ defmodule CodePuppyControl.Tools.FileModifications.Validation do
     end
   end
 
-  # TOML validation (basic)
-  defp validate_extension(".toml", _content) do
-    # No built-in TOML parser — skip validation
-    {:ok, :valid}
-  end
-
-  # YAML validation (basic)
-  defp validate_extension(ext, _content) when ext in ~w(.yaml .yml) do
-    # No built-in YAML parser — skip validation
-    {:ok, :valid}
-  end
-
-  # Python/JS/TS/Rust — defer to external parsers via bridge
+  # All other extensions — fail-open (no validation available in this module).
+  # This includes .py, .js, .ts, .tsx, .rs, .yaml, .yml, .toml which have
+  # no built-in parser here. The elixir_bridge could be used for external
+  # parsing, but that is not currently integrated.
   defp validate_extension(_ext, _content) do
-    # Could integrate with elixir_bridge for external parsing
-    # For now, fail-open (no validation available)
     {:ok, :valid}
   end
 end
