@@ -28,11 +28,10 @@ defmodule CodePuppyControl.Tools.StagedChanges do
 
   use GenServer
   require Logger
-  alias CodePuppyControl.Text.{Diff, ReplaceEngine}
   alias CodePuppyControl.Tool.Registry
   alias CodePuppyControl.Tools.StagedChanges.StagedChange
+  alias CodePuppyControl.Tools.StagedChanges.{Applier, Diff}
   alias CodePuppyControl.FileOps.Security
-  alias CodePuppyControl.Tools.FileModifications.{SafeWrite, FileLock}
 
   @table :staged_changes
   @stage_dir Path.join(System.tmp_dir!(), "code_puppy_staged")
@@ -166,7 +165,7 @@ defmodule CodePuppyControl.Tools.StagedChanges do
       # Cache file contents to avoid repeated I/O (Python parity)
       {diffs, _final_cache} =
         Enum.reduce(changes, {[], %{}}, fn c, {acc, cache} ->
-          {diff, new_cache} = gen_diff_cached(c, cache)
+          {diff, new_cache} = Diff.gen_diff_cached(c, cache)
 
           if diff == "" do
             {acc, new_cache}
@@ -192,7 +191,7 @@ defmodule CodePuppyControl.Tools.StagedChanges do
     Enum.map(grouped, fn {file_path, file_changes} ->
       {diffs, _cache} =
         Enum.reduce(file_changes, {[], %{}}, fn c, {acc, cache} ->
-          {diff, new_cache} = gen_diff_cached(c, cache)
+          {diff, new_cache} = Diff.gen_diff_cached(c, cache)
 
           if diff == "" do
             {acc, new_cache}
@@ -390,7 +389,7 @@ defmodule CodePuppyControl.Tools.StagedChanges do
     else
       result =
         Enum.reduce_while(changes, {:ok, 0}, fn c, {:ok, acc} ->
-          case do_apply(c) do
+          case Applier.apply_change(c) do
             :ok ->
               :ets.insert(@table, {c.change_id, %{c | applied: true}})
               {:cont, {:ok, acc + 1}}
@@ -449,20 +448,28 @@ defmodule CodePuppyControl.Tools.StagedChanges do
       {:ok, raw} ->
         case Jason.decode(raw) do
           {:ok, data} ->
-            # Robust deserialization: skip malformed entries instead of crashing
+            # Robust deserialization: validate "changes" is a list
             raw_changes = Map.get(data, "changes", [])
 
             {loaded_changes, skipped} =
-              Enum.reduce(raw_changes, {[], 0}, fn entry, {acc, skip_count} ->
-                case StagedChange.from_map(entry) do
-                  {:ok, c} ->
-                    {[c | acc], skip_count}
+              if is_list(raw_changes) do
+                Enum.reduce(raw_changes, {[], 0}, fn entry, {acc, skip_count} ->
+                  case StagedChange.from_map(entry) do
+                    {:ok, c} ->
+                      {[c | acc], skip_count}
 
-                  {:error, reason} ->
-                    Logger.warning("Skipping malformed staged change: #{reason}")
-                    {acc, skip_count + 1}
-                end
-              end)
+                    {:error, reason} ->
+                      Logger.warning("Skipping malformed staged change: #{reason}")
+                      {acc, skip_count + 1}
+                  end
+                end)
+              else
+                Logger.warning(
+                  "Ignoring malformed 'changes' field (expected list, got #{inspect(raw_changes)}), loading 0 changes"
+                )
+
+                {[], 0}
+              end
 
             loaded_changes = Enum.reverse(loaded_changes)
 
@@ -540,161 +547,4 @@ defmodule CodePuppyControl.Tools.StagedChanges do
 
   defp id, do: :crypto.strong_rand_bytes(16) |> Base.encode16(case: :lower)
 
-  # ── Apply logic (routed through SafeWrite + FileLock) ───────────────────
-
-  defp do_apply(%StagedChange{change_type: :create} = c) do
-    FileLock.with_lock(c.file_path, fn ->
-      SafeWrite.safe_write(c.file_path, c.content || "")
-    end)
-    |> normalize_safe_write_result()
-  end
-
-  defp do_apply(%StagedChange{change_type: :replace} = c) do
-    FileLock.with_lock(c.file_path, fn ->
-      case File.read(c.file_path) do
-        {:ok, content} ->
-          case ReplaceEngine.replace_in_content(content, [{c.old_str || "", c.new_str || ""}]) do
-            {:ok, %{modified: m}} -> SafeWrite.safe_write(c.file_path, m)
-            {:error, %{reason: r}} -> {:error, r}
-          end
-
-        e ->
-          e
-      end
-    end)
-    |> normalize_result()
-  end
-
-  defp do_apply(%StagedChange{change_type: :delete_snippet} = c) do
-    FileLock.with_lock(c.file_path, fn ->
-      case File.read(c.file_path) do
-        {:ok, content} ->
-          snip = c.snippet || ""
-
-          if String.contains?(content, snip),
-            do:
-              SafeWrite.safe_write(c.file_path, String.replace(content, snip, "", global: false)),
-            else: {:error, "Snippet not found"}
-
-        e ->
-          e
-      end
-    end)
-    |> normalize_result()
-  end
-
-  defp do_apply(%StagedChange{change_type: :delete_file} = c) do
-    case File.rm(c.file_path) do
-      :ok -> :ok
-      {:error, :enoent} -> :ok
-      {:error, reason} -> {:error, "Delete failed: #{reason}"}
-    end
-  end
-
-  defp do_apply(_), do: {:error, "Unsupported change type"}
-
-  # Normalize SafeWrite results to :ok / {:error, reason}
-  defp normalize_safe_write_result(:ok), do: :ok
-
-  defp normalize_safe_write_result({:error, reason}),
-    do: {:error, "SafeWrite failed: #{reason}"}
-
-  # Normalize FileLock results (may wrap in {:error, exception} on raise)
-  defp normalize_result(:ok), do: :ok
-  defp normalize_result({:ok, _}), do: :ok
-
-  defp normalize_result({:error, reason}) when is_binary(reason),
-    do: {:error, reason}
-
-  defp normalize_result({:error, %_{__exception__: true} = exception}),
-    do: {:error, Exception.message(exception)}
-
-  defp normalize_result({:error, reason}),
-    do: {:error, inspect(reason)}
-
-  # ── Diff generation (with file cache) ───────────────────────────────────
-
-  defp gen_diff_cached(%StagedChange{change_type: :create} = c, cache) do
-    diff =
-      Diff.unified_diff("", c.content || "",
-        from_file: "/dev/null",
-        to_file: "b/#{Path.basename(c.file_path)}"
-      )
-
-    {diff, cache}
-  end
-
-  defp gen_diff_cached(%StagedChange{change_type: :replace} = c, cache) do
-    {original_content, new_cache} = read_file_cached(c.file_path, cache)
-    old_str = c.old_str || ""
-
-    diff =
-      if original_content != nil and String.contains?(original_content, old_str) do
-        modified = String.replace(original_content, old_str, c.new_str || "", global: false)
-
-        Diff.unified_diff(original_content, modified,
-          from_file: "a/#{Path.basename(c.file_path)}",
-          to_file: "b/#{Path.basename(c.file_path)}"
-        )
-      else
-        ""
-      end
-
-    {diff, new_cache}
-  end
-
-  defp gen_diff_cached(%StagedChange{change_type: :delete_snippet} = c, cache) do
-    {original_content, new_cache} = read_file_cached(c.file_path, cache)
-    snip = c.snippet || ""
-
-    diff =
-      if original_content != nil and String.contains?(original_content, snip) do
-        modified = String.replace(original_content, snip, "", global: false)
-
-        Diff.unified_diff(original_content, modified,
-          from_file: "a/#{Path.basename(c.file_path)}",
-          to_file: "b/#{Path.basename(c.file_path)}"
-        )
-      else
-        ""
-      end
-
-    {diff, new_cache}
-  end
-
-  defp gen_diff_cached(%StagedChange{change_type: :delete_file} = c, cache) do
-    {original_content, new_cache} = read_file_cached(c.file_path, cache)
-
-    diff =
-      if original_content != nil do
-        Diff.unified_diff(original_content, "",
-          from_file: "a/#{Path.basename(c.file_path)}",
-          to_file: "/dev/null"
-        )
-      else
-        ""
-      end
-
-    {diff, new_cache}
-  end
-
-  defp gen_diff_cached(_, cache), do: {"", cache}
-
-  # Read file content with cache to avoid repeated I/O.
-  # Returns {content_or_nil, updated_cache}.
-  defp read_file_cached(file_path, cache) do
-    case Map.get(cache, file_path) do
-      nil ->
-        content =
-          case File.read(file_path) do
-            {:ok, data} -> data
-            _ -> nil
-          end
-
-        {content, Map.put(cache, file_path, content)}
-
-      cached ->
-        {cached, cache}
-    end
-  end
 end

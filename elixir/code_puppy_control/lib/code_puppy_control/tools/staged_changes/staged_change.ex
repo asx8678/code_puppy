@@ -101,7 +101,7 @@ defmodule CodePuppyControl.Tools.StagedChanges.StagedChange do
 
   Returns `{:ok, change}` or `{:error, reason}`.
   """
-  @spec from_map(map()) :: {:ok, t()} | {:error, String.t()}
+  @spec from_map(map() | term()) :: {:ok, t()} | {:error, String.t()}
   def from_map(data) when is_map(data) do
     with {:ok, change_id} <- require_field(data, "change_id"),
          {:ok, change_type} <- parse_change_type(data["change_type"]),
@@ -133,6 +133,12 @@ defmodule CodePuppyControl.Tools.StagedChanges.StagedChange do
          rejected: rejected
        }}
     end
+  end
+
+  # Catch-all for non-map input: strings, numbers, nil, lists, etc.
+  # Returns {:error, reason} instead of raising FunctionClauseError.
+  def from_map(other) when not is_map(other) do
+    {:error, "expected map for from_map, got: #{inspect(other)}"}
   end
 
   @doc """
