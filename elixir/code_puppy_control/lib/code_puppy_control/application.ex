@@ -10,9 +10,10 @@ defmodule CodePuppyControl.Application do
   5. CodePuppyControl.EventStore - ETS-based event history for replay
   5b. CodePuppyControl.SessionStorage.AutosaveTracker - Autosave debounce/dedup
   6. CodePuppyControl.RuntimeState - Global runtime state (autosave ID, session model)
-  7. CodePuppyControl.PolicyEngine - Priority-based policy rule engine
-  8. CodePuppyControl.AgentModelPinning - Agent-to-model pin configuration (ETS-backed)
-  8b. CodePuppyControl.ModelFactory.ProviderRegistry - Provider type -> module mapping (Agent-backed)
+  7. CodePuppyControl.Callbacks.Registry - ETS-backed callback storage (must start before PolicyEngine)
+  8. CodePuppyControl.PolicyEngine - Priority-based policy rule engine
+  9. CodePuppyControl.AgentModelPinning - Agent-to-model pin configuration (ETS-backed)
+  9b. CodePuppyControl.ModelFactory.ProviderRegistry - Provider type -> module mapping (Agent-backed)
   9a. CodePuppyControl.ModelRegistry - Model configuration registry (ETS-backed)
   9b. CodePuppyControl.ModelAvailability - Model health circuit breaker (ETS-backed)
   9c. CodePuppyControl.ModelPacks - Role-based model packs
@@ -74,6 +75,10 @@ defmodule CodePuppyControl.Application do
       CodePuppyControl.RuntimeState,
       # Workflow state tracking for /flags command
       {CodePuppyControl.WorkflowState, name: CodePuppyControl.WorkflowState},
+      # Callback registry (ETS-backed GenServer) — must start before
+      # any component triggers or registers callbacks (e.g. plugin loader,
+      # security checks, slash commands).
+      CodePuppyControl.Callbacks.Registry,
       CodePuppyControl.PolicyEngine,
       CodePuppyControl.AgentModelPinning,
       # Provider registry (Agent-backed) for provider type → module mapping

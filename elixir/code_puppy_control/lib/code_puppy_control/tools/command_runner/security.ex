@@ -115,7 +115,7 @@ defmodule CodePuppyControl.Tools.CommandRunner.Security do
               # Step 4: Callback hook for allowed commands
               case callback_check(command, cwd, context) do
                 {:denied, reason} -> denied(reason)
-                other -> other
+                :allowed -> allowed()
               end
           end
         end
@@ -173,21 +173,23 @@ defmodule CodePuppyControl.Tools.CommandRunner.Security do
   @spec callback_check(String.t(), String.t() | nil, map()) :: decision()
   defp callback_check(command, cwd, context) do
     try do
-      # Trigger the run_shell_command callback hook (arity 3)
+      # Trigger the run_shell_command callback hook (arity 3) using
+      # trigger_raw to get the unmerged results list. This is critical
+      # for fail-closed semantics: the :noop merge used by trigger/2
+      # can silently discard :callback_failed sentinels when mixed
+      # with nil or %{blocked: false} results (code_puppy-mmk.6).
+      #
       # Hook signature: (context, command, cwd) -> %{blocked: true} | nil
-      results =
-        case Callbacks.trigger(:run_shell_command, [context, command, cwd]) do
-          nil -> []
-          list when is_list(list) -> list
-          other -> [other]
-        end
+      results = Callbacks.trigger_raw(:run_shell_command, [context, command, cwd])
 
-      # Check if any callback returned a block decision
-      # The hook uses :noop merge, so we get a list of results
+      # Fail-closed: any callback returning :callback_failed or
+      # {:callback_failed, _} is treated as a denial — we cannot
+      # determine the callback's intent, so we deny to be safe.
       blocked =
         Enum.any?(results, fn
           %{blocked: true} -> true
-          {:callback_failed, _} -> false
+          :callback_failed -> true
+          {:callback_failed, _} -> true
           _ -> false
         end)
 
@@ -199,13 +201,13 @@ defmodule CodePuppyControl.Tools.CommandRunner.Security do
     rescue
       e ->
         Logger.warning("Security: callback check raised: #{Exception.message(e)}")
-        # Callbacks failing is not fatal — allow to proceed
-        # (the validator already ran)
-        :allowed
+        # Fail-closed: callback errors deny execution
+        {:denied, "Security callback failed (fail-closed)"}
     catch
       :exit, reason ->
         Logger.warning("Security: callback check crashed: #{inspect(reason)}")
-        :allowed
+        # Fail-closed: callback crashes deny execution
+        {:denied, "Security callback crashed (fail-closed)"}
     end
   end
 

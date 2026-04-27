@@ -364,7 +364,7 @@ defmodule CodePuppyControl.Tools.CommandRunner.ProcessManager do
   defp process_alive?(pid) do
     try do
       # kill -0 checks if process exists without sending a signal
-      {output, exit_code} =
+      {_output, exit_code} =
         System.cmd("kill", ["-0", to_string(pid)],
           stderr_to_stdout: true,
           parallelism: true
@@ -382,9 +382,7 @@ defmodule CodePuppyControl.Tools.CommandRunner.ProcessManager do
   defp getpgid(pid) do
     try do
       {output, 0} =
-        System.cmd("ps", ["-o", "pgid=", "-p", to_string(pid)],
-          parallelism: true
-        )
+        System.cmd("ps", ["-o", "pgid=", "-p", to_string(pid)], parallelism: true)
 
       output
       |> String.trim()

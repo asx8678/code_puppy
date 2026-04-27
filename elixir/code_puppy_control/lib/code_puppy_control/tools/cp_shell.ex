@@ -92,7 +92,7 @@ defmodule CodePuppyControl.Tools.CpShell do
     end
 
     @impl true
-    def permission_check(args, context) do
+    def permission_check(_args, _context) do
       # Delegate to CommandRunner security pipeline
       # The Tool behaviour default :ok allows CommandRunner.run/2
       # to handle security internally (PolicyEngine + callbacks + validator)

@@ -230,4 +230,61 @@ defmodule CodePuppyControl.CallbacksTest do
       assert 1 = Callbacks.count_callbacks(:shutdown)
     end
   end
+
+  describe "trigger_raw/2" do
+    test "returns empty list when no callbacks registered" do
+      assert [] = Callbacks.trigger_raw(:startup)
+    end
+
+    test "returns raw results list without merging" do
+      Callbacks.register(:load_prompt, fn -> "section 1" end)
+      Callbacks.register(:load_prompt, fn -> "section 2" end)
+
+      # trigger merges to "section 1\nsection 2", trigger_raw returns list
+      assert ["section 1", "section 2"] = Callbacks.trigger_raw(:load_prompt)
+    end
+
+    test "preserves :callback_failed sentinel in raw results (fail-closed)" do
+      Callbacks.register(:startup, fn -> :ok end)
+      Callbacks.register(:startup, fn -> raise "boom" end)
+      Callbacks.register(:startup, fn -> nil end)
+
+      results = Callbacks.trigger_raw(:startup)
+      assert is_list(results)
+      assert length(results) == 3
+      assert :ok in results
+      assert :callback_failed in results
+      assert nil in results
+    end
+
+    test "preserves :callback_failed even when mixed with %{blocked: false}" do
+      # This is the exact scenario that broke fail-closed in Security.callback_check:
+      # Callbacks.trigger(:noop merge) would drop :callback_failed, returning
+      # only %{blocked: false}. trigger_raw preserves both.
+      Callbacks.register(:run_shell_command, fn _ctx, _cmd, _cwd ->
+        raise "security error"
+      end)
+
+      Callbacks.register(:run_shell_command, fn _ctx, _cmd, _cwd ->
+        %{blocked: false}
+      end)
+
+      results = Callbacks.trigger_raw(:run_shell_command, [%{}, "ls", "/tmp"])
+      assert length(results) == 2
+      assert :callback_failed in results
+      assert %{blocked: false} in results
+
+      # With trigger(:noop merge), the :callback_failed would be discarded
+      # and %{blocked: false} would be the sole return — losing the failure.
+      merged = Callbacks.trigger(:run_shell_command, [%{}, "ls", "/tmp"])
+      assert merged == %{blocked: false}
+    end
+
+    test "passes args to callbacks" do
+      Callbacks.register(:custom_command, fn cmd, name -> {:handled, cmd, name} end)
+
+      assert [{:handled, "/echo hello", "echo"}] =
+               Callbacks.trigger_raw(:custom_command, ["/echo hello", "echo"])
+    end
+  end
 end

@@ -36,26 +36,43 @@ defmodule CodePuppyControl.Config.ModelsTest do
   # Point registry at an empty JSON so list_model_names() returns [].
   # This tests the same "no models available" code path as stopping
   # the GenServer, but deterministically and without destroying ETS.
+  #
+  # We must also override PUP_EX_HOME so that data_dir() (used by
+  # Paths.extra_models_file etc.) resolves to a temp directory with
+  # no overlay model files. Otherwise, real overlay files in
+  # ~/.code_puppy/ still contribute models after reload.
   defp with_empty_registry(fun) do
     File.write!(@empty_models_json, "{}")
-    original_env = System.get_env("PUP_BUNDLED_MODELS_PATH")
+    original_models_env = System.get_env("PUP_BUNDLED_MODELS_PATH")
+    original_home_env = System.get_env("PUP_EX_HOME")
+
+    empty_data_dir = Path.join(@tmp_dir, "empty_data_#{:erlang.unique_integer([:positive])}")
+    File.mkdir_p!(empty_data_dir)
 
     System.put_env("PUP_BUNDLED_MODELS_PATH", @empty_models_json)
+    System.put_env("PUP_EX_HOME", empty_data_dir)
 
     try do
       :ok = CodePuppyControl.ModelRegistry.reload()
       fun.()
     after
-      # Restore env var (saved for on_exit too, but restore immediately
+      # Restore env vars (saved for on_exit too, but restore immediately
       # so subsequent tests in this module see the real models).
-      if original_env do
-        System.put_env("PUP_BUNDLED_MODELS_PATH", original_env)
+      if original_models_env do
+        System.put_env("PUP_BUNDLED_MODELS_PATH", original_models_env)
       else
         System.delete_env("PUP_BUNDLED_MODELS_PATH")
       end
 
+      if original_home_env do
+        System.put_env("PUP_EX_HOME", original_home_env)
+      else
+        System.delete_env("PUP_EX_HOME")
+      end
+
       :ok = CodePuppyControl.ModelRegistry.reload()
       File.rm(@empty_models_json)
+      File.rm_rf(empty_data_dir)
     end
   end
 
@@ -88,6 +105,7 @@ defmodule CodePuppyControl.Config.ModelsTest do
   # Idempotent env restore used by on_exit.
   defp restore_registry_env do
     System.delete_env("PUP_BUNDLED_MODELS_PATH")
+    System.delete_env("PUP_EX_HOME")
 
     try do
       CodePuppyControl.ModelRegistry.reload()

@@ -19,7 +19,12 @@ defmodule CodePuppyControl.Tools.CommandRunnerTest do
   use CodePuppyControl.StatefulCase
 
   alias CodePuppyControl.Tools.CommandRunner
-  alias CodePuppyControl.Tools.CommandRunner.{Executor, OutputProcessor, ProcessManager, Validator}
+
+  alias CodePuppyControl.Tools.CommandRunner.{
+    Executor,
+    Security,
+    Validator
+  }
 
   # ============================================================================
   # Validator Tests
@@ -221,7 +226,10 @@ defmodule CodePuppyControl.Tools.CommandRunnerTest do
   describe "run/2 with env option" do
     test "sets environment variables" do
       assert {:ok, result} =
-               CommandRunner.run("echo $TEST_VAR", env: [{"TEST_VAR", "hello"}], skip_security: true)
+               CommandRunner.run("echo $TEST_VAR",
+                 env: [{"TEST_VAR", "hello"}],
+                 skip_security: true
+               )
 
       assert result.success == true
       assert result.stdout =~ "hello"
@@ -240,13 +248,19 @@ defmodule CodePuppyControl.Tools.CommandRunnerTest do
   end
 
   describe "run/2 with pty option" do
-    test "executes command in PTY mode" do
-      # PTY mode requires PtyManager (may use stub in test)
-      # Use skip_security to avoid policy engine issues
+    test "executes command in PTY mode and reports pty: true" do
+      # PTY mode uses PtyManager.Stub in test env
       assert {:ok, result} = CommandRunner.run("echo pty_test", pty: true, skip_security: true)
 
-      # Should either succeed or fall back to standard execution
-      assert result.success == true or match?({:error, _}, {:ok, result})
+      # PTY execution should report pty: true when PTY path is used
+      assert result.pty == true
+      assert result.success == true
+    end
+
+    test "standard execution reports pty: false" do
+      assert {:ok, result} = CommandRunner.run("echo no_pty", skip_security: true)
+
+      assert result.pty == false
     end
   end
 
@@ -258,6 +272,9 @@ defmodule CodePuppyControl.Tools.CommandRunnerTest do
       assert result.background == true
       assert result.log_file != nil
       assert result.execution_time_ms == 0
+      # OS PID is not available from System.cmd; documented as nil
+      assert result.pid == nil
+      assert result.pty == false
 
       # Clean up log file
       if result.log_file do
@@ -270,6 +287,7 @@ defmodule CodePuppyControl.Tools.CommandRunnerTest do
                CommandRunner.run("echo bg_noexit", background: true, skip_security: true)
 
       assert result.exit_code == nil
+      assert result.pid == nil
 
       if result.log_file do
         File.rm(result.log_file)
@@ -413,6 +431,42 @@ defmodule CodePuppyControl.Tools.CommandRunnerTest do
 
       if File.exists?(result.log_file) do
         File.rm(result.log_file)
+      end
+    end
+  end
+
+  # ============================================================================
+  # Regression Tests for code_puppy-mmk.6
+  # ============================================================================
+
+  describe "regression: explicit allow-policy path does not CaseClauseError (code_puppy-mmk.6)" do
+    # When Security.check/2 returned bare :allowed atom from callback_check/3
+    # instead of the documented %{allowed: true, decision: :allowed, reason: nil}
+    # map, CommandRunner.run/2 would crash with CaseClauseError because the
+    # case expression expected a map matching %{allowed: true}.
+    test "run/2 executes successfully when Security.check allows command" do
+      # Without skip_security, the security pipeline runs. If PolicyEngine
+      # allows and callback_check returns :allowed (not a map), run/2 crashes.
+      # After fix: Security.check always returns the proper map.
+      result = CommandRunner.run("echo regression_allow_test")
+
+      # The command should either execute successfully or be denied by policy,
+      # but it must NOT crash with CaseClauseError.
+      assert match?({:ok, _}, result) or match?({:error, _}, result)
+    end
+
+    test "Security.check/2 returns proper map shape for allowed command" do
+      result = Security.check("echo map_regression_test")
+
+      # Must be a map with :allowed, :decision, :reason keys
+      assert is_map(result)
+      assert Map.has_key?(result, :allowed)
+      assert Map.has_key?(result, :decision)
+      assert Map.has_key?(result, :reason)
+
+      # If allowed, must match the documented shape exactly
+      if result.allowed == true do
+        assert result == %{allowed: true, decision: :allowed, reason: nil}
       end
     end
   end

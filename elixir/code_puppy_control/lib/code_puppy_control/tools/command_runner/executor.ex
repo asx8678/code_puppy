@@ -4,7 +4,7 @@ defmodule CodePuppyControl.Tools.CommandRunner.Executor do
 
   Supports three execution modes:
   1. **Standard** - `System.cmd/3` with shell interpretation (pipes, redirects)
-  2. **PTY** - Via `PtyManager` for interactive terminal emulation
+  2. **PTY** - Via `PtyManager` for interactive terminal emulation (delegates to `ExecutorPty`)
   3. **Background** - Detached process with log file capture
 
   ## Standard Execution
@@ -15,17 +15,17 @@ defmodule CodePuppyControl.Tools.CommandRunner.Executor do
 
   ## PTY Execution
 
-  Delegates to `PtyManager` for true PTY allocation. This provides:
-  - Proper terminal semantics (readline, colors, $LINES/$COLUMNS)
-  - Signal handling (SIGINT propagates to child)
-  - Window resize support
-
-  Useful for commands that check `isatty()` or produce ANSI output.
+  Delegates to `ExecutorPty` which manages PTY sessions via `PtyManager`.
+  When PTY creation fails, `ExecutorPty` falls back to `execute_standard/2`
+  and reports `pty: false` in the result.
 
   ## Background Execution
 
   Spawns a detached process with stdout/stderr redirected to a temp
-  log file. Returns immediately with PID and log path.
+  log file. Returns immediately with log path. The `pid` field is `nil`
+  because the OS PID of the child shell is not directly available
+  from `System.cmd/3`; process lifecycle is tracked via the BEAM PID
+  in `ProcessManager`.
 
   ## Concurrency
 
@@ -37,9 +37,8 @@ defmodule CodePuppyControl.Tools.CommandRunner.Executor do
 
   require Logger
 
-  alias CodePuppyControl.Tools.CommandRunner.{ProcessManager, OutputProcessor}
+  alias CodePuppyControl.Tools.CommandRunner.{ExecutorPty, OutputProcessor, ProcessManager}
   alias CodePuppyControl.Concurrency.Limiter
-  alias CodePuppyControl.PtyManager
 
   # Default timeout for commands (seconds)
   @default_timeout 60
@@ -109,7 +108,7 @@ defmodule CodePuppyControl.Tools.CommandRunner.Executor do
         execute_background(command, cwd: cwd, env: env)
 
       pty ->
-        execute_pty(command,
+        ExecutorPty.execute(command,
           timeout: timeout,
           cwd: cwd,
           env: env,
@@ -130,7 +129,10 @@ defmodule CodePuppyControl.Tools.CommandRunner.Executor do
   # Standard Execution (System.cmd with shell)
   # ---------------------------------------------------------------------------
 
-  defp execute_standard(command, opts) do
+  @doc false
+  @spec execute_standard(String.t(), keyword()) ::
+          {:ok, execution_result()} | {:error, String.t()}
+  def execute_standard(command, opts) do
     timeout = Keyword.get(opts, :timeout, @default_timeout)
     cwd = Keyword.get(opts, :cwd)
     env = Keyword.get(opts, :env, [])
@@ -150,7 +152,7 @@ defmodule CodePuppyControl.Tools.CommandRunner.Executor do
     end
   end
 
-  defp do_execute_standard(command, timeout, cwd, env, silent) do
+  defp do_execute_standard(command, timeout, cwd, env, _silent) do
     start_time = System.monotonic_time(:millisecond)
 
     # Register with ProcessManager
@@ -208,148 +210,11 @@ defmodule CodePuppyControl.Tools.CommandRunner.Executor do
     rescue
       e ->
         {:error, "Command execution failed: #{Exception.message(e)}"}
-
     catch
       :exit, reason ->
         {:error, "Command execution failed: #{inspect(reason)}"}
-
     after
       ProcessManager.unregister_command(tracking_id)
-    end
-  end
-
-  # ---------------------------------------------------------------------------
-  # PTY Execution (via PtyManager)
-  # ---------------------------------------------------------------------------
-
-  defp execute_pty(command, opts) do
-    timeout = Keyword.get(opts, :timeout, @default_timeout)
-    cwd = Keyword.get(opts, :cwd)
-    env = Keyword.get(opts, :env, [])
-    silent = Keyword.get(opts, :silent, false)
-
-    # Acquire concurrency slot
-    case Limiter.acquire(:tool_calls) do
-      :ok ->
-        try do
-          do_execute_pty(command, timeout, cwd, env, silent)
-        after
-          Limiter.release(:tool_calls)
-        end
-
-      {:error, :timeout} ->
-        {:error, "Concurrency limit reached for tool calls"}
-    end
-  end
-
-  defp do_execute_pty(command, timeout, cwd, env, silent) do
-    start_time = System.monotonic_time(:millisecond)
-
-    # Build env string for PTY
-    env_prefix = build_env_prefix(env, cwd)
-
-    # Build the actual command to run in PTY (with env + cd)
-    full_command =
-      cond do
-        cwd && env_prefix != "" -> "cd #{shlex_escape(cwd)} && #{env_prefix}#{command}"
-        cwd -> "cd #{shlex_escape(cwd)} && #{command}"
-        env_prefix != "" -> "#{env_prefix}#{command}"
-        true -> command
-      end
-
-    # Create a unique session ID
-    session_id = "cmd-#{:erlang.unique_integer([:positive])}"
-
-    # Register with ProcessManager
-    {:ok, tracking_id} = ProcessManager.register_command(command, mode: :pty)
-
-    # Collect output from PTY
-    parent = self()
-    output_collector = spawn_link(fn -> collect_pty_output(parent, session_id, silent) end)
-
-    try do
-      case PtyManager.create_session(session_id,
-             cols: 120,
-             rows: 40,
-             subscriber: output_collector
-           ) do
-        {:ok, session} ->
-          # Update ProcessManager with OS PID
-          ProcessManager.update_os_pid(tracking_id, session.os_pid)
-
-          # Send the command to the PTY
-          PtyManager.write(session_id, full_command <> "\n")
-
-          # Send exit command to close the shell after the command finishes
-          PtyManager.write(session_id, "exit $?\n")
-
-          # Wait for completion with timeout
-          result =
-            receive do
-              {:pty_done, ^session_id, exit_code} ->
-                execution_time = System.monotonic_time(:millisecond) - start_time
-                output = get_pty_output(output_collector)
-
-                # Strip ANSI sequences from PTY output
-                clean_output = OutputProcessor.strip_ansi(output)
-                processed = OutputProcessor.process_output(clean_output)
-
-                build_success_result(
-                  command,
-                  processed.text,
-                  "",
-                  exit_code,
-                  execution_time,
-                  false
-                )
-
-              {:pty_timeout, ^session_id} ->
-                execution_time = System.monotonic_time(:millisecond) - start_time
-                output = get_pty_output(output_collector)
-
-                clean_output = OutputProcessor.strip_ansi(output)
-                processed = OutputProcessor.process_output(clean_output)
-
-                build_timeout_result_with_output(command, processed.text, execution_time)
-            after
-              timeout * 1000 ->
-                execution_time = System.monotonic_time(:millisecond) - start_time
-                output = get_pty_output(output_collector)
-
-                clean_output = OutputProcessor.strip_ansi(output)
-                processed = OutputProcessor.process_output(clean_output)
-
-                PtyManager.close_session(session_id)
-                build_timeout_result_with_output(command, processed.text, execution_time)
-            end
-
-          {:ok, result}
-
-        {:error, reason} ->
-          # PTY creation failed — fall back to standard execution
-          Logger.warning(
-            "PTY creation failed (#{inspect(reason)}), falling back to standard execution"
-          )
-
-          send(output_collector, :stop)
-          ProcessManager.unregister_command(tracking_id)
-          execute_standard(command, timeout: timeout, cwd: cwd, env: env, silent: silent)
-      end
-    rescue
-      e ->
-        send(output_collector, :stop)
-        PtyManager.close_session(session_id)
-        {:error, "PTY execution failed: #{Exception.message(e)}"}
-
-    catch
-      :exit, reason ->
-        send(output_collector, :stop)
-        PtyManager.close_session(session_id)
-        {:error, "PTY execution crashed: #{inspect(reason)}"}
-
-    after
-      ProcessManager.unregister_command(tracking_id)
-      PtyManager.close_session(session_id)
     end
   end
 
@@ -387,13 +252,14 @@ defmodule CodePuppyControl.Tools.CommandRunner.Executor do
 
       {shell, shell_flag} = shell_command()
 
-      # Spawn a detached process using spawn_link + Process.monitor
-      # We avoid Task.async here because we need to detach completely
-      parent = self()
-
-      bg_pid =
+      # Spawn a detached process.
+      # NOTE(code_puppy-mmk.6): The OS PID of the child shell is not available
+      # from System.cmd/3. The BEAM PID is tracked internally for lifecycle
+      # monitoring via ProcessManager, but `pid` in the result is nil because
+      # we cannot retrieve the OS PID of the sh -c child process.
+      _bg_pid =
         spawn(fn ->
-          {output, exit_code} =
+          {output, _exit_code} =
             try do
               System.cmd(shell, [shell_flag, command], cmd_opts)
             rescue
@@ -402,18 +268,22 @@ defmodule CodePuppyControl.Tools.CommandRunner.Executor do
               :exit, reason -> {"Process exited: #{inspect(reason)}", -1}
             end
 
-          # Write output to log file
-          try do
-            File.write!(log_path, output, [:append])
-          rescue
-            _ -> :ok
+          # Write output to log file (best-effort)
+          if is_binary(output) do
+            try do
+              File.write!(log_path, output, [:append])
+            rescue
+              _ -> :ok
+            end
           end
 
           # Unregister when done
           ProcessManager.unregister_command(tracking_id)
         end)
 
-      # Return immediately with background info
+      # Return immediately with background info.
+      # `pid` is nil — OS PID is not retrievable from System.cmd.
+      # ProcessManager tracks the command for kill escalation.
       {:ok,
        %{
          success: true,
@@ -443,52 +313,6 @@ defmodule CodePuppyControl.Tools.CommandRunner.Executor do
   end
 
   # ---------------------------------------------------------------------------
-  # PTY Output Collection
-  # ---------------------------------------------------------------------------
-
-  defp collect_pty_output(parent, session_id, silent) do
-    collect_pty_loop(parent, session_id, [], silent)
-  end
-
-  defp collect_pty_loop(parent, session_id, chunks, silent) do
-    receive do
-      {:pty_output, ^session_id, data} ->
-        unless silent, do: emit_shell_output(data)
-        collect_pty_loop(parent, session_id, [data | chunks], silent)
-
-      {:pty_exit, ^session_id, status} ->
-        send(parent, {:pty_done, session_id, parse_exit_status(status)})
-
-      :stop -> :ok
-      _other -> collect_pty_loop(parent, session_id, chunks, silent)
-    after
-      100 -> collect_pty_loop(parent, session_id, chunks, silent)
-    end
-  end
-
-  defp parse_exit_status(:normal), do: 0
-  defp parse_exit_status(:closed), do: 0
-  defp parse_exit_status({:status, code}) when is_integer(code), do: code
-  defp parse_exit_status(_), do: -1
-
-  defp get_pty_output(collector_pid) do
-    send(collector_pid, {:get_output, self()})
-    receive do
-      {:output, chunks} -> Enum.join(chunks, "")
-    after
-      1000 -> ""
-    end
-  end
-
-  defp emit_shell_output(data) do
-    Phoenix.PubSub.broadcast(
-      CodePuppyControl.PubSub,
-      "shell:output",
-      {:shell_output, data}
-    )
-  end
-
-  # ---------------------------------------------------------------------------
   # Helpers
   # ---------------------------------------------------------------------------
 
@@ -505,28 +329,18 @@ defmodule CodePuppyControl.Tools.CommandRunner.Executor do
     end
   end
 
-  defp build_env_prefix([], _cwd), do: ""
-  defp build_env_prefix(env, _cwd) do
-    env
-    |> Enum.map(fn {k, v} -> "#{k}=#{shlex_escape(v)}" end)
-    |> Enum.join(" ")
-    |> then(&(&1 <> " "))
-  end
-
-  defp shlex_escape(str) when is_binary(str) do
-    str |> String.replace("'", "'\\''") |> then(&("'#{&1}'"))
-  end
-
   defp check_user_interrupted(_task) do
     # TODO(code_puppy-mmk.6): Check ProcessManager.is_pid_killed? for task's OS PID
     false
   end
 
   # ---------------------------------------------------------------------------
-  # Result Builders
+  # Result Builders (shared with ExecutorPty)
   # ---------------------------------------------------------------------------
 
-  defp build_result(overrides) do
+  @doc false
+  @spec build_result(map()) :: execution_result()
+  def build_result(overrides) do
     defaults = %{
       success: false,
       command: "",
@@ -546,7 +360,9 @@ defmodule CodePuppyControl.Tools.CommandRunner.Executor do
     Map.merge(defaults, overrides)
   end
 
-  defp build_timeout_result(command, execution_time_ms) do
+  @doc false
+  @spec build_timeout_result(String.t(), integer()) :: execution_result()
+  def build_timeout_result(command, execution_time_ms) do
     build_result(%{
       command: command,
       exit_code: -9,
@@ -556,7 +372,9 @@ defmodule CodePuppyControl.Tools.CommandRunner.Executor do
     })
   end
 
-  defp build_timeout_result_with_output(command, stdout, execution_time_ms) do
+  @doc false
+  @spec build_timeout_result_with_output(String.t(), String.t(), integer()) :: execution_result()
+  def build_timeout_result_with_output(command, stdout, execution_time_ms) do
     build_result(%{
       command: command,
       stdout: stdout,
@@ -567,7 +385,9 @@ defmodule CodePuppyControl.Tools.CommandRunner.Executor do
     })
   end
 
-  defp build_error_result(command, reason, execution_time_ms) do
+  @doc false
+  @spec build_error_result(String.t(), String.t(), integer()) :: execution_result()
+  def build_error_result(command, reason, execution_time_ms) do
     build_result(%{
       command: command,
       stderr: reason,
@@ -576,7 +396,17 @@ defmodule CodePuppyControl.Tools.CommandRunner.Executor do
     })
   end
 
-  defp build_success_result(command, stdout, stderr, exit_code, execution_time_ms, user_interrupted) do
+  @doc false
+  @spec build_success_result(String.t(), String.t(), String.t(), integer(), integer(), boolean()) ::
+          execution_result()
+  def build_success_result(
+        command,
+        stdout,
+        stderr,
+        exit_code,
+        execution_time_ms,
+        user_interrupted
+      ) do
     error =
       cond do
         user_interrupted -> "Command interrupted by user"
