@@ -344,6 +344,47 @@ defmodule CodePuppyControl.Auth.ClaudeOAuth do
     end
   end
 
+  @doc """
+  Load Claude models, filtering to only the latest per family.
+
+  Returns only the most recent haiku, sonnet, and opus models
+  (default: 1 per family, opus up to 6). Useful for status display
+  where showing every dated snapshot is noise.
+  """
+  @spec load_models_filtered() :: {:ok, map()}
+  def load_models_filtered do
+    {:ok, all_models} = load_models()
+
+    if map_size(all_models) == 0 do
+      {:ok, %{}}
+    else
+      # Extract model names from OAuth-sourced entries
+      model_names =
+        all_models
+        |> Enum.filter(fn {_, cfg} -> cfg["oauth_source"] == "claude-code-plugin" end)
+        |> Enum.map(fn {_, cfg} -> cfg["name"] || "" end)
+        |> Enum.filter(&(&1 != ""))
+
+      latest_names =
+        filter_latest_models(model_names, %{"default" => 1, "opus" => 6})
+        |> MapSet.new()
+
+      filtered =
+        all_models
+        |> Enum.filter(fn {_, cfg} ->
+          name = cfg["name"] || ""
+          MapSet.member?(latest_names, name)
+        end)
+        |> Map.new()
+
+      Logger.info(
+        "Loaded #{map_size(all_models)} models, filtered to #{map_size(filtered)} latest models"
+      )
+
+      {:ok, filtered}
+    end
+  end
+
   @doc "Remove all Claude Code OAuth models. Returns `{:ok, count}` or `{:error, reason}`."
   @spec remove_models() :: {:ok, non_neg_integer()} | {:error, term()}
   def remove_models do
