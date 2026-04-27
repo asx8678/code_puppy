@@ -225,7 +225,14 @@ defmodule CodePuppyControl.Tool.Runner do
     :cp_delete_snippet,
     :cp_read_file,
     :cp_list_files,
-    :cp_grep
+    :cp_grep,
+    # Staged tools — defense-in-depth (slash-only, but if somehow invoked
+    # through Runner they still need file-permission checks)
+    :stage_create,
+    :stage_replace,
+    :stage_delete_snippet,
+    :stage_delete_file,
+    :apply_staged_changes
   ]
 
   defp check_permission(module, args, context) do
@@ -305,6 +312,11 @@ defmodule CodePuppyControl.Tool.Runner do
   defp file_operation_from_tool(:cp_read_file), do: "read"
   defp file_operation_from_tool(:cp_list_files), do: "list"
   defp file_operation_from_tool(:cp_grep), do: "search"
+  defp file_operation_from_tool(:stage_create), do: "create"
+  defp file_operation_from_tool(:stage_replace), do: "write"
+  defp file_operation_from_tool(:stage_delete_snippet), do: "delete"
+  defp file_operation_from_tool(:stage_delete_file), do: "delete"
+  defp file_operation_from_tool(:apply_staged_changes), do: "write"
   defp file_operation_from_tool(_), do: "access"
 
   # ── Target Path Extraction ───────────────────────────────────────────────
