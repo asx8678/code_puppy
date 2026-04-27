@@ -546,5 +546,4 @@ defmodule CodePuppyControl.Tools.StagedChanges do
   defp default_desc(_, fp), do: "Change #{Path.basename(fp)}"
 
   defp id, do: :crypto.strong_rand_bytes(16) |> Base.encode16(case: :lower)
-
 end
