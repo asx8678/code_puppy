@@ -38,8 +38,10 @@ defmodule CodePuppyControl.Tool.Runner do
 
   require Logger
 
+  alias CodePuppyControl.Callbacks.FilePermission
   alias CodePuppyControl.Tool.Registry
   alias CodePuppyControl.Tool.Schema
+  alias CodePuppyControl.PolicyEngine.PolicyRule.{Allow, Deny}
 
   @default_timeout_ms 60_000
 
@@ -207,7 +209,40 @@ defmodule CodePuppyControl.Tool.Runner do
 
   # ── Permission Check ─────────────────────────────────────────────────────
 
+  # Tool names that involve file operations and should go through
+  # the FilePermission callback chain in addition to the tool's own
+  # permission_check/2.
+  @file_tools [
+    :create_file,
+    :replace_in_file,
+    :edit_file,
+    :delete_file,
+    :delete_snippet,
+    :cp_create_file,
+    :cp_replace_in_file,
+    :cp_edit_file,
+    :cp_delete_file,
+    :cp_delete_snippet,
+    :cp_read_file,
+    :cp_list_files,
+    :cp_grep
+  ]
+
   defp check_permission(module, args, context) do
+    # Step 1: Tool's own permission_check (path validation, etc.)
+    with :ok <- tool_permission_check(module, args, context) do
+      # Step 2: FilePermission callback chain for file-related tools
+      tool_name = tool_name_from_module(module)
+
+      if tool_name in @file_tools do
+        file_permission_check(tool_name, args, context)
+      else
+        :ok
+      end
+    end
+  end
+
+  defp tool_permission_check(module, args, context) do
     if function_exported?(module, :permission_check, 2) do
       try do
         case module.permission_check(args, context) do
@@ -220,6 +255,101 @@ defmodule CodePuppyControl.Tool.Runner do
     else
       # No permission_check defined — allow by default
       :ok
+    end
+  end
+
+  defp file_permission_check(tool_name, args, context) do
+    file_path = file_target_from_args(tool_name, args)
+    operation = file_operation_from_tool(tool_name)
+
+    if file_path == "" do
+      # No target path in args — skip file permission check.
+      # Directory-oriented tools (cp_list_files, cp_grep) return "." when
+      # the directory arg is absent, so they always go through the check.
+      # Refs: code_puppy-mmk.3
+      :ok
+    else
+      case FilePermission.check(context, file_path, operation, nil, nil, nil,
+             tool_name: Atom.to_string(tool_name)
+           ) do
+        %Allow{} -> :ok
+        %Deny{reason: reason} -> {:error, "permission denied: #{reason}"}
+        # AskUser from policy — for now, deny (no interactive prompt in Runner)
+        # TODO(code_puppy-mmk.3): Integrate with user interaction for ask_user
+        _ -> {:error, "File operation requires user approval"}
+      end
+    end
+  end
+
+  defp tool_name_from_module(module) when is_atom(module) do
+    if function_exported?(module, :name, 0) do
+      module.name()
+    else
+      module
+    end
+  end
+
+  # Map tool atoms to file operation verbs for the callback chain.
+  # cp_* variants are the agent-facing mutation wrappers (see CpFileMods)
+  # and map to the same operations as their unprefixed counterparts.
+  defp file_operation_from_tool(:create_file), do: "create"
+  defp file_operation_from_tool(:replace_in_file), do: "write"
+  defp file_operation_from_tool(:edit_file), do: "edit"
+  defp file_operation_from_tool(:delete_file), do: "delete"
+  defp file_operation_from_tool(:delete_snippet), do: "delete"
+  defp file_operation_from_tool(:cp_create_file), do: "create"
+  defp file_operation_from_tool(:cp_replace_in_file), do: "write"
+  defp file_operation_from_tool(:cp_edit_file), do: "edit"
+  defp file_operation_from_tool(:cp_delete_file), do: "delete"
+  defp file_operation_from_tool(:cp_delete_snippet), do: "delete"
+  defp file_operation_from_tool(:cp_read_file), do: "read"
+  defp file_operation_from_tool(:cp_list_files), do: "list"
+  defp file_operation_from_tool(:cp_grep), do: "search"
+  defp file_operation_from_tool(_), do: "access"
+
+  # ── Target Path Extraction ───────────────────────────────────────────────
+
+  @doc """
+  Extracts the target file or directory path from tool arguments.
+
+  Different tool types use different argument names for their target path:
+
+  - Directory-oriented tools (`cp_list_files`, `cp_grep`) use `"directory"`
+    with a default of `"."` when absent (matching the tools' actual default cwd)
+  - File-oriented tools use `"file_path"` with `"path"` as fallback
+  - If no recognized key is found for file tools, returns an empty string
+
+  This helper ensures `FilePermission.check` always receives the actual
+  target path regardless of the tool's argument naming convention.
+
+  Refs: code_puppy-mmk.3 (Shepherd blocker — directory tools must not
+  bypass FilePermission when the directory arg is omitted)
+
+  ## Examples
+
+      iex> Runner.file_target_from_args(:cp_create_file, %{"file_path" => "lib/foo.ex"})
+      "lib/foo.ex"
+
+      iex> Runner.file_target_from_args(:cp_list_files, %{"directory" => "lib/"})
+      "lib/"
+
+      iex> Runner.file_target_from_args(:cp_list_files, %{})
+      "."
+
+      iex> Runner.file_target_from_args(:cp_grep, %{"directory" => "src/", "search_string" => "TODO"})
+      "src/"
+
+      iex> Runner.file_target_from_args(:cp_grep, %{"search_string" => "TODO"})
+      "."
+  """
+  @spec file_target_from_args(atom(), map()) :: String.t()
+  def file_target_from_args(tool_name, args) when is_atom(tool_name) and is_map(args) do
+    directory_tools = [:cp_list_files, :cp_grep, :list_files, :grep]
+
+    if tool_name in directory_tools do
+      Map.get(args, "directory", ".")
+    else
+      Map.get(args, "file_path", Map.get(args, "path", ""))
     end
   end
 
