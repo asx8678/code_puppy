@@ -2,27 +2,58 @@ defmodule CodePuppyControl.Plugins.Loader do
   @moduledoc """
   Discovers and loads plugins from builtin and user directories.
 
+  Per ADR-006, the loader auto-discovers `register_callbacks.ex` and
+  `register_callbacks.exs` files under:
+
+  - **Builtin**: `priv/plugins/<name>/` (shipped with the application)
+  - **User**: `~/.code_puppy_ex/plugins/<name>/` (user-installed)
+
   ## Plugin Types
 
-  ### Builtin Plugins
-  Compiled modules that implement `CodePuppyControl.Plugins.PluginBehaviour`.
-  These are discovered at compile time by scanning modules in the
-  `CodePuppyControl.Plugins.*` namespace that have `@behaviour PluginBehaviour`.
+  ### Builtin Compiled Plugins
+  Modules in `CodePuppyControl.Plugins.*` that implement
+  `CodePuppyControl.Plugins.PluginBehaviour`. Discovered at runtime
+  by scanning `:code.all_loaded/0` for modules declaring
+  `@behaviour PluginBehaviour`.
+
+  ### Builtin `priv/plugins/` Plugins
+  `.ex` or `.exs` files under `priv/plugins/<name>/register_callbacks.*`.
+  These are compiled (`.ex`) or evaluated (`.exs`) at runtime.
+  See ADR-006 D2 for the static-vs-dynamic compilation decision.
 
   ### User Plugins
-  `.ex` files under `~/.code_puppy/plugins/` that are compiled at runtime
-  using `Code.compile_file/1`.
+  `.ex` or `.exs` files under `~/.code_puppy_ex/plugins/<name>/`
+  that are compiled/evaluated at runtime.
 
   **SECURITY WARNING**: User plugins execute arbitrary Elixir code with full
   system privileges. A malicious plugin can perform any action the host process
   can perform (delete files, steal credentials, install malware, etc.).
   Only load plugins from trusted sources.
 
+  ## File Discovery Priority
+
+  Per plugin directory, files are discovered in this order:
+
+  1. `register_callbacks.ex`   — preferred (compiled to BEAM)
+  2. `register_callbacks.exs`  — fallback (evaluated as script)
+  3. Any other `.ex` file       — alphabetically
+  4. Any other `.exs` file      — alphabetically
+
+  When both `register_callbacks.ex` and `register_callbacks.exs` exist,
+  the `.ex` file takes precedence.
+
+  ## Compilation Semantics
+
+  | Extension | Function          | BEAM  | Use Case                  |
+  |-----------|-------------------|-------|---------------------------|
+  | `.ex`     | `Code.compile_file/1` | ✅  | Proper modules with behaviours |
+  | `.exs`    | `Code.eval_file/1`    | ❌  | Scripts that define a `PluginBehaviour` module (no `.beam`) |
+
   ## Discovery
 
-  The loader scans for plugin modules and `.ex` files, then registers them
-  with the callback system. Discovery is idempotent — calling `discover/0`
-  multiple times only discovers plugins once.
+  The loader scans for plugin modules and `.ex`/`.exs` files, then registers
+  them with the callback system. Discovery is idempotent — calling
+  `load_all/0` multiple times only discovers new plugins.
   """
 
   require Logger
@@ -30,7 +61,7 @@ defmodule CodePuppyControl.Plugins.Loader do
   alias CodePuppyControl.Callbacks
   alias CodePuppyControl.Config.Isolation
   alias CodePuppyControl.Config.Paths
-  alias CodePuppyControl.Plugins.PluginBehaviour
+  alias CodePuppyControl.Plugins.Loader.Discovery
 
   # ── Public API ──────────────────────────────────────────────────
 
@@ -53,10 +84,11 @@ defmodule CodePuppyControl.Plugins.Loader do
   @doc """
   Loads a single plugin from the given path.
 
-  For `.ex` files: compiles and loads the file, then discovers any modules
-  that implement `PluginBehaviour` within the compiled code.
-
-  For module atoms: directly loads the module if it implements `PluginBehaviour`.
+  - For **module atoms**: directly loads if it implements `PluginBehaviour`.
+  - For **`.ex` files**: compiles via `Code.compile_file/1`, discovers
+    `PluginBehaviour` modules in the compiled output.
+  - For **`.exs` files**: evaluates via `Code.eval_file/1`, discovers
+    `PluginBehaviour` modules that were defined during evaluation.
 
   Returns `{:ok, plugin_name}` or `{:error, reason}`.
   """
@@ -64,7 +96,7 @@ defmodule CodePuppyControl.Plugins.Loader do
   def load_plugin(path_or_module)
 
   def load_plugin(module_name) when is_atom(module_name) do
-    if plugin_behaviour?(module_name) do
+    if Discovery.plugin_behaviour?(module_name) do
       register_plugin(module_name)
       {:ok, module_name.name()}
     else
@@ -84,22 +116,7 @@ defmodule CodePuppyControl.Plugins.Loader do
       )
 
       try do
-        modules_before = loaded_modules()
-        Code.compile_file(expanded)
-        modules_after = loaded_modules()
-        new_modules = modules_after -- modules_before
-
-        plugin_modules =
-          Enum.filter(new_modules, &plugin_behaviour?/1)
-
-        case plugin_modules do
-          [] ->
-            {:error, {:no_plugins_found, expanded}}
-
-          [mod | _] ->
-            register_plugin(mod)
-            {:ok, mod.name()}
-        end
+        load_plugin_file(expanded)
       rescue
         e ->
           Logger.error("Failed to load plugin from #{expanded}: #{Exception.message(e)}")
@@ -139,9 +156,31 @@ defmodule CodePuppyControl.Plugins.Loader do
     end
   end
 
+  # Delegated discovery helpers (exposed for testability)
+
+  @doc "Delegates to `Discovery.discover_plugin_files/1`."
+  @spec discover_plugin_files(String.t()) :: [String.t()]
+  def discover_plugin_files(plugin_dir), do: Discovery.discover_plugin_files(plugin_dir)
+
+  @doc "Loads and registers a plugin file, delegating to Discovery."
+  @spec load_and_register_plugin_file(String.t(), :builtin | :user) :: [atom()]
+  def load_and_register_plugin_file(file_path, type) do
+    Discovery.load_and_register_plugin_file(file_path, type, &register_plugin/2)
+  end
+
+  # ── File Loading ─────────────────────────────────────────────────
+
+  @spec load_plugin_file(String.t()) :: {:ok, atom()} | {:error, term()}
+  defp load_plugin_file(file_path) do
+    if String.ends_with?(file_path, ".exs") do
+      Discovery.load_exs_plugin(file_path, &register_plugin/1)
+    else
+      Discovery.load_ex_plugin(file_path, &register_plugin/1)
+    end
+  end
+
   # ── Builtin Plugin Discovery ────────────────────────────────────
 
-  @doc false
   @spec load_builtin_plugins() :: [atom()]
   defp load_builtin_plugins do
     ensure_ets_table()
@@ -155,7 +194,7 @@ defmodule CodePuppyControl.Plugins.Loader do
     module_names =
       :code.all_loaded()
       |> Enum.map(fn {mod, _} -> mod end)
-      |> Enum.filter(&plugin_behaviour?/1)
+      |> Enum.filter(&Discovery.plugin_behaviour?/1)
       |> Enum.reject(&already_loaded?(&1, loaded_names))
       |> Enum.map(fn mod ->
         register_plugin(mod, :builtin)
@@ -168,7 +207,6 @@ defmodule CodePuppyControl.Plugins.Loader do
     module_names ++ priv_names
   end
 
-  @doc false
   @spec load_priv_plugins(MapSet.t()) :: [atom()]
   defp load_priv_plugins(loaded_names) do
     priv_dir = priv_plugins_dir()
@@ -186,10 +224,7 @@ defmodule CodePuppyControl.Plugins.Loader do
           not String.starts_with?(name, ".")
       end)
       |> Enum.flat_map(fn plugin_name ->
-        # Skip if already loaded by name (compare as strings)
-        normalized =
-          plugin_name
-          |> String.replace("-", "_")
+        normalized = plugin_name |> String.replace("-", "_")
 
         if MapSet.member?(loaded_names, normalized) do
           []
@@ -200,49 +235,23 @@ defmodule CodePuppyControl.Plugins.Loader do
     end
   end
 
-  @doc false
   @spec load_priv_plugin(String.t(), String.t()) :: [atom()]
   defp load_priv_plugin(plugin_name, plugins_dir) do
     plugin_dir = Path.join(plugins_dir, plugin_name)
+    plugin_files = Discovery.discover_plugin_files(plugin_dir)
 
-    # Try register_callbacks.ex first, then any .ex file
-    ex_files =
-      [Path.join(plugin_dir, "register_callbacks.ex")]
-      |> Enum.filter(&File.exists?/1)
-      |> case do
-        [] ->
-          plugin_dir
-          |> File.ls!()
-          |> Enum.filter(&String.ends_with?(&1, ".ex"))
-          |> Enum.map(&Path.join(plugin_dir, &1))
-
-        files ->
-          files
-      end
-
-    case ex_files do
+    case plugin_files do
       [] ->
-        Logger.debug("No .ex files found in priv plugin: #{plugin_name}")
+        Logger.debug("No .ex/.exs files found in priv plugin: #{plugin_name}")
         []
 
       files ->
         Enum.flat_map(files, fn file ->
           try do
-            modules_before = loaded_modules()
-            Code.compile_file(file)
-            modules_after = loaded_modules()
-            new_modules = modules_after -- modules_before
-
-            plugin_modules = Enum.filter(new_modules, &plugin_behaviour?/1)
-
-            Enum.map(plugin_modules, fn mod ->
-              register_plugin(mod, :builtin)
-              mod.name()
-            end)
+            Discovery.load_and_register_plugin_file(file, :builtin, &register_plugin/2)
           rescue
             e ->
               Logger.error("Failed to load priv plugin '#{plugin_name}': #{Exception.message(e)}")
-
               []
           end
         end)
@@ -259,13 +268,11 @@ defmodule CodePuppyControl.Plugins.Loader do
     |> Path.join("plugins")
   rescue
     _ ->
-      # Fallback for development: priv/plugins/ relative to the project
       Path.join([File.cwd!(), "priv", "plugins"])
   end
 
   # ── User Plugin Discovery ───────────────────────────────────────
 
-  @doc false
   @spec load_user_plugins() :: [atom()]
   defp load_user_plugins do
     ensure_ets_table()
@@ -298,85 +305,69 @@ defmodule CodePuppyControl.Plugins.Loader do
     end
   end
 
-  @doc false
   @spec load_user_plugin(String.t(), String.t()) :: [atom()]
   defp load_user_plugin(plugin_name, plugins_dir) do
     plugin_dir = Path.join(plugins_dir, plugin_name)
 
-    # SECURITY: Validate no path traversal in the plugin name
     if String.contains?(plugin_name, ["..", "/", "\\", <<0>>]) do
       Logger.warning("SECURITY: Skipping user plugin with suspicious name: #{plugin_name}")
       []
     else
-      # Try register_callbacks.ex first, then any .ex file
-      ex_files =
-        [Path.join(plugin_dir, "register_callbacks.ex")]
-        |> Enum.filter(&File.exists?/1)
-        |> case do
-          [] ->
-            plugin_dir
-            |> File.ls!()
-            |> Enum.filter(&String.ends_with?(&1, ".ex"))
-            |> Enum.map(&Path.join(plugin_dir, &1))
+      # Guard against the plugin directory itself being a symlink
+      # that escapes the plugins base (e.g. evil_plugin → /tmp/escape).
+      unless safe_plugin_path?(plugin_dir, plugins_dir) do
+        Logger.warning(
+          "SECURITY: Skipping user plugin '#{plugin_name}' — " <>
+            "directory canonical path escapes plugins directory"
+        )
 
-          files ->
-            files
-        end
+        []
+      else
+        plugin_files = Discovery.discover_plugin_files(plugin_dir)
 
-      # SECURITY: Reject any file whose canonical path escapes the plugins base dir
-      safe_ex_files =
-        Enum.filter(ex_files, fn file ->
-          if safe_plugin_path?(file, plugins_dir) do
-            true
-          else
-            Logger.warning(
-              "SECURITY: Skipping user plugin file #{file} — canonical path escapes plugins directory"
-            )
+        safe_files =
+          Enum.filter(plugin_files, fn file ->
+            if safe_plugin_path?(file, plugins_dir) do
+              true
+            else
+              Logger.warning(
+                "SECURITY: Skipping user plugin file #{file} — canonical path escapes plugins directory"
+              )
 
-            false
-          end
-        end)
-
-      case safe_ex_files do
-        [] ->
-          Logger.warning("No .ex files found in user plugin: #{plugin_name}")
-          []
-
-        files ->
-          Enum.flat_map(files, fn file ->
-            Logger.warning(
-              "SECURITY: Loading user plugin '#{plugin_name}' from #{file} — " <>
-                "executes arbitrary Elixir code with full system privileges!"
-            )
-
-            try do
-              modules_before = loaded_modules()
-              Code.compile_file(file)
-              modules_after = loaded_modules()
-              new_modules = modules_after -- modules_before
-
-              plugin_modules = Enum.filter(new_modules, &plugin_behaviour?/1)
-
-              Enum.map(plugin_modules, fn mod ->
-                register_plugin(mod, :user)
-                mod.name()
-              end)
-            rescue
-              e ->
-                Logger.error(
-                  "Failed to load user plugin '#{plugin_name}': #{Exception.message(e)}"
-                )
-
-                []
+              false
             end
           end)
+
+        case safe_files do
+          [] ->
+            Logger.warning("No .ex/.exs files found in user plugin: #{plugin_name}")
+            []
+
+          files ->
+            Enum.flat_map(files, fn file ->
+              Logger.warning(
+                "SECURITY: Loading user plugin '#{plugin_name}' from #{file} — " <>
+                  "executes arbitrary Elixir code with full system privileges!"
+              )
+
+              try do
+                Discovery.load_and_register_plugin_file(file, :user, &register_plugin/2)
+              rescue
+                e ->
+                  Logger.error(
+                    "Failed to load user plugin '#{plugin_name}': #{Exception.message(e)}"
+                  )
+
+                  []
+              end
+            end)
+        end
       end
     end
   end
 
   # ── Plugin Registration ─────────────────────────────────────────
 
-  @doc false
   @spec register_plugin(module(), :builtin | :user) :: :ok
   defp register_plugin(module, type \\ :builtin) do
     ensure_ets_table()
@@ -390,36 +381,57 @@ defmodule CodePuppyControl.Plugins.Loader do
     :ets.insert(__MODULE__, {module.name(), plugin_info})
 
     # Prefer register/0 over register_callbacks/0
+    # Errors from register/0 are caught so a broken plugin
+    # cannot crash the host application.
     cond do
       function_exported?(module, :register, 0) ->
-        case module.register() do
-          :ok ->
-            :ok
+        try do
+          case module.register() do
+            :ok ->
+              :ok
 
-          {:error, reason} ->
-            Logger.warning(
-              "Plugin #{module.name()} register/0 returned error: #{inspect(reason)}"
-            )
+            {:error, reason} ->
+              Logger.warning(
+                "Plugin #{module.name()} register/0 returned error: #{inspect(reason)}"
+              )
 
-          other ->
-            Logger.warning(
-              "Plugin #{module.name()} register/0 returned unexpected: #{inspect(other)}"
+            other ->
+              Logger.warning(
+                "Plugin #{module.name()} register/0 returned unexpected: #{inspect(other)}"
+              )
+          end
+        rescue
+          e ->
+            Logger.error("Plugin #{module.name()} register/0 raised: #{Exception.message(e)}")
+        catch
+          kind, reason ->
+            Logger.error(
+              "Plugin #{module.name()} register/0 crashed: #{Exception.format(kind, reason)}"
             )
         end
 
       function_exported?(module, :register_callbacks, 0) ->
-        callbacks = module.register_callbacks()
+        # Crash isolation: catch errors so a broken plugin cannot
+        # crash the host or prevent later plugins from loading.
+        try do
+          callbacks = module.register_callbacks()
 
-        Enum.each(callbacks, fn {hook_name, fun} ->
-          try do
-            Callbacks.register(hook_name, fun)
-          rescue
-            ArgumentError ->
-              Logger.warning(
-                "Plugin #{module.name()} registered callback for unknown hook: #{hook_name}"
-              )
-          end
-        end)
+          Enum.each(callbacks, fn {hook_name, fun} ->
+            try do
+              Callbacks.register(hook_name, fun)
+            rescue
+              ArgumentError ->
+                Logger.warning(
+                  "Plugin #{module.name()} registered callback for unknown hook: #{hook_name}"
+                )
+            end
+          end)
+        rescue
+          e ->
+            Logger.error(
+              "Plugin #{module.name()} register_callbacks/0 raised: #{Exception.message(e)}"
+            )
+        end
 
       true ->
         Logger.warning(
@@ -427,24 +439,33 @@ defmodule CodePuppyControl.Plugins.Loader do
         )
     end
 
-    # Call startup
     if function_exported?(module, :startup, 0) do
-      module.startup()
+      # Crash isolation: startup/0 errors must not crash the host or
+      # prevent later plugins from loading.
+      try do
+        module.startup()
+      rescue
+        e ->
+          Logger.error("Plugin #{module.name()} startup/0 raised: #{Exception.message(e)}")
+      catch
+        kind, reason ->
+          Logger.error(
+            "Plugin #{module.name()} startup/0 crashed: #{Exception.format(kind, reason)}"
+          )
+      end
     end
 
     Logger.info("Loaded #{type} plugin: #{module.name()}")
     :ok
   end
 
-  # ── Helpers ─────────────────────────────────────────────────────
+  # ── Security Helpers ─────────────────────────────────────────────
 
-  @doc false
   @spec normalize_names([atom() | String.t()]) :: MapSet.t(String.t())
   defp normalize_names(names) do
     MapSet.new(names, &to_string/1)
   end
 
-  @doc false
   @spec already_loaded?(module(), MapSet.t(String.t())) :: boolean()
   defp already_loaded?(module, loaded_names) do
     name = to_string(module.name())
@@ -460,54 +481,17 @@ defmodule CodePuppyControl.Plugins.Loader do
   """
   @spec safe_plugin_path?(String.t(), String.t()) :: boolean()
   def safe_plugin_path?(path, base_dir) do
-    canonical = canonicalize_path(path)
-    canonical_base = canonicalize_path(base_dir)
-    String.starts_with?(canonical, canonical_base <> "/")
+    # Use Paths.canonical_resolve/1 which walks ALL intermediate directory
+    # symlinks, not just the final path component. This prevents attacks
+    # where an intermediate directory in the path is a symlink pointing
+    # outside the plugins base (e.g. plugin_dir → /tmp/escape).
+    canonical = Paths.canonical_resolve(path)
+    canonical_base = Paths.canonical_resolve(base_dir)
+    canonical == canonical_base or String.starts_with?(canonical, canonical_base <> "/")
   end
 
-  @doc false
-  @spec canonicalize_path(String.t()) :: String.t()
-  defp canonicalize_path(path) do
-    expanded = Path.expand(path)
+  # ── ETS Table Management ────────────────────────────────────────
 
-    case File.read_link(expanded) do
-      {:ok, target} ->
-        # Resolve symlink target relative to link's directory
-        target_path =
-          if Path.type(target) == :absolute do
-            target
-          else
-            Path.expand(target, Path.dirname(expanded))
-          end
-
-        # Recurse for chained symlinks
-        canonicalize_path(target_path)
-
-      {:error, _} ->
-        expanded
-    end
-  end
-
-  @doc false
-  @spec plugin_behaviour?(module()) :: boolean()
-  defp plugin_behaviour?(module) do
-    behaviours =
-      module.module_info(:attributes)
-      |> Keyword.get(:behaviour, [])
-
-    PluginBehaviour in behaviours
-  rescue
-    UndefinedFunctionError -> false
-    _ -> false
-  end
-
-  @doc false
-  @spec loaded_modules() :: [module()]
-  defp loaded_modules do
-    :code.all_loaded() |> Enum.map(fn {mod, _} -> mod end)
-  end
-
-  @doc false
   @spec ensure_ets_table() :: :ok
   defp ensure_ets_table do
     case :ets.whereis(__MODULE__) do

@@ -245,5 +245,73 @@ defmodule CodePuppyControl.Plugins.LoaderTest do
 
       File.rm_rf!(plugins_base)
     end
+
+    test "rejects plugin directory that is a symlink escaping plugins dir" do
+      tmp_dir = System.tmp_dir!()
+      uniq = :erlang.unique_integer([:positive])
+      plugins_base = Path.join(tmp_dir, "cp_dir_symlink_test_#{uniq}")
+      File.mkdir_p!(plugins_base)
+
+      # Create an outside directory
+      outside_dir = Path.join(tmp_dir, "cp_dir_outside_#{uniq}")
+      File.mkdir_p!(outside_dir)
+
+      # Symlink the plugin directory itself to outside
+      symlink_plugin = Path.join(plugins_base, "escaped_dir")
+      File.ln_s!(outside_dir, symlink_plugin)
+
+      refute Loader.safe_plugin_path?(symlink_plugin, plugins_base)
+
+      File.rm_rf!(plugins_base)
+      File.rm_rf!(outside_dir)
+    end
+
+    test "rejects intermediate directory symlink that escapes plugins dir" do
+      tmp_dir = System.tmp_dir!()
+      uniq = :erlang.unique_integer([:positive])
+      plugins_base = Path.join(tmp_dir, "cp_nested_symlink_test_#{uniq}")
+      plugin_dir = Path.join(plugins_base, "nested_escape")
+      File.mkdir_p!(plugin_dir)
+
+      # Create an outside directory
+      outside_dir = Path.join(tmp_dir, "cp_nested_outside_#{uniq}")
+      File.mkdir_p!(outside_dir)
+
+      # Replace a subdirectory with a symlink to outside
+      internal_link = Path.join(plugin_dir, "subdir")
+      File.ln_s!(outside_dir, internal_link)
+
+      file_path = Path.join(internal_link, "register_callbacks.ex")
+
+      refute Loader.safe_plugin_path?(file_path, plugins_base)
+
+      File.rm_rf!(plugins_base)
+      File.rm_rf!(outside_dir)
+    end
+
+    test "allows valid internal symlink within plugins dir" do
+      tmp_dir = System.tmp_dir!()
+      uniq = :erlang.unique_integer([:positive])
+      plugins_base = Path.join(tmp_dir, "cp_internal_symlink_test_#{uniq}")
+      File.mkdir_p!(plugins_base)
+
+      # Shared directory within plugins_base
+      shared_dir = Path.join(plugins_base, "_shared")
+      File.mkdir_p!(shared_dir)
+
+      shared_file = Path.join(shared_dir, "helper.ex")
+      File.write!(shared_file, "# safe")
+
+      # Plugin directory with symlink to shared file
+      plugin_dir = Path.join(plugins_base, "my_plugin")
+      File.mkdir_p!(plugin_dir)
+
+      symlink_path = Path.join(plugin_dir, "register_callbacks.ex")
+      File.ln_s!(shared_file, symlink_path)
+
+      assert Loader.safe_plugin_path?(symlink_path, plugins_base)
+
+      File.rm_rf!(plugins_base)
+    end
   end
 end

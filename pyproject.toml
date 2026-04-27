@@ -76,6 +76,9 @@ packages = ["code_puppy"]
 
 [tool.hatch.build.targets.wheel]
 
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+
 [tool.ruff]
 target-version = "py314"
 
@@ -97,5 +100,7 @@ override-dependencies = [
 
 [dependency-groups]
 dev = [
+    "pytest>=9.0.3",
+    "pytest-asyncio>=0.24.0",
     "ruff>=0.15.8",
 ]
