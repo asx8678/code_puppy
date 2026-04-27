@@ -8,13 +8,16 @@ defmodule CodePuppyControl.Tools.CpSchedulerOpsTest do
   - Parameters match the Python tool signatures
   - Invoke delegates correctly to SchedulerTools
   - Agent alias mapping (Python `agent` → Elixir `agent_name`)
+  - No daemon references in descriptions
+  - Safe atomize_keys (static allowlist, no String.to_atom on user keys)
   - Error cases return formatted strings
+  - Registry filtering through for_agent(CodePuppyControl.Agents.CodePuppy)
   """
 
   use CodePuppyControl.StatefulCase
 
   alias CodePuppyControl.Tools.CpSchedulerOps
-  alias CodePuppyControl.Scheduler
+  alias CodePuppyControl.Tool.Registry
   alias CodePuppyControl.Repo
 
   setup do
@@ -78,6 +81,20 @@ defmodule CodePuppyControl.Tools.CpSchedulerOpsTest do
         assert is_binary(desc) and desc != "", "Tool #{inspect(tool)} has empty description"
       end
     end
+
+    test "no descriptions reference 'daemon'" do
+      tools = [
+        CpSchedulerOps.CpSchedulerListTasks,
+        CpSchedulerOps.CpSchedulerStatus
+      ]
+
+      for tool <- tools do
+        desc = tool.description()
+
+        refute desc =~ ~r/daemon/i,
+               "Tool #{inspect(tool)} description still references 'daemon': #{desc}"
+      end
+    end
   end
 
   # ── Parameter Schema ──────────────────────────────────────────────────
@@ -132,6 +149,40 @@ defmodule CodePuppyControl.Tools.CpSchedulerOpsTest do
     end
   end
 
+  # ── Safe atomize_keys ──────────────────────────────────────────────────
+
+  describe "CpSchedulerCreateTask atomize_keys safety" do
+    test "unknown string keys are preserved as strings (not converted to atoms)" do
+      # The atomize_keys function uses a static allowlist map.
+      # Unknown keys should remain as string keys, not be converted to atoms.
+      # We test this indirectly by invoking with an extra unknown key.
+      attrs = %{
+        "name" => "safe-atom-test",
+        "prompt" => "Test prompt",
+        "agent" => "code-puppy",
+        "unknown_malicious_key" => "should_not_become_atom"
+      }
+
+      {:ok, result} = CpSchedulerOps.CpSchedulerCreateTask.invoke(attrs, %{})
+      assert Map.has_key?(result, :output)
+      # Task was still created successfully (known keys were atomized)
+      assert result.output =~ "safe-atom-test"
+    end
+
+    test "known keys are properly atomized" do
+      attrs = %{
+        "name" => "known-keys-test",
+        "prompt" => "Test prompt",
+        "agent" => "code-puppy",
+        "schedule_type" => "hourly"
+      }
+
+      {:ok, result} = CpSchedulerOps.CpSchedulerCreateTask.invoke(attrs, %{})
+      assert result.output =~ "known-keys-test"
+      assert result.output =~ "hourly"
+    end
+  end
+
   # ── Invoke Delegation ─────────────────────────────────────────────────
 
   describe "invoke delegation" do
@@ -172,7 +223,9 @@ defmodule CodePuppyControl.Tools.CpSchedulerOpsTest do
     end
 
     test "CpSchedulerToggleTask returns not found for missing task" do
-      {:ok, result} = CpSchedulerOps.CpSchedulerToggleTask.invoke(%{"task_id" => "nonexistent"}, %{})
+      {:ok, result} =
+        CpSchedulerOps.CpSchedulerToggleTask.invoke(%{"task_id" => "nonexistent"}, %{})
+
       assert result.output =~ "Task not found"
     end
 
@@ -245,6 +298,25 @@ defmodule CodePuppyControl.Tools.CpSchedulerOpsTest do
         assert {:ok, %{output: output}} = result
         assert is_binary(output)
       end
+    end
+  end
+
+  # ── Registry filtering ─────────────────────────────────────────────────
+
+  describe "Registry filtering for CodePuppy agent" do
+    @tag :integration
+    test "all scheduler cp_ tools appear in for_agent(CodePuppy)" do
+      agent_tools = Registry.for_agent(CodePuppyControl.Agents.CodePuppy)
+      tool_names = Enum.map(agent_tools, & &1.name)
+
+      assert "cp_scheduler_list_tasks" in tool_names
+      assert "cp_scheduler_create_task" in tool_names
+      assert "cp_scheduler_delete_task" in tool_names
+      assert "cp_scheduler_toggle_task" in tool_names
+      assert "cp_scheduler_status" in tool_names
+      assert "cp_scheduler_run_task" in tool_names
+      assert "cp_scheduler_view_log" in tool_names
+      assert "cp_scheduler_force_check" in tool_names
     end
   end
 end

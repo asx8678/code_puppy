@@ -49,8 +49,7 @@ defmodule CodePuppyControl.Tools.CpUniversalConstructor do
         "action" => %{
           "type" => "string",
           "enum" => ["list", "call", "create", "update", "info"],
-          "description" =>
-            "The operation to perform: list, call, create, update, or info"
+          "description" => "The operation to perform: list, call, create, update, or info"
         },
         "tool_name" => %{
           "type" => "string",
@@ -64,8 +63,7 @@ defmodule CodePuppyControl.Tools.CpUniversalConstructor do
         },
         "elixir_code" => %{
           "type" => "string",
-          "description" =>
-            "Elixir source code for the tool (for create/update actions)"
+          "description" => "Elixir source code for the tool (for create/update actions)"
         },
         "python_code" => %{
           "type" => "string",
@@ -86,7 +84,18 @@ defmodule CodePuppyControl.Tools.CpUniversalConstructor do
   def invoke(args, _context) do
     # Check if UC is enabled
     unless CodePuppyControl.Config.Debug.universal_constructor_enabled?() do
-      {:error, "Universal Constructor is disabled. Enable it with /set enable_universal_constructor=true"}
+      {:ok,
+       %{
+         action: Map.get(args, "action", "list"),
+         success: false,
+         error:
+           "Universal Constructor is disabled. Enable it with /set enable_universal_constructor=true",
+         list_result: nil,
+         call_result: nil,
+         create_result: nil,
+         update_result: nil,
+         info_result: nil
+       }}
     else
       do_invoke(args)
     end
@@ -111,11 +120,11 @@ defmodule CodePuppyControl.Tools.CpUniversalConstructor do
     # Emit event via EventBus
     emit_uc_event(result)
 
-    if result.success do
-      {:ok, result}
-    else
-      {:error, result.error || "Universal Constructor operation failed"}
-    end
+    # Always return {:ok, result} to preserve UniversalConstructorOutput shape.
+    # Expected operation failures (unknown action, tool not found, validation
+    # errors) have success: false with error field populated.
+    # Reserve {:error, reason} only for unexpected infrastructure failures.
+    {:ok, result}
   end
 
   # Handle python_code → elixir_code compatibility bridge
@@ -124,13 +133,17 @@ defmodule CodePuppyControl.Tools.CpUniversalConstructor do
     python_code = Map.get(args, "python_code")
 
     cond do
-      is_binary(elixir_code) and elixir_code != "" -> elixir_code
+      is_binary(elixir_code) and elixir_code != "" ->
+        elixir_code
+
       is_binary(python_code) and python_code != "" ->
         # Python code was provided but we only accept Elixir.
         # Return it as-is; the UC validator will reject it if it's
         # not valid Elixir syntax, giving a clear error message.
         python_code
-      true -> nil
+
+      true ->
+        nil
     end
   end
 

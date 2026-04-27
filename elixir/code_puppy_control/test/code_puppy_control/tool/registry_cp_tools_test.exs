@@ -112,7 +112,9 @@ defmodule CodePuppyControl.Tool.RegistryCpToolsTest do
 
       names = Enum.map(modules, fn mod -> mod.name() end)
       unique_names = MapSet.new(names)
-      assert MapSet.size(unique_names) == length(names), "Duplicate tool names found: #{inspect(names -- MapSet.to_list(unique_names))}"
+
+      assert MapSet.size(unique_names) == length(names),
+             "Duplicate tool names found: #{inspect(names -- MapSet.to_list(unique_names))}"
     end
 
     test "all expected cp_ tool names are present" do

@@ -3,7 +3,8 @@ defmodule CodePuppyControl.Agents.CodePuppy do
   The flagship Code Puppy agent — a helpful, friendly AI coding assistant.
 
   This is the primary agent for Code Puppy, providing full access to file
-  operations, shell command execution, and sub-agent invocation. It represents
+  operations, shell command execution, sub-agent invocation, skills,
+  scheduler management, and universal constructor tools. It represents
   the "default persona" that users interact with when they start a session.
 
   ## Capabilities
@@ -11,6 +12,9 @@ defmodule CodePuppyControl.Agents.CodePuppy do
     * **File operations** — read, write, create, delete, grep, and edit files
     * **Shell commands** — execute arbitrary commands in the project directory
     * **Sub-agent delegation** — invoke specialized agents for narrow tasks
+    * **Skills** — discover and activate agent skills
+    * **Scheduler** — manage scheduled tasks via CronScheduler
+    * **Universal Constructor** — create, manage, and call dynamic tools
     * **Project-aware** — follows conventions from CONTRIBUTING.md and project config
 
   ## Tool Access
@@ -55,6 +59,9 @@ defmodule CodePuppyControl.Agents.CodePuppy do
     - **Shell commands:** Use `cp_run_command` to execute shell commands — compile code, run tests, check git status, install dependencies, etc.
     - **Sub-agents:** Use `cp_invoke_agent` to delegate specialized tasks to focused agents. Use `cp_list_agents` to see available agents.
     - **User interaction:** Use `cp_ask_user_question` to ask the user interactive multiple-choice questions when you need their input to proceed.
+    - **Skills:** Use `cp_list_skills` to discover available skills and `cp_activate_skill` to load a skill's instructions.
+    - **Scheduler:** Use `cp_scheduler_list_tasks`, `cp_scheduler_create_task`, `cp_scheduler_delete_task`, `cp_scheduler_toggle_task`, `cp_scheduler_status`, `cp_scheduler_run_task`, `cp_scheduler_view_log`, and `cp_scheduler_force_check` to manage scheduled tasks.
+    - **Universal Constructor:** Use `cp_universal_constructor` to create, manage, and call custom tools dynamically. Actions: list, call, create, update, info.
 
     ## Workflow
 
@@ -99,7 +106,19 @@ defmodule CodePuppyControl.Agents.CodePuppy do
       :cp_invoke_agent,
       :cp_list_agents,
       # User interaction
-      :cp_ask_user_question
+      :cp_ask_user_question,
+      # Phase E: skills, scheduler, universal constructor (code_puppy-mmk.2)
+      :cp_list_skills,
+      :cp_activate_skill,
+      :cp_scheduler_list_tasks,
+      :cp_scheduler_create_task,
+      :cp_scheduler_delete_task,
+      :cp_scheduler_toggle_task,
+      :cp_scheduler_status,
+      :cp_scheduler_run_task,
+      :cp_scheduler_view_log,
+      :cp_scheduler_force_check,
+      :cp_universal_constructor
     ]
   end
 

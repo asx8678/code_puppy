@@ -7,14 +7,20 @@ defmodule CodePuppyControl.Tools.CpUniversalConstructorTest do
   - cp_ prefixed name
   - Parameters include all Python-compatible action params
   - python_code → elixir_code alias works
-  - UC disabled check returns error
+  - UC disabled check returns UniversalConstructorOutput shape
   - list action returns correct shape
+  - All expected operation failures return {:ok, map} with success: false
   - EventBus emission on actions
+  - Registry filtering through for_agent(CodePuppyControl.Agents.CodePuppy)
+  - Exact shape parity with Python UniversalConstructorOutput
   """
 
   use ExUnit.Case, async: true
 
   alias CodePuppyControl.Tools.CpUniversalConstructor
+  alias CodePuppyControl.Tool.Registry
+
+  # ── Tool contract ──────────────────────────────────────────────────────
 
   describe "tool contract" do
     test "name/0 returns :cp_universal_constructor" do
@@ -49,89 +55,170 @@ defmodule CodePuppyControl.Tools.CpUniversalConstructorTest do
     end
   end
 
-  describe "invoke/2 - list action" do
-    @tag :integration
-    test "returns list result with correct shape" do
-      result = CpUniversalConstructor.invoke(%{"action" => "list"}, %{})
+  # ── UniversalConstructorOutput shape parity ────────────────────────────
 
-      case result do
-        {:ok, data} ->
-          # Python UniversalConstructorOutput shape:
-          # action, success, error, list_result
-          assert Map.has_key?(data, :action) or Map.has_key(data, "action")
-          assert Map.has_key?(data, :success) or Map.has_key(data, "success")
-
-        {:error, reason} ->
-          # May fail if UC is disabled or registry not running
-          assert is_binary(reason)
-      end
-    end
-  end
-
-  describe "invoke/2 - unknown action" do
-    test "returns error for unknown action" do
+  describe "invoke/2 - UniversalConstructorOutput shape parity" do
+    test "unknown action returns {:ok, map} with success: false (not {:error, _})" do
       result = CpUniversalConstructor.invoke(%{"action" => "explode"}, %{})
 
-      case result do
-        {:error, reason} ->
-          assert reason =~ "Unknown action" or reason =~ "unknown"
-
-        {:ok, data} ->
-          assert data.success == false
-          assert data.error =~ "Unknown action" or data.error =~ "unknown"
-      end
+      # Must be {:ok, _} to preserve UniversalConstructorOutput shape
+      assert {:ok, data} = result
+      assert Map.has_key?(data, :action)
+      assert Map.has_key?(data, :success)
+      assert Map.has_key?(data, :error)
+      assert data.success == false
+      assert is_binary(data.error)
+      assert data.error =~ "Unknown action"
     end
-  end
 
-  describe "invoke/2 - call without tool_name" do
-    test "returns error when tool_name is missing for call action" do
+    test "call without tool_name returns {:ok, map} with success: false" do
       result = CpUniversalConstructor.invoke(%{"action" => "call"}, %{})
 
-      case result do
-        {:error, reason} ->
-          assert reason =~ "tool_name" or reason =~ "required"
-
-        {:ok, data} ->
-          assert data.success == false
-          assert data.error =~ "tool_name" or data.error =~ "required"
-      end
+      assert {:ok, data} = result
+      assert data.success == false
+      assert Map.has_key?(data, :action)
+      assert Map.has_key?(data, :error)
+      assert data.error =~ "tool_name"
     end
-  end
 
-  describe "invoke/2 - info without tool_name" do
-    test "returns error when tool_name is missing for info action" do
+    test "info without tool_name returns {:ok, map} with success: false" do
       result = CpUniversalConstructor.invoke(%{"action" => "info"}, %{})
 
-      case result do
-        {:error, reason} ->
-          assert reason =~ "tool_name" or reason =~ "required"
+      assert {:ok, data} = result
+      assert data.success == false
+      assert Map.has_key?(data, :action)
+      assert Map.has_key?(data, :error)
+      assert data.error =~ "tool_name"
+    end
 
-        {:ok, data} ->
-          assert data.success == false
-          assert data.error =~ "tool_name" or data.error =~ "required"
-      end
+    test "call for nonexistent tool returns {:ok, map} with success: false" do
+      result =
+        CpUniversalConstructor.invoke(
+          %{"action" => "call", "tool_name" => "nonexistent_xyz"},
+          %{}
+        )
+
+      assert {:ok, data} = result
+      assert data.success == false
+      assert Map.has_key?(data, :error)
+      assert data.error =~ "not found"
+    end
+
+    test "info for nonexistent tool returns {:ok, map} with success: false" do
+      result =
+        CpUniversalConstructor.invoke(
+          %{"action" => "info", "tool_name" => "nonexistent_xyz"},
+          %{}
+        )
+
+      assert {:ok, data} = result
+      assert data.success == false
+      assert Map.has_key?(data, :error)
+    end
+
+    test "update without tool_name returns {:ok, map} with success: false" do
+      result =
+        CpUniversalConstructor.invoke(
+          %{"action" => "update", "elixir_code" => "defmodule X do end"},
+          %{}
+        )
+
+      assert {:ok, data} = result
+      assert data.success == false
+      assert Map.has_key?(data, :error)
+      assert data.error =~ "tool_name"
+    end
+
+    test "update without elixir_code returns {:ok, map} with success: false" do
+      result =
+        CpUniversalConstructor.invoke(
+          %{"action" => "update", "tool_name" => "some_tool"},
+          %{}
+        )
+
+      assert {:ok, data} = result
+      assert data.success == false
+      assert Map.has_key?(data, :error)
     end
   end
+
+  # ── python_code compatibility ──────────────────────────────────────────
 
   describe "python_code compatibility" do
     test "parameters include python_code field" do
       params = CpUniversalConstructor.parameters()
       assert Map.has_key?(params["properties"], "python_code")
     end
+
+    test "create with python_code instead of elixir_code passes code to UC" do
+      # When python_code is provided without elixir_code, the code is
+      # forwarded to UC which will reject non-Elixir syntax in validation.
+      # The result should still be {:ok, map} shape.
+      result =
+        CpUniversalConstructor.invoke(
+          %{
+            "action" => "create",
+            "tool_name" => "py_compat_test",
+            "python_code" => "def hello(): print('hi')",
+            "description" => "Python compat test"
+          },
+          %{}
+        )
+
+      # Shape parity: always {:ok, map}
+      assert {:ok, data} = result
+      assert Map.has_key?(data, :action)
+      assert Map.has_key?(data, :success)
+      assert Map.has_key?(data, :error)
+      # The code is non-Elixir so it should fail with success: false
+      assert data.success == false
+      assert is_binary(data.error)
+    end
+
+    test "elixir_code takes precedence over python_code when both provided" do
+      # When both are provided, elixir_code should be used
+      result =
+        CpUniversalConstructor.invoke(
+          %{
+            "action" => "create",
+            "tool_name" => "precedence_test",
+            "elixir_code" =>
+              "defmodule PrecedenceTest do @uc_tool %{name: \"precedence_test\", description: \"test\"} def run(_), do: :ok end",
+            "python_code" => "def hello(): pass",
+            "description" => "Precedence test"
+          },
+          %{}
+        )
+
+      assert {:ok, data} = result
+      assert Map.has_key?(data, :success)
+    end
   end
 
-  describe "delegation to UniversalConstructor" do
+  # ── list action ────────────────────────────────────────────────────────
+
+  describe "invoke/2 - list action" do
     @tag :integration
-    test "list action delegates to UniversalConstructor.run/1" do
-      # We verify the wrapper properly routes to the underlying module
-      # The actual result depends on whether the Registry GenServer is running
+    test "returns {:ok, map} with list result" do
       result = CpUniversalConstructor.invoke(%{"action" => "list"}, %{})
 
-      # Either succeeds or gives a structured error
-      case result do
-        {:ok, data} -> assert is_map(data)
-        {:error, reason} -> assert is_binary(reason)
-      end
+      assert {:ok, data} = result
+      # UniversalConstructorOutput shape
+      assert Map.has_key?(data, :action)
+      assert Map.has_key?(data, :success)
+      assert Map.has_key?(data, :error)
+      assert data.action == "list" or data.action == :list
+    end
+  end
+
+  # ── Registry filtering ─────────────────────────────────────────────────
+
+  describe "Registry filtering for CodePuppy agent" do
+    @tag :integration
+    test "cp_universal_constructor appears in for_agent(CodePuppy)" do
+      agent_tools = Registry.for_agent(CodePuppyControl.Agents.CodePuppy)
+      tool_names = Enum.map(agent_tools, & &1.name)
+      assert "cp_universal_constructor" in tool_names
     end
   end
 end

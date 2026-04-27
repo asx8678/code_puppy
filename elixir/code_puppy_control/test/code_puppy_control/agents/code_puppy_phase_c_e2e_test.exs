@@ -516,7 +516,7 @@ defmodule CodePuppyControl.Agents.CodePuppyPhaseCE2ETest do
     test "implements Agent.Behaviour with correct name, tools, and model" do
       assert CodePuppy.name() == :code_puppy
       assert is_list(CodePuppy.allowed_tools())
-      assert length(CodePuppy.allowed_tools()) == 11
+      assert length(CodePuppy.allowed_tools()) == 22
       assert :cp_list_files in CodePuppy.allowed_tools()
       assert :cp_read_file in CodePuppy.allowed_tools()
       assert :cp_grep in CodePuppy.allowed_tools()
@@ -528,6 +528,18 @@ defmodule CodePuppyControl.Agents.CodePuppyPhaseCE2ETest do
       assert :cp_run_command in CodePuppy.allowed_tools()
       assert :cp_invoke_agent in CodePuppy.allowed_tools()
       assert :cp_list_agents in CodePuppy.allowed_tools()
+      # Phase E tools (code_puppy-mmk.2)
+      assert :cp_list_skills in CodePuppy.allowed_tools()
+      assert :cp_activate_skill in CodePuppy.allowed_tools()
+      assert :cp_scheduler_list_tasks in CodePuppy.allowed_tools()
+      assert :cp_scheduler_create_task in CodePuppy.allowed_tools()
+      assert :cp_scheduler_delete_task in CodePuppy.allowed_tools()
+      assert :cp_scheduler_toggle_task in CodePuppy.allowed_tools()
+      assert :cp_scheduler_status in CodePuppy.allowed_tools()
+      assert :cp_scheduler_run_task in CodePuppy.allowed_tools()
+      assert :cp_scheduler_view_log in CodePuppy.allowed_tools()
+      assert :cp_scheduler_force_check in CodePuppy.allowed_tools()
+      assert :cp_universal_constructor in CodePuppy.allowed_tools()
 
       assert CodePuppy.model_preference() == "claude-sonnet-4-20250514"
 

@@ -38,14 +38,20 @@ defmodule CodePuppyControl.Tools.Skills do
   @spec disabled_skills() :: [String.t()]
   def disabled_skills do
     case CodePuppyControl.Config.Loader.get_value("disabled_skills") do
-      nil -> []
-      "" -> []
+      nil ->
+        []
+
+      "" ->
+        []
+
       val when is_binary(val) ->
         val
         |> String.split(",", trim: true)
         |> Enum.map(&String.trim/1)
         |> Enum.reject(&(&1 == ""))
-      _ -> []
+
+      _ ->
+        []
     end
   end
 
@@ -186,8 +192,14 @@ defmodule CodePuppyControl.Tools.Skills do
           }
 
         {:error, _} ->
-          %{name: Path.basename(skill_dir), description: "", path: skill_dir, tags: [],
-            version: nil, author: nil}
+          %{
+            name: Path.basename(skill_dir),
+            description: "",
+            path: skill_dir,
+            tags: [],
+            version: nil,
+            author: nil
+          }
       end
     end
 
@@ -277,11 +289,40 @@ defmodule CodePuppyControl.Tools.Skills do
 
       # Check if skills are enabled (matches Python behavior)
       unless CodePuppyControl.Tools.Skills.skills_enabled?() do
-        {:error, "Skills integration is disabled. Enable it with /set skills_enabled=true"}
+        {:ok,
+         %{
+           skill_name: skill_name,
+           content: nil,
+           resources: [],
+           error: "Skills integration is disabled. Enable it with /set skills_enabled=true"
+         }}
       else
-        do_invoke(skill_name)
+        # Guard against path traversal — reject skill names containing
+        # '/', '\\', '..' components or absolute paths
+        if skill_name_has_traversal?(skill_name) do
+          {:ok,
+           %{
+             skill_name: skill_name,
+             content: nil,
+             resources: [],
+             error: "Invalid skill name: '#{skill_name}' contains path traversal characters"
+           }}
+        else
+          do_invoke(skill_name)
+        end
       end
     end
+
+    # Rejects skill names that could traverse outside skill directories.
+    # Matches Python security posture: no '/', '\\', '..' or absolute paths.
+    defp skill_name_has_traversal?(name) when is_binary(name) do
+      String.contains?(name, "/") or
+        String.contains?(name, "\\") or
+        String.contains?(name, "..") or
+        (byte_size(name) > 0 and :binary.first(name) == ?/)
+    end
+
+    defp skill_name_has_traversal?(_), do: true
 
     defp do_invoke(skill_name) do
       case find_skill(skill_name) do
@@ -300,7 +341,16 @@ defmodule CodePuppyControl.Tools.Skills do
            }}
 
         {:error, reason} ->
-          {:error, reason}
+          # Expected failure: skill not found or read error.
+          # Return ok with SkillActivateOutput shape (error field populated)
+          # rather than {:error, reason} to preserve Python contract.
+          {:ok,
+           %{
+             skill_name: skill_name,
+             content: nil,
+             resources: [],
+             error: reason
+           }}
       end
     end
 
@@ -323,23 +373,27 @@ defmodule CodePuppyControl.Tools.Skills do
     defp find_skill(skill_name) do
       skill_dirs = get_skill_dirs()
 
-      Enum.reduce_while(skill_dirs, {:error, "Skill '#{skill_name}' not found. Use list_skills to see available skills."}, fn dir, acc ->
-        skill_dir = Path.join(dir, skill_name)
-        skill_md = Path.join(skill_dir, "SKILL.md")
+      Enum.reduce_while(
+        skill_dirs,
+        {:error, "Skill '#{skill_name}' not found. Use list_skills to see available skills."},
+        fn dir, acc ->
+          skill_dir = Path.join(dir, skill_name)
+          skill_md = Path.join(skill_dir, "SKILL.md")
 
-        if File.dir?(skill_dir) and File.exists?(skill_md) do
-          case File.read(skill_md) do
-            {:ok, content} ->
-              resources = get_resources(skill_dir)
-              {:halt, {:ok, skill_dir, content, resources}}
+          if File.dir?(skill_dir) and File.exists?(skill_md) do
+            case File.read(skill_md) do
+              {:ok, content} ->
+                resources = get_resources(skill_dir)
+                {:halt, {:ok, skill_dir, content, resources}}
 
-            {:error, reason} ->
-              {:halt, {:error, "Failed to read SKILL.md: #{:file.format_error(reason)}"}}
+              {:error, reason} ->
+                {:halt, {:error, "Failed to read SKILL.md: #{:file.format_error(reason)}"}}
+            end
+          else
+            {:cont, acc}
           end
-        else
-          {:cont, acc}
         end
-      end)
+      )
     end
 
     defp get_resources(skill_dir) do

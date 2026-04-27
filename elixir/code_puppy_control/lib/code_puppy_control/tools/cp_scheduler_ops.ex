@@ -12,11 +12,11 @@ defmodule CodePuppyControl.Tools.CpSchedulerOps do
 
   ## Architecture Note
 
-  Unlike the Python scheduler which uses a daemon process with PID files,
-  the Elixir scheduler runs as a supervised GenServer (`CronScheduler`).
-  There is no `cp_scheduler_start_daemon` / `cp_scheduler_stop_daemon` —
-  instead, `cp_scheduler_status` reports the always-on CronScheduler state
-  and `cp_scheduler_force_check` triggers immediate schedule evaluation.
+  The Elixir scheduler runs as a supervised GenServer (`CronScheduler`)
+  under the application supervision tree. There is no separate daemon
+  process to start or stop. `cp_scheduler_status` reports the
+  CronScheduler state and `cp_scheduler_force_check` triggers
+  immediate schedule evaluation.
 
   ## Tools
 
@@ -43,8 +43,8 @@ defmodule CodePuppyControl.Tools.CpSchedulerOps do
 
     @impl true
     def description do
-      "List all scheduled tasks with their status and daemon info. " <>
-        "Returns a formatted overview of daemon status, all configured " <>
+      "List all scheduled tasks with their status and scheduler info. " <>
+        "Returns a formatted overview of scheduler status, all configured " <>
         "tasks with their schedules, and last run status for each task."
     end
 
@@ -129,19 +129,41 @@ defmodule CodePuppyControl.Tools.CpSchedulerOps do
       {:ok, %{output: SchedulerTools.create_task(attrs)}}
     end
 
-    # Converts string keys to atom keys for Ecto compatibility.
-    # Only converts known safe keys — never user-supplied strings to atoms.
-    @known_keys ~w(name prompt agent_name agent model schedule_type schedule_value schedule working_directory enabled log_file description config)a
+    # Static string-to-atom allowlist map — never calls String.to_atom
+    # on arbitrary user keys. Only known safe keys are mapped;
+    # unknown string keys are dropped (Ecto requires homogeneous key types).
+    @key_allowlist %{
+      "name" => :name,
+      "prompt" => :prompt,
+      "agent_name" => :agent_name,
+      "agent" => :agent,
+      "model" => :model,
+      "schedule_type" => :schedule_type,
+      "schedule_value" => :schedule_value,
+      "schedule" => :schedule,
+      "working_directory" => :working_directory,
+      "enabled" => :enabled,
+      "log_file" => :log_file,
+      "description" => :description,
+      "config" => :config
+    }
 
     defp atomize_keys(map) when is_map(map) do
-      Map.new(map, fn
+      map
+      |> Enum.flat_map(fn
         {key, value} when is_binary(key) ->
-          atom_key = String.to_atom(key)
-          if atom_key in @known_keys, do: {atom_key, value}, else: {key, value}
+          case Map.fetch(@key_allowlist, key) do
+            {:ok, atom_key} -> [{atom_key, value}]
+            :error -> []
+          end
 
-        {key, value} ->
-          {key, value}
+        {key, value} when is_atom(key) ->
+          [{key, value}]
+
+        _ ->
+          []
       end)
+      |> Map.new()
     end
   end
 
@@ -214,7 +236,7 @@ defmodule CodePuppyControl.Tools.CpSchedulerOps do
   end
 
   defmodule CpSchedulerStatus do
-    @moduledoc "Check if the scheduler daemon is running."
+    @moduledoc "Check if the scheduler (CronScheduler) is running."
     use CodePuppyControl.Tool
 
     @impl true
@@ -222,8 +244,8 @@ defmodule CodePuppyControl.Tools.CpSchedulerOps do
 
     @impl true
     def description do
-      "Check if the scheduler daemon is running. Returns detailed " <>
-        "status including PID and task counts."
+      "Check if the scheduler (CronScheduler) is running. Returns " <>
+        "status including task counts and scheduler state."
     end
 
     @impl true
@@ -335,5 +357,4 @@ defmodule CodePuppyControl.Tools.CpSchedulerOps do
       {:ok, %{output: SchedulerTools.force_check()}}
     end
   end
-
 end
