@@ -29,6 +29,7 @@ defmodule CodePuppyControl.Application do
   16. CodePuppyControl.MCP.Registry - Process registry for MCP servers
   17. CodePuppyControl.MCP.Supervisor - DynamicSupervisor for MCP servers
   18. CodePuppyControl.Concurrency.Supervisor - Concurrency limiter (ETS-backed)
+  18b. CodePuppyControl.Plugins.PackParallelism.Supervisor - Pack run semaphore (replaces Python _async_active HACK)
   19. CodePuppyControl.TokenLedger - Token usage accounting
   19b. CodePuppyControl.Config.Writer - Atomic puppy.cfg write-back
   20. CodePuppyControl.RequestTracker - Tracks JSON-RPC request/response correlation
@@ -117,6 +118,8 @@ defmodule CodePuppyControl.Application do
       CodePuppyControl.MCP.ClientSupervisor,
       # Concurrency limiter (ETS-backed semaphores for file_ops, api_calls, tool_calls)
       CodePuppyControl.Concurrency.Supervisor,
+      # Pack parallelism semaphore GenServer (replaces Python _async_active HACK)
+      CodePuppyControl.Plugins.PackParallelism.Supervisor,
       # Adaptive rate limiter with circuit breaker
       CodePuppyControl.RateLimiter.Supervisor,
       # Token ledger for per-run/session token accounting

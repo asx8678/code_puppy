@@ -38,6 +38,14 @@ except ImportError:
 
 logger = logging.getLogger(__name__)
 
+# NOTE(code_puppy-154.3): The _async_active race condition (HACK(pack-parallelism))
+# has been resolved by porting the authoritative state to the Elixir GenServer
+# `CodePuppyControl.Plugins.PackParallelism`. When the Elixir control plane is
+# connected, all acquire/release/status calls are delegated to the GenServer,
+# which serializes mutations through a single BEAM process mailbox. The Python
+# local fallback path retains the old semaphore+counter approach for
+# disconnected mode only.
+
 
 # Respects pup-ex isolation (ADR-003) — resolves under active home
 _CONFIG_PATH: Path | None = None
