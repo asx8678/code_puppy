@@ -486,7 +486,8 @@ defmodule CodePuppyControl.EventBus do
     Commands.InterruptShellCommand,
     Commands.UserInputResponse,
     Commands.ConfirmationResponse,
-    Commands.SelectionResponse
+    Commands.SelectionResponse,
+    Commands.AskUserQuestionResponse
   ]
 
   @spec broadcast_command(String.t() | nil, String.t() | nil, term(), keyword()) ::

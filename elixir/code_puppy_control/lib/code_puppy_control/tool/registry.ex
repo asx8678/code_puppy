@@ -386,7 +386,8 @@ defmodule CodePuppyControl.Tool.Registry do
       CodePuppyControl.Tools.CpFileMods.CpReplaceInFile,
       CodePuppyControl.Tools.CpFileMods.CpEditFile,
       CodePuppyControl.Tools.CpFileMods.CpDeleteFile,
-      CodePuppyControl.Tools.CpFileMods.CpDeleteSnippet
+      CodePuppyControl.Tools.CpFileMods.CpDeleteSnippet,
+      CodePuppyControl.Tools.CpAskUserQuestion
     ]
 
     Enum.filter(candidates, fn mod ->

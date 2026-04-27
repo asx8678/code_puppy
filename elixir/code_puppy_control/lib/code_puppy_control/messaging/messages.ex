@@ -25,10 +25,10 @@ defmodule CodePuppyControl.Messaging.Messages do
 
   - `CodePuppyControl.Messaging.ToolOutput` — file, grep, diff, shell, UC messages
   - `CodePuppyControl.Messaging.Agent` — reasoning, response, sub-agent messages
-  - `CodePuppyControl.Messaging.UserInteraction` — input, confirmation, selection
+  - `CodePuppyControl.Messaging.UserInteraction` — input, confirmation, selection, ask_user_question
   - `CodePuppyControl.Messaging.Control` — spinner, divider, status, version
   - `CodePuppyControl.Messaging.Skill` — skill list, skill activate
-  - `CodePuppyControl.Messaging.Entries` — FileEntry, GrepMatch, DiffLine, SkillEntry
+  - `CodePuppyControl.Messaging.Entries` — FileEntry, GrepMatch, DiffLine, SkillEntry, QuestionOption, Question, QuestionAnswer
 
   ## Design Notes
 
@@ -219,6 +219,10 @@ defmodule CodePuppyControl.Messaging.Messages do
   defdelegate selection_request(fields),
     to: CodePuppyControl.Messaging.UserInteraction
 
+  @doc false
+  defdelegate ask_user_question_request(fields),
+    to: CodePuppyControl.Messaging.UserInteraction
+
   # Control family
   @doc false
   defdelegate spinner_control(fields),
@@ -260,6 +264,18 @@ defmodule CodePuppyControl.Messaging.Messages do
 
   @doc false
   defdelegate skill_entry(fields),
+    to: CodePuppyControl.Messaging.Entries
+
+  @doc false
+  defdelegate question_option_entry(fields),
+    to: CodePuppyControl.Messaging.Entries
+
+  @doc false
+  defdelegate question_entry(fields),
+    to: CodePuppyControl.Messaging.Entries
+
+  @doc false
+  defdelegate question_answer_entry(fields),
     to: CodePuppyControl.Messaging.Entries
 
   # ── Private helpers ────────────────────────────────────────────────────────

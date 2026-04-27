@@ -96,7 +96,12 @@ defmodule CodePuppyControl.Agent.Loop.ToolDispatch do
     )
 
     # Dispatch via Tool.Runner (registry + permission check + validation + timeout)
-    context = Runner.build_context(run_id: state.run_id)
+    context =
+      Runner.build_context(
+        run_id: state.run_id,
+        session_id: state.session_id
+      )
+
     result = Runner.invoke(tool_call.name, tool_call.arguments, context)
 
     Events.publish(

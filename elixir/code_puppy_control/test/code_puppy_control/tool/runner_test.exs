@@ -89,11 +89,33 @@ defmodule CodePuppyControl.Tool.RunnerTest do
     end
   end
 
+  defmodule ToolTimeoutTool do
+    use CodePuppyControl.Tool
+
+    @impl true
+    def name, do: :runner_tool_timeout
+
+    @impl true
+    def description, do: "A tool that declares a custom tool_timeout"
+
+    @impl true
+    def parameters, do: %{"type" => "object", "properties" => %{}}
+
+    @impl true
+    def invoke(_args, _ctx) do
+      {:ok, "slow but within custom timeout"}
+    end
+
+    # Optional: declares custom timeout for Tool.Runner
+    @doc false
+    def tool_timeout, do: 300_000
+  end
+
   # ── Setup ─────────────────────────────────────────────────────────────────
 
   setup do
     Registry.clear()
-    Registry.register_many([EchoTool, BlockedTool, SlowTool, CrashTool])
+    Registry.register_many([EchoTool, BlockedTool, SlowTool, CrashTool, ToolTimeoutTool])
 
     on_exit(fn ->
       Registry.clear()
@@ -186,6 +208,32 @@ defmodule CodePuppyControl.Tool.RunnerTest do
 
     test "returns error for unknown tools" do
       assert {:error, _} = Runner.resolve_tool(:totally_unknown_tool)
+    end
+  end
+
+  describe "invoke/3 — module tool_timeout" do
+    test "uses tool's tool_timeout/0 when no context override" do
+      # ToolTimeoutTool defines tool_timeout/0 returning 300_000
+      result = Runner.invoke(:runner_tool_timeout, %{}, %{run_id: "test-tool-timeout"})
+      assert {:ok, "slow but within custom timeout"} = result
+    end
+
+    test "context timeout overrides tool_timeout" do
+      # Even though ToolTimeoutTool asks for 300_000, context says 100
+      result =
+        Runner.invoke(:runner_tool_timeout, %{}, %{
+          run_id: "test-ctx-override",
+          timeout: 100
+        })
+
+      # The tool is fast, so it should succeed before the 100ms timeout
+      assert {:ok, "slow but within custom timeout"} = result
+    end
+
+    test "build_context includes session_id when provided" do
+      ctx = Runner.build_context(run_id: "r1", session_id: "s1")
+      assert ctx.run_id == "r1"
+      assert ctx.session_id == "s1"
     end
   end
 
