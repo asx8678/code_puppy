@@ -6,17 +6,26 @@ defmodule CodePuppyControl.Tools.CpAgentOps do
   behaviour so the CodePuppy agent can call `cp_invoke_agent` and
   `cp_list_agents` via the tool registry.
 
-  Refs: code_puppy-4s8.7 (Phase C CI gate)
+  Delegates to `CodePuppyControl.Tools.AgentInvocation` for core logic.
+  Result shapes match Python's `AgentInvokeOutput` and `ListAgentsOutput`.
+
+  Refs: code_puppy-mmk.4 (Phase E), code_puppy-4s8.7 (Phase C CI gate)
   """
 
   defmodule CpInvokeAgent do
     @moduledoc """
     Invokes a sub-agent for a specialized task.
 
-    Delegates to `CodePuppyControl.Workers.AgentInvocation`.
+    Delegates to `AgentInvocation.invoke/3` for the full invocation
+    flow including session management, context filtering, and event emission.
+
+    Returns `%{response: ..., agent_name: ..., session_id: ..., error: ...}`
+    matching Python's `AgentInvokeOutput`.
     """
 
     use CodePuppyControl.Tool
+
+    alias CodePuppyControl.Tools.AgentInvocation
 
     @impl true
     def name, do: :cp_invoke_agent
@@ -24,7 +33,8 @@ defmodule CodePuppyControl.Tools.CpAgentOps do
     @impl true
     def description do
       "Invoke a specialized sub-agent to handle a focused task. " <>
-        "Use cp_list_agents to see available agents."
+        "Use cp_list_agents to see available agents. " <>
+        "Optionally provide a session_id to continue a previous conversation."
     end
 
     @impl true
@@ -39,6 +49,13 @@ defmodule CodePuppyControl.Tools.CpAgentOps do
           "prompt" => %{
             "type" => "string",
             "description" => "Task description for the sub-agent"
+          },
+          "session_id" => %{
+            "type" => "string",
+            "description" =>
+              "Optional session ID for continuing a conversation. " <>
+                "Auto-generated with a unique hash suffix if omitted. " <>
+                "Must be kebab-case (lowercase, hyphens only)."
           }
         },
         "required" => ["agent_name", "prompt"]
@@ -49,38 +66,52 @@ defmodule CodePuppyControl.Tools.CpAgentOps do
     def invoke(args, context) do
       agent_name = Map.get(args, "agent_name", "")
       prompt = Map.get(args, "prompt", "")
-      session_id = Map.get(context, :agent_session_id) || Map.get(context, "agent_session_id")
+      session_id = Map.get(args, "session_id")
 
-      case CodePuppyControl.Tools.AgentCatalogue.get_agent_module(agent_name) do
-        {:ok, _module} ->
-          # Start an agent run via Run.Manager
-          config = %{"prompt" => prompt}
+      # Extract parent context from the tool invocation context
+      # for sub-agent isolation filtering
+      parent_context = extract_parent_context(context)
 
-          case CodePuppyControl.Run.Manager.start_run(session_id, agent_name, config: config) do
-            {:ok, run_id} ->
-              {:ok, %{run_id: run_id, agent_name: agent_name, status: :started}}
+      result =
+        AgentInvocation.invoke(agent_name, prompt,
+          session_id: session_id,
+          context: parent_context
+        )
 
-            {:error, reason} ->
-              {:error, "Failed to start agent run: #{inspect(reason)}"}
-          end
-
-        {:error, :no_module} ->
-          {:error, "Agent found but has no module: #{agent_name}"}
-
-        :not_found ->
-          {:error, "Agent not found: #{agent_name}"}
+      # Convert to {:ok, ...} / {:error, ...} for Tool behaviour
+      if result.error do
+        {:error, result}
+      else
+        {:ok, result}
       end
     end
+
+    # Extracts relevant context from the tool invocation context map.
+    # The context map includes :run_id, :agent_module, :agent_session_id, etc.
+    defp extract_parent_context(context) when is_map(context) do
+      # Only pass string-keyed entries through the context filter
+      context
+      |> Enum.filter(fn
+        {k, _} when is_binary(k) -> true
+        _ -> false
+      end)
+      |> Map.new()
+    end
+
+    defp extract_parent_context(_), do: nil
   end
 
   defmodule CpListAgents do
     @moduledoc """
     Lists available sub-agents.
 
-    Delegates to `CodePuppyControl.Tools.AgentCatalogue.list_agents/0`.
+    Delegates to `AgentInvocation.list_agents/0`.
+    Returns `%{agents: [...], error: nil}` matching Python's `ListAgentsOutput`.
     """
 
     use CodePuppyControl.Tool
+
+    alias CodePuppyControl.Tools.AgentInvocation
 
     @impl true
     def name, do: :cp_list_agents
@@ -102,20 +133,13 @@ defmodule CodePuppyControl.Tools.CpAgentOps do
 
     @impl true
     def invoke(_args, _context) do
-      agents = CodePuppyControl.Tools.AgentCatalogue.list_agents()
+      result = AgentInvocation.list_agents()
 
-      {:ok,
-       %{
-         agents:
-           Enum.map(agents, fn info ->
-             %{
-               name: info.name,
-               display_name: info.display_name,
-               description: info.description
-             }
-           end),
-         count: length(agents)
-       }}
+      if result.error do
+        {:error, result.error}
+      else
+        {:ok, result}
+      end
     end
   end
 end

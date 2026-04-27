@@ -560,21 +560,54 @@ def register_list_agents(agent):
         list_agents_color = get_banner_color("list_agents")
 
         try:
-            from code_puppy.agents import get_agent_descriptions, get_available_agents
-
-            # Get available agents and their descriptions from the agent manager
-            agents_dict = get_available_agents()
-            descriptions_dict = get_agent_descriptions()
-
-            # Convert to list of AgentInfo objects
-            agents = [
-                AgentInfo(
-                    name=name,
-                    display_name=display_name,
-                    description=descriptions_dict.get(name, "No description available"),
+            # Try Elixir bridge first (code_puppy-mmk.4)
+            agents = None
+            try:
+                from code_puppy.plugins.elixir_bridge import (
+                    is_connected,
+                    call_elixir_agent_tools,
                 )
-                for name, display_name in agents_dict.items()
-            ]
+
+                if is_connected():
+                    try:
+                        import asyncio
+
+                        result = asyncio.run(
+                            call_elixir_agent_tools(
+                                "agent_tools.list",
+                                {},
+                                timeout=2.0,
+                            )
+                        )
+                        if result.get("status") != "timeout" and "agents" in result:
+                            agents = [
+                                AgentInfo(
+                                    name=a["name"],
+                                    display_name=a["display_name"],
+                                    description=a["description"],
+                                )
+                                for a in result["agents"]
+                            ]
+                    except Exception:
+                        pass  # Fallback to local on any error
+            except ImportError:
+                pass
+
+            if agents is None:
+                # Local fallback
+                from code_puppy.agents import get_agent_descriptions, get_available_agents
+
+                agents_dict = get_available_agents()
+                descriptions_dict = get_agent_descriptions()
+
+                agents = [
+                    AgentInfo(
+                        name=name,
+                        display_name=display_name,
+                        description=descriptions_dict.get(name, "No description available"),
+                    )
+                    for name, display_name in agents_dict.items()
+                ]
 
             # Quiet output - banner and count on same line
             agent_count = len(agents)
@@ -993,6 +1026,32 @@ async def invoke_agent_headless(
     Raises:
         RuntimeError: If agent loading or model initialization fails.
     """
+    # Try Elixir bridge first (code_puppy-mmk.4)
+    try:
+        from code_puppy.plugins.elixir_bridge import (
+            is_connected,
+            call_elixir_agent_tools,
+        )
+
+        if is_connected():
+            try:
+                result = await call_elixir_agent_tools(
+                    "agent_tools.invoke_headless",
+                    {
+                        "agent_name": agent_name,
+                        "prompt": prompt,
+                        "session_id": session_id,
+                    },
+                    timeout=30.0,
+                )
+                if result.get("status") != "timeout" and "response" in result:
+                    return result["response"]
+            except Exception:
+                pass  # Fallback to local on any error
+    except ImportError:
+        pass
+
+    # Local fallback
     from code_puppy.agents.agent_manager import load_agent
     from code_puppy.model_factory import ModelFactory, make_model_settings
     from code_puppy.model_utils import prepare_prompt_for_model
