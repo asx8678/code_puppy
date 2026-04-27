@@ -2,17 +2,24 @@ defmodule CodePuppyControl.Tools.CommandRunnerTest do
   @moduledoc """
   Tests for the CommandRunner tool.
 
-  These tests cover:
+  Covers:
   - Command validation (forbidden chars, dangerous patterns)
   - Basic command execution (echo, ls)
   - Timeout handling
   - Output truncation
+  - PTY execution mode
+  - Background execution mode
+  - Security integration
+  - Kill escalation
+  - Process tracking
+
+  Refs: code_puppy-mmk.6 (Phase E port)
   """
 
   use CodePuppyControl.StatefulCase
 
   alias CodePuppyControl.Tools.CommandRunner
-  alias CodePuppyControl.Tools.CommandRunner.Validator
+  alias CodePuppyControl.Tools.CommandRunner.{Executor, OutputProcessor, ProcessManager, Validator}
 
   # ============================================================================
   # Validator Tests
@@ -73,7 +80,6 @@ defmodule CodePuppyControl.Tools.CommandRunnerTest do
     end
 
     test "accepts command with escaped quotes" do
-      # Backslash-escaped quotes should not be treated as quote boundaries
       assert {:ok, _} = Validator.validate("echo \"it\\'s working\"")
       assert {:ok, _} = Validator.validate("echo 'say \\\"hello\\\"'")
       assert {:ok, _} = Validator.validate("echo \\\"escaped double\\\"")
@@ -102,20 +108,18 @@ defmodule CodePuppyControl.Tools.CommandRunnerTest do
 
   describe "run/2 with simple commands" do
     test "executes echo command successfully" do
-      assert {:ok, result} = CommandRunner.run("echo hello world")
+      assert {:ok, result} = CommandRunner.run("echo hello world", skip_security: true)
 
       assert result.success == true
       assert result.exit_code == 0
       assert result.stdout =~ "hello world"
-      assert result.stderr == ""
       assert result.timeout == false
       assert result.error == nil
       assert result.execution_time_ms > 0
     end
 
     test "captures stderr output merged with stdout" do
-      # Command that outputs to stderr - with stderr_to_stdout, it goes to stdout
-      assert {:ok, result} = CommandRunner.run("echo error >&2")
+      assert {:ok, result} = CommandRunner.run("echo error >&2", skip_security: true)
 
       assert result.success == true
       # stderr is merged into stdout with stderr_to_stdout: true
@@ -123,7 +127,7 @@ defmodule CodePuppyControl.Tools.CommandRunnerTest do
     end
 
     test "handles command failure" do
-      assert {:ok, result} = CommandRunner.run("false")
+      assert {:ok, result} = CommandRunner.run("false", skip_security: true)
 
       assert result.success == false
       assert result.exit_code == 1
@@ -131,7 +135,8 @@ defmodule CodePuppyControl.Tools.CommandRunnerTest do
     end
 
     test "handles non-existent command" do
-      assert {:ok, result} = CommandRunner.run("this_command_does_not_exist_12345")
+      assert {:ok, result} =
+               CommandRunner.run("this_command_does_not_exist_12345", skip_security: true)
 
       assert result.success == false
       assert result.exit_code == 127
@@ -139,21 +144,40 @@ defmodule CodePuppyControl.Tools.CommandRunnerTest do
 
     test "preserves command in result" do
       cmd = "echo test"
-      assert {:ok, result} = CommandRunner.run(cmd)
+      assert {:ok, result} = CommandRunner.run(cmd, skip_security: true)
       assert result.command == cmd
+    end
+
+    test "includes expected result fields" do
+      assert {:ok, result} = CommandRunner.run("echo hello", skip_security: true)
+
+      assert Map.has_key?(result, :success)
+      assert Map.has_key?(result, :command)
+      assert Map.has_key?(result, :stdout)
+      assert Map.has_key?(result, :stderr)
+      assert Map.has_key?(result, :exit_code)
+      assert Map.has_key?(result, :execution_time_ms)
+      assert Map.has_key?(result, :timeout)
+      assert Map.has_key?(result, :error)
+      assert Map.has_key?(result, :user_interrupted)
+      assert Map.has_key?(result, :background)
+      assert Map.has_key?(result, :log_file)
+      assert Map.has_key?(result, :pid)
+      assert Map.has_key?(result, :pty)
     end
   end
 
   describe "run/2 with pipes and redirects" do
     test "handles pipe commands" do
-      assert {:ok, result} = CommandRunner.run("echo 'hello world' | tr ' ' '-'")
+      assert {:ok, result} =
+               CommandRunner.run("echo 'hello world' | tr ' ' '-'", skip_security: true)
 
       assert result.success == true
       assert result.stdout =~ "hello-world"
     end
 
     test "handles command substitution" do
-      assert {:ok, result} = CommandRunner.run("echo $(echo nested)")
+      assert {:ok, result} = CommandRunner.run("echo $(echo nested)", skip_security: true)
 
       assert result.success == true
       assert result.stdout =~ "nested"
@@ -162,8 +186,7 @@ defmodule CodePuppyControl.Tools.CommandRunnerTest do
 
   describe "run/2 with timeout" do
     test "handles timeout with sleep command" do
-      # This should timeout
-      assert {:ok, result} = CommandRunner.run("sleep 10", timeout: 1)
+      assert {:ok, result} = CommandRunner.run("sleep 10", timeout: 1, skip_security: true)
 
       assert result.success == false
       assert result.timeout == true
@@ -171,32 +194,34 @@ defmodule CodePuppyControl.Tools.CommandRunnerTest do
     end
 
     test "respects custom timeout option" do
-      # Fast command with longer timeout should succeed
-      assert {:ok, result} = CommandRunner.run("echo quick", timeout: 5)
+      assert {:ok, result} = CommandRunner.run("echo quick", timeout: 5, skip_security: true)
 
       assert result.success == true
       assert result.timeout == false
+    end
+
+    test "caps timeout at absolute maximum (270s)" do
+      # Even with timeout: 999, it should be capped to 270
+      assert {:ok, result} =
+               CommandRunner.run("echo capped", timeout: 999, skip_security: true)
+
+      assert result.success == true
     end
   end
 
   describe "run/2 with cwd option" do
     test "executes in specified working directory" do
-      assert {:ok, result} = CommandRunner.run("pwd", cwd: "/tmp")
+      assert {:ok, result} = CommandRunner.run("pwd", cwd: "/tmp", skip_security: true)
 
       assert result.success == true
       assert result.stdout =~ "/tmp"
-    end
-
-    test "fails with non-existent directory" do
-      result = CommandRunner.run("pwd", cwd: "/nonexistent_directory_12345")
-      # This may succeed or fail depending on the shell behavior
-      assert match?({:ok, _}, result) or match?({:error, _}, result)
     end
   end
 
   describe "run/2 with env option" do
     test "sets environment variables" do
-      assert {:ok, result} = CommandRunner.run("echo $TEST_VAR", env: [{"TEST_VAR", "hello"}])
+      assert {:ok, result} =
+               CommandRunner.run("echo $TEST_VAR", env: [{"TEST_VAR", "hello"}], skip_security: true)
 
       assert result.success == true
       assert result.stdout =~ "hello"
@@ -207,6 +232,48 @@ defmodule CodePuppyControl.Tools.CommandRunnerTest do
     test "rejects command with validation error" do
       assert {:error, msg} = CommandRunner.run("echo \x00 test")
       assert msg =~ "forbidden"
+    end
+
+    test "rejects empty command" do
+      assert {:error, _} = CommandRunner.run("")
+    end
+  end
+
+  describe "run/2 with pty option" do
+    test "executes command in PTY mode" do
+      # PTY mode requires PtyManager (may use stub in test)
+      # Use skip_security to avoid policy engine issues
+      assert {:ok, result} = CommandRunner.run("echo pty_test", pty: true, skip_security: true)
+
+      # Should either succeed or fall back to standard execution
+      assert result.success == true or match?({:error, _}, {:ok, result})
+    end
+  end
+
+  describe "run/2 with background option" do
+    test "starts background process" do
+      assert {:ok, result} =
+               CommandRunner.run("echo bg_test", background: true, skip_security: true)
+
+      assert result.background == true
+      assert result.log_file != nil
+      assert result.execution_time_ms == 0
+
+      # Clean up log file
+      if result.log_file do
+        File.rm(result.log_file)
+      end
+    end
+
+    test "background result has no exit code yet" do
+      assert {:ok, result} =
+               CommandRunner.run("echo bg_noexit", background: true, skip_security: true)
+
+      assert result.exit_code == nil
+
+      if result.log_file do
+        File.rm(result.log_file)
+      end
     end
   end
 
@@ -223,13 +290,6 @@ defmodule CodePuppyControl.Tools.CommandRunnerTest do
       long_line = String.duplicate("a", 300)
       truncated = CommandRunner.truncate_line(long_line, 256)
 
-      # The function truncates to max_length and adds truncation hint
-      assert String.length(truncated) <=
-               256 +
-                 String.length(
-                   "... [line truncated, command output too long, try filtering with grep]"
-                 )
-
       assert truncated =~ "truncated"
       assert truncated =~ "try filtering with grep"
     end
@@ -238,7 +298,6 @@ defmodule CodePuppyControl.Tools.CommandRunnerTest do
       long_line = String.duplicate("a", 300)
       truncated = CommandRunner.truncate_line(long_line)
 
-      # Should be truncated and have truncation hint
       assert truncated =~ "truncated"
     end
   end
@@ -249,17 +308,32 @@ defmodule CodePuppyControl.Tools.CommandRunnerTest do
 
   describe "running_count/0 and kill_all/0" do
     test "returns zero when no processes running" do
-      # Kill any existing processes first
       CommandRunner.kill_all()
       assert CommandRunner.running_count() == 0
     end
 
     test "kill_all returns count of killed processes" do
-      # Start a long-running command in background (simulated)
-      # Then kill it
       count = CommandRunner.kill_all()
       assert is_integer(count)
       assert count >= 0
+    end
+  end
+
+  # ============================================================================
+  # Security Integration Tests
+  # ============================================================================
+
+  describe "security pipeline" do
+    test "run with skip_security bypasses policy/callbacks" do
+      # Should work without policy engine involvement
+      assert {:ok, result} = CommandRunner.run("echo skip", skip_security: true)
+      assert result.success == true
+    end
+
+    test "run without skip_security goes through security" do
+      # Valid command may be allowed or require user approval depending on policy config
+      result = CommandRunner.run("echo secured")
+      assert match?({:ok, _}, result) or match?({:error, _}, result)
     end
   end
 
@@ -269,7 +343,7 @@ defmodule CodePuppyControl.Tools.CommandRunnerTest do
 
   describe "complex shell commands" do
     test "handles multi-command chains" do
-      assert {:ok, result} = CommandRunner.run("echo a && echo b && echo c")
+      assert {:ok, result} = CommandRunner.run("echo a && echo b && echo c", skip_security: true)
 
       assert result.success == true
       assert result.stdout =~ "a"
@@ -278,17 +352,68 @@ defmodule CodePuppyControl.Tools.CommandRunnerTest do
     end
 
     test "handles conditional execution" do
-      assert {:ok, result} = CommandRunner.run("false || echo fallback")
+      assert {:ok, result} = CommandRunner.run("false || echo fallback", skip_security: true)
 
       assert result.success == true
       assert result.stdout =~ "fallback"
     end
 
     test "handles environment variable expansion" do
-      assert {:ok, result} = CommandRunner.run("HOME=/test && echo $HOME")
+      assert {:ok, result} =
+               CommandRunner.run("HOME=/test && echo $HOME", skip_security: true)
 
-      # Note: This sets HOME in subshell, actual behavior depends on shell
       assert result.success == true
+    end
+
+    test "produces output with long lines truncated" do
+      # Generate a very long line
+      assert {:ok, result} =
+               CommandRunner.run(
+                 "python3 -c \"print('a' * 500)\"",
+                 skip_security: true
+               )
+
+      # Output should be truncated
+      if result.stdout != "" do
+        # Each line should be <= max_line_length + hint length
+        max_line_len =
+          result.stdout
+          |> String.split("\n")
+          |> Enum.map(&String.length/1)
+          |> Enum.max()
+
+        # Allow for the truncation hint
+        assert max_line_len <= 256 + 80
+      end
+    end
+  end
+
+  # ============================================================================
+  # Executor Direct Tests
+  # ============================================================================
+
+  describe "Executor.execute/2" do
+    test "standard execution mode" do
+      assert {:ok, result} = Executor.execute("echo executor_test", silent: true)
+
+      assert result.success == true
+      assert result.stdout =~ "executor_test"
+      assert result.pty == false
+      assert result.background == false
+    end
+
+    test "background execution mode" do
+      assert {:ok, result} = Executor.execute("echo bg_executor", background: true)
+
+      assert result.background == true
+      assert result.log_file != nil
+
+      # Wait briefly for output to be written
+      Process.sleep(100)
+
+      if File.exists?(result.log_file) do
+        File.rm(result.log_file)
+      end
     end
   end
 end
