@@ -46,13 +46,13 @@ def read_message():
 
         return json.loads(body)
 
-    except (json.JSONDecodeError, Exception):
+    except json.JSONDecodeError, Exception:
         return None
 
 
 def write_message(msg):
     """Write a JSON-RPC message to stdout with Content-Length framing."""
-    body = json.dumps(msg, separators=(',', ':'))
+    body = json.dumps(msg, separators=(",", ":"))
     framed = f"Content-Length: {len(body)}\r\n\r\n{body}"
     sys.stdout.write(framed)
     sys.stdout.flush()
@@ -60,21 +60,13 @@ def write_message(msg):
 
 def send_notification(method, params):
     """Send a JSON-RPC notification (no response expected)."""
-    notification = {
-        "jsonrpc": "2.0",
-        "method": method,
-        "params": params
-    }
+    notification = {"jsonrpc": "2.0", "method": method, "params": params}
     write_message(notification)
 
 
 def send_response(result, msg_id):
     """Send a JSON-RPC success response."""
-    response = {
-        "jsonrpc": "2.0",
-        "id": msg_id,
-        "result": result
-    }
+    response = {"jsonrpc": "2.0", "id": msg_id, "result": result}
     write_message(response)
 
 
@@ -83,10 +75,7 @@ def send_error(code, message, msg_id, data=None):
     error = {
         "jsonrpc": "2.0",
         "id": msg_id,
-        "error": {
-            "code": code,
-            "message": message
-        }
+        "error": {"code": code, "message": message},
     }
     if data is not None:
         error["error"]["data"] = data
@@ -95,43 +84,51 @@ def send_error(code, message, msg_id, data=None):
 
 def handle_ping(params, msg_id):
     """Handle ping/health check - returns immediately for spawn latency test."""
-    send_response({
-        "status": "ok",
-        "timestamp": int(time.time() * 1000000)  # microseconds
-    }, msg_id)
+    send_response(
+        {
+            "status": "ok",
+            "timestamp": int(time.time() * 1000000),  # microseconds
+        },
+        msg_id,
+    )
 
 
 def handle_echo(params, msg_id):
     """Handle echo test - returns the input for round-trip measurement."""
-    send_response({
-        "echo": params.get("message", ""),
-        "timestamp": int(time.time() * 1000000),  # microseconds
-        "worker_pid": os.getpid()
-    }, msg_id)
+    send_response(
+        {
+            "echo": params.get("message", ""),
+            "timestamp": int(time.time() * 1000000),  # microseconds
+            "worker_pid": os.getpid(),
+        },
+        msg_id,
+    )
 
 
 def handle_initialize(params, msg_id):
     """Handle initialize request - signals worker is ready."""
-    send_response({
-        "status": "initialized",
-        "capabilities": {
-            "echo": True,
-            "crash": True,
-            "ping": True
+    send_response(
+        {
+            "status": "initialized",
+            "capabilities": {"echo": True, "crash": True, "ping": True},
+            "worker_pid": os.getpid(),
+            "timestamp": int(time.time() * 1000000),
         },
-        "worker_pid": os.getpid(),
-        "timestamp": int(time.time() * 1000000)
-    }, msg_id)
+        msg_id,
+    )
 
 
 def handle_crash(params, msg_id):
     """Handle crash command - exits the process for fault recovery test."""
     # Acknowledge the crash command before exiting
-    send_response({
-        "status": "crashing",
-        "message": "Exiting as requested",
-        "timestamp": int(time.time() * 1000000)
-    }, msg_id)
+    send_response(
+        {
+            "status": "crashing",
+            "message": "Exiting as requested",
+            "timestamp": int(time.time() * 1000000),
+        },
+        msg_id,
+    )
     sys.stdout.flush()
     # Force exit
     os._exit(1)
@@ -139,10 +136,9 @@ def handle_crash(params, msg_id):
 
 def handle_stats(params, msg_id):
     """Return worker statistics."""
-    send_response({
-        "worker_pid": os.getpid(),
-        "timestamp": int(time.time() * 1000000)
-    }, msg_id)
+    send_response(
+        {"worker_pid": os.getpid(), "timestamp": int(time.time() * 1000000)}, msg_id
+    )
 
 
 def dispatch_request(msg):
@@ -155,10 +151,10 @@ def dispatch_request(msg):
     if msg_id is None:
         if method == "initialize":
             # Send notification response
-            send_notification("initialized", {
-                "status": "ready",
-                "timestamp": int(time.time() * 1000000)
-            })
+            send_notification(
+                "initialized",
+                {"status": "ready", "timestamp": int(time.time() * 1000000)},
+            )
         return True
 
     # Route to handler based on method
@@ -195,12 +191,15 @@ def main():
             run_id = args[i + 1]
 
     # Send startup notification
-    send_notification("system.ready", {
-        "status": "ready",
-        "run_id": run_id,
-        "worker_pid": os.getpid(),
-        "timestamp": int(time.time() * 1000000)
-    })
+    send_notification(
+        "system.ready",
+        {
+            "status": "ready",
+            "run_id": run_id,
+            "worker_pid": os.getpid(),
+            "timestamp": int(time.time() * 1000000),
+        },
+    )
 
     running = True
     while running:
