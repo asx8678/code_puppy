@@ -40,7 +40,7 @@ The plugin loader will discover files matching either extension:
 | File Pattern | Discovery Priority | Compilation |
 |---|---|---|
 | `register_callbacks.ex` | **1st** (preferred) | `Code.compile_file/1` — produces `.beam` |
-| `register_callbacks.exs` | **2nd** (fallback) | `Code.eval_file/1` — no `.beam` |
+| `register_callbacks.exs` | **2nd** (fallback) | `Code.eval_file/1` — no `.beam`, but MUST define a `PluginBehaviour` module |
 
 When both exist, `register_callbacks.ex` wins. This mirrors Python's
 single-file convention (`register_callbacks.py`) while honoring Elixir's
@@ -48,10 +48,12 @@ single-file convention (`register_callbacks.py`) while honoring Elixir's
 
 **Rationale**: `.ex` files are proper Elixir modules compiled to BEAM
 bytecode. They can implement behaviours, define structs, and participate
-in the type system. `.exs` files are scripts — they execute top-level
-side effects and are evaluated, not compiled. Supporting both maximises
-ergonomics for plugin authors while maintaining type safety for
-production plugins.
+in the type system. `.exs` files are evaluated (not compiled to `.beam`),
+but **must still define a module implementing `PluginBehaviour`**. This
+ensures all plugins have a name, type, and lifecycle — properties that
+inline scripts (no module) cannot provide. The only difference between
+`.ex` and `.exs` is the compilation method; the structural requirement
+remains the same.
 
 ### D2: Builtin plugins — static compilation for `priv/plugins/*.ex`
 
@@ -73,8 +75,10 @@ The static-compilation alternative (adding `priv/plugins/` to
 
 **The decision: keep dynamic compilation for builtin `priv/plugins/`.**
 
-`.exs` files in `priv/plugins/` are evaluated via `Code.eval_file/1`,
-which is stateless and side-effect-only — no BEAM files produced.
+`.exs` files in `priv/plugins/` are evaluated via `Code.eval_file/1`.
+Like `.ex` files, they **must define a module implementing
+`PluginBehaviour`**. No BEAM files are produced, but the module is
+available in-memory for introspection and lifecycle management.
 
 ### D3: User plugins — `.code_puppy_ex/plugins/` with security guards
 
@@ -133,6 +137,8 @@ discover_plugin(dir, base_dir):
     Code.compile_file(file) → find PluginBehaviour modules → register
   elif file ends with .exs:
     Code.eval_file(file)   → find PluginBehaviour modules → register
+    # NOTE: .exs files MUST define a PluginBehaviour module.
+    # Inline scripts with no module are not supported.
 ```
 
 ### Compilation Semantics
@@ -140,12 +146,15 @@ discover_plugin(dir, base_dir):
 | Extension | Function | BEAM Produced | Module Available | Re-load |
 |---|---|---|---|---|
 | `.ex` | `Code.compile_file/1` | ✅ Yes (in-memory) | ✅ Yes | Call `Code.compile_file/1` again |
-| `.exs` | `Code.eval_file/1` | ❌ No | Only if `defmodule` is in the script | Call `Code.eval_file/1` again |
+| `.exs` | `Code.eval_file/1` | ❌ No | Only if `defmodule` with `PluginBehaviour` is in the script | Call `Code.eval_file/1` again |
 
 **Key difference**: `Code.compile_file/1` is preferred because it
-produces proper BEAM modules that can implement behaviours and be
-introspected. `Code.eval_file/1` is a convenience for simple scripts
-that register callbacks inline (no module definition needed).
+produces proper BEAM modules that survive hot-code upgrades.
+`Code.eval_file/1` evaluates the script without producing a `.beam`
+file, but the script must still define a `PluginBehaviour` module.
+Inline scripts that merely execute side effects without defining a
+module are NOT supported — they lack identity, lifecycle hooks,
+and cannot be tracked or cleaned up by the loader.
 
 ### Security Invariants
 
@@ -209,11 +218,12 @@ same as Python plugins.
   <100ms. For large plugin directories, this could become noticeable.
   Mitigation: plugin count is expected to stay small; if it grows,
   consider a compile cache or lazy loading.
-- **`.exs` scripts can't implement behaviours properly**: A `.exs` file
-  that defines a `defmodule` with `@behaviour PluginBehaviour` works,
+- **`.exs` modules lack `.beam` files**: A `.exs` file that defines
+  a `defmodule` with `@behaviour PluginBehaviour` works at runtime,
   but the module won't have a `.beam` file. This limits introspection
   and hot-code upgrade. Mitigation: documented as "prefer `.ex` for
-  production plugins".
+  production plugins". Inline `.exs` scripts without a module are
+  NOT supported (see Decision D1 rationale).
 - **No sandboxing**: User plugins run with full privileges. This is
   the same posture as Python but is worth restating.
 

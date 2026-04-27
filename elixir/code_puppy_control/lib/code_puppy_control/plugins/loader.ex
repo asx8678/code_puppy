@@ -47,7 +47,7 @@ defmodule CodePuppyControl.Plugins.Loader do
   | Extension | Function          | BEAM  | Use Case                  |
   |-----------|-------------------|-------|---------------------------|
   | `.ex`     | `Code.compile_file/1` | ✅  | Proper modules with behaviours |
-  | `.exs`    | `Code.eval_file/1`    | ❌  | Lightweight scripts, inline callbacks |
+  | `.exs`    | `Code.eval_file/1`    | ❌  | Scripts that define a `PluginBehaviour` module (no `.beam`) |
 
   ## Discovery
 
@@ -313,44 +313,55 @@ defmodule CodePuppyControl.Plugins.Loader do
       Logger.warning("SECURITY: Skipping user plugin with suspicious name: #{plugin_name}")
       []
     else
-      plugin_files = Discovery.discover_plugin_files(plugin_dir)
+      # Guard against the plugin directory itself being a symlink
+      # that escapes the plugins base (e.g. evil_plugin → /tmp/escape).
+      unless safe_plugin_path?(plugin_dir, plugins_dir) do
+        Logger.warning(
+          "SECURITY: Skipping user plugin '#{plugin_name}' — " <>
+            "directory canonical path escapes plugins directory"
+        )
 
-      safe_files =
-        Enum.filter(plugin_files, fn file ->
-          if safe_plugin_path?(file, plugins_dir) do
-            true
-          else
-            Logger.warning(
-              "SECURITY: Skipping user plugin file #{file} — canonical path escapes plugins directory"
-            )
+        []
+      else
+        plugin_files = Discovery.discover_plugin_files(plugin_dir)
 
-            false
-          end
-        end)
+        safe_files =
+          Enum.filter(plugin_files, fn file ->
+            if safe_plugin_path?(file, plugins_dir) do
+              true
+            else
+              Logger.warning(
+                "SECURITY: Skipping user plugin file #{file} — canonical path escapes plugins directory"
+              )
 
-      case safe_files do
-        [] ->
-          Logger.warning("No .ex/.exs files found in user plugin: #{plugin_name}")
-          []
-
-        files ->
-          Enum.flat_map(files, fn file ->
-            Logger.warning(
-              "SECURITY: Loading user plugin '#{plugin_name}' from #{file} — " <>
-                "executes arbitrary Elixir code with full system privileges!"
-            )
-
-            try do
-              Discovery.load_and_register_plugin_file(file, :user, &register_plugin/2)
-            rescue
-              e ->
-                Logger.error(
-                  "Failed to load user plugin '#{plugin_name}': #{Exception.message(e)}"
-                )
-
-                []
+              false
             end
           end)
+
+        case safe_files do
+          [] ->
+            Logger.warning("No .ex/.exs files found in user plugin: #{plugin_name}")
+            []
+
+          files ->
+            Enum.flat_map(files, fn file ->
+              Logger.warning(
+                "SECURITY: Loading user plugin '#{plugin_name}' from #{file} — " <>
+                  "executes arbitrary Elixir code with full system privileges!"
+              )
+
+              try do
+                Discovery.load_and_register_plugin_file(file, :user, &register_plugin/2)
+              rescue
+                e ->
+                  Logger.error(
+                    "Failed to load user plugin '#{plugin_name}': #{Exception.message(e)}"
+                  )
+
+                  []
+              end
+            end)
+        end
       end
     end
   end
@@ -376,30 +387,51 @@ defmodule CodePuppyControl.Plugins.Loader do
       function_exported?(module, :register, 0) ->
         try do
           case module.register() do
-            :ok -> :ok
+            :ok ->
+              :ok
+
             {:error, reason} ->
-              Logger.warning("Plugin #{module.name()} register/0 returned error: #{inspect(reason)}")
+              Logger.warning(
+                "Plugin #{module.name()} register/0 returned error: #{inspect(reason)}"
+              )
+
             other ->
-              Logger.warning("Plugin #{module.name()} register/0 returned unexpected: #{inspect(other)}")
+              Logger.warning(
+                "Plugin #{module.name()} register/0 returned unexpected: #{inspect(other)}"
+              )
           end
         rescue
           e ->
             Logger.error("Plugin #{module.name()} register/0 raised: #{Exception.message(e)}")
+        catch
+          kind, reason ->
+            Logger.error(
+              "Plugin #{module.name()} register/0 crashed: #{Exception.format(kind, reason)}"
+            )
         end
 
       function_exported?(module, :register_callbacks, 0) ->
-        callbacks = module.register_callbacks()
+        # Crash isolation: catch errors so a broken plugin cannot
+        # crash the host or prevent later plugins from loading.
+        try do
+          callbacks = module.register_callbacks()
 
-        Enum.each(callbacks, fn {hook_name, fun} ->
-          try do
-            Callbacks.register(hook_name, fun)
-          rescue
-            ArgumentError ->
-              Logger.warning(
-                "Plugin #{module.name()} registered callback for unknown hook: #{hook_name}"
-              )
-          end
-        end)
+          Enum.each(callbacks, fn {hook_name, fun} ->
+            try do
+              Callbacks.register(hook_name, fun)
+            rescue
+              ArgumentError ->
+                Logger.warning(
+                  "Plugin #{module.name()} registered callback for unknown hook: #{hook_name}"
+                )
+            end
+          end)
+        rescue
+          e ->
+            Logger.error(
+              "Plugin #{module.name()} register_callbacks/0 raised: #{Exception.message(e)}"
+            )
+        end
 
       true ->
         Logger.warning(
@@ -408,7 +440,19 @@ defmodule CodePuppyControl.Plugins.Loader do
     end
 
     if function_exported?(module, :startup, 0) do
-      module.startup()
+      # Crash isolation: startup/0 errors must not crash the host or
+      # prevent later plugins from loading.
+      try do
+        module.startup()
+      rescue
+        e ->
+          Logger.error("Plugin #{module.name()} startup/0 raised: #{Exception.message(e)}")
+      catch
+        kind, reason ->
+          Logger.error(
+            "Plugin #{module.name()} startup/0 crashed: #{Exception.format(kind, reason)}"
+          )
+      end
     end
 
     Logger.info("Loaded #{type} plugin: #{module.name()}")
@@ -437,29 +481,13 @@ defmodule CodePuppyControl.Plugins.Loader do
   """
   @spec safe_plugin_path?(String.t(), String.t()) :: boolean()
   def safe_plugin_path?(path, base_dir) do
-    canonical = canonicalize_path(path)
-    canonical_base = canonicalize_path(base_dir)
-    String.starts_with?(canonical, canonical_base <> "/")
-  end
-
-  @spec canonicalize_path(String.t()) :: String.t()
-  defp canonicalize_path(path) do
-    expanded = Path.expand(path)
-
-    case File.read_link(expanded) do
-      {:ok, target} ->
-        target_path =
-          if Path.type(target) == :absolute do
-            target
-          else
-            Path.expand(target, Path.dirname(expanded))
-          end
-
-        canonicalize_path(target_path)
-
-      {:error, _} ->
-        expanded
-    end
+    # Use Paths.canonical_resolve/1 which walks ALL intermediate directory
+    # symlinks, not just the final path component. This prevents attacks
+    # where an intermediate directory in the path is a symlink pointing
+    # outside the plugins base (e.g. plugin_dir → /tmp/escape).
+    canonical = Paths.canonical_resolve(path)
+    canonical_base = Paths.canonical_resolve(base_dir)
+    canonical == canonical_base or String.starts_with?(canonical, canonical_base <> "/")
   end
 
   # ── ETS Table Management ────────────────────────────────────────

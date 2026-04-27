@@ -273,6 +273,77 @@ defmodule CodePuppyControl.Plugins.LoaderADR006Test do
       File.rm_rf!(plugins_base)
       File.rm_rf!(outside_dir)
     end
+
+    test "rejects plugin directory that is a symlink to outside" do
+      tmp_dir = System.tmp_dir!()
+      uniq = :erlang.unique_integer([:positive])
+      plugins_base = Path.join(tmp_dir, "cp_symlink_dir_test_#{uniq}")
+      File.mkdir_p!(plugins_base)
+
+      # Create an outside directory
+      outside_dir = Path.join(tmp_dir, "cp_outside_dir_#{uniq}")
+      File.mkdir_p!(outside_dir)
+
+      # Symlink the plugin directory itself to outside
+      symlink_plugin = Path.join(plugins_base, "symlinked_plugin")
+      File.ln_s!(outside_dir, symlink_plugin)
+
+      # The symlinked plugin directory should be rejected
+      refute Loader.safe_plugin_path?(symlink_plugin, plugins_base)
+
+      File.rm_rf!(plugins_base)
+      File.rm_rf!(outside_dir)
+    end
+
+    test "rejects intermediate directory symlink that escapes" do
+      tmp_dir = System.tmp_dir!()
+      uniq = :erlang.unique_integer([:positive])
+      plugins_base = Path.join(tmp_dir, "cp_symlink_nested_test_#{uniq}")
+      plugin_dir = Path.join(plugins_base, "nested_escape")
+      File.mkdir_p!(plugin_dir)
+
+      # Create an outside directory
+      outside_dir = Path.join(tmp_dir, "cp_outside_nested_#{uniq}")
+      File.mkdir_p!(outside_dir)
+
+      # Replace a subdirectory inside plugin_dir with a symlink to outside
+      internal_link = Path.join(plugin_dir, "subdir")
+      File.ln_s!(outside_dir, internal_link)
+
+      # File accessed through the symlinked intermediate dir
+      file_path = Path.join(internal_link, "register_callbacks.ex")
+
+      refute Loader.safe_plugin_path?(file_path, plugins_base)
+
+      File.rm_rf!(plugins_base)
+      File.rm_rf!(outside_dir)
+    end
+
+    test "allows valid internal symlink within plugins dir" do
+      tmp_dir = System.tmp_dir!()
+      uniq = :erlang.unique_integer([:positive])
+      plugins_base = Path.join(tmp_dir, "cp_symlink_safe_test_#{uniq}")
+      File.mkdir_p!(plugins_base)
+
+      # Create a shared directory within plugins_base
+      shared_dir = Path.join(plugins_base, "_shared")
+      File.mkdir_p!(shared_dir)
+
+      shared_file = Path.join(shared_dir, "helper.ex")
+      File.write!(shared_file, "# safe")
+
+      # Create a plugin directory with a symlink to the shared file
+      plugin_dir = Path.join(plugins_base, "safe_plugin")
+      File.mkdir_p!(plugin_dir)
+
+      symlink_path = Path.join(plugin_dir, "register_callbacks.ex")
+      File.ln_s!(shared_file, symlink_path)
+
+      # The internal symlink should be allowed
+      assert Loader.safe_plugin_path?(symlink_path, plugins_base)
+
+      File.rm_rf!(plugins_base)
+    end
   end
 
   # ── GATE-F1-6: Path traversal rejected ──────────────────────────
@@ -352,15 +423,79 @@ defmodule CodePuppyControl.Plugins.LoaderADR006Test do
       """)
 
       # Should not crash — register/0 errors are caught and logged
-      result = Loader.load_and_register_plugin_file(
-        Path.join(bad_dir, "broken.ex"),
-        :builtin
-      )
+      result =
+        Loader.load_and_register_plugin_file(
+          Path.join(bad_dir, "broken.ex"),
+          :builtin
+        )
 
       # The plugin module is loaded; its name is returned
       # (even though register/0 raised, the plugin is still registered)
       assert is_list(result)
       assert :broken in result or "broken" in result
+
+      File.rm_rf!(bad_dir)
+    end
+
+    test "broken startup/0 does not crash loader" do
+      tmp_dir = System.tmp_dir!()
+      uniq = :erlang.unique_integer([:positive])
+      bad_dir = Path.join(tmp_dir, "cp_bad_startup_test_#{uniq}")
+      File.mkdir_p!(bad_dir)
+
+      File.write!(Path.join(bad_dir, "broken_startup.ex"), """
+      defmodule BrokenStartupPlugin do
+        use CodePuppyControl.Plugins.PluginBehaviour
+        @impl true
+        def name, do: :broken_startup
+        @impl true
+        def register, do: :ok
+        @impl true
+        def startup do
+          raise "intentional crash in startup/0"
+        end
+      end
+      """)
+
+      # Should not crash — startup/0 errors are caught and logged
+      result =
+        Loader.load_and_register_plugin_file(
+          Path.join(bad_dir, "broken_startup.ex"),
+          :builtin
+        )
+
+      assert is_list(result)
+      assert :broken_startup in result or "broken_startup" in result
+
+      File.rm_rf!(bad_dir)
+    end
+
+    test "broken register_callbacks/0 does not crash loader" do
+      tmp_dir = System.tmp_dir!()
+      uniq = :erlang.unique_integer([:positive])
+      bad_dir = Path.join(tmp_dir, "cp_bad_rc_test_#{uniq}")
+      File.mkdir_p!(bad_dir)
+
+      File.write!(Path.join(bad_dir, "broken_rc.ex"), """
+      defmodule BrokenRCPlugin do
+        use CodePuppyControl.Plugins.PluginBehaviour
+        @impl true
+        def name, do: :broken_rc
+        @impl true
+        def register do
+          raise "intentional crash in register/0"
+        end
+      end
+      """)
+
+      # Should not crash — register_callbacks/0 errors are caught
+      result =
+        Loader.load_and_register_plugin_file(
+          Path.join(bad_dir, "broken_rc.ex"),
+          :builtin
+        )
+
+      assert is_list(result)
 
       File.rm_rf!(bad_dir)
     end
@@ -398,19 +533,22 @@ defmodule CodePuppyControl.Plugins.LoaderADR006Test do
       """)
 
       # Load once — discovers new module
-      names1 = Loader.load_and_register_plugin_file(
-        Path.join(plugin_dir, "register_callbacks.ex"),
-        :builtin
-      )
+      names1 =
+        Loader.load_and_register_plugin_file(
+          Path.join(plugin_dir, "register_callbacks.ex"),
+          :builtin
+        )
+
       assert is_list(names1) and length(names1) >= 1
 
       # Load again — Code.compile_file/1 redefines the module in memory,
       # but since it was already in loaded_modules() from the first call,
       # new_modules will be empty (the module already exists in :code.all_loaded/0)
-      names2 = Loader.load_and_register_plugin_file(
-        Path.join(plugin_dir, "register_callbacks.ex"),
-        :builtin
-      )
+      names2 =
+        Loader.load_and_register_plugin_file(
+          Path.join(plugin_dir, "register_callbacks.ex"),
+          :builtin
+        )
 
       # names2 will be [] because the module was already loaded;
       # this is the correct idempotent behaviour
@@ -424,7 +562,11 @@ defmodule CodePuppyControl.Plugins.LoaderADR006Test do
 
   describe "discover_plugin_files/1" do
     test "returns empty list for non-existent directory" do
-      files = Loader.discover_plugin_files("/tmp/nonexistent_dir_#{:erlang.unique_integer([:positive])}")
+      files =
+        Loader.discover_plugin_files(
+          "/tmp/nonexistent_dir_#{:erlang.unique_integer([:positive])}"
+        )
+
       assert files == []
     end
 
