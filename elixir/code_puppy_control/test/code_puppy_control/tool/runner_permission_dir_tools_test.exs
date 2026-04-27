@@ -181,8 +181,9 @@ defmodule CodePuppyControl.Tool.RunnerPermissionDirToolsTest do
       assert Runner.file_target_from_args(:grep, %{"directory" => "/tmp"}) == "/tmp"
     end
 
-    test "directory tool with no directory key returns empty string" do
-      assert Runner.file_target_from_args(:cp_list_files, %{"recursive" => true}) == ""
+    test "directory tool with no directory key returns \".\" (cwd default)" do
+      assert Runner.file_target_from_args(:cp_list_files, %{"recursive" => true}) == "."
+      assert Runner.file_target_from_args(:cp_grep, %{"search_string" => "TODO"}) == "."
     end
 
     test "file-oriented tool extracts file_path arg" do
@@ -269,18 +270,37 @@ defmodule CodePuppyControl.Tool.RunnerPermissionDirToolsTest do
       Callbacks.unregister(:file_permission, deny_cb)
     end
 
-    test "empty directory arg skips FilePermission chain (not bypassable)" do
+    test "denied when callback blocks and directory arg is omitted (defaults to cwd)" do
       allow_all_policy()
 
       deny_cb = fn _ctx, _path, _op, _, _, _ -> false end
       Callbacks.register(:file_permission, deny_cb)
 
-      # No directory arg → file_target_from_args returns "" → check is skipped
-      # This is correct: the tool defaults to cwd, which is a safe default
+      # No directory arg → file_target_from_args returns "." → FilePermission still fires
       result = Runner.invoke(:cp_list_files, %{}, %{})
-      assert {:ok, _} = result
+      assert {:error, reason} = result
+      assert reason =~ "permission denied"
+      assert reason =~ "blocked by security plugin"
 
       Callbacks.unregister(:file_permission, deny_cb)
+    end
+
+    test "FilePermission receives \".\" when cp_list_files has no directory arg" do
+      allow_all_policy()
+
+      test_pid = self()
+
+      spy_cb = fn _ctx, path, _op, _, _, _ ->
+        send(test_pid, {:file_perm_path, path})
+        nil
+      end
+
+      Callbacks.register(:file_permission, spy_cb)
+
+      Runner.invoke(:cp_list_files, %{}, %{})
+      assert_received {:file_perm_path, "."}
+
+      Callbacks.unregister(:file_permission, spy_cb)
     end
 
     test "directory path is actually sent to FilePermission.check" do
@@ -361,6 +381,21 @@ defmodule CodePuppyControl.Tool.RunnerPermissionDirToolsTest do
       Callbacks.unregister(:file_permission, deny_cb)
     end
 
+    test "denied when callback blocks and directory arg is omitted (defaults to cwd)" do
+      allow_all_policy()
+
+      deny_cb = fn _ctx, _path, _op, _, _, _ -> false end
+      Callbacks.register(:file_permission, deny_cb)
+
+      # No directory arg → file_target_from_args returns "." → FilePermission still fires
+      result = Runner.invoke(:cp_grep, %{"search_string" => "TODO"}, %{})
+      assert {:error, reason} = result
+      assert reason =~ "permission denied"
+      assert reason =~ "blocked by security plugin"
+
+      Callbacks.unregister(:file_permission, deny_cb)
+    end
+
     test "directory path is actually sent to FilePermission.check" do
       allow_all_policy()
 
@@ -375,6 +410,24 @@ defmodule CodePuppyControl.Tool.RunnerPermissionDirToolsTest do
 
       Runner.invoke(:cp_grep, %{"directory" => "src/", "search_string" => "TODO"}, %{})
       assert_received {:file_perm_path, "src/"}
+
+      Callbacks.unregister(:file_permission, spy_cb)
+    end
+
+    test "FilePermission receives \".\" when cp_grep has no directory arg" do
+      allow_all_policy()
+
+      test_pid = self()
+
+      spy_cb = fn _ctx, path, _op, _, _, _ ->
+        send(test_pid, {:file_perm_path, path})
+        nil
+      end
+
+      Callbacks.register(:file_permission, spy_cb)
+
+      Runner.invoke(:cp_grep, %{"search_string" => "TODO"}, %{})
+      assert_received {:file_perm_path, "."}
 
       Callbacks.unregister(:file_permission, spy_cb)
     end
