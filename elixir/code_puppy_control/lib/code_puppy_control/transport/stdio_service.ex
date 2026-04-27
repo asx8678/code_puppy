@@ -725,8 +725,13 @@ defmodule CodePuppyControl.Transport.StdioService do
   # runtime_set_session_model - Set session model
   defp handle_request("runtime_set_session_model", params, id) do
     model = params["model"]
-    :ok = CodePuppyControl.RuntimeState.set_session_model(model)
-    Protocol.encode_response(%{"session_model" => model}, id)
+
+    if not (is_nil(model) or is_binary(model)) do
+      Protocol.encode_error(-32602, "Invalid param: model must be string or nil", nil, id)
+    else
+      :ok = CodePuppyControl.RuntimeState.set_session_model(model)
+      Protocol.encode_response(%{"session_model" => model}, id)
+    end
   end
 
   # runtime_reset_session_model - Reset session model cache
@@ -786,8 +791,13 @@ defmodule CodePuppyControl.Transport.StdioService do
   # runtime_set_cached_system_prompt - Set cached system prompt
   defp handle_request("runtime_set_cached_system_prompt", params, id) do
     prompt = params["prompt"]
-    :ok = CodePuppyControl.RuntimeState.set_cached_system_prompt(prompt)
-    Protocol.encode_response(%{"cached_system_prompt" => prompt}, id)
+
+    if not (is_nil(prompt) or is_binary(prompt)) do
+      Protocol.encode_error(-32602, "Invalid param: prompt must be string or nil", nil, id)
+    else
+      :ok = CodePuppyControl.RuntimeState.set_cached_system_prompt(prompt)
+      Protocol.encode_response(%{"cached_system_prompt" => prompt}, id)
+    end
   end
 
   # runtime_get_cached_tool_defs - Get cached tool definitions
@@ -799,8 +809,13 @@ defmodule CodePuppyControl.Transport.StdioService do
   # runtime_set_cached_tool_defs - Set cached tool definitions
   defp handle_request("runtime_set_cached_tool_defs", params, id) do
     defs = params["tool_defs"]
-    :ok = CodePuppyControl.RuntimeState.set_cached_tool_defs(defs)
-    Protocol.encode_response(%{"cached_tool_defs" => defs}, id)
+
+    if not (is_nil(defs) or is_list(defs)) do
+      Protocol.encode_error(-32602, "Invalid param: tool_defs must be list or nil", nil, id)
+    else
+      :ok = CodePuppyControl.RuntimeState.set_cached_tool_defs(defs)
+      Protocol.encode_response(%{"cached_tool_defs" => defs}, id)
+    end
   end
 
   # runtime_get_model_name_cache - Get cached model name
@@ -812,8 +827,13 @@ defmodule CodePuppyControl.Transport.StdioService do
   # runtime_set_model_name_cache - Set cached model name
   defp handle_request("runtime_set_model_name_cache", params, id) do
     name = params["model_name"]
-    :ok = CodePuppyControl.RuntimeState.set_model_name_cache(name)
-    Protocol.encode_response(%{"model_name_cache" => name}, id)
+
+    if not (is_nil(name) or is_binary(name)) do
+      Protocol.encode_error(-32602, "Invalid param: model_name must be string or nil", nil, id)
+    else
+      :ok = CodePuppyControl.RuntimeState.set_model_name_cache(name)
+      Protocol.encode_response(%{"model_name_cache" => name}, id)
+    end
   end
 
   # runtime_get_delayed_compaction_requested - Get delayed compaction flag
@@ -825,8 +845,13 @@ defmodule CodePuppyControl.Transport.StdioService do
   # runtime_set_delayed_compaction_requested - Set delayed compaction flag
   defp handle_request("runtime_set_delayed_compaction_requested", params, id) do
     value = params["value"]
-    :ok = CodePuppyControl.RuntimeState.set_delayed_compaction_requested(value)
-    Protocol.encode_response(%{"delayed_compaction_requested" => value}, id)
+
+    if not is_boolean(value) do
+      Protocol.encode_error(-32602, "Invalid param: value must be boolean", nil, id)
+    else
+      :ok = CodePuppyControl.RuntimeState.set_delayed_compaction_requested(value)
+      Protocol.encode_response(%{"delayed_compaction_requested" => value}, id)
+    end
   end
 
   # runtime_get_tool_ids_cache - Get tool IDs cache
@@ -851,8 +876,13 @@ defmodule CodePuppyControl.Transport.StdioService do
   # runtime_set_cached_context_overhead - Set cached context overhead
   defp handle_request("runtime_set_cached_context_overhead", params, id) do
     value = params["value"]
-    :ok = CodePuppyControl.RuntimeState.set_cached_context_overhead(value)
-    Protocol.encode_response(%{"cached_context_overhead" => value}, id)
+
+    if not (is_nil(value) or is_integer(value)) do
+      Protocol.encode_error(-32602, "Invalid param: value must be integer or nil", nil, id)
+    else
+      :ok = CodePuppyControl.RuntimeState.set_cached_context_overhead(value)
+      Protocol.encode_response(%{"cached_context_overhead" => value}, id)
+    end
   end
 
   # runtime_get_resolved_model_components_cache - Get resolved model components cache
@@ -864,8 +894,31 @@ defmodule CodePuppyControl.Transport.StdioService do
   # runtime_set_resolved_model_components_cache - Set resolved model components cache
   defp handle_request("runtime_set_resolved_model_components_cache", params, id) do
     cache = params["cache"]
-    :ok = CodePuppyControl.RuntimeState.set_resolved_model_components_cache(cache)
-    Protocol.encode_response(%{"resolved_model_components_cache" => cache}, id)
+
+    if not (is_nil(cache) or is_map(cache)) do
+      Protocol.encode_error(-32602, "Invalid param: cache must be map or nil", nil, id)
+    else
+      :ok = CodePuppyControl.RuntimeState.set_resolved_model_components_cache(cache)
+      Protocol.encode_response(%{"resolved_model_components_cache" => cache}, id)
+    end
+  end
+
+  # runtime_get_puppy_rules_cache - Get cached puppy rules content
+  defp handle_request("runtime_get_puppy_rules_cache", _params, id) do
+    rules = CodePuppyControl.RuntimeState.get_puppy_rules_cache()
+    Protocol.encode_response(%{"puppy_rules_cache" => rules}, id)
+  end
+
+  # runtime_set_puppy_rules_cache - Set cached puppy rules content
+  defp handle_request("runtime_set_puppy_rules_cache", params, id) do
+    rules = params["rules"]
+
+    if not (is_nil(rules) or is_binary(rules)) do
+      Protocol.encode_error(-32602, "Invalid param: rules must be string or nil", nil, id)
+    else
+      :ok = CodePuppyControl.RuntimeState.set_puppy_rules_cache(rules)
+      Protocol.encode_response(%{"puppy_rules_cache" => rules}, id)
+    end
   end
 
   # ============================================================================

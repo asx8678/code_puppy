@@ -115,11 +115,17 @@ class AgentRuntimeState:
 
         See: token-audit finding — cache invalidation was fragmented
         across multiple call sites with incomplete coverage.
+
+        Cache parity with Elixir RuntimeState.invalidate_all_token_caches/0:
+        clears cached_context_overhead, cached_system_prompt, cached_tool_defs,
+        tool_ids_cache, resolved_model_components_cache, and puppy_rules.
+        model_name_cache is NOT cleared (not a token budget cache).
         """
         self.cached_context_overhead = None
         self.cached_system_prompt = None
         self.cached_tool_defs = None
         self.tool_ids_cache = None
+        self.resolved_model_components_cache = None
         self.puppy_rules = None
 
     def invalidate_system_prompt_cache(self) -> None:

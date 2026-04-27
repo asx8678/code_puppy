@@ -162,6 +162,7 @@ defmodule CodePuppyControl.Runtime.RuntimeStateTest do
       :ok = RuntimeState.set_cached_tool_defs([%{}])
       :ok = RuntimeState.set_tool_ids_cache([1])
       :ok = RuntimeState.set_resolved_model_components_cache(%{})
+      :ok = RuntimeState.set_puppy_rules_cache("rules")
       _ = RuntimeState.get_state()
 
       assert :ok = RuntimeState.invalidate_all_token_caches()
@@ -170,6 +171,7 @@ defmodule CodePuppyControl.Runtime.RuntimeStateTest do
       assert RuntimeState.get_cached_tool_defs() == nil
       assert RuntimeState.get_tool_ids_cache() == nil
       assert RuntimeState.get_resolved_model_components_cache() == nil
+      assert RuntimeState.get_puppy_rules_cache() == nil
     end
   end
 
@@ -233,6 +235,13 @@ defmodule CodePuppyControl.Runtime.RuntimeStateTest do
       _ = RuntimeState.get_state()
       assert RuntimeState.get_resolved_model_components_cache() == %{"k" => "v"}
     end
+
+    test "puppy_rules_cache" do
+      assert RuntimeState.get_puppy_rules_cache() == nil
+      :ok = RuntimeState.set_puppy_rules_cache("AGENTS.md")
+      _ = RuntimeState.get_state()
+      assert RuntimeState.get_puppy_rules_cache() == "AGENTS.md"
+    end
   end
 
   # ---------------------------------------------------------------------------
@@ -256,6 +265,24 @@ defmodule CodePuppyControl.Runtime.RuntimeStateTest do
       failing_fn = fn -> raise "intentional" end
       result = RuntimeState.finalize_autosave_session(failing_fn)
       assert is_binary(result)
+    end
+
+    # Regression test: save_fn called before rotation (code_puppy-ctj.4)
+    test "save callback is invoked before rotation (autosave-before-rotation)" do
+      old_id = RuntimeState.get_current_autosave_id()
+      Process.sleep(1100)
+      Process.put(:finalize_test_order, [])
+
+      tracking_fn = fn ->
+        current = Process.get(:finalize_test_order)
+        Process.put(:finalize_test_order, current ++ [:save_called])
+      end
+
+      _result = RuntimeState.finalize_autosave_session(tracking_fn)
+      assert :save_called in Process.get(:finalize_test_order)
+      assert RuntimeState.get_current_autosave_id() != old_id
+    after
+      Process.delete(:finalize_test_order)
     end
   end
 

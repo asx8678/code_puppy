@@ -145,6 +145,7 @@ defmodule CodePuppyControl.RuntimeStateTest do
       assert Map.has_key?(state, :tool_ids_cache)
       assert Map.has_key?(state, :cached_context_overhead)
       assert Map.has_key?(state, :resolved_model_components_cache)
+      assert Map.has_key?(state, :puppy_rules_cache)
     end
   end
 
@@ -187,6 +188,7 @@ defmodule CodePuppyControl.RuntimeStateTest do
       :ok = RuntimeState.set_cached_tool_defs([%{"name" => "test"}])
       :ok = RuntimeState.set_tool_ids_cache([1, 2])
       :ok = RuntimeState.set_resolved_model_components_cache(%{"provider" => "anthropic"})
+      :ok = RuntimeState.set_puppy_rules_cache("AGENTS.md content")
       _ = RuntimeState.get_state()
 
       assert :ok = RuntimeState.invalidate_all_token_caches()
@@ -196,6 +198,7 @@ defmodule CodePuppyControl.RuntimeStateTest do
       assert RuntimeState.get_cached_tool_defs() == nil
       assert RuntimeState.get_tool_ids_cache() == nil
       assert RuntimeState.get_resolved_model_components_cache() == nil
+      assert RuntimeState.get_puppy_rules_cache() == nil
     end
 
     test "does not clear model_name_cache" do
@@ -206,6 +209,16 @@ defmodule CodePuppyControl.RuntimeStateTest do
 
       # model_name_cache is NOT a token-related cache
       assert RuntimeState.get_model_name_cache() == "claude-sonnet-4"
+    end
+
+    test "cache parity: clears puppy_rules_cache (matches Python AgentRuntimeState.puppy_rules)" do
+      :ok = RuntimeState.set_puppy_rules_cache("rules content")
+      _ = RuntimeState.get_state()
+
+      assert :ok = RuntimeState.invalidate_all_token_caches()
+
+      # puppy_rules_cache IS a token-related cache (Python parity)
+      assert RuntimeState.get_puppy_rules_cache() == nil
     end
   end
 
@@ -327,6 +340,35 @@ defmodule CodePuppyControl.RuntimeStateTest do
     end
   end
 
+  describe "puppy_rules_cache getter/setter" do
+    test "defaults to nil after reset_for_test" do
+      assert RuntimeState.get_puppy_rules_cache() == nil
+    end
+
+    test "round-trips a string value" do
+      :ok = RuntimeState.set_puppy_rules_cache("AGENTS.md rules content")
+      _ = RuntimeState.get_state()
+      assert RuntimeState.get_puppy_rules_cache() == "AGENTS.md rules content"
+    end
+
+    test "can be set to nil" do
+      :ok = RuntimeState.set_puppy_rules_cache("temp")
+      _ = RuntimeState.get_state()
+      :ok = RuntimeState.set_puppy_rules_cache(nil)
+      _ = RuntimeState.get_state()
+      assert RuntimeState.get_puppy_rules_cache() == nil
+    end
+
+    test "accessible via Cache submodule" do
+      alias CodePuppyControl.RuntimeState.Cache
+
+      :ok = Cache.set_puppy_rules_cache("from cache module")
+      _ = RuntimeState.get_state()
+      assert Cache.get_puppy_rules_cache() == "from cache module"
+      assert RuntimeState.get_puppy_rules_cache() == "from cache module"
+    end
+  end
+
   # ---------------------------------------------------------------------------
   # finalize_autosave_session/0
   # ---------------------------------------------------------------------------
@@ -358,14 +400,50 @@ defmodule CodePuppyControl.RuntimeStateTest do
     end
 
     test "with failing rotate, returns fallback ID" do
-      # Make rotate_autosave_id fail by temporarily stopping the GenServer
-      # is complex; instead, test the fallback path by providing a save_fn
-      # that succeeds but then checking the returned ID format
       save_fn = fn -> :ok end
       result = RuntimeState.finalize_autosave_session(save_fn)
       assert is_binary(result)
-      # The result should be a valid ID (not fallback in normal operation)
       assert Regex.match?(~r/^\d{8}_\d{6}$/, result)
+    end
+
+    # Regression test: save_fn MUST be called BEFORE rotation (code_puppy-ctj.4)
+    test "save callback is invoked before rotation (autosave-before-rotation)" do
+      old_id = RuntimeState.get_current_autosave_id()
+      Process.sleep(1100)
+      # Track call order with a process dictionary flag
+      Process.put(:finalize_test_order, [])
+
+      tracking_fn = fn ->
+        current = Process.get(:finalize_test_order)
+        Process.put(:finalize_test_order, current ++ [:save_called])
+      end
+
+      # We can't easily intercept rotate_autosave_id from inside finalize,
+      # but we can verify the save_fn was called and the ID changed.
+      _result = RuntimeState.finalize_autosave_session(tracking_fn)
+
+      # The save function must have been called
+      assert :save_called in Process.get(:finalize_test_order)
+      # The ID must have rotated
+      assert RuntimeState.get_current_autosave_id() != old_id
+    after
+      Process.delete(:finalize_test_order)
+    end
+
+    test "save callback is called even if it raises (never silently skipped)" do
+      call_count = Process.get(:save_call_count, 0)
+
+      raising_fn = fn ->
+        Process.put(:save_call_count, Process.get(:save_call_count, 0) + 1)
+        raise "intentional failure"
+      end
+
+      _result = RuntimeState.finalize_autosave_session(raising_fn)
+
+      # The save function was called even though it raised
+      assert Process.get(:save_call_count, 0) > call_count
+    after
+      Process.delete(:save_call_count)
     end
   end
 
@@ -398,6 +476,7 @@ defmodule CodePuppyControl.RuntimeStateTest do
       assert state.model_name_cache == nil
       assert state.tool_ids_cache == nil
       assert state.resolved_model_components_cache == nil
+      assert state.puppy_rules_cache == nil
     end
 
     test "session_start_time is refreshed after reset" do

@@ -969,6 +969,199 @@ defmodule CodePuppyControl.Transport.StdioServiceTest do
     end
   end
 
+  # ===========================================================================
+  # Runtime State: Cache / Invalidation / Finalize Transport Tests
+  # ===========================================================================
+
+  describe "runtime cache transport handlers" do
+    test "runtime_get_cached_system_prompt returns nil by default" do
+      req = encode_request("runtime_get_cached_system_prompt", %{}, 1)
+      output = capture_stdio([req])
+      response = decode_response(output)
+      assert response["result"]["cached_system_prompt"] == nil
+    end
+
+    test "runtime_set_cached_system_prompt accepts string" do
+      req = encode_request("runtime_set_cached_system_prompt", %{"prompt" => "hello"}, 1)
+      output = capture_stdio([req])
+      response = decode_response(output)
+      assert response["result"]["cached_system_prompt"] == "hello"
+    end
+
+    test "runtime_get_cached_tool_defs returns nil by default" do
+      req = encode_request("runtime_get_cached_tool_defs", %{}, 1)
+      output = capture_stdio([req])
+      response = decode_response(output)
+      assert response["result"]["cached_tool_defs"] == nil
+    end
+
+    test "runtime_get_model_name_cache returns nil by default" do
+      req = encode_request("runtime_get_model_name_cache", %{}, 1)
+      output = capture_stdio([req])
+      response = decode_response(output)
+      assert response["result"]["model_name_cache"] == nil
+    end
+
+    test "runtime_get_delayed_compaction_requested returns false by default" do
+      req = encode_request("runtime_get_delayed_compaction_requested", %{}, 1)
+      output = capture_stdio([req])
+      response = decode_response(output)
+      assert response["result"]["delayed_compaction_requested"] == false
+    end
+
+    test "runtime_get_cached_context_overhead returns nil by default" do
+      req = encode_request("runtime_get_cached_context_overhead", %{}, 1)
+      output = capture_stdio([req])
+      response = decode_response(output)
+      assert response["result"]["cached_context_overhead"] == nil
+    end
+
+    test "runtime_get_resolved_model_components_cache returns nil by default" do
+      req = encode_request("runtime_get_resolved_model_components_cache", %{}, 1)
+      output = capture_stdio([req])
+      response = decode_response(output)
+      assert response["result"]["resolved_model_components_cache"] == nil
+    end
+
+    test "runtime_get_puppy_rules_cache returns nil by default" do
+      req = encode_request("runtime_get_puppy_rules_cache", %{}, 1)
+      output = capture_stdio([req])
+      response = decode_response(output)
+      assert response["result"]["puppy_rules_cache"] == nil
+    end
+
+    test "runtime_set_puppy_rules_cache accepts string" do
+      req = encode_request("runtime_set_puppy_rules_cache", %{"rules" => "AGENTS.md content"}, 1)
+      output = capture_stdio([req])
+      response = decode_response(output)
+      assert response["result"]["puppy_rules_cache"] == "AGENTS.md content"
+    end
+  end
+
+  describe "runtime cache invalidation transport handlers" do
+    test "runtime_invalidate_caches clears ephemeral caches" do
+      # Set some caches first
+      set1 = encode_request("runtime_set_cached_context_overhead", %{"value" => 100}, 1)
+      set2 = encode_request("runtime_set_tool_ids_cache", %{"cache" => [1, 2]}, 2)
+      _ = capture_stdio([set1, set2])
+
+      # Invalidate
+      inv_req = encode_request("runtime_invalidate_caches", %{}, 3)
+      output = capture_stdio([inv_req])
+      response = decode_response(output)
+      assert response["result"]["reset"] == true
+    end
+
+    test "runtime_invalidate_all_token_caches clears all token caches" do
+      inv_req = encode_request("runtime_invalidate_all_token_caches", %{}, 1)
+      output = capture_stdio([inv_req])
+      response = decode_response(output)
+      assert response["result"]["reset"] == true
+    end
+
+    test "runtime_invalidate_system_prompt_cache clears prompt + overhead" do
+      inv_req = encode_request("runtime_invalidate_system_prompt_cache", %{}, 1)
+      output = capture_stdio([inv_req])
+      response = decode_response(output)
+      assert response["result"]["reset"] == true
+    end
+  end
+
+  describe "runtime_finalize_autosave_session transport handler" do
+    test "returns a valid autosave ID" do
+      req = encode_request("runtime_finalize_autosave_session", %{}, 1)
+      output = capture_stdio([req])
+      response = decode_response(output)
+      assert Regex.match?(~r/^\d{8}_\d{6}$/, response["result"]["autosave_id"])
+    end
+  end
+
+  # ===========================================================================
+  # Runtime State: Type Validation (-32602) Tests
+  # ===========================================================================
+
+  describe "runtime setter type validation" do
+    test "runtime_set_session_model rejects non-string model" do
+      req = encode_request("runtime_set_session_model", %{"model" => 123}, 1)
+      output = capture_stdio([req])
+      response = decode_response(output)
+      assert response["error"]["code"] == -32602
+      assert response["error"]["message"] =~ "model"
+    end
+
+    test "runtime_set_session_model accepts nil model" do
+      req = encode_request("runtime_set_session_model", %{"model" => nil}, 1)
+      output = capture_stdio([req])
+      response = decode_response(output)
+      assert response["result"]["session_model"] == nil
+    end
+
+    test "runtime_set_cached_system_prompt rejects non-string prompt" do
+      req = encode_request("runtime_set_cached_system_prompt", %{"prompt" => 42}, 1)
+      output = capture_stdio([req])
+      response = decode_response(output)
+      assert response["error"]["code"] == -32602
+      assert response["error"]["message"] =~ "prompt"
+    end
+
+    test "runtime_set_cached_tool_defs rejects non-list tool_defs" do
+      req = encode_request("runtime_set_cached_tool_defs", %{"tool_defs" => "oops"}, 1)
+      output = capture_stdio([req])
+      response = decode_response(output)
+      assert response["error"]["code"] == -32602
+      assert response["error"]["message"] =~ "tool_defs"
+    end
+
+    test "runtime_set_model_name_cache rejects non-string model_name" do
+      req = encode_request("runtime_set_model_name_cache", %{"model_name" => 99}, 1)
+      output = capture_stdio([req])
+      response = decode_response(output)
+      assert response["error"]["code"] == -32602
+      assert response["error"]["message"] =~ "model_name"
+    end
+
+    test "runtime_set_delayed_compaction_requested rejects non-boolean value" do
+      req = encode_request("runtime_set_delayed_compaction_requested", %{"value" => "yes"}, 1)
+      output = capture_stdio([req])
+      response = decode_response(output)
+      assert response["error"]["code"] == -32602
+      assert response["error"]["message"] =~ "value"
+    end
+
+    test "runtime_set_cached_context_overhead rejects non-integer value" do
+      req = encode_request("runtime_set_cached_context_overhead", %{"value" => "big"}, 1)
+      output = capture_stdio([req])
+      response = decode_response(output)
+      assert response["error"]["code"] == -32602
+      assert response["error"]["message"] =~ "value"
+    end
+
+    test "runtime_set_resolved_model_components_cache rejects non-map cache" do
+      req =
+        encode_request("runtime_set_resolved_model_components_cache", %{"cache" => [1, 2]}, 1)
+
+      output = capture_stdio([req])
+      response = decode_response(output)
+      assert response["error"]["code"] == -32602
+      assert response["error"]["message"] =~ "cache"
+    end
+
+    test "runtime_set_puppy_rules_cache rejects non-string rules" do
+      req = encode_request("runtime_set_puppy_rules_cache", %{"rules" => 123}, 1)
+      output = capture_stdio([req])
+      response = decode_response(output)
+      assert response["error"]["code"] == -32602
+      assert response["error"]["message"] =~ "rules"
+    end
+
+    test "runtime_set_autosave_from_session rejects missing session_name" do
+      req = encode_request("runtime_set_autosave_from_session", %{}, 1)
+      output = capture_stdio([req])
+      response = decode_response(output)
+      assert response["error"]["code"] == -32602
+    end
+  end
+
   # ============================================================================
   # Message Processing Tests
   # ============================================================================
