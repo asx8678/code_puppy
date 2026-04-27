@@ -259,11 +259,11 @@ defmodule CodePuppyControl.Tool.Runner do
   end
 
   defp file_permission_check(tool_name, args, context) do
-    file_path = Map.get(args, "file_path", Map.get(args, "path", ""))
+    file_path = file_target_from_args(tool_name, args)
     operation = file_operation_from_tool(tool_name)
 
     if file_path == "" do
-      # No file path in args — skip file permission check
+      # No target path in args — skip file permission check
       :ok
     else
       case FilePermission.check(context, file_path, operation, nil, nil, nil,
@@ -303,6 +303,42 @@ defmodule CodePuppyControl.Tool.Runner do
   defp file_operation_from_tool(:cp_list_files), do: "list"
   defp file_operation_from_tool(:cp_grep), do: "search"
   defp file_operation_from_tool(_), do: "access"
+
+  # ── Target Path Extraction ───────────────────────────────────────────────
+
+  @doc """
+  Extracts the target file or directory path from tool arguments.
+
+  Different tool types use different argument names for their target path:
+
+  - Directory-oriented tools (`cp_list_files`, `cp_grep`) use `"directory"`
+  - File-oriented tools use `"file_path"` with `"path"` as fallback
+  - If no recognized key is found, returns an empty string
+
+  This helper ensures `FilePermission.check` always receives the actual
+  target path regardless of the tool's argument naming convention.
+
+  ## Examples
+
+      iex> Runner.file_target_from_args(:cp_create_file, %{"file_path" => "lib/foo.ex"})
+      "lib/foo.ex"
+
+      iex> Runner.file_target_from_args(:cp_list_files, %{"directory" => "lib/"})
+      "lib/"
+
+      iex> Runner.file_target_from_args(:cp_grep, %{"directory" => "src/", "search_string" => "TODO"})
+      "src/"
+  """
+  @spec file_target_from_args(atom(), map()) :: String.t()
+  def file_target_from_args(tool_name, args) when is_atom(tool_name) and is_map(args) do
+    directory_tools = [:cp_list_files, :cp_grep, :list_files, :grep]
+
+    if tool_name in directory_tools do
+      Map.get(args, "directory", "")
+    else
+      Map.get(args, "file_path", Map.get(args, "path", ""))
+    end
+  end
 
   # ── Argument Validation ──────────────────────────────────────────────────
 
