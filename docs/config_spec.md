@@ -1,11 +1,9 @@
-# Config Spec: code_puppy/config.py
+# Config Spec: code_puppy/config/ (split package)
 
-> **Scope:** This spec covers every `get_*` accessor and path constant surfaced by
-> `code_puppy/config.py` (2698 LOC, 67 top-level `get_*` symbols). It is intended as
-> a migration-analysis reference for a future `CodePuppyControl.Config.Schema`
-> Elixir implementation. An appendix lists raw config keys declared in
-> `get_default_config_keys()` that have **no** dedicated getter inside config.py
-> itself (they are consumed from adjacent modules).
+> **Scope:** Every `get_*` accessor and path constant in `code_puppy/config/` (split from
+> monolithic `config.py`, 2698→9 sub-modules). Re-exports all names for backward compat.
+> Migration-analysis reference for a future `CodePuppyControl.Config.Schema` Elixir impl.
+> Appendix: raw keys from `get_default_config_keys()` with no dedicated getter (consumed by adjacent modules).
 
 ---
 
@@ -59,7 +57,6 @@ These read a single key from the `[puppy]` section of `puppy.cfg` via
 | `get_suppress_informational_messages()` | `suppress_informational_messages` | `bool` | `False` | — | yes | |
 | `get_max_session_tokens` | `max_session_tokens` | `int` | `0` | — | yes | 0 = disabled |
 | `get_max_run_tokens` | `max_run_tokens` | `int` | `0` | — | yes | 0 = disabled |
-
 
 ### 1.2 Dynamic / Pattern-Key Accessors
 
@@ -120,7 +117,6 @@ These are runtime state or filesystem operations, not config keys.
 | `model_supports_setting(model, setting)` | `models.json` + heuristics | `bool` | Reads model config | no |
 | `load_api_keys_to_environment()` | `.env` -> `puppy.cfg` -> `os.environ` | `None` | Side-effect: mutates env; see S7 | no |
 | `get_value(key)` / `get_config_keys()` | configparser | various | Low-level accessors | no |
-
 
 ---
 
@@ -246,7 +242,6 @@ These are runtime state or filesystem operations, not config keys.
 | `MISTRAL_API_KEY` | `str` | `""` | In allowlist, not in api_key_names |
 | `MOONSHOT_API_KEY` | `str` | `""` | In allowlist, not in api_key_names |
 
-
 ---
 
 ## 3. Paths and File Constants
@@ -306,18 +301,22 @@ When `PUP_EX_HOME` is set, any XDG-derived path that resolves **outside** the
 active home tree is silently overridden to stay within it. This is enforced by
 `_is_path_within_home()` in `config_paths.py`.
 
-
 ---
 
-## 4. Elixir Schema Draft
+## 4. Elixir Schema Reference
 
-This is a **migration blueprint**, not production-ready Elixir. It is designed
-to inform a future `CodePuppyControl.Config.Schema` implementation.
+The Elixir implementation lives in `CodePuppyControl.Config.*` sub-modules;
+below is a field-spec reference for `[puppy]` section keys. For the runnable implementation, see:
+
+- `CodePuppyControl.Config` (facade)
+- `CodePuppyControl.Config.Paths` (XDG path resolution)
+- `CodePuppyControl.Config.Isolation` (ADR-003 guard)
+- `CodePuppyControl.Config.Loader` / `Writer` (INI I/O)
+- `CodePuppyControl.Config.Models`, `Agents`, `Limits`, `Debug`, `TUI`, `Cache`
 
 ```text
-Blueprint: CodePuppyControl.Config.Schema
+Reference: CodePuppyControl.Config [puppy] section fields
 All fields map to the [puppy] section of puppy.cfg.
-Not runnable code -- field-spec format for migration planning.
 
 --- Identity / Defaults ---
   puppy_name            string   default: "Puppy"
@@ -483,8 +482,6 @@ Not runnable code -- field-spec format for migration planning.
   get_effective_model_settings/1:
     per-model + global temp + supports filter
 ```
-
-
 
 ---
 

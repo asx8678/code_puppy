@@ -126,7 +126,7 @@ This document defines the **"thin shell"** — the minimal Python surface that r
 
 | Module | Lines | Justification |
 |--------|-------|---------------|
-| `code_puppy/config.py` | 2,648 | Configuration system, puppy.cfg parsing, API key management. |
+| `code_puppy/config/` | ~2,900 | Config system (split by concern: loader, paths, models, agents, tui, limits, debug, cache, mcp). ADR-003 dual-home isolation. |
 | `code_puppy/config_package/*.py` | ~1,200 | Pydantic-based config models and loaders. |
 | `code_puppy/tool_schema.py` | 350 | Tool definition schemas for pydantic-ai. |
 
