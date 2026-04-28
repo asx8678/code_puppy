@@ -34,7 +34,7 @@ defmodule CodePuppyControl.Plugins.LoopDetection do
   def register do
     Callbacks.register(:pre_tool_call, &__MODULE__.on_pre_tool_call/3)
     Callbacks.register(:post_tool_call, &__MODULE__.on_post_tool_call/5)
-    Callbacks.register(:agent_run_end, &__MODULE__.on_agent_run_end/6)
+    Callbacks.register(:agent_run_end, &__MODULE__.on_agent_run_end/7)
     Callbacks.register(:shutdown, &__MODULE__.on_shutdown/0)
     :ok
   end
@@ -136,9 +136,17 @@ defmodule CodePuppyControl.Plugins.LoopDetection do
   end
 
   @doc false
-  @spec on_agent_run_end(String.t(), String.t(), String.t() | nil, boolean(), term(), term()) ::
+  @spec on_agent_run_end(
+          String.t(),
+          String.t(),
+          String.t() | nil,
+          boolean(),
+          term(),
+          term(),
+          term()
+        ) ::
           :ok
-  def on_agent_run_end(_agent, _model, session_id, _success, _error, _meta) do
+  def on_agent_run_end(_agent, _model, session_id, _success, _error, _response_text, _metadata) do
     if session_id, do: reset(to_string(session_id))
     :ok
   end

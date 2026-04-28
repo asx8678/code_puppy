@@ -84,9 +84,10 @@ defmodule CodePuppyControl.Workflow.State.CallbackHandlers do
         session_id,
         success,
         error,
-        metadata
+        _response_text,
+        _metadata
       ) do
-    _ = {agent_name, model_name, error, metadata}
+    _ = {agent_name, model_name, error}
 
     # Look up run key from session index (set by on_agent_run_start)
     run_key =
@@ -166,7 +167,7 @@ defmodule CodePuppyControl.Workflow.State.CallbackHandlers do
     Callbacks.register(:delete_file, &on_delete_file/1)
     Callbacks.register(:run_shell_command, &on_run_shell_command/3)
     Callbacks.register(:agent_run_start, &on_agent_run_start/3)
-    Callbacks.register(:agent_run_end, &on_agent_run_end/6)
+    Callbacks.register(:agent_run_end, &on_agent_run_end/7)
     Callbacks.register(:pre_tool_call, &on_pre_tool_call/3)
 
     Logger.debug("Workflow.State callback handlers registered")
@@ -183,7 +184,7 @@ defmodule CodePuppyControl.Workflow.State.CallbackHandlers do
     Callbacks.unregister(:delete_file, &on_delete_file/1)
     Callbacks.unregister(:run_shell_command, &on_run_shell_command/3)
     Callbacks.unregister(:agent_run_start, &on_agent_run_start/3)
-    Callbacks.unregister(:agent_run_end, &on_agent_run_end/6)
+    Callbacks.unregister(:agent_run_end, &on_agent_run_end/7)
     Callbacks.unregister(:pre_tool_call, &on_pre_tool_call/3)
 
     Logger.debug("Workflow.State callback handlers unregistered")

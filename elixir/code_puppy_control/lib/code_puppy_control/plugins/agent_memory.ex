@@ -31,7 +31,7 @@ defmodule CodePuppyControl.Plugins.AgentMemory do
   def register do
     Callbacks.register(:startup, &__MODULE__.on_startup/0)
     Callbacks.register(:shutdown, &__MODULE__.on_shutdown/0)
-    Callbacks.register(:agent_run_end, &__MODULE__.on_agent_run_end/6)
+    Callbacks.register(:agent_run_end, &__MODULE__.on_agent_run_end/7)
     Callbacks.register(:get_model_system_prompt, &Prompts.on_get_model_system_prompt/3)
     Callbacks.register(:custom_command, &Commands.handle_command/2)
     Callbacks.register(:custom_command_help, &Commands.help_entries/0)
@@ -69,9 +69,25 @@ defmodule CodePuppyControl.Plugins.AgentMemory do
   def on_shutdown, do: :ok
 
   @doc false
-  @spec on_agent_run_end(String.t(), String.t(), String.t() | nil, boolean(), term(), term()) ::
+  @spec on_agent_run_end(
+          String.t(),
+          String.t(),
+          String.t() | nil,
+          boolean(),
+          term(),
+          term(),
+          term()
+        ) ::
           :ok
-  def on_agent_run_end(agent_name, _model_name, session_id, success, _error, metadata) do
+  def on_agent_run_end(
+        agent_name,
+        _model_name,
+        session_id,
+        success,
+        _error,
+        _response_text,
+        metadata
+      ) do
     config = Config.load()
 
     if config.enabled and success do

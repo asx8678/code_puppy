@@ -462,7 +462,7 @@ defmodule CodePuppyControl.Workflow.StateTest do
     test "_on_agent_run_end sets error flag on failure" do
       # Must start first so session index is populated
       State._on_agent_run_start("code-puppy", "claude-3.5", "sess-end-fail")
-      State._on_agent_run_end("code-puppy", "claude-3.5", "sess-end-fail", false, nil, nil)
+      State._on_agent_run_end("code-puppy", "claude-3.5", "sess-end-fail", false, nil, nil, nil)
 
       assert State.has_flag?(:did_encounter_error, run_key: "sess-end-fail")
       assert Store.get_metadata("success", nil, run_key: "sess-end-fail") == false
@@ -649,8 +649,8 @@ defmodule CodePuppyControl.Workflow.StateTest do
       State.unregister_callback_handlers()
     end
 
-    test "agent_run_end callback is arity 6" do
-      assert CodePuppyControl.Callbacks.Hooks.arity(:agent_run_end) == 6
+    test "agent_run_end callback is arity 7" do
+      assert CodePuppyControl.Callbacks.Hooks.arity(:agent_run_end) == 7
 
       State.register_callback_handlers()
 
@@ -660,6 +660,7 @@ defmodule CodePuppyControl.Workflow.StateTest do
           "claude-3.5",
           "session-arity-end",
           true,
+          nil,
           nil,
           nil
         ])
@@ -850,6 +851,7 @@ defmodule CodePuppyControl.Workflow.StateTest do
           "async-sess-end",
           false,
           "oops",
+          nil,
           nil
         ])
 

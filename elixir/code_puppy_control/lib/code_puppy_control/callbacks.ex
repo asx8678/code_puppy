@@ -42,6 +42,89 @@ defmodule CodePuppyControl.Callbacks do
 
   alias CodePuppyControl.Callbacks.{Hooks, Merge, Registry}
 
+  # ── Shutdown Reentrancy Guard ───────────────────────────────────
+  # 3-state machine: :idle → :running → :complete
+  # Prevents recursive cleanup when signals arrive during shutdown.
+  # Ported from Python's _ShutdownStage in code_puppy/callbacks.py.
+
+  @shutdown_table :code_puppy_shutdown_stage
+
+  @doc """
+  Returns the current shutdown stage.
+
+  One of `:idle`, `:running`, or `:complete`.
+  """
+  @spec shutdown_stage() :: :idle | :running | :complete
+  def shutdown_stage do
+    case :ets.whereis(@shutdown_table) do
+      :undefined ->
+        :idle
+
+      _ref ->
+        case :ets.lookup(@shutdown_table, :stage) do
+          [{:stage, stage}] -> stage
+          [] -> :idle
+        end
+    end
+  end
+
+  @doc """
+  Resets the shutdown stage to `:idle`.
+
+  Only intended for testing. Do not call in production code.
+  """
+  @spec reset_shutdown_stage() :: :ok
+  def reset_shutdown_stage do
+    ensure_shutdown_table()
+    :ets.insert(@shutdown_table, {:stage, :idle})
+    :ok
+  end
+
+  @doc """
+  Triggers shutdown callbacks with reentrancy protection.
+
+  Implements a 3-state machine (:idle → :running → :complete) to prevent
+  recursive cleanup when signals arrive during an ongoing shutdown.
+
+  Returns the merged result, or `nil` if shutdown is already running/complete.
+  """
+  @spec trigger_shutdown() :: term()
+  def trigger_shutdown do
+    ensure_shutdown_table()
+
+    # Try to transition :idle → :running atomically
+    case :ets.lookup(@shutdown_table, :stage) do
+      [{:stage, :idle}] ->
+        :ets.insert(@shutdown_table, {:stage, :running})
+
+        try do
+          trigger(:shutdown)
+        after
+          :ets.insert(@shutdown_table, {:stage, :complete})
+        end
+
+      [{:stage, :running}] ->
+        Logger.warning("Shutdown triggered recursively (already running); ignoring")
+        nil
+
+      [{:stage, :complete}] ->
+        Logger.debug("Shutdown already complete; ignoring duplicate request")
+        nil
+    end
+  end
+
+  defp ensure_shutdown_table do
+    case :ets.whereis(@shutdown_table) do
+      :undefined ->
+        :ets.new(@shutdown_table, [:set, :public, :named_table])
+        :ets.insert(@shutdown_table, {:stage, :idle})
+        :ok
+
+      _ref ->
+        :ok
+    end
+  end
+
   # ── Registration ────────────────────────────────────────────────
 
   @doc """
@@ -144,6 +227,83 @@ defmodule CodePuppyControl.Callbacks do
   end
 
   @doc """
+  Triggers callbacks sequentially with chaining: each callback
+  receives the current effective args updated from the prior result.
+
+  Designed for hooks like `:get_model_system_prompt` where callbacks
+  should cooperate by reading the prior result's `instructions` and
+  `user_prompt` keys and returning an updated map.
+
+  `key_to_index` maps result-map keys to arg positions so chaining
+  can feed prior results forward. For `:get_model_system_prompt`:
+
+      key_to_index: [instructions: 1, user_prompt: 2]
+
+  Means: if a callback returns `%{instructions: "...", user_prompt: "..."}`,
+  the next callback receives those values at arg positions 1 and 2.
+
+  Returns the merged result using the hook's declared merge strategy,
+  or `nil` if no callbacks are registered.
+  """
+  @spec trigger_chained(atom(), [term()], [{atom(), non_neg_integer()}]) :: term()
+  def trigger_chained(hook_name, args, key_to_index \\ [])
+      when is_atom(hook_name) and is_list(args) and is_list(key_to_index) do
+    callbacks = Registry.get_callbacks(hook_name)
+
+    if callbacks == [] do
+      nil
+    else
+      {results, _final_args} =
+        Enum.reduce(callbacks, {[], args}, fn callback, {acc, current_args} ->
+          result =
+            try do
+              apply(callback, current_args)
+            rescue
+              e ->
+                Logger.error(
+                  "Chained callback #{inspect(callback)} failed in hook :#{hook_name}: " <>
+                    Exception.message(e)
+                )
+
+                Merge.error_sentinel()
+            catch
+              kind, reason ->
+                Logger.error(
+                  "Chained callback #{inspect(callback)} crashed in hook :#{hook_name}: " <>
+                    Exception.format(kind, reason, __STACKTRACE__)
+                )
+
+                Merge.error_sentinel()
+            end
+
+          next_args =
+            if is_map(result) and result != :callback_failed do
+              Enum.reduce(key_to_index, current_args, fn {key, idx}, acc_args ->
+                case Map.fetch(result, key) do
+                  {:ok, val} ->
+                    if idx < length(acc_args) do
+                      List.replace_at(acc_args, idx, val)
+                    else
+                      acc_args
+                    end
+
+                  :error ->
+                    acc_args
+                end
+              end)
+            else
+              current_args
+            end
+
+          {[result | acc], next_args}
+        end)
+
+      merge_strategy = Hooks.merge_type(hook_name)
+      Merge.merge_results(Enum.reverse(results), merge_strategy)
+    end
+  end
+
+  @doc """
   Triggers all callbacks registered for the given hook and returns
   the **raw unmerged results list**.
 
@@ -172,6 +332,38 @@ defmodule CodePuppyControl.Callbacks do
       []
     else
       execute_callbacks(hook_name, callbacks, args)
+    end
+  end
+
+  @doc """
+  Async variant of `trigger_raw/2` for hooks declared with `async: true`.
+
+  Like `trigger_raw/2`, returns the **unmerged** results list with
+  `:callback_failed` sentinels preserved. Unlike `trigger_async/2`,
+  which merges results before returning, this function preserves
+  raw results for fail-closed security checks.
+
+  Returns `{:ok, [results]}` or `{:error, :not_async}` if the hook
+  doesn't support async execution.
+
+  ## Examples
+
+      CodePuppyControl.Callbacks.trigger_raw_async(:file_permission, [ctx, path, op])
+      #=> {:ok, [true, :callback_failed, nil]}
+  """
+  @spec trigger_raw_async(atom(), [term()]) :: {:ok, [term()]} | {:error, :not_async}
+  def trigger_raw_async(hook_name, args \\ []) when is_atom(hook_name) and is_list(args) do
+    if Hooks.async?(hook_name) do
+      callbacks = Registry.get_callbacks(hook_name)
+
+      if callbacks == [] do
+        {:ok, []}
+      else
+        results = execute_callbacks_async(hook_name, callbacks, args)
+        {:ok, results}
+      end
+    else
+      {:error, :not_async}
     end
   end
 

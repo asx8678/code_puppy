@@ -68,6 +68,16 @@ defmodule CodePuppyControl.CallbacksTest do
     end
   end
 
+  describe "trigger/2 with :update_map merge (load_model_config)" do
+    test "deep-merges map results" do
+      Callbacks.register(:load_model_config, fn _a, _b -> %{api_key: "test"} end)
+      Callbacks.register(:load_model_config, fn _a, _b -> %{timeout: 30} end)
+
+      result = Callbacks.trigger(:load_model_config, [:arg1, :arg2])
+      assert %{api_key: "test", timeout: 30} = result
+    end
+  end
+
   describe "trigger/2 with :extend_list merge" do
     test "flattens list results" do
       Callbacks.register(:custom_command_help, fn -> [{"woof", "emit woof"}] end)
@@ -75,6 +85,24 @@ defmodule CodePuppyControl.CallbacksTest do
 
       result = Callbacks.trigger(:custom_command_help)
       assert [{"woof", "emit woof"}, {"echo", "echo text"}] = result
+    end
+  end
+
+  describe "trigger/2 with :update_map merge (load_models_config)" do
+    test "deep-merges map results from load_models_config" do
+      Callbacks.register(:load_models_config, fn -> %{model_a: %{type: "gpt"}} end)
+      Callbacks.register(:load_models_config, fn -> %{model_b: %{type: "claude"}} end)
+
+      result = Callbacks.trigger(:load_models_config)
+      assert %{model_a: %{type: "gpt"}, model_b: %{type: "claude"}} = result
+    end
+
+    test "later map values win on key conflict" do
+      Callbacks.register(:load_models_config, fn -> %{model_x: %{version: 1}} end)
+      Callbacks.register(:load_models_config, fn -> %{model_x: %{version: 2}} end)
+
+      result = Callbacks.trigger(:load_models_config)
+      assert %{model_x: %{version: 2}} = result
     end
   end
 
@@ -231,6 +259,158 @@ defmodule CodePuppyControl.CallbacksTest do
     end
   end
 
+  describe "shutdown reentrancy guard" do
+    test "shutdown_stage starts as :idle" do
+      Callbacks.reset_shutdown_stage()
+      assert :idle == Callbacks.shutdown_stage()
+    end
+
+    test "trigger_shutdown transitions idle → running → complete" do
+      Callbacks.reset_shutdown_stage()
+      Callbacks.register(:shutdown, fn -> :clean end)
+
+      assert :clean == Callbacks.trigger_shutdown()
+      assert :complete == Callbacks.shutdown_stage()
+    end
+
+    test "trigger_shutdown returns nil when already running" do
+      Callbacks.reset_shutdown_stage()
+      # Register a callback that tries to trigger shutdown recursively
+      Callbacks.register(:shutdown, fn ->
+        # Recursive call should be blocked
+        Callbacks.trigger_shutdown()
+        :done
+      end)
+
+      result = Callbacks.trigger_shutdown()
+      assert :done == result
+      assert :complete == Callbacks.shutdown_stage()
+    end
+
+    test "trigger_shutdown returns nil when already complete" do
+      Callbacks.reset_shutdown_stage()
+      Callbacks.register(:shutdown, fn -> :clean end)
+
+      Callbacks.trigger_shutdown()
+      assert nil == Callbacks.trigger_shutdown()
+      assert :complete == Callbacks.shutdown_stage()
+    end
+
+    test "reset_shutdown_stage resets to idle" do
+      Callbacks.reset_shutdown_stage()
+      Callbacks.register(:shutdown, fn -> :done end)
+      Callbacks.trigger_shutdown()
+
+      assert :complete == Callbacks.shutdown_stage()
+      Callbacks.reset_shutdown_stage()
+      assert :idle == Callbacks.shutdown_stage()
+    end
+  end
+
+  describe "trigger_chained/3 (get_model_system_prompt chaining)" do
+    test "chains callbacks — second receives updated args from first" do
+      Callbacks.register(:get_model_system_prompt, fn _name, prompt, user ->
+        %{instructions: prompt <> " +p1", user_prompt: user <> " +u1", handled: true}
+      end)
+
+      Callbacks.register(:get_model_system_prompt, fn _name, prompt, user ->
+        %{instructions: prompt <> " +p2", user_prompt: user <> " +u2", handled: true}
+      end)
+
+      result =
+        Callbacks.trigger_chained(
+          :get_model_system_prompt,
+          ["gpt-4", "base", "hello"],
+          instructions: 1,
+          user_prompt: 2
+        )
+
+      # noop merge with multiple callbacks returns list
+      assert is_list(result)
+      assert length(result) == 2
+      # First callback gets original args
+      assert Enum.any?(result, fn r ->
+               r[:instructions] == "base +p1" and r[:user_prompt] == "hello +u1"
+             end)
+
+      # Second callback gets chained args (base +p1, hello +u1)
+      assert Enum.any?(result, fn r ->
+               r[:instructions] == "base +p1 +p2" and r[:user_prompt] == "hello +u1 +u2"
+             end)
+    end
+
+    test "returns nil when no callbacks registered" do
+      result =
+        Callbacks.trigger_chained(
+          :get_model_system_prompt,
+          ["gpt-4", "base", "hello"],
+          instructions: 1,
+          user_prompt: 2
+        )
+
+      assert nil == result
+    end
+
+    test "single callback returns its result" do
+      Callbacks.register(:get_model_system_prompt, fn _name, prompt, _user ->
+        %{instructions: prompt <> " +extra", handled: true}
+      end)
+
+      result =
+        Callbacks.trigger_chained(
+          :get_model_system_prompt,
+          ["gpt-4", "base", "hello"],
+          instructions: 1,
+          user_prompt: 2
+        )
+
+      assert %{instructions: "base +extra", handled: true} = result
+    end
+
+    test "non-map result does not update args for next callback" do
+      Callbacks.register(:get_model_system_prompt, fn _name, _prompt, _user ->
+        nil
+      end)
+
+      Callbacks.register(:get_model_system_prompt, fn _name, prompt, user ->
+        %{instructions: prompt, user_prompt: user, handled: true}
+      end)
+
+      result =
+        Callbacks.trigger_chained(
+          :get_model_system_prompt,
+          ["gpt-4", "base", "hello"],
+          instructions: 1,
+          user_prompt: 2
+        )
+
+      # Second callback should receive original args since first returned nil
+      # noop merge: [nil, %{...}] → filters nil → single map result
+      assert %{instructions: "base", user_prompt: "hello", handled: true} = result
+    end
+
+    test "failed callback produces :callback_failed sentinel" do
+      Callbacks.register(:get_model_system_prompt, fn _name, _prompt, _user ->
+        raise "boom"
+      end)
+
+      Callbacks.register(:get_model_system_prompt, fn _name, prompt, user ->
+        %{instructions: prompt, user_prompt: user}
+      end)
+
+      result =
+        Callbacks.trigger_chained(
+          :get_model_system_prompt,
+          ["gpt-4", "base", "hello"],
+          instructions: 1,
+          user_prompt: 2
+        )
+
+      # noop merge: [:callback_failed, %{...}] → filters error, returns only real value
+      assert %{instructions: "base", user_prompt: "hello"} = result
+    end
+  end
+
   describe "trigger_raw/2" do
     test "returns empty list when no callbacks registered" do
       assert [] = Callbacks.trigger_raw(:startup)
@@ -285,6 +465,54 @@ defmodule CodePuppyControl.CallbacksTest do
 
       assert [{:handled, "/echo hello", "echo"}] =
                Callbacks.trigger_raw(:custom_command, ["/echo hello", "echo"])
+    end
+  end
+
+  describe "trigger_raw_async/2" do
+    test "returns empty list when no callbacks registered" do
+      assert {:ok, []} = Callbacks.trigger_raw_async(:stream_event, ["token", %{}, nil])
+    end
+
+    test "preserves :callback_failed in async raw results (fail-closed)" do
+      Callbacks.register(:stream_event, fn _type, _data, _session ->
+        raise "async boom"
+      end)
+
+      Callbacks.register(:stream_event, fn _type, _data, _session ->
+        :ok
+      end)
+
+      assert {:ok, results} = Callbacks.trigger_raw_async(:stream_event, ["token", %{}, nil])
+      assert length(results) == 2
+      assert :callback_failed in results
+      assert :ok in results
+    end
+
+    test "returns {:error, :not_async} for non-async hooks" do
+      assert {:error, :not_async} = Callbacks.trigger_raw_async(:startup)
+    end
+
+    test "returns raw unmerged results (not merged by strategy)" do
+      Callbacks.register(:load_prompt, fn -> "section 1" end)
+      Callbacks.register(:load_prompt, fn -> "section 2" end)
+
+      # load_prompt is NOT async, so trigger_raw_async returns error
+      assert {:error, :not_async} = Callbacks.trigger_raw_async(:load_prompt)
+    end
+
+    test "async hook returns raw list without merge" do
+      Callbacks.register(:file_permission, fn _ctx, _path, _op, _, _, _ -> true end)
+      Callbacks.register(:file_permission, fn _ctx, _path, _op, _, _, _ -> false end)
+
+      assert {:ok, [true, false]} =
+               Callbacks.trigger_raw_async(:file_permission, [
+                 %{},
+                 "test.ex",
+                 "create",
+                 nil,
+                 nil,
+                 nil
+               ])
     end
   end
 end

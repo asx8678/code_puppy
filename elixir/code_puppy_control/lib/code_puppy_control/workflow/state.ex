@@ -246,6 +246,7 @@ defmodule CodePuppyControl.Workflow.State do
         session_id \\ nil,
         success \\ true,
         error \\ nil,
+        response_text \\ nil,
         metadata \\ nil
       ),
       do:
@@ -255,6 +256,7 @@ defmodule CodePuppyControl.Workflow.State do
           session_id,
           success,
           error,
+          response_text,
           metadata
         )
 
