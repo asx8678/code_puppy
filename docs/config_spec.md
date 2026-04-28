@@ -1,7 +1,8 @@
-# Config Spec: code_puppy/config.py
+# Config Spec: code_puppy/config/ (split package)
 
 > **Scope:** This spec covers every `get_*` accessor and path constant surfaced by
-> `code_puppy/config.py` (2698 LOC, 67 top-level `get_*` symbols). It is intended as
+> `code_puppy/config/` (split from the former monolithic `config.py`, 2698 LOC → 9 focused sub-modules).
+> The package re-exports all names for full backward compatibility. It is intended as
 > a migration-analysis reference for a future `CodePuppyControl.Config.Schema`
 > Elixir implementation. An appendix lists raw config keys declared in
 > `get_default_config_keys()` that have **no** dedicated getter inside config.py
