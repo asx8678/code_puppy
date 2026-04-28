@@ -19,15 +19,10 @@ Config keys in puppy.cfg:
 
 from __future__ import annotations
 
-import re
-from pathlib import Path
-
 from code_puppy.config.loader import (
-    ConfigState,
     _SANITIZE_MODEL_NAME_RE,
     _get_config,
     _invalidate_config,
-    _is_truthy,
     _registered_cache,
     _state,
     DEFAULT_SECTION,

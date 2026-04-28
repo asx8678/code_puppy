@@ -12,7 +12,6 @@ from __future__ import annotations
 import json
 import pathlib
 
-from code_puppy.config.loader import _state
 from code_puppy.config.paths import _path_mcp_servers_file
 
 __all__ = [

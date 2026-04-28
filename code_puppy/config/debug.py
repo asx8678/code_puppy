@@ -61,6 +61,9 @@ __all__ = [
     "load_api_keys_to_environment",
     "get_api_key",
     "set_api_key",
+    # ADR-003 / feature toggles
+    "get_elixir_message_shadow_mode_enabled",
+    "get_enable_gitignore_filtering",
 ]
 
 
@@ -331,6 +334,38 @@ def get_api_key(key_name: str) -> str:
 def set_api_key(key_name: str, value: str) -> None:
     """Set an API key in puppy.cfg."""
     set_config_value(key_name, value)
+
+
+# ---------------------------------------------------------------------------
+# Elixir shadow mode
+# ---------------------------------------------------------------------------
+
+
+get_elixir_message_shadow_mode_enabled = _make_bool_getter(
+    "enable_elixir_message_shadow_mode",
+    default=False,
+    doc="""Return True if Elixir message shadow mode is enabled (default False).
+
+    When enabled, both Python and Elixir execute message operations
+    and results are compared for divergence detection.
+    """,
+)
+
+
+# ---------------------------------------------------------------------------
+# Gitignore filtering
+# ---------------------------------------------------------------------------
+
+
+get_enable_gitignore_filtering = _make_bool_getter(
+    "enable_gitignore_filtering",
+    default=False,
+    doc="""Return True if gitignore-based file filtering is enabled (default False).
+
+    When enabled, file operations respect .gitignore patterns.
+    Higher-risk flag: requires explicit opt-in.
+    """,
+)
 
 
 # Code Puppy environment variable allowlist

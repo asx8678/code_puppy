@@ -30,8 +30,6 @@ from typing import TYPE_CHECKING
 
 from code_puppy.config_paths import (
     assert_write_allowed as _assert_write_allowed,
-    safe_atomic_write as _safe_atomic_write,
-    safe_mkdir_p as _safe_mkdir_p,
     is_pup_ex,
     home_dir as _home_dir,
 )

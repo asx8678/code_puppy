@@ -310,15 +310,21 @@ active home tree is silently overridden to stay within it. This is enforced by
 
 ---
 
-## 4. Elixir Schema Draft
+## 4. Elixir Schema Reference
 
-This is a **migration blueprint**, not production-ready Elixir. It is designed
-to inform a future `CodePuppyControl.Config.Schema` implementation.
+The Elixir implementation lives in `CodePuppyControl.Config.*` sub-modules.
+The section below is a field-spec reference for the `[puppy]` section keys.
+For the runnable implementation, see:
+
+- `CodePuppyControl.Config` (facade)
+- `CodePuppyControl.Config.Paths` (XDG path resolution)
+- `CodePuppyControl.Config.Isolation` (ADR-003 guard)
+- `CodePuppyControl.Config.Loader` / `Writer` (INI I/O)
+- `CodePuppyControl.Config.Models`, `Agents`, `Limits`, `Debug`, `TUI`, `Cache`
 
 ```text
-Blueprint: CodePuppyControl.Config.Schema
+Reference: CodePuppyControl.Config [puppy] section fields
 All fields map to the [puppy] section of puppy.cfg.
-Not runnable code -- field-spec format for migration planning.
 
 --- Identity / Defaults ---
   puppy_name            string   default: "Puppy"

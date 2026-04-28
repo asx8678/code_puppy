@@ -16,14 +16,12 @@ from __future__ import annotations
 import os
 
 from code_puppy.config.loader import (
-    _is_truthy,
     _registered_cache,
     get_value,
     set_config_value,
 )
 from code_puppy.config.paths import (
     _path_agents_dir,
-    _path_skills_dir,
 )
 
 __all__ = [

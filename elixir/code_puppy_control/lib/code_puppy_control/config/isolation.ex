@@ -161,9 +161,16 @@ defmodule CodePuppyControl.Config.Isolation do
     File.read(path)
   end
 
-  # ── Private ─────────────────────────────────────────────────────────────
+  # ── Explicit Guard (public for inter-module use) ───────────────────────
 
-  defp ensure_allowed!(path, action) do
+  @doc """
+  Raise `IsolationViolation` unless the write to `path` is allowed.
+
+  Called by `CodePuppyControl.Config.Writer` before every disk write
+  to enforce ADR-003 at the Elixir layer.
+  """
+  @spec ensure_allowed!(Path.t(), atom()) :: :ok
+  def ensure_allowed!(path, action) do
     resolved = Paths.canonical_resolve(path)
 
     unless allowed?(path) do

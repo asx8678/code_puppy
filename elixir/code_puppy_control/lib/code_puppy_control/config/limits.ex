@@ -219,6 +219,42 @@ defmodule CodePuppyControl.Config.Limits do
     end
   end
 
+  @doc """
+  Return characters to preserve from start of truncated return (default `500`).
+  Clamped to range `100–5000`.
+  """
+  @spec summarization_return_head_chars() :: pos_integer()
+  def summarization_return_head_chars do
+    case Loader.get_value("summarization_return_head_chars") do
+      nil ->
+        500
+
+      val ->
+        case Integer.parse(val) do
+          {n, _} -> n |> max(100) |> min(5_000)
+          :error -> 500
+        end
+    end
+  end
+
+  @doc """
+  Return characters to preserve from end of truncated return (default `200`).
+  Clamped to range `50–2000`.
+  """
+  @spec summarization_return_tail_chars() :: pos_integer()
+  def summarization_return_tail_chars do
+    case Loader.get_value("summarization_return_tail_chars") do
+      nil ->
+        200
+
+      val ->
+        case Integer.parse(val) do
+          {n, _} -> n |> max(50) |> min(2_000)
+          :error -> 200
+        end
+    end
+  end
+
   @doc "Model to use for summarization. Default: claude-3-haiku"
   def summarization_model do
     case Loader.get_value("summarization_model") do

@@ -36,6 +36,8 @@ use the bridge access pattern::
         result = call_method('code_context.explore_file', {'file_path': path})
 """
 
+# ruff: noqa: F401 — re-export facade; all imports are re-exported for backward compatibility
+
 from __future__ import annotations
 
 # ---------------------------------------------------------------------------
@@ -137,6 +139,7 @@ from code_puppy.config.models import (
     get_all_agent_pinned_models,
     get_effective_top_p,
     get_effective_seed,
+    _validate_model_exists,
 )
 
 # ---------------------------------------------------------------------------
@@ -192,6 +195,7 @@ from code_puppy.config.limits import (
     get_summarization_pretruncate_enabled,
     get_summarization_arg_max_length,
     get_summarization_return_max_length,
+    get_summarization_return_head_chars,
     get_summarization_return_tail_chars,
     get_summarization_history_offload_enabled,
     get_summarization_history_dir,
@@ -228,6 +232,8 @@ from code_puppy.config.debug import (
     get_memory_max_facts,
     get_memory_token_budget,
     get_memory_extraction_model,
+    get_elixir_message_shadow_mode_enabled,
+    get_enable_gitignore_filtering,
 )
 
 # ---------------------------------------------------------------------------
@@ -301,6 +307,7 @@ __all__ = [
     # Model management
     "set_model_name", "get_global_model_name", "get_all_model_settings",
     "model_supports_setting", "set_model_setting",
+    "_validate_model_exists",
     # OpenAI reasoning/verbosity
     "get_openai_reasoning_effort", "set_openai_reasoning_effort",
     "get_openai_reasoning_summary", "set_openai_reasoning_summary",
@@ -313,11 +320,14 @@ __all__ = [
     "get_all_agent_pinned_models",
     # Feature toggles
     "get_use_dbos", "get_yolo_mode", "get_auto_save_session",
+    "get_elixir_message_shadow_mode_enabled",
+    "get_enable_gitignore_filtering",
     # Personalization
     "get_puppy_name", "get_owner_name", "get_default_agent",
     # Session/compaction
     "get_resume_message_count", "get_compaction_threshold",
     "get_compaction_strategy", "get_protected_token_count",
+    "get_summarization_return_head_chars",
     # Temperature
     "get_effective_temperature",
     # UI colors

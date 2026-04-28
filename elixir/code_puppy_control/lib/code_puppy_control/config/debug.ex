@@ -56,6 +56,16 @@ defmodule CodePuppyControl.Config.Debug do
   @spec gitignore_filtering_enabled?() :: boolean()
   def gitignore_filtering_enabled?, do: truthy?("enable_gitignore_filtering", false)
 
+  @doc """
+  Return `true` if Elixir message shadow mode is enabled (default `false`).
+
+  When enabled, both Python and Elixir execute the same message operation
+  and results are compared for divergence detection. Opt-in only.
+  Config key: `enable_elixir_message_shadow_mode`
+  """
+  @spec elixir_message_shadow_mode_enabled?() :: boolean()
+  def elixir_message_shadow_mode_enabled?, do: truthy?("enable_elixir_message_shadow_mode", false)
+
   @doc "Return `true` if agent memory is enabled (default `false`)."
   @spec agent_memory_enabled?() :: boolean()
   def agent_memory_enabled?, do: truthy?("enable_agent_memory", false)

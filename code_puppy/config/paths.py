@@ -11,17 +11,15 @@ This module provides lazy path accessors for INTERNAL use (``_xdg_*()``,
 for backward-compatible EXTERNAL access (e.g. ``config.CONFIG_FILE``).
 """
 
+# ruff: noqa: F822 — lazy __all__ names resolved via __getattr__ (PEP 562)
+
 from __future__ import annotations
 
 import os
 import pathlib
 from collections.abc import Callable
-from pathlib import Path
 
 from code_puppy.config_paths import (
-    assert_write_allowed as _assert_write_allowed,
-    home_dir as _home_dir,
-    is_pup_ex,
     config_dir as _cp_config_dir,
     data_dir as _cp_data_dir,
     cache_dir as _cp_cache_dir,

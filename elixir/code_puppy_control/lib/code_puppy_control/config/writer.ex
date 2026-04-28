@@ -31,7 +31,7 @@ defmodule CodePuppyControl.Config.Writer do
 
   require Logger
 
-  alias CodePuppyControl.Config.Loader
+  alias CodePuppyControl.Config.{Isolation, Loader}
 
   # ── Client API ──────────────────────────────────────────────────────────
 
@@ -145,6 +145,8 @@ defmodule CodePuppyControl.Config.Writer do
   @spec do_write(Loader.config()) :: :ok
   defp do_write(config) do
     path = Loader.loaded_path()
+    # ADR-003: Verify the write target is NOT under the legacy home.
+    Isolation.ensure_allowed!(path, :write)
     content = serialize(config)
     atomic_write(path, content)
     Loader.invalidate()

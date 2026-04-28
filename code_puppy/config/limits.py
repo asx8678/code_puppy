@@ -29,7 +29,7 @@ from code_puppy.config.loader import (
     _registered_cache,
     get_value,
 )
-from code_puppy.config.models import get_model_context_length, get_global_model_name
+from code_puppy.config.models import get_model_context_length
 
 __all__ = [
     "get_protected_token_count",
@@ -46,6 +46,7 @@ __all__ = [
     "get_summarization_pretruncate_enabled",
     "get_summarization_arg_max_length",
     "get_summarization_return_max_length",
+    "get_summarization_return_head_chars",
     "get_summarization_return_tail_chars",
     "get_summarization_history_offload_enabled",
     "get_summarization_history_dir",
@@ -200,6 +201,15 @@ get_summarization_return_max_length = _make_int_getter(
     min_val=500,
     max_val=100000,
     doc="Max characters for tool return before truncation (default 5000).",
+)
+
+
+get_summarization_return_head_chars = _make_int_getter(
+    "summarization_return_head_chars",
+    default=500,
+    min_val=100,
+    max_val=5000,
+    doc="Characters to preserve from start of truncated return (default 500).",
 )
 
 
