@@ -14,6 +14,13 @@ defmodule CodePuppyControl.HookEngine.IntegrationTest do
     Callbacks.clear(:pre_tool_call)
     Callbacks.clear(:post_tool_call)
 
+    # Clean up adapter ETS if left from a prior test
+    try do
+      :ets.delete(:hook_engine_callback_adapter)
+    catch
+      _, _ -> :ok
+    end
+
     on_exit(fn ->
       # Safely stop the engine — it may already be dead
       case Process.whereis(@engine_name) do
@@ -30,6 +37,12 @@ defmodule CodePuppyControl.HookEngine.IntegrationTest do
 
       Callbacks.clear(:pre_tool_call)
       Callbacks.clear(:post_tool_call)
+
+      try do
+        :ets.delete(:hook_engine_callback_adapter)
+      catch
+        _, _ -> :ok
+      end
     end)
 
     {:ok, engine: @engine_name, pid: pid}
@@ -52,8 +65,6 @@ defmodule CodePuppyControl.HookEngine.IntegrationTest do
     end
 
     test "returns error for invalid config with strict mode" do
-      # Start a strict engine with a unique name
-      # {System.unique_integer([:positive])}
       strict_name = :strict_test_engine_
       result = HookEngine.start_link(strict_validation: true, name: strict_name)
 
@@ -64,7 +75,6 @@ defmodule CodePuppyControl.HookEngine.IntegrationTest do
           GenServer.stop(pid, :normal, 1000)
 
         {:error, _} ->
-          # Engine failed to start — that's also an acceptable strict-mode outcome
           :ok
       end
     end
@@ -261,12 +271,10 @@ defmodule CodePuppyControl.HookEngine.IntegrationTest do
 
   describe "CallbackAdapter integration" do
     test "registers as pre_tool_call callback" do
-      # Should not raise
       assert :ok = CallbackAdapter.register(@engine_name)
     end
 
     test "handle_pre_tool_call returns nil when not blocked" do
-      # No hooks configured, so nothing should block
       result = CallbackAdapter.handle_pre_tool_call(@engine_name, "Bash", %{})
       assert result == nil
     end
@@ -287,14 +295,209 @@ defmodule CodePuppyControl.HookEngine.IntegrationTest do
     end
 
     test "handle_post_tool_call always returns nil" do
-      result = CallbackAdapter.handle_post_tool_call(@engine_name, "Bash", %{})
+      result = CallbackAdapter.handle_post_tool_call(@engine_name, "Bash", %{}, "ok", 42)
       assert result == nil
     end
 
     test "adapter recovers from errors gracefully (fail-open)" do
-      # Use a non-existent engine — adapter should not crash
       result = CallbackAdapter.handle_pre_tool_call(:nonexistent_engine, "Bash", %{})
       assert result == nil
+    end
+
+    test "post_tool_call includes result and duration in context" do
+      # Load a hook that can read the stdin JSON (which includes context)
+      config = %{
+        "PostToolUse" => [
+          %{
+            "matcher" => "*",
+            "hooks" => [
+              %{
+                "type" => "command",
+                "command" =>
+                  "cat | python3 -c 'import sys,json; d=json.load(sys.stdin); print(d.get(\"tool_result\", \"MISSING\"))'"
+              }
+            ]
+          }
+        ]
+      }
+
+      :ok = HookEngine.load_config(@engine_name, config)
+
+      event_data =
+        EventData.new(
+          event_type: "PostToolUse",
+          tool_name: "Bash",
+          tool_args: %{},
+          context: %{"result" => "test_result", "duration_ms" => 150}
+        )
+
+      result = HookEngine.process_event(@engine_name, "PostToolUse", event_data)
+      assert result.executed_hooks == 1
+      assert String.contains?(hd(result.results).stdout, "test_result")
+    end
+  end
+
+  describe "CallbackAdapter idempotency" do
+    test "repeated register/1 does not create duplicate callbacks" do
+      # Register twice
+      assert :ok = CallbackAdapter.register(@engine_name)
+      assert :ok = CallbackAdapter.register(@engine_name)
+
+      pre_callbacks = Callbacks.get_callbacks(:pre_tool_call)
+      post_callbacks = Callbacks.get_callbacks(:post_tool_call)
+
+      # Should have exactly one pre and one post callback from the adapter
+      assert length(pre_callbacks) == 1
+      assert length(post_callbacks) == 1
+    end
+
+    test "repeated register/1 does not cause duplicate execution" do
+      # Register twice
+      :ok = CallbackAdapter.register(@engine_name)
+      :ok = CallbackAdapter.register(@engine_name)
+
+      # Load a hook that produces observable output
+      config = %{
+        "PreToolUse" => [
+          %{"matcher" => "*", "hooks" => [%{"type" => "command", "command" => "echo idempotent"}]}
+        ]
+      }
+
+      :ok = HookEngine.load_config(@engine_name, config)
+
+      # Trigger the callback via Callbacks.trigger
+      results = Callbacks.trigger_raw(:pre_tool_call, ["Bash", %{}, nil])
+
+      # Should be exactly one result (not duplicated)
+      assert length(results) == 1
+      # The result should be nil (hook didn't block)
+      assert hd(results) == nil
+    end
+
+    test "engine reference is updated on re-register" do
+      # Register with first engine
+      :ok = CallbackAdapter.register(@engine_name)
+
+      # Verify engine ref stored
+      assert CallbackAdapter.get_engine_ref() == @engine_name
+
+      # Register with a different engine name
+      other_name = :other_engine_for_idempotency_test
+
+      # Start another engine
+      {:ok, _pid} = HookEngine.start_link(name: other_name, strict_validation: false)
+
+      :ok = CallbackAdapter.register(other_name)
+
+      # Engine ref should now point to the new engine
+      assert CallbackAdapter.get_engine_ref() == other_name
+
+      # And still only one callback registered
+      assert length(Callbacks.get_callbacks(:pre_tool_call)) == 1
+
+      GenServer.stop(other_name, :normal, 1000)
+    end
+
+    test "stable function captures compare equal" do
+      # Verify that named function captures are equal across evaluations
+      f1 = &CallbackAdapter.pre_tool_callback/3
+      f2 = &CallbackAdapter.pre_tool_callback/3
+      assert f1 == f2
+
+      g1 = &CallbackAdapter.post_tool_callback/5
+      g2 = &CallbackAdapter.post_tool_callback/5
+      assert g1 == g2
+    end
+  end
+
+  describe "CallbackAdapter end-to-end through Callbacks" do
+    test "pre_tool_call through Callbacks reaches HookEngine" do
+      :ok = CallbackAdapter.register(@engine_name)
+
+      config = %{
+        "PreToolUse" => [
+          %{"matcher" => "Bash", "hooks" => [%{"type" => "command", "command" => "echo hooked"}]}
+        ]
+      }
+
+      :ok = HookEngine.load_config(@engine_name, config)
+
+      # Trigger via the Callbacks system (not directly)
+      results = Callbacks.trigger_raw(:pre_tool_call, ["Bash", %{}, nil])
+
+      # Should have one result from the adapter
+      assert length(results) == 1
+      assert hd(results) == nil
+    end
+
+    test "post_tool_call through Callbacks reaches HookEngine" do
+      :ok = CallbackAdapter.register(@engine_name)
+
+      config = %{
+        "PostToolUse" => [
+          %{"matcher" => "*", "hooks" => [%{"type" => "command", "command" => "echo post_hook"}]}
+        ]
+      }
+
+      :ok = HookEngine.load_config(@engine_name, config)
+
+      # Trigger via the Callbacks system
+      results = Callbacks.trigger_raw(:post_tool_call, ["Bash", %{}, "result", 100, nil])
+
+      # Post hooks don't block, so adapter returns nil
+      assert length(results) == 1
+      assert hd(results) == nil
+    end
+
+    test "blocking pre_tool_call returns %{blocked: true} through Callbacks" do
+      :ok = CallbackAdapter.register(@engine_name)
+
+      config = %{
+        "PreToolUse" => [
+          %{"matcher" => "*", "hooks" => [%{"type" => "command", "command" => "exit 1"}]}
+        ]
+      }
+
+      :ok = HookEngine.load_config(@engine_name, config)
+
+      # Trigger via the Callbacks system
+      results = Callbacks.trigger_raw(:pre_tool_call, ["Bash", %{}, nil])
+
+      assert length(results) == 1
+      result = hd(results)
+      assert result.blocked == true
+    end
+  end
+
+  describe "CallbackAdapter supervision/restart resilience" do
+    test "adapter uses registered name, survives engine restart" do
+      :ok = CallbackAdapter.register(@engine_name)
+
+      # Kill the engine
+      GenServer.stop(@engine_name, :normal, 1000)
+
+      # Engine is dead — adapter should fail-open
+      result = CallbackAdapter.handle_pre_tool_call(@engine_name, "Bash", %{})
+      assert result == nil
+
+      # Restart the engine with the same name
+      {:ok, _pid} = HookEngine.start_link(name: @engine_name, strict_validation: false)
+
+      # Adapter should work again because it references by name
+      result2 = CallbackAdapter.handle_pre_tool_call(@engine_name, "Bash", %{})
+      assert result2 == nil
+
+      # Load a blocking config and verify it works
+      config = %{
+        "PreToolUse" => [
+          %{"matcher" => "*", "hooks" => [%{"type" => "command", "command" => "exit 1"}]}
+        ]
+      }
+
+      :ok = HookEngine.load_config(@engine_name, config)
+
+      result3 = CallbackAdapter.handle_pre_tool_call(@engine_name, "Bash", %{})
+      assert result3.blocked == true
     end
   end
 end

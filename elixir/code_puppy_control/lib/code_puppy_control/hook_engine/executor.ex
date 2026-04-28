@@ -84,11 +84,35 @@ defmodule CodePuppyControl.HookEngine.Executor do
   @spec do_execute_command(HookConfig.t(), String.t(), String.t(), list(), String.t(), integer()) ::
           ExecutionResult.t()
   defp do_execute_command(hook, command, stdin_data, env, cwd, start_time) do
-    # Write stdin data to a temp file, pipe it in via shell redirect
-    stdin_path = write_temp_stdin(stdin_data)
+    # Create a private, unpredictable temp directory for this hook execution.
+    # Uses 0700 perms so only the BEAM OS user can access it — prevents
+    # symlink attacks and information leaks of hook JSON payloads.
+    temp_dir = create_secure_temp_dir()
 
-    stderr_path =
-      Path.join(System.tmp_dir!(), "hook_stderr_#{:erlang.unique_integer([:positive])}")
+    try do
+      do_execute_command_in_dir(hook, command, stdin_data, env, cwd, start_time, temp_dir)
+    after
+      # Clean up entire temp directory regardless of outcome.
+      # This ensures hook JSON (stdin payload) never leaks to disk.
+      File.rm_rf(temp_dir)
+    end
+  end
+
+  @spec do_execute_command_in_dir(
+          HookConfig.t(),
+          String.t(),
+          String.t(),
+          list(),
+          String.t(),
+          integer(),
+          String.t()
+        ) :: ExecutionResult.t()
+  defp do_execute_command_in_dir(hook, command, stdin_data, env, cwd, start_time, temp_dir) do
+    # Write stdin data to a secure temp file (0600 perms, unpredictable name)
+    stdin_path = write_temp_stdin(stdin_data, temp_dir)
+
+    # Stderr capture path (same secure directory)
+    stderr_path = secure_temp_path(temp_dir, "stderr")
 
     full_command =
       "( #{command} ) < #{shell_quote_path(stdin_path)} 2> #{shell_quote_path(stderr_path)}"
@@ -97,17 +121,15 @@ defmodule CodePuppyControl.HookEngine.Executor do
       Task.async(fn ->
         try do
           {stdout, exit_code} = System.cmd("sh", ["-c", full_command], env: env, cd: cwd)
-          stderr = File.read(stderr_path) |> elem(1)
-          {stdout, stderr || "", exit_code}
+          # Robust stderr read — handle :enoent and other error cases
+          stderr = read_temp_file(stderr_path)
+          {stdout, stderr, exit_code}
         rescue
           e ->
             {"", Exception.message(e), -1}
         catch
           kind, reason ->
             {"", Exception.format(kind, reason), -1}
-        after
-          # Best-effort cleanup
-          File.rm(stderr_path)
         end
       end)
 
@@ -121,10 +143,6 @@ defmodule CodePuppyControl.HookEngine.Executor do
       end
 
     duration_ms = max(0.0, (System.monotonic_time(:millisecond) - start_time) * 1.0)
-
-    # Clean up stdin temp file
-    File.rm(stdin_path)
-    File.rm(stderr_path)
 
     case result do
       {:ok, stdout, stderr, exit_code} ->
@@ -382,12 +400,61 @@ defmodule CodePuppyControl.HookEngine.Executor do
 
   defp make_serializable(value), do: inspect(value)
 
-  # Write stdin payload to a temp file for shell redirect.
-  @spec write_temp_stdin(String.t()) :: String.t()
-  defp write_temp_stdin(data) do
-    path = Path.join(System.tmp_dir!(), "hook_stdin_#{:erlang.unique_integer([:positive])}")
+  # Create a private temp directory with restrictive permissions.
+  # Uses :crypto.strong_rand_bytes for unpredictable naming and
+  # chmod 0o700 so only the BEAM OS user can access it.
+  @spec create_secure_temp_dir() :: String.t()
+  defp create_secure_temp_dir do
+    rand_suffix =
+      :crypto.strong_rand_bytes(16) |> Base.encode16(case: :lower) |> String.slice(0, 24)
+
+    dir = Path.join(System.tmp_dir!(), "codepuppy-hooks-#{rand_suffix}")
+    File.mkdir_p!(dir)
+
+    # Set 0700 permissions (owner-only access).
+    # Gracefully handle platforms where chmod is unsupported (Windows).
+    try do
+      File.chmod!(dir, 0o700)
+    rescue
+      _ -> :ok
+    end
+
+    dir
+  end
+
+  # Generate a secure temp file path within the given directory.
+  @spec secure_temp_path(String.t(), String.t()) :: String.t()
+  defp secure_temp_path(temp_dir, prefix) do
+    rand_suffix =
+      :crypto.strong_rand_bytes(8) |> Base.encode16(case: :lower) |> String.slice(0, 12)
+
+    Path.join(temp_dir, "#{prefix}_#{rand_suffix}")
+  end
+
+  # Write stdin payload to a secure temp file with 0600 permissions.
+  @spec write_temp_stdin(String.t(), String.t()) :: String.t()
+  defp write_temp_stdin(data, temp_dir) do
+    path = secure_temp_path(temp_dir, "stdin")
     File.write!(path, data)
+
+    # Set 0600 permissions (owner read/write only).
+    # Gracefully handle platforms where chmod is unsupported.
+    try do
+      File.chmod!(path, 0o600)
+    rescue
+      _ -> :ok
+    end
+
     path
+  end
+
+  # Read a temp file robustly — returns empty string on any error.
+  @spec read_temp_file(String.t()) :: String.t()
+  defp read_temp_file(path) do
+    case File.read(path) do
+      {:ok, content} -> content
+      {:error, _} -> ""
+    end
   end
 
   # Quote a file path for safe embedding in a shell command.

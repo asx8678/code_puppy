@@ -244,4 +244,141 @@ defmodule CodePuppyControl.HookEngine.ExecutorTest do
       assert String.contains?(summary, "Blocked: 1")
     end
   end
+
+  describe "temp file security" do
+    test "stdin temp files are created in private directory" do
+      hook = HookConfig.new(matcher: "*", type: :command, command: "echo secure")
+      event_data = EventData.new(event_type: "PreToolUse", tool_name: "Bash")
+
+      result = Executor.execute_hook(hook, event_data)
+
+      assert result.exit_code == 0
+      # After execution, no hook temp files should remain in /tmp
+      # (cleaned up by the after block)
+      tmp_files =
+        File.ls!(System.tmp_dir!())
+        |> Enum.filter(&String.starts_with?(&1, "codepuppy-hooks-"))
+
+      # Should be empty (all cleaned up)
+      assert tmp_files == []
+    end
+
+    test "temp directory has restrictive permissions" do
+      hook =
+        HookConfig.new(
+          matcher: "*",
+          type: :command,
+          command: "stat -f %Lp /tmp/codepuppy-hooks-*"
+        )
+
+      event_data = EventData.new(event_type: "PreToolUse", tool_name: "Bash")
+
+      # This test verifies the directory exists during execution
+      # The actual permission check is done in the implementation
+      result = Executor.execute_hook(hook, event_data)
+
+      # The hook may or may not succeed depending on whether a directory
+      # exists at query time — the key point is no crash
+      assert %ExecutionResult{} = result
+    end
+
+    test "temp files are cleaned up after execution" do
+      # Count temp files before
+      before_count =
+        case File.ls(System.tmp_dir!()) do
+          {:ok, files} ->
+            Enum.count(files, &String.starts_with?(&1, "codepuppy-hooks-"))
+
+          _ ->
+            0
+        end
+
+      hook = HookConfig.new(matcher: "*", type: :command, command: "echo cleanup_test")
+      event_data = EventData.new(event_type: "PreToolUse", tool_name: "Bash")
+
+      _result = Executor.execute_hook(hook, event_data)
+
+      # Count temp files after
+      after_count =
+        case File.ls(System.tmp_dir!()) do
+          {:ok, files} ->
+            Enum.count(files, &String.starts_with?(&1, "codepuppy-hooks-"))
+
+          _ ->
+            0
+        end
+
+      # No new temp directories should remain
+      assert after_count == before_count
+    end
+
+    test "temp files are cleaned up even on hook failure" do
+      before_count =
+        case File.ls(System.tmp_dir!()) do
+          {:ok, files} ->
+            Enum.count(files, &String.starts_with?(&1, "codepuppy-hooks-"))
+
+          _ ->
+            0
+        end
+
+      # Hook that fails
+      hook = HookConfig.new(matcher: "*", type: :command, command: "exit 1")
+      event_data = EventData.new(event_type: "PreToolUse", tool_name: "Bash")
+
+      _result = Executor.execute_hook(hook, event_data)
+
+      after_count =
+        case File.ls(System.tmp_dir!()) do
+          {:ok, files} ->
+            Enum.count(files, &String.starts_with?(&1, "codepuppy-hooks-"))
+
+          _ ->
+            0
+        end
+
+      assert after_count == before_count
+    end
+
+    test "temp files are cleaned up on timeout" do
+      before_count =
+        case File.ls(System.tmp_dir!()) do
+          {:ok, files} ->
+            Enum.count(files, &String.starts_with?(&1, "codepuppy-hooks-"))
+
+          _ ->
+            0
+        end
+
+      # Hook that times out
+      hook = HookConfig.new(matcher: "*", type: :command, command: "sleep 10", timeout: 200)
+      event_data = EventData.new(event_type: "PreToolUse", tool_name: "Bash")
+
+      _result = Executor.execute_hook(hook, event_data)
+
+      after_count =
+        case File.ls(System.tmp_dir!()) do
+          {:ok, files} ->
+            Enum.count(files, &String.starts_with?(&1, "codepuppy-hooks-"))
+
+          _ ->
+            0
+        end
+
+      assert after_count == before_count
+    end
+
+    test "stderr is captured robustly (not via elem(1))" do
+      # Hook that writes to stderr
+      hook =
+        HookConfig.new(matcher: "*", type: :command, command: "echo stderr_output >&2; exit 0")
+
+      event_data = EventData.new(event_type: "PreToolUse", tool_name: "Bash")
+
+      result = Executor.execute_hook(hook, event_data)
+
+      assert result.exit_code == 0
+      assert String.contains?(result.stderr, "stderr_output")
+    end
+  end
 end

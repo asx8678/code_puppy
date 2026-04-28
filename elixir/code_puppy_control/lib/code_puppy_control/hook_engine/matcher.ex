@@ -202,26 +202,29 @@ defmodule CodePuppyControl.HookEngine.Matcher do
       not MapSet.disjoint?(Aliases.get_aliases(tool_name), Aliases.get_aliases(pattern)) ->
         true
 
-      # File extension match (.py, .ts, etc.)
-      String.starts_with?(pattern, ".") ->
-        case extract_file_path(tool_args) do
-          nil -> false
-          path -> String.ends_with?(path, pattern)
-        end
-
-      # Wildcard match (*)
-      String.contains?(pattern, "*") ->
-        parts = String.split(pattern, "*")
-        regex_str = Enum.map_join(parts, ".*", &Regex.escape/1)
-        safe_regex_match("^#{regex_str}$", tool_name)
-
-      # Regex pattern match
+      # Regex pattern match (advanced metacharacters: ^, $, +, ?, etc.)
+      # Must come BEFORE file-extension and wildcard checks so patterns
+      # like `^agent_.*` and `.*\.py$` are treated as regex, not glob.
       is_regex_pattern?(pattern) ->
         safe_regex_match(pattern, tool_name) ||
           case extract_file_path(tool_args) do
             nil -> false
             path -> safe_regex_match(pattern, path)
           end
+
+      # File extension match (.py, .ts, etc.) — only simple extensions
+      # Patterns with regex metacharacters are handled above.
+      String.starts_with?(pattern, ".") ->
+        case extract_file_path(tool_args) do
+          nil -> false
+          path -> String.ends_with?(path, pattern)
+        end
+
+      # Simple wildcard/glob match (only `*` metacharacter)
+      String.contains?(pattern, "*") ->
+        parts = String.split(pattern, "*")
+        regex_str = Enum.map_join(parts, ".*", &Regex.escape/1)
+        safe_regex_match("^#{regex_str}$", tool_name)
 
       true ->
         false
@@ -249,9 +252,26 @@ defmodule CodePuppyControl.HookEngine.Matcher do
 
   defp is_safe_pattern?(_pattern), do: false
 
+  # Metacharacters that indicate regex semantics (not glob).
+  # Excludes `*` because `*` is handled separately as a glob/wildcard.
+  # Includes `.` only when it appears in regex context (`.*` or `\.`).
+  # Cannot use ~w sigil due to special characters — plain list required.
+  @regex_metacharacters ["^", "$", "+", "?", "{", "}", "[", "]", "(", ")", "|", "\\"]
+
   @spec is_regex_pattern?(String.t()) :: boolean()
   defp is_regex_pattern?(pattern) do
-    regex_chars = "^$.+?[](){}{|}\\\\"
-    String.contains?(pattern, regex_chars)
+    Enum.any?(@regex_metacharacters, &String.contains?(pattern, &1)) or
+      regex_dot?(pattern)
+  end
+
+  # A dot is a regex metacharacter when it appears in regex context:
+  #   `.*` — zero-or-more-any
+  #   `\.` — escaped literal dot (single backslash + dot)
+  # Standalone dots (e.g. in file paths like `main.py`) are NOT
+  # treated as regex because they're handled by file-extension matching
+  # or exact-name matching earlier in `match_single`.
+  @spec regex_dot?(String.t()) :: boolean()
+  defp regex_dot?(pattern) do
+    String.contains?(pattern, ".*") or String.contains?(pattern, "\\.")
   end
 end
