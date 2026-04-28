@@ -231,6 +231,54 @@ defmodule CodePuppyControl.CallbacksTest do
     end
   end
 
+  describe "shutdown reentrancy guard" do
+    test "shutdown_stage starts as :idle" do
+        Callbacks.reset_shutdown_stage()
+        assert :idle == Callbacks.shutdown_stage()
+    end
+
+    test "trigger_shutdown transitions idle → running → complete" do
+        Callbacks.reset_shutdown_stage()
+        Callbacks.register(:shutdown, fn -> :clean end)
+
+        assert :clean == Callbacks.trigger_shutdown()
+        assert :complete == Callbacks.shutdown_stage()
+    end
+
+    test "trigger_shutdown returns nil when already running" do
+        Callbacks.reset_shutdown_stage()
+        # Register a callback that tries to trigger shutdown recursively
+        Callbacks.register(:shutdown, fn ->
+          # Recursive call should be blocked
+          Callbacks.trigger_shutdown()
+          :done
+        end)
+
+        result = Callbacks.trigger_shutdown()
+        assert :done == result
+        assert :complete == Callbacks.shutdown_stage()
+    end
+
+    test "trigger_shutdown returns nil when already complete" do
+        Callbacks.reset_shutdown_stage()
+        Callbacks.register(:shutdown, fn -> :clean end)
+
+        Callbacks.trigger_shutdown()
+        assert nil == Callbacks.trigger_shutdown()
+        assert :complete == Callbacks.shutdown_stage()
+    end
+
+    test "reset_shutdown_stage resets to idle" do
+        Callbacks.reset_shutdown_stage()
+        Callbacks.register(:shutdown, fn -> :done end)
+        Callbacks.trigger_shutdown()
+
+        assert :complete == Callbacks.shutdown_stage()
+        Callbacks.reset_shutdown_stage()
+        assert :idle == Callbacks.shutdown_stage()
+    end
+  end
+
   describe "trigger_raw/2" do
     test "returns empty list when no callbacks registered" do
       assert [] = Callbacks.trigger_raw(:startup)
@@ -285,6 +333,47 @@ defmodule CodePuppyControl.CallbacksTest do
 
       assert [{:handled, "/echo hello", "echo"}] =
                Callbacks.trigger_raw(:custom_command, ["/echo hello", "echo"])
+    end
+  end
+
+  describe "trigger_raw_async/2" do
+    test "returns empty list when no callbacks registered" do
+      assert {:ok, []} = Callbacks.trigger_raw_async(:stream_event, ["token", %{}, nil])
+    end
+
+    test "preserves :callback_failed in async raw results (fail-closed)" do
+      Callbacks.register(:stream_event, fn _type, _data, _session ->
+        raise "async boom"
+      end)
+
+      Callbacks.register(:stream_event, fn _type, _data, _session ->
+        :ok
+      end)
+
+      assert {:ok, results} = Callbacks.trigger_raw_async(:stream_event, ["token", %{}, nil])
+      assert length(results) == 2
+      assert :callback_failed in results
+      assert :ok in results
+    end
+
+    test "returns {:error, :not_async} for non-async hooks" do
+      assert {:error, :not_async} = Callbacks.trigger_raw_async(:startup)
+    end
+
+    test "returns raw unmerged results (not merged by strategy)" do
+      Callbacks.register(:load_prompt, fn -> "section 1" end)
+      Callbacks.register(:load_prompt, fn -> "section 2" end)
+
+      # load_prompt is NOT async, so trigger_raw_async returns error
+      assert {:error, :not_async} = Callbacks.trigger_raw_async(:load_prompt)
+    end
+
+    test "async hook returns raw list without merge" do
+      Callbacks.register(:file_permission, fn _ctx, _path, _op, _, _, _ -> true end)
+      Callbacks.register(:file_permission, fn _ctx, _path, _op, _, _, _ -> false end)
+
+      assert {:ok, [true, false]} =
+               Callbacks.trigger_raw_async(:file_permission, [%{}, "test.ex", "create", nil, nil, nil])
     end
   end
 end

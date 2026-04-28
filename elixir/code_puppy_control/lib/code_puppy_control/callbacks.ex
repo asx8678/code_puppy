@@ -42,6 +42,86 @@ defmodule CodePuppyControl.Callbacks do
 
   alias CodePuppyControl.Callbacks.{Hooks, Merge, Registry}
 
+  # ── Shutdown Reentrancy Guard ───────────────────────────────────
+  # 3-state machine: :idle → :running → :complete
+  # Prevents recursive cleanup when signals arrive during shutdown.
+  # Ported from Python's _ShutdownStage in code_puppy/callbacks.py.
+
+  @shutdown_table :code_puppy_shutdown_stage
+
+  @doc """
+  Returns the current shutdown stage.
+
+  One of `:idle`, `:running`, or `:complete`.
+  """
+  @spec shutdown_stage() :: :idle | :running | :complete
+  def shutdown_stage do
+    case :ets.whereis(@shutdown_table) do
+      :undefined -> :idle
+      _ref ->
+        case :ets.lookup(@shutdown_table, :stage) do
+          [{:stage, stage}] -> stage
+          [] -> :idle
+        end
+    end
+  end
+
+  @doc """
+  Resets the shutdown stage to `:idle`.
+
+  Only intended for testing. Do not call in production code.
+  """
+  @spec reset_shutdown_stage() :: :ok
+  def reset_shutdown_stage do
+    ensure_shutdown_table()
+    :ets.insert(@shutdown_table, {:stage, :idle})
+    :ok
+  end
+
+  @doc """
+  Triggers shutdown callbacks with reentrancy protection.
+
+  Implements a 3-state machine (:idle → :running → :complete) to prevent
+  recursive cleanup when signals arrive during an ongoing shutdown.
+
+  Returns the merged result, or `nil` if shutdown is already running/complete.
+  """
+  @spec trigger_shutdown() :: term()
+  def trigger_shutdown do
+    ensure_shutdown_table()
+
+    # Try to transition :idle → :running atomically
+    case :ets.lookup(@shutdown_table, :stage) do
+      [{:stage, :idle}] ->
+        :ets.insert(@shutdown_table, {:stage, :running})
+        try do
+          trigger(:shutdown)
+        after
+          :ets.insert(@shutdown_table, {:stage, :complete})
+        end
+
+      [{:stage, :running}] ->
+        Logger.warning("Shutdown triggered recursively (already running); ignoring")
+        nil
+
+      [{:stage, :complete}] ->
+        Logger.debug("Shutdown already complete; ignoring duplicate request")
+        nil
+    end
+  end
+
+  defp ensure_shutdown_table do
+    case :ets.whereis(@shutdown_table) do
+      :undefined ->
+        :ets.new(@shutdown_table, [:set, :public, :named_table])
+        :ets.insert(@shutdown_table, {:stage, :idle})
+        :ok
+
+      _ref ->
+        :ok
+    end
+  end
+
   # ── Registration ────────────────────────────────────────────────
 
   @doc """
@@ -172,6 +252,38 @@ defmodule CodePuppyControl.Callbacks do
       []
     else
       execute_callbacks(hook_name, callbacks, args)
+    end
+  end
+
+  @doc """
+  Async variant of `trigger_raw/2` for hooks declared with `async: true`.
+
+  Like `trigger_raw/2`, returns the **unmerged** results list with
+  `:callback_failed` sentinels preserved. Unlike `trigger_async/2`,
+  which merges results before returning, this function preserves
+  raw results for fail-closed security checks.
+
+  Returns `{:ok, [results]}` or `{:error, :not_async}` if the hook
+  doesn't support async execution.
+
+  ## Examples
+
+      CodePuppyControl.Callbacks.trigger_raw_async(:file_permission, [ctx, path, op])
+      #=> {:ok, [true, :callback_failed, nil]}
+  """
+  @spec trigger_raw_async(atom(), [term()]) :: {:ok, [term()]} | {:error, :not_async}
+  def trigger_raw_async(hook_name, args \\ []) when is_atom(hook_name) and is_list(args) do
+    if Hooks.async?(hook_name) do
+      callbacks = Registry.get_callbacks(hook_name)
+
+      if callbacks == [] do
+        {:ok, []}
+      else
+        results = execute_callbacks_async(hook_name, callbacks, args)
+        {:ok, results}
+      end
+    else
+      {:error, :not_async}
     end
   end
 

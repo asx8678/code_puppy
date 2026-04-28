@@ -128,7 +128,7 @@ defmodule CodePuppyControl.Callbacks.Hooks do
     },
     file_permission: %{
       arity: 6,
-      merge: :noop,
+      merge: :or_bool,
       async: true,
       description: "Security hook for file operations (fail-closed)"
     },
@@ -162,7 +162,7 @@ defmodule CodePuppyControl.Callbacks.Hooks do
       async: false,
       description: "Collect custom agent registrations"
     },
-    register_model_types: %{
+    register_model_type: %{
       arity: 0,
       merge: :extend_list,
       async: false,
@@ -200,9 +200,9 @@ defmodule CodePuppyControl.Callbacks.Hooks do
     },
     get_motd: %{
       arity: 0,
-      merge: :extend_list,
+      merge: :noop,
       async: false,
-      description: "Get custom MOTD content"
+      description: "Get custom MOTD content (returns tuple {msg, version} or nil)"
     },
     register_model_providers: %{
       arity: 0,
@@ -211,13 +211,13 @@ defmodule CodePuppyControl.Callbacks.Hooks do
       description: "Register custom model providers"
     },
     message_history_processor_start: %{
-      arity: 1,
+      arity: 4,
       merge: :noop,
       async: true,
       description: "Before message history processing"
     },
     message_history_processor_end: %{
-      arity: 1,
+      arity: 5,
       merge: :noop,
       async: true,
       description: "After message history processing"

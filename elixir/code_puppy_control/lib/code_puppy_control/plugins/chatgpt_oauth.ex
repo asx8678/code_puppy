@@ -16,7 +16,7 @@ defmodule CodePuppyControl.Plugins.ChatGptOAuth do
   - `:startup` — Proactively refresh tokens at boot
   - `:custom_command` — `/chatgpt-auth`, `/chatgpt-status`, `/chatgpt-logout`
   - `:custom_command_help` — Help text for custom commands
-  - `:register_model_types` — Register `chatgpt_oauth` model type handler
+  - `:register_model_type` — Register `chatgpt_oauth` model type handler
   """
 
   use CodePuppyControl.Plugins.PluginBehaviour
@@ -38,7 +38,7 @@ defmodule CodePuppyControl.Plugins.ChatGptOAuth do
     Callbacks.register(:startup, &__MODULE__.on_startup/0)
     Callbacks.register(:custom_command, &__MODULE__.handle_custom_command/2)
     Callbacks.register(:custom_command_help, &__MODULE__.custom_help/0)
-    Callbacks.register(:register_model_types, &__MODULE__.register_model_types/0)
+    Callbacks.register(:register_model_type, &__MODULE__.register_model_types/0)
     :ok
   end
 

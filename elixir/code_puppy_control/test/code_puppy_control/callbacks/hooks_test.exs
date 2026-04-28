@@ -29,7 +29,7 @@ defmodule CodePuppyControl.Callbacks.HooksTest do
     :register_browser_types,
     :register_mcp_catalog_servers,
     :register_model_providers,
-    :register_model_types,
+    :register_model_type,
     :register_tools,
     :run_shell_command,
     :shutdown,
@@ -142,6 +142,18 @@ defmodule CodePuppyControl.Callbacks.HooksTest do
     test "returns :noop for startup (no merge needed)" do
       assert :noop = Hooks.merge_type(:startup)
     end
+
+    test "returns :or_bool for file_permission (AGENTS table: bool→OR)" do
+      assert :or_bool = Hooks.merge_type(:file_permission)
+    end
+
+    test "returns :noop for get_motd (returns tuple, not list)" do
+      assert :noop = Hooks.merge_type(:get_motd)
+    end
+
+    test "returns :extend_list for register_model_type" do
+      assert :extend_list = Hooks.merge_type(:register_model_type)
+    end
   end
 
   describe "async?/1" do
@@ -177,6 +189,18 @@ defmodule CodePuppyControl.Callbacks.HooksTest do
 
     test "agent_run_end has arity 6" do
       assert 6 = Hooks.arity(:agent_run_end)
+    end
+
+    test "message_history_processor_start has arity 4" do
+      assert 4 = Hooks.arity(:message_history_processor_start)
+    end
+
+    test "message_history_processor_end has arity 5" do
+      assert 5 = Hooks.arity(:message_history_processor_end)
+    end
+
+    test "file_permission has arity 6" do
+      assert 6 = Hooks.arity(:file_permission)
     end
 
     test "unknown hook returns 0" do
