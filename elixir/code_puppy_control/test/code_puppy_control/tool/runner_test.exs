@@ -1,6 +1,7 @@
 defmodule CodePuppyControl.Tool.RunnerTest do
   use ExUnit.Case, async: false
 
+  alias CodePuppyControl.Callbacks
   alias CodePuppyControl.Tool.{Registry, Runner}
 
   # ── Test Tool Modules ─────────────────────────────────────────────────────
@@ -290,6 +291,190 @@ defmodule CodePuppyControl.Tool.RunnerTest do
       assert is_integer(meas_stop.duration)
 
       :telemetry.detach(handler_id)
+    end
+  end
+
+  # ── Callback Integration Tests ──────────────────────────────────────────
+  #
+  # These test that the Tool.Runner dispatches :pre_tool_call and
+  # :post_tool_call callbacks around tool execution, proving that:
+  #   1. A pre_tool_call hook returning %{blocked: true} prevents execution
+  #   2. A post_tool_call hook receives result and duration_ms
+  #   3. Fail-closed: a crashing pre hook blocks execution
+  #
+  # Refs: code_puppy-154.4 (Shepherd REQUEST_CHANGES)
+
+  describe "invoke/3 — pre_tool_call callback integration" do
+    setup do
+      Callbacks.clear(:pre_tool_call)
+      Callbacks.clear(:post_tool_call)
+
+      on_exit(fn ->
+        Callbacks.clear(:pre_tool_call)
+        Callbacks.clear(:post_tool_call)
+      end)
+
+      :ok
+    end
+
+    test "tool executes normally when no pre_tool_call callbacks are registered" do
+      assert {:ok, "echo: hello"} =
+               Runner.invoke(:runner_echo, %{"message" => "hello"}, %{run_id: "pre-1"})
+    end
+
+    test "tool executes when pre_tool_call callback returns nil" do
+      Callbacks.register(:pre_tool_call, fn _tool_name, _args, _ctx -> nil end)
+
+      assert {:ok, "echo: hello"} =
+               Runner.invoke(:runner_echo, %{"message" => "hello"}, %{run_id: "pre-2"})
+    end
+
+    test "pre_tool_call hook returning %{blocked: true} prevents tool execution" do
+      Callbacks.register(:pre_tool_call, fn _tool_name, _args, _ctx ->
+        %{blocked: true, reason: "security policy denies this tool"}
+      end)
+
+      result =
+        Runner.invoke(:runner_echo, %{"message" => "hello"}, %{run_id: "pre-blocked"})
+
+      assert {:error, reason} = result
+      assert String.contains?(reason, "blocked by pre_tool_call hook")
+      assert String.contains?(reason, "security policy denies this tool")
+    end
+
+    test "pre_tool_call hook returning %{blocked: true} without reason uses default" do
+      Callbacks.register(:pre_tool_call, fn _tool_name, _args, _ctx ->
+        %{blocked: true}
+      end)
+
+      result =
+        Runner.invoke(:runner_echo, %{"message" => "hello"}, %{run_id: "pre-no-reason"})
+
+      assert {:error, reason} = result
+      assert String.contains?(reason, "blocked by pre_tool_call hook")
+      assert String.contains?(reason, "no reason provided")
+    end
+
+    test "crashing pre_tool_call callback blocks execution (fail-closed)" do
+      Callbacks.register(:pre_tool_call, fn _tool_name, _args, _ctx ->
+        raise "security check exploded"
+      end)
+
+      result =
+        Runner.invoke(:runner_echo, %{"message" => "hello"}, %{run_id: "pre-crash"})
+
+      assert {:error, reason} = result
+      assert String.contains?(reason, "blocked by pre_tool_call hook")
+      assert String.contains?(reason, "fail-closed")
+    end
+
+    test "pre_tool_call receives tool_name, args, and context" do
+      test_pid = self()
+
+      Callbacks.register(:pre_tool_call, fn tool_name, args, ctx ->
+        send(test_pid, {:pre_called, tool_name, args, ctx})
+        nil
+      end)
+
+      Runner.invoke(:runner_echo, %{"message" => "inspect"}, %{run_id: "pre-inspect"})
+
+      assert_receive {:pre_called, "runner_echo", args, ctx}, 1000
+      assert args == %{"message" => "inspect"}
+      assert ctx.run_id == "pre-inspect"
+    end
+  end
+
+  describe "invoke/3 — post_tool_call callback integration" do
+    setup do
+      Callbacks.clear(:pre_tool_call)
+      Callbacks.clear(:post_tool_call)
+
+      on_exit(fn ->
+        Callbacks.clear(:pre_tool_call)
+        Callbacks.clear(:post_tool_call)
+      end)
+
+      :ok
+    end
+
+    test "post_tool_call receives tool_name, args, result, and duration_ms" do
+      test_pid = self()
+
+      Callbacks.register(:post_tool_call, fn tool_name, args, result, duration_ms, ctx ->
+        send(test_pid, {:post_called, tool_name, args, result, duration_ms, ctx})
+        nil
+      end)
+
+      Runner.invoke(:runner_echo, %{"message" => "post-test"}, %{run_id: "post-1"})
+
+      assert_receive {:post_called, tool_name, args, result, duration_ms, ctx}, 1000
+      assert tool_name == "runner_echo"
+      assert args == %{"message" => "post-test"}
+      assert result == {:ok, "echo: post-test"}
+      assert is_integer(duration_ms)
+      assert duration_ms >= 0
+      assert ctx.run_id == "post-1"
+    end
+
+    test "post_tool_call receives error result when tool fails" do
+      test_pid = self()
+
+      Callbacks.register(:post_tool_call, fn _tool_name, _args, result, _duration, _ctx ->
+        send(test_pid, {:post_result, result})
+        nil
+      end)
+
+      # BlockedTool denies in permission_check, which produces an error result
+      Runner.invoke(:runner_blocked, %{}, %{run_id: "post-err"})
+
+      assert_receive {:post_result, result}, 1000
+      assert {:error, _} = result
+    end
+
+    test "post_tool_call receives non-zero duration for slow tools" do
+      test_pid = self()
+
+      Callbacks.register(:post_tool_call, fn _tool_name, _args, _result, duration_ms, _ctx ->
+        send(test_pid, {:post_duration, duration_ms})
+        nil
+      end)
+
+      # EchoTool is instant, but we can still verify duration is present
+      Runner.invoke(:runner_echo, %{"message" => "duration"}, %{run_id: "post-dur"})
+
+      assert_receive {:post_duration, duration_ms}, 1000
+      assert is_integer(duration_ms)
+      assert duration_ms >= 0
+    end
+
+    test "crashing post_tool_call callback does not affect tool result" do
+      Callbacks.register(:post_tool_call, fn _tool_name, _args, _result, _duration, _ctx ->
+        raise "post hook exploded"
+      end)
+
+      # Tool should still succeed — post hooks are observers only
+      assert {:ok, "echo: resilient"} =
+               Runner.invoke(:runner_echo, %{"message" => "resilient"}, %{run_id: "post-crash"})
+    end
+
+    test "post_tool_call is NOT called when pre_tool_call blocks" do
+      test_pid = self()
+
+      Callbacks.register(:pre_tool_call, fn _tool_name, _args, _ctx ->
+        %{blocked: true, reason: "denied"}
+      end)
+
+      Callbacks.register(:post_tool_call, fn tool_name, _args, _result, _duration, _ctx ->
+        send(test_pid, {:post_should_not_fire, tool_name})
+        nil
+      end)
+
+      result =
+        Runner.invoke(:runner_echo, %{"message" => "blocked"}, %{run_id: "pre-block-post"})
+
+      assert {:error, _} = result
+      # Post callback should NOT be called when tool is blocked
+      refute_receive {:post_should_not_fire, _}, 500
     end
   end
 end

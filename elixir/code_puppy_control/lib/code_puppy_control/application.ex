@@ -12,6 +12,7 @@ defmodule CodePuppyControl.Application do
   5b. CodePuppyControl.SessionStorage.AutosaveTracker - Autosave debounce/dedup
   6. CodePuppyControl.RuntimeState - Global runtime state (autosave ID, session model)
   7. CodePuppyControl.Callbacks.Registry - ETS-backed callback storage (must start before PolicyEngine)
+  7a. CodePuppyControl.HookEngine - Configurable hook script engine (must start after Callbacks.Registry)
   8. CodePuppyControl.PolicyEngine - Priority-based policy rule engine
   9. CodePuppyControl.AgentModelPinning - Agent-to-model pin configuration (ETS-backed)
   9b. CodePuppyControl.ModelFactory.ProviderRegistry - Provider type -> module mapping (Agent-backed)
@@ -86,6 +87,10 @@ defmodule CodePuppyControl.Application do
       # any component triggers or registers callbacks (e.g. plugin loader,
       # security checks, slash commands).
       CodePuppyControl.Callbacks.Registry,
+      # HookEngine (GenServer) for configurable hook scripts.
+      # Must start AFTER Callbacks.Registry so that CallbackAdapter.register/1
+      # can safely register pre_tool_call / post_tool_call callbacks.
+      {CodePuppyControl.HookEngine, name: CodePuppyControl.HookEngine},
       CodePuppyControl.PolicyEngine,
       CodePuppyControl.AgentModelPinning,
       # Provider registry (Agent-backed) for provider type → module mapping
@@ -180,6 +185,19 @@ defmodule CodePuppyControl.Application do
         e ->
           require Logger
           Logger.warning("Failed to register workflow-state callbacks: #{inspect(e)}")
+      end
+
+      # Wire HookEngine CallbackAdapter AFTER Callbacks.Registry and
+      # HookEngine are started.  The adapter registers stable named function
+      # captures as :pre_tool_call / :post_tool_call callbacks, routing
+      # tool events through the configured hook engine.
+      # Idempotent — safe to call on supervision restart.
+      try do
+        CodePuppyControl.HookEngine.CallbackAdapter.register()
+      rescue
+        e ->
+          require Logger
+          Logger.warning("Failed to register HookEngine callback adapter: #{inspect(e)}")
       end
     end
 

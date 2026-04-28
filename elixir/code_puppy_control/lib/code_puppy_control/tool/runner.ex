@@ -1,16 +1,32 @@
 defmodule CodePuppyControl.Tool.Runner do
   @moduledoc """
   Dispatches tool invocations with permission checks, schema validation,
-  telemetry, and timeout handling.
+  telemetry, timeout handling, and callback integration.
 
   The runner is the single entry point for executing tools from the agent
   loop. It handles the full lifecycle:
 
   1. Resolve the tool module (registry → legacy fallback)
-  2. Check permissions
-  3. Validate arguments against the tool's schema
-  4. Invoke the tool with timeout protection
-  5. Emit telemetry events
+  2. Trigger `:pre_tool_call` callbacks (fail-closed — can block execution)
+  3. Check permissions
+  4. Validate arguments against the tool's schema
+  5. Invoke the tool with timeout protection
+  6. Trigger `:post_tool_call` callbacks with result and duration
+  7. Emit telemetry events
+
+  ## Callback Integration
+
+  The runner integrates with the `CodePuppyControl.Callbacks` system:
+
+  - **`:pre_tool_call`** — Triggered before execution. Uses `trigger_raw/2`
+    (fail-closed) so any callback returning `%{blocked: true}` or crashing
+    prevents the tool from executing. This is the path through which
+    `HookEngine` PreToolUse hooks actually block tools.
+
+  - **`:post_tool_call`** — Triggered after execution. Receives
+    `tool_name`, `args`, `result`, `duration_ms`, and `context`. Observer-only
+    — cannot block. Enables HookEngine PostToolUse hooks, tracing, and
+    cost estimation to receive execution context.
 
   ## Usage
 
@@ -21,6 +37,8 @@ defmodule CodePuppyControl.Tool.Runner do
       {:ok, %{success: true, stdout: "...", ...}}
       # or
       {:error, "permission denied: ..."}
+      # or
+      {:error, "blocked by pre_tool_call hook: ..."}
       # or
       {:error, "validation failed: ..."}
 
@@ -38,6 +56,7 @@ defmodule CodePuppyControl.Tool.Runner do
 
   require Logger
 
+  alias CodePuppyControl.Callbacks
   alias CodePuppyControl.Callbacks.FilePermission
   alias CodePuppyControl.Tool.Registry
   alias CodePuppyControl.Tool.Schema
@@ -156,28 +175,114 @@ defmodule CodePuppyControl.Tool.Runner do
         module_default_timeout(module) ||
         @default_timeout_ms
 
-    # Emit start telemetry
-    start_time = System.monotonic_time(:millisecond)
+    tool_name_str = Atom.to_string(tool_name)
 
-    :telemetry.execute(
-      [:tool, :invoke, :start],
-      %{system_time: System.system_time()},
-      %{tool_name: tool_name, args: args}
-    )
+    # ── Pre-tool-call callback trigger (fail-closed) ──────────────
+    # If any :pre_tool_call callback returns %{blocked: true} or
+    # crashes (:callback_failed), execution is prevented.
+    # This integrates HookEngine PreToolUse hooks so they can
+    # actually block tools through the Runner path.
+    case pre_tool_check(tool_name_str, args, context) do
+      :ok ->
+        # Emit start telemetry
+        start_time = System.monotonic_time(:millisecond)
 
-    # Run the tool with timeout protection
-    result = run_with_timeout(module, tool_name, args, context, timeout)
+        :telemetry.execute(
+          [:tool, :invoke, :start],
+          %{system_time: System.system_time()},
+          %{tool_name: tool_name, args: args}
+        )
 
-    # Emit stop telemetry
-    duration_ms = System.monotonic_time(:millisecond) - start_time
+        # Run the tool with timeout protection
+        result = run_with_timeout(module, tool_name, args, context, timeout)
 
-    :telemetry.execute(
-      [:tool, :invoke, :stop],
-      %{duration: duration_ms},
-      %{tool_name: tool_name, result: result}
-    )
+        # Emit stop telemetry
+        duration_ms = System.monotonic_time(:millisecond) - start_time
 
-    result
+        :telemetry.execute(
+          [:tool, :invoke, :stop],
+          %{duration: duration_ms},
+          %{tool_name: tool_name, result: result}
+        )
+
+        # ── Post-tool-call callback trigger (observer) ──────────
+        # Post hooks are observers — they cannot block. They receive
+        # result and duration_ms so hook scripts can access tool
+        # results and timing via the callback chain.
+        post_tool_notify(tool_name_str, args, result, duration_ms, context)
+
+        result
+
+      {:blocked, reason} ->
+        {:error, "blocked by pre_tool_call hook: #{reason}"}
+    end
+  end
+
+  # ── Callback Integration ────────────────────────────────────────────────
+
+  # Pre-tool-call: fail-closed security check.
+  # Uses trigger_raw to get individual results (not merged), matching
+  # the RunShellCommand fail-closed pattern.
+  # Any callback returning %{blocked: true} or :callback_failed prevents
+  # execution — we cannot determine the callback's intent on crash,
+  # so we deny to be safe.
+  @spec pre_tool_check(String.t(), map(), map()) :: :ok | {:blocked, String.t()}
+  defp pre_tool_check(tool_name, args, context) do
+    try do
+      results = Callbacks.trigger_raw(:pre_tool_call, [tool_name, args, context])
+
+      blocked? =
+        Enum.any?(results, fn
+          %{blocked: true} -> true
+          :callback_failed -> true
+          {:callback_failed, _} -> true
+          _ -> false
+        end)
+
+      if blocked? do
+        reason =
+          Enum.find_value(results, fn
+            %{blocked: true, reason: r} -> r
+            %{blocked: true} -> "no reason provided"
+            :callback_failed -> "callback crashed (fail-closed)"
+            {:callback_failed, _} -> "callback crashed (fail-closed)"
+            _ -> nil
+          end)
+
+        {:blocked, reason || "blocked by security plugin"}
+      else
+        :ok
+      end
+    rescue
+      e ->
+        Logger.warning("pre_tool_call callback check raised: #{Exception.message(e)}")
+        # Fail-closed: callback errors block execution
+        {:blocked, "Security callback failed (fail-closed)"}
+    catch
+      :exit, reason ->
+        Logger.warning("pre_tool_call callback check crashed: #{inspect(reason)}")
+        {:blocked, "Security callback crashed (fail-closed)"}
+    end
+  end
+
+  # Post-tool-call: observer-only notification.
+  # Cannot block. Fires after tool execution completes with the
+  # full result and duration so that hook scripts and observers
+  # (e.g. HookEngine PostToolUse, tracing, cost estimation) receive
+  # the execution context they expect.
+  @spec post_tool_notify(String.t(), map(), term(), integer(), map()) :: :ok
+  defp post_tool_notify(tool_name, args, result, duration_ms, context) do
+    try do
+      Callbacks.trigger(:post_tool_call, [tool_name, args, result, duration_ms, context])
+    rescue
+      e ->
+        Logger.warning("post_tool_call callback raised: #{Exception.message(e)}")
+    catch
+      :exit, reason ->
+        Logger.warning("post_tool_call callback crashed: #{inspect(reason)}")
+    end
+
+    :ok
   end
 
   defp run_with_timeout(module, tool_name, args, context, timeout) do
