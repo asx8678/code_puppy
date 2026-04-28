@@ -59,7 +59,14 @@ defmodule CodePuppyControl.Callbacks.Security do
           message_group :: String.t() | nil,
           operation_data :: term()
         ) :: [term()]
-  def on_file_permission(context, file_path, operation, preview \\ nil, message_group \\ nil, operation_data \\ nil) do
+  def on_file_permission(
+        context,
+        file_path,
+        operation,
+        preview \\ nil,
+        message_group \\ nil,
+        operation_data \\ nil
+      ) do
     # Backward compat: if operation_data provided, prefer it over preview
     effective_preview = if operation_data != nil, do: nil, else: preview
 
@@ -108,7 +115,14 @@ defmodule CodePuppyControl.Callbacks.Security do
           message_group :: String.t() | nil,
           operation_data :: term()
         ) :: {:ok, [term()]} | {:error, :not_async}
-  def on_file_permission_async(context, file_path, operation, preview \\ nil, message_group \\ nil, operation_data \\ nil) do
+  def on_file_permission_async(
+        context,
+        file_path,
+        operation,
+        preview \\ nil,
+        message_group \\ nil,
+        operation_data \\ nil
+      ) do
     effective_preview = if operation_data != nil, do: nil, else: preview
 
     case Callbacks.trigger_raw_async(
@@ -166,7 +180,8 @@ defmodule CodePuppyControl.Callbacks.Security do
   and is replaced with `%{blocked: true}`. This matches Python's
   `on_run_shell_command` behavior.
   """
-  @spec on_run_shell_command(context :: term(), command :: String.t(), cwd :: String.t() | nil) :: [term()]
+  @spec on_run_shell_command(context :: term(), command :: String.t(), cwd :: String.t() | nil) ::
+          [term()]
   def on_run_shell_command(context, command, cwd \\ nil) do
     results = Callbacks.trigger_raw(:run_shell_command, [context, command, cwd])
 
@@ -207,7 +222,9 @@ defmodule CodePuppyControl.Callbacks.Security do
 
   If a security callback crashes, the tool call is blocked.
   """
-  @spec on_pre_tool_call(tool_name :: String.t(), tool_args :: map(), context :: term()) :: [term()]
+  @spec on_pre_tool_call(tool_name :: String.t(), tool_args :: map(), context :: term()) :: [
+          term()
+        ]
   def on_pre_tool_call(tool_name, tool_args, context \\ nil) do
     results = Callbacks.trigger_raw(:pre_tool_call, [tool_name, tool_args, context])
 

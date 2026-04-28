@@ -37,9 +37,12 @@ defmodule CodePuppyControl.Callbacks.SecurityTest do
         true
       end)
 
-      Security.on_file_permission(%{run_id: "r1"}, "lib/foo.ex", "create", "prev", "mg1", %{diff: "++"})
+      Security.on_file_permission(%{run_id: "r1"}, "lib/foo.ex", "create", "prev", "mg1", %{
+        diff: "++"
+      })
 
-      assert_received {:fp_args, %{run_id: "r1"}, "lib/foo.ex", "create", nil, "mg1", %{diff: "++"}}
+      assert_received {:fp_args, %{run_id: "r1"}, "lib/foo.ex", "create", nil, "mg1",
+                       %{diff: "++"}}
     end
 
     test "crashed callback returns false (fail-closed)" do
