@@ -66,7 +66,7 @@ This error may be transient - retry recommended.",
   @impl true
   def register do
     Callbacks.register(:agent_exception, &__MODULE__.on_agent_exception/2)
-    Callbacks.register(:agent_run_end, &__MODULE__.on_agent_run_end/6)
+    Callbacks.register(:agent_run_end, &__MODULE__.on_agent_run_end/7)
     :ok
   end
 
@@ -229,10 +229,37 @@ This error may be transient - retry recommended.",
     end
   end
 
-  def on_agent_run_end(_agent_name, _model_name, _session_id, true, _error, _metadata), do: :ok
-  def on_agent_run_end(_agent_name, _model_name, _session_id, false, nil, _metadata), do: :ok
+  def on_agent_run_end(
+        _agent_name,
+        _model_name,
+        _session_id,
+        true,
+        _error,
+        _response_text,
+        _metadata
+      ),
+      do: :ok
 
-  def on_agent_run_end(_agent_name, _model_name, _session_id, false, error, _metadata) do
+  def on_agent_run_end(
+        _agent_name,
+        _model_name,
+        _session_id,
+        false,
+        nil,
+        _response_text,
+        _metadata
+      ),
+      do: :ok
+
+  def on_agent_run_end(
+        _agent_name,
+        _model_name,
+        _session_id,
+        false,
+        error,
+        _response_text,
+        _metadata
+      ) do
     ensure_ets_tables()
     if is_binary(error), do: :ok, else: handle_run_end_error(error)
   end

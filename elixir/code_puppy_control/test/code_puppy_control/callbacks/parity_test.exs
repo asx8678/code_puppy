@@ -32,7 +32,7 @@ defmodule CodePuppyControl.Callbacks.ParityTest do
     {:delete_file, :noop},
     {:run_shell_command, :noop},
     {:load_model_config, :update_map},
-    {:load_models_config, :extend_list},
+    {:load_models_config, :update_map},
     {:load_prompt, :concat_str},
     {:agent_reload, :noop},
     {:custom_command, :noop},
@@ -66,6 +66,7 @@ defmodule CodePuppyControl.Callbacks.ParityTest do
     test "all Python hooks have matching merge types" do
       for {hook_name, expected_merge} <- @python_hooks do
         actual = Hooks.merge_type(hook_name)
+
         assert actual == expected_merge,
                "Hook #{hook_name}: expected merge #{inspect(expected_merge)}, got #{inspect(actual)}"
       end
@@ -76,6 +77,7 @@ defmodule CodePuppyControl.Callbacks.ParityTest do
       elixir_names = Hooks.names() |> MapSet.new()
 
       extra = MapSet.difference(elixir_names, python_names)
+
       assert MapSet.size(extra) == 0,
              "Elixir has extra hooks not in Python: #{inspect(MapSet.to_list(extra))}"
     end
@@ -156,7 +158,9 @@ defmodule CodePuppyControl.Callbacks.ParityTest do
       Callbacks.register(:file_permission, fn _ctx, _path, _op, _, _, _ -> raise "boom" end)
       Callbacks.register(:file_permission, fn _ctx, _path, _op, _, _, _ -> true end)
 
-      {:ok, results} = Callbacks.trigger_raw_async(:file_permission, [%{}, "test.ex", "create", nil, nil, nil])
+      {:ok, results} =
+        Callbacks.trigger_raw_async(:file_permission, [%{}, "test.ex", "create", nil, nil, nil])
+
       assert :callback_failed in results
       assert true in results
     end
@@ -173,7 +177,8 @@ defmodule CodePuppyControl.Callbacks.ParityTest do
         func_name = "on_#{hook_name}" |> String.to_atom()
 
         # Security hooks also have fail-closed variants in Security module
-        has_security = hook_name in [:file_permission, :run_shell_command, :pre_tool_call, :post_tool_call]
+        has_security =
+          hook_name in [:file_permission, :run_shell_command, :pre_tool_call, :post_tool_call]
 
         assert func_name in trigger_names or has_security,
                "No on_#{hook_name} function in Triggers module for hook #{hook_name}"
@@ -213,6 +218,19 @@ defmodule CodePuppyControl.Callbacks.ParityTest do
       # Verify it triggers correctly
       result = Callbacks.trigger(:register_model_type)
       assert [%{type: "test"}] = result
+
+      Callbacks.unregister(:register_model_type, fun)
+    end
+
+    test "Triggers.on_register_model_types/0 delegates to on_register_model_type/0" do
+      alias CodePuppyControl.Callbacks
+      alias CodePuppyControl.Callbacks.Triggers
+
+      fun = fn -> [%{type: "alias_test"}] end
+      assert :ok = Callbacks.register(:register_model_type, fun)
+
+      # Both names return identical results
+      assert Triggers.on_register_model_types() == Triggers.on_register_model_type()
 
       Callbacks.unregister(:register_model_type, fun)
     end

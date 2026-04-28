@@ -84,7 +84,11 @@ defmodule CodePuppyControl.Callbacks.Triggers do
 
   Called when an agent run starts.
   """
-  @spec on_agent_run_start(agent_name :: String.t(), model_name :: String.t(), session_id :: String.t() | nil) ::
+  @spec on_agent_run_start(
+          agent_name :: String.t(),
+          model_name :: String.t(),
+          session_id :: String.t() | nil
+        ) ::
           {:ok, term()} | {:error, :not_async}
   def on_agent_run_start(agent_name, model_name, session_id \\ nil) do
     Callbacks.trigger_async(:agent_run_start, [agent_name, model_name, session_id])
@@ -93,7 +97,8 @@ defmodule CodePuppyControl.Callbacks.Triggers do
   @doc """
   Triggers `:agent_run_end` callbacks (async, noop merge).
 
-  Called when an agent run ends.
+  Called when an agent run ends. Arity matches Python's 7-arg contract:
+  agent_name, model_name, session_id, success, error, response_text, metadata.
   """
   @spec on_agent_run_end(
           agent_name :: String.t(),
@@ -101,10 +106,27 @@ defmodule CodePuppyControl.Callbacks.Triggers do
           session_id :: String.t() | nil,
           success :: boolean(),
           error :: Exception.t() | nil,
-          response_text :: String.t() | nil
+          response_text :: String.t() | nil,
+          metadata :: map() | nil
         ) :: {:ok, term()} | {:error, :not_async}
-  def on_agent_run_end(agent_name, model_name, session_id \\ nil, success \\ true, error \\ nil, response_text \\ nil) do
-    Callbacks.trigger_async(:agent_run_end, [agent_name, model_name, session_id, success, error, response_text])
+  def on_agent_run_end(
+        agent_name,
+        model_name,
+        session_id \\ nil,
+        success \\ true,
+        error \\ nil,
+        response_text \\ nil,
+        metadata \\ nil
+      ) do
+    Callbacks.trigger_async(:agent_run_end, [
+      agent_name,
+      model_name,
+      session_id,
+      success,
+      error,
+      response_text,
+      metadata
+    ])
   end
 
   # ── Prompt / Config Hooks ────────────────────────────────────────
@@ -129,24 +151,39 @@ defmodule CodePuppyControl.Callbacks.Triggers do
   end
 
   @doc """
-  Triggers `:load_models_config` callbacks (sync, extend_list merge).
+  Triggers `:load_models_config` callbacks (sync, update_map merge).
 
-  Each callback returns a list. Results are flattened.
+  Each callback returns a map of model configurations. Results are
+  deep-merged (later wins on conflict), matching the Python contract
+  where plugins return dicts to be merged with built-in models.
   """
-  @spec on_load_models_config() :: list() | nil
+  @spec on_load_models_config() :: map() | nil
   def on_load_models_config, do: Callbacks.trigger(:load_models_config)
 
   @doc """
-  Triggers `:get_model_system_prompt` callbacks (sync, noop merge).
+  Triggers `:get_model_system_prompt` callbacks with chaining (sync, noop merge).
 
-  Callbacks are executed sequentially and each receives the current
-  effective prompt values. Return a dict with `instructions`,
-  `user_prompt`, `handled` or nil.
+  Each callback receives the current effective prompt values updated
+  from prior results. If a callback returns a map with `instructions`
+  and/or `user_prompt`, those values feed into the next callback's args.
+  This matches the Python chaining contract where callbacks cooperate
+  instead of recomputing from the original prompt independently.
+
+  Return a dict with `instructions`, `user_prompt`, `handled` or nil.
   """
-  @spec on_get_model_system_prompt(model_name :: String.t(), default_prompt :: String.t(), user_prompt :: String.t()) ::
+  @spec on_get_model_system_prompt(
+          model_name :: String.t(),
+          default_prompt :: String.t(),
+          user_prompt :: String.t()
+        ) ::
           term()
   def on_get_model_system_prompt(model_name, default_prompt, user_prompt) do
-    Callbacks.trigger(:get_model_system_prompt, [model_name, default_prompt, user_prompt])
+    Callbacks.trigger_chained(
+      :get_model_system_prompt,
+      [model_name, default_prompt, user_prompt],
+      instructions: 1,
+      user_prompt: 2
+    )
   end
 
   # ── File Mutation Observer Hooks ─────────────────────────────────
@@ -230,7 +267,11 @@ defmodule CodePuppyControl.Callbacks.Triggers do
 
   Reacts to streaming events in real-time.
   """
-  @spec on_stream_event(event_type :: String.t(), event_data :: term(), agent_session_id :: String.t() | nil) ::
+  @spec on_stream_event(
+          event_type :: String.t(),
+          event_data :: term(),
+          agent_session_id :: String.t() | nil
+        ) ::
           {:ok, term()} | {:error, :not_async}
   def on_stream_event(event_type, event_data, agent_session_id \\ nil) do
     Callbacks.trigger_async(:stream_event, [event_type, event_data, agent_session_id])
@@ -271,6 +312,18 @@ defmodule CodePuppyControl.Callbacks.Triggers do
   """
   @spec on_register_model_type() :: list() | nil
   def on_register_model_type, do: Callbacks.trigger(:register_model_type)
+
+  @doc """
+  Python-compatible alias for `on_register_model_type/0`.
+
+  The Python API uses `on_register_model_types()` (plural) while the
+  hook name is `:register_model_type` (singular). This alias bridges
+  the naming gap so Python-oriented plugins can use the familiar name.
+
+  Each callback returns `[%{type: str, handler: fun}]`.
+  """
+  @spec on_register_model_types() :: list() | nil
+  def on_register_model_types, do: on_register_model_type()
 
   @doc """
   Triggers `:register_mcp_catalog_servers` callbacks (sync, extend_list merge).
@@ -322,8 +375,22 @@ defmodule CodePuppyControl.Callbacks.Triggers do
           message_group :: String.t() | nil,
           operation_data :: term()
         ) :: {:ok, term()} | {:error, :not_async}
-  def on_file_permission(context, file_path, operation, preview \\ nil, message_group \\ nil, operation_data \\ nil) do
-    Callbacks.trigger_async(:file_permission, [context, file_path, operation, preview, message_group, operation_data])
+  def on_file_permission(
+        context,
+        file_path,
+        operation,
+        preview \\ nil,
+        message_group \\ nil,
+        operation_data \\ nil
+      ) do
+    Callbacks.trigger_async(:file_permission, [
+      context,
+      file_path,
+      operation,
+      preview,
+      message_group,
+      operation_data
+    ])
   end
 
   @doc """
@@ -352,8 +419,18 @@ defmodule CodePuppyControl.Callbacks.Triggers do
           message_history :: list(),
           incoming_messages :: list()
         ) :: {:ok, term()} | {:error, :not_async}
-  def on_message_history_processor_start(agent_name, session_id, message_history, incoming_messages) do
-    Callbacks.trigger_async(:message_history_processor_start, [agent_name, session_id, message_history, incoming_messages])
+  def on_message_history_processor_start(
+        agent_name,
+        session_id,
+        message_history,
+        incoming_messages
+      ) do
+    Callbacks.trigger_async(:message_history_processor_start, [
+      agent_name,
+      session_id,
+      message_history,
+      incoming_messages
+    ])
   end
 
   @doc """
@@ -368,7 +445,19 @@ defmodule CodePuppyControl.Callbacks.Triggers do
           messages_added :: non_neg_integer(),
           messages_filtered :: non_neg_integer()
         ) :: {:ok, term()} | {:error, :not_async}
-  def on_message_history_processor_end(agent_name, session_id, message_history, messages_added, messages_filtered) do
-    Callbacks.trigger_async(:message_history_processor_end, [agent_name, session_id, message_history, messages_added, messages_filtered])
+  def on_message_history_processor_end(
+        agent_name,
+        session_id,
+        message_history,
+        messages_added,
+        messages_filtered
+      ) do
+    Callbacks.trigger_async(:message_history_processor_end, [
+      agent_name,
+      session_id,
+      message_history,
+      messages_added,
+      messages_filtered
+    ])
   end
 end

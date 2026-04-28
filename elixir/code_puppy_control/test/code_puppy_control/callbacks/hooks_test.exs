@@ -187,8 +187,8 @@ defmodule CodePuppyControl.Callbacks.HooksTest do
       assert 3 = Hooks.arity(:stream_event)
     end
 
-    test "agent_run_end has arity 6" do
-      assert 6 = Hooks.arity(:agent_run_end)
+    test "agent_run_end has arity 7" do
+      assert 7 = Hooks.arity(:agent_run_end)
     end
 
     test "message_history_processor_start has arity 4" do

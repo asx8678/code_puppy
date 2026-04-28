@@ -98,6 +98,18 @@ world" =
       assert %{a: 1, b: 2} =
                Merge.merge_results([%{a: 1}, :callback_failed, %{b: 2}], :update_map)
     end
+
+    test "load_models_config: dict/map returns are preserved (not dropped)" do
+      # Simulates load_models_config with map-returns — maps must not be
+      # silently dropped like they would be with :extend_list merge.
+      result =
+        Merge.merge_results(
+          [%{"gpt-4" => %{type: "openai"}}, %{"claude-3" => %{type: "anthropic"}}],
+          :update_map
+        )
+
+      assert %{"gpt-4" => %{type: "openai"}, "claude-3" => %{type: "anthropic"}} = result
+    end
   end
 
   describe "merge_results/2 with :or_bool" do

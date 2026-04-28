@@ -18,7 +18,7 @@ defmodule CodePuppyControl.Plugins.AgentTrace do
     Callbacks.register(:stream_event, &__MODULE__.on_stream_event/3)
     Callbacks.register(:pre_tool_call, &__MODULE__.on_pre_tool_call/3)
     Callbacks.register(:post_tool_call, &__MODULE__.on_post_tool_call/5)
-    Callbacks.register(:agent_run_end, &__MODULE__.on_agent_run_end/6)
+    Callbacks.register(:agent_run_end, &__MODULE__.on_agent_run_end/7)
     Callbacks.register(:custom_command_help, &__MODULE__.custom_help/0)
     Callbacks.register(:custom_command, &__MODULE__.handle_trace_command/2)
     :ok
@@ -104,7 +104,7 @@ defmodule CodePuppyControl.Plugins.AgentTrace do
   end
 
   @doc false
-  def on_agent_run_end(agent_name, _model, _session, success, error, _meta) do
+  def on_agent_run_end(agent_name, _model, _session, success, error, _response_text, _metadata) do
     trace_id = Process.get({__MODULE__, :current_trace_id})
     agent_span = Process.get({__MODULE__, :agent_span_id})
 

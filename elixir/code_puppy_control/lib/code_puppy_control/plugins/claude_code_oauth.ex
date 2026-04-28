@@ -39,7 +39,7 @@ defmodule CodePuppyControl.Plugins.ClaudeCodeOAuth do
     Callbacks.register(:custom_command_help, &__MODULE__._custom_help/0)
     Callbacks.register(:register_model_type, &__MODULE__._register_model_types/0)
     Callbacks.register(:agent_run_start, &__MODULE__._on_agent_run_start/3)
-    Callbacks.register(:agent_run_end, &__MODULE__._on_agent_run_end/6)
+    Callbacks.register(:agent_run_end, &__MODULE__._on_agent_run_end/7)
     :ok
   end
 
@@ -89,7 +89,15 @@ defmodule CodePuppyControl.Plugins.ClaudeCodeOAuth do
   end
 
   @doc false
-  def _on_agent_run_end(_agent_name, model_name, session_id, _success, _error, _metadata) do
+  def _on_agent_run_end(
+        _agent_name,
+        model_name,
+        session_id,
+        _success,
+        _error,
+        _response_text,
+        _metadata
+      ) do
     # Only stop heartbeat for Claude Code models (mirrors the start gate)
     if model_name && String.starts_with?(model_name, "claude-code") do
       key = session_id || "default"

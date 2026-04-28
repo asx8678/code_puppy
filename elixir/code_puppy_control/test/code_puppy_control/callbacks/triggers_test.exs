@@ -90,6 +90,7 @@ defmodule CodePuppyControl.Callbacks.TriggersTest do
   describe "on_agent_run_start/3" do
     test "triggers async callback with args" do
       test_pid = self()
+
       Callbacks.register(:agent_run_start, fn name, model, sid ->
         send(test_pid, {:run_start, name, model, sid})
         :ok
@@ -101,6 +102,7 @@ defmodule CodePuppyControl.Callbacks.TriggersTest do
 
     test "default session_id is nil" do
       test_pid = self()
+
       Callbacks.register(:agent_run_start, fn _name, _model, sid ->
         send(test_pid, {:sid, sid})
         :ok
@@ -111,16 +113,31 @@ defmodule CodePuppyControl.Callbacks.TriggersTest do
     end
   end
 
-  describe "on_agent_run_end/6" do
+  describe "on_agent_run_end/7" do
     test "triggers async callback with all args" do
       test_pid = self()
-      Callbacks.register(:agent_run_end, fn name, model, sid, success, err, text ->
-        send(test_pid, {:run_end, name, success, text})
+
+      Callbacks.register(:agent_run_end, fn _name, _model, _sid, success, _err, text, meta ->
+        send(test_pid, {:run_end, success, text, meta})
+        :ok
+      end)
+
+      assert {:ok, :ok} ==
+               Triggers.on_agent_run_end("puppy", "gpt-4", "s1", true, nil, "woof!", %{tokens: 42})
+
+      assert_received {:run_end, true, "woof!", %{tokens: 42}}
+    end
+
+    test "metadata defaults to nil" do
+      test_pid = self()
+
+      Callbacks.register(:agent_run_end, fn _name, _model, _sid, _success, _err, _text, meta ->
+        send(test_pid, {:meta, meta})
         :ok
       end)
 
       assert {:ok, :ok} == Triggers.on_agent_run_end("puppy", "gpt-4", "s1", true, nil, "woof!")
-      assert_received {:run_end, "puppy", true, "woof!"}
+      assert_received {:meta, nil}
     end
   end
 
@@ -150,12 +167,12 @@ defmodule CodePuppyControl.Callbacks.TriggersTest do
   end
 
   describe "on_load_models_config/0" do
-    test "flattens list results" do
-      Callbacks.register(:load_models_config, fn -> [%{name: "model_a"}] end)
-      Callbacks.register(:load_models_config, fn -> [%{name: "model_b"}] end)
+    test "deep-merges map results" do
+      Callbacks.register(:load_models_config, fn -> %{model_a: %{type: "gpt"}} end)
+      Callbacks.register(:load_models_config, fn -> %{model_b: %{type: "claude"}} end)
 
       result = Triggers.on_load_models_config()
-      assert [%{name: "model_a"}, %{name: "model_b"}] = result
+      assert %{model_a: %{type: "gpt"}, model_b: %{type: "claude"}} = result
     end
   end
 
@@ -168,6 +185,28 @@ defmodule CodePuppyControl.Callbacks.TriggersTest do
       result = Triggers.on_get_model_system_prompt("gpt-4", "base prompt", "user msg")
       # noop merge returns single value
       assert %{instructions: "base prompt +extra", handled: true} = result
+    end
+
+    test "chains callbacks — second receives updated instructions from first" do
+      Callbacks.register(:get_model_system_prompt, fn _name, prompt, user ->
+        %{instructions: prompt <> " +plugin1", user_prompt: user <> " +u1", handled: true}
+      end)
+
+      Callbacks.register(:get_model_system_prompt, fn _name, prompt, user ->
+        %{instructions: prompt <> " +plugin2", user_prompt: user <> " +u2", handled: true}
+      end)
+
+      result = Triggers.on_get_model_system_prompt("gpt-4", "base", "hello")
+      # noop merge with multiple callbacks returns list
+      assert is_list(result)
+
+      assert Enum.any?(result, fn r ->
+               r[:instructions] == "base +plugin1" and r[:user_prompt] == "hello +u1"
+             end)
+
+      assert Enum.any?(result, fn r ->
+               r[:instructions] == "base +plugin1 +plugin2" and r[:user_prompt] == "hello +u1 +u2"
+             end)
     end
   end
 
@@ -231,6 +270,7 @@ defmodule CodePuppyControl.Callbacks.TriggersTest do
   describe "on_post_tool_call/5" do
     test "triggers async callback with result and duration" do
       test_pid = self()
+
       Callbacks.register(:post_tool_call, fn name, _args, result, dur, _ctx ->
         send(test_pid, {:post, name, result, dur})
         :ok
@@ -278,6 +318,11 @@ defmodule CodePuppyControl.Callbacks.TriggersTest do
       assert [%{type: "custom"}] = Triggers.on_register_model_type()
     end
 
+    test "on_register_model_types/0 delegates to on_register_model_type/0" do
+      Callbacks.register(:register_model_type, fn -> [%{type: "custom"}] end)
+      assert Triggers.on_register_model_types() == Triggers.on_register_model_type()
+    end
+
     test "on_register_mcp_catalog_servers extends lists" do
       Callbacks.register(:register_mcp_catalog_servers, fn -> [%{name: "my_server"}] end)
       assert [%{name: "my_server"}] = Triggers.on_register_mcp_catalog_servers()
@@ -313,6 +358,7 @@ defmodule CodePuppyControl.Callbacks.TriggersTest do
   describe "on_message_history_processor_start/4" do
     test "triggers async callback with all args" do
       test_pid = self()
+
       Callbacks.register(:message_history_processor_start, fn name, sid, hist, incoming ->
         send(test_pid, {:mhps, name, sid, length(hist), length(incoming)})
         :ok
@@ -326,12 +372,15 @@ defmodule CodePuppyControl.Callbacks.TriggersTest do
   describe "on_message_history_processor_end/5" do
     test "triggers async callback with all args" do
       test_pid = self()
+
       Callbacks.register(:message_history_processor_end, fn name, sid, hist, added, filtered ->
         send(test_pid, {:mhpe, name, sid, length(hist), added, filtered})
         :ok
       end)
 
-      assert {:ok, :ok} == Triggers.on_message_history_processor_end("puppy", "s1", [1, 2, 3], 2, 1)
+      assert {:ok, :ok} ==
+               Triggers.on_message_history_processor_end("puppy", "s1", [1, 2, 3], 2, 1)
+
       assert_received {:mhpe, "puppy", "s1", 3, 2, 1}
     end
   end

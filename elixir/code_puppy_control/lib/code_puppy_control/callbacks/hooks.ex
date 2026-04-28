@@ -98,9 +98,9 @@ defmodule CodePuppyControl.Callbacks.Hooks do
     },
     load_models_config: %{
       arity: 0,
-      merge: :extend_list,
+      merge: :update_map,
       async: false,
-      description: "Plugin-provided model configurations"
+      description: "Plugin-provided model configurations (maps deep-merged, later wins)"
     },
     load_prompt: %{
       arity: 0,
@@ -181,7 +181,7 @@ defmodule CodePuppyControl.Callbacks.Hooks do
       description: "Triggered when an agent run starts"
     },
     agent_run_end: %{
-      arity: 6,
+      arity: 7,
       merge: :noop,
       async: true,
       description: "Triggered when an agent run ends"
