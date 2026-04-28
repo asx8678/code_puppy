@@ -164,25 +164,46 @@ defmodule CodePuppyControl.Config.Isolation do
   # ── Explicit Guard (public for inter-module use) ───────────────────────
 
   @doc """
+  Check whether a write to `path` is allowed, returning `:ok` or `{:error, ...}`.
+
+  Non-raising variant of `ensure_allowed!/2`. Used by `Config.Writer` to
+  return graceful errors from the GenServer without killing the process.
+
+  Returns `{:error, %IsolationViolation{}}` when the path is under the legacy
+  home directory, `:ok` otherwise.
+  """
+  @spec check_allowed(Path.t(), atom()) :: :ok | {:error, IsolationViolation.t()}
+  def check_allowed(path, action) do
+    resolved = Paths.canonical_resolve(path)
+
+    if allowed?(path) do
+      :ok
+    else
+      emit_violation_telemetry(resolved, action)
+
+      {:error,
+       %IsolationViolation{
+         path: resolved,
+         action: action,
+         message:
+           "ConfigIsolationViolation: blocked #{action} to #{resolved} (under legacy home)"
+       }}
+    end
+  end
+
+  @doc """
   Raise `IsolationViolation` unless the write to `path` is allowed.
 
-  Called by `CodePuppyControl.Config.Writer` before every disk write
-  to enforce ADR-003 at the Elixir layer.
+  Called by `CodePuppyControl.Config.Writer` bang-variants and other code
+  that prefers exceptions. The non-bang counterpart `check_allowed/2` returns
+  `{:ok, :ok} | {:error, %IsolationViolation{}}`.
   """
   @spec ensure_allowed!(Path.t(), atom()) :: :ok
   def ensure_allowed!(path, action) do
-    resolved = Paths.canonical_resolve(path)
-
-    unless allowed?(path) do
-      emit_violation_telemetry(resolved, action)
-
-      raise IsolationViolation,
-        path: resolved,
-        action: action,
-        message: "ConfigIsolationViolation: blocked #{action} to #{resolved} (under legacy home)"
+    case check_allowed(path, action) do
+      :ok -> :ok
+      {:error, exception} -> raise exception
     end
-
-    :ok
   end
 
   defp emit_violation_telemetry(resolved_path, action) do

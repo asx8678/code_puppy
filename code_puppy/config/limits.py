@@ -74,7 +74,7 @@ def get_protected_token_count() -> int:
         max_protected_tokens = int(model_context_length * 0.75)
         configured_value = int(val) if val else 50000
         return max(1000, min(configured_value, max_protected_tokens))
-    except (ValueError, TypeError):
+    except ValueError, TypeError:
         model_context_length = get_model_context_length()
         max_protected_tokens = int(model_context_length * 0.75)
         return min(50000, max_protected_tokens)
@@ -132,7 +132,7 @@ def get_message_limit(default: int = 100) -> int:
     val = get_value("message_limit")
     try:
         return int(val) if val else default
-    except (ValueError, TypeError):
+    except ValueError, TypeError:
         return default
 
 
@@ -142,12 +142,16 @@ def get_message_limit(default: int = 100) -> int:
 
 
 get_max_session_tokens = _make_int_getter(
-    "max_session_tokens", 0, min_val=0,
+    "max_session_tokens",
+    0,
+    min_val=0,
     doc="Hard token budget per session (0=disabled).",
 )
 
 get_max_run_tokens = _make_int_getter(
-    "max_run_tokens", 0, min_val=0,
+    "max_run_tokens",
+    0,
+    min_val=0,
     doc="Hard token budget per run (0=disabled).",
 )
 
@@ -164,7 +168,7 @@ def get_summarization_trigger_fraction() -> float:
     try:
         result = float(val) if val else 0.85
         return max(0.5, min(0.95, result))
-    except (ValueError, TypeError):
+    except ValueError, TypeError:
         return 0.85
 
 
@@ -175,7 +179,7 @@ def get_summarization_keep_fraction() -> float:
     try:
         result = float(val) if val else 0.10
         return max(0.05, min(0.50, result))
-    except (ValueError, TypeError):
+    except ValueError, TypeError:
         return 0.10
 
 
@@ -235,6 +239,7 @@ def get_summarization_history_dir() -> Path:
     ADR-003: Defaults to <active_home>/history/ (respects isolation).
     """
     from code_puppy.config_paths import home_dir as _home_dir
+
     val = get_value("summarization_history_dir")
     if val:
         return Path(val).expanduser()

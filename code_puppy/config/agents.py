@@ -95,6 +95,7 @@ def get_user_agents_directory() -> str:
     agents_dir = str(_path_agents_dir())
     if not os.path.exists(agents_dir):
         from code_puppy.config_paths import safe_mkdir_p
+
         safe_mkdir_p(agents_dir)
     return agents_dir
 

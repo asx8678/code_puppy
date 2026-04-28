@@ -174,7 +174,7 @@ def save_command_to_history(command: str) -> None:
             command = command.encode("utf-8", errors="surrogatepass").decode(
                 "utf-8", errors="replace"
             )
-        except (UnicodeEncodeError, UnicodeDecodeError):
+        except UnicodeEncodeError, UnicodeDecodeError:
             command = "".join(
                 char if ord(char) < 0xD800 or ord(char) > 0xDFFF else "\ufffd"
                 for char in command
@@ -186,6 +186,7 @@ def save_command_to_history(command: str) -> None:
             f.write(f"\n# {timestamp}\n{command}\n")
     except Exception as e:
         from code_puppy.messaging import emit_error
+
         emit_error(f"Error saving command history: {str(e)}")
 
 
@@ -197,24 +198,28 @@ def save_command_to_history(command: str) -> None:
 def get_current_autosave_id() -> str:
     """Get or create the current autosave session ID for this process."""
     from code_puppy import runtime_state
+
     return runtime_state.get_current_autosave_id()
 
 
 def rotate_autosave_id() -> str:
     """Force a new autosave session ID and return it."""
     from code_puppy import runtime_state
+
     return runtime_state.rotate_autosave_id()
 
 
 def get_current_autosave_session_name() -> str:
     """Return the full session name used for autosaves."""
     from code_puppy import runtime_state
+
     return runtime_state.get_current_autosave_session_name()
 
 
 def set_current_autosave_from_session_name(session_name: str) -> str:
     """Set the current autosave ID based on a full session name."""
     from code_puppy import runtime_state
+
     return runtime_state.set_current_autosave_from_session_name(session_name)
 
 
@@ -235,6 +240,7 @@ def auto_save_session_if_enabled() -> bool:
             return False
 
         from code_puppy.session_storage import should_skip_autosave
+
         if should_skip_autosave(history):
             return False
 
@@ -245,6 +251,7 @@ def auto_save_session_if_enabled() -> bool:
         session_name = runtime_state.get_current_autosave_session_name()
 
         from code_puppy.session_storage import save_session_async
+
         save_session_async(session_name, history)
 
         emit_info(f"💾 Session auto-saved as {session_name}")
@@ -256,4 +263,5 @@ def auto_save_session_if_enabled() -> bool:
 def finalize_autosave_session() -> str:
     """Persist the current autosave snapshot and rotate to a fresh session."""
     from code_puppy import runtime_state
+
     return runtime_state.finalize_autosave_session()

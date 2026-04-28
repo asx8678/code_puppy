@@ -80,6 +80,7 @@ def _default_model_from_models_json() -> str:
 
     try:
         from code_puppy.model_factory import ModelFactory
+
         models_config = ModelFactory.load_config()
         if models_config:
             first_key = next(iter(models_config))
@@ -99,6 +100,7 @@ def _default_vision_model_from_models_json() -> str:
 
     try:
         from code_puppy.model_factory import ModelFactory
+
         models_config = ModelFactory.load_config()
         if models_config:
             for name, config in models_config.items():
@@ -107,8 +109,11 @@ def _default_vision_model_from_models_json() -> str:
                     return name
 
             preferred_candidates = (
-                "gpt-4.1", "gpt-4.1-mini", "gpt-4.1-nano",
-                "claude-4-0-sonnet", "gemini-2.5-flash-preview-05-20",
+                "gpt-4.1",
+                "gpt-4.1-mini",
+                "gpt-4.1-nano",
+                "claude-4-0-sonnet",
+                "gemini-2.5-flash-preview-05-20",
             )
             for candidate in preferred_candidates:
                 if candidate in models_config:
@@ -132,6 +137,7 @@ def _validate_model_exists(model_name: str) -> bool:
 
     try:
         from code_puppy.model_factory import ModelFactory
+
         models_config = ModelFactory.load_config()
         exists = model_name in models_config
         _state.model_validation_cache[model_name] = exists
@@ -161,15 +167,19 @@ def _get_supported_settings_cache():
     from code_puppy.utils.thread_safe_cache import thread_safe_lru_cache
 
     if _state.supported_settings_cache is None:
+
         @thread_safe_lru_cache(maxsize=128)
         def _cached_supported_settings(model_name: str) -> frozenset:
             from code_puppy.model_factory import ModelFactory
+
             models_config = ModelFactory.load_config()
             model_config = models_config.get(model_name, {})
             supported_settings = model_config.get("supported_settings")
             if supported_settings is None:
                 if "claude" in model_name.lower():
-                    return frozenset({"temperature", "top_p", "thinking", "clear_thinking"})
+                    return frozenset(
+                        {"temperature", "top_p", "thinking", "clear_thinking"}
+                    )
                 return frozenset({"temperature", "top_p", "seed"})
             return frozenset(supported_settings)
 
@@ -246,9 +256,14 @@ def _get_model_context_length(model_name: str) -> int:
         return _state.model_context_length_cache[model_name]
 
     _KNOWN_CONTEXT_LENGTHS = {
-        "claude-3": 200000, "claude-3-5": 200000, "claude-4": 200000,
-        "gpt-4-turbo": 128000, "gpt-4o": 128000, "gpt-5": 128000,
-        "gemini-1.5": 1000000, "gemini-2": 1000000,
+        "claude-3": 200000,
+        "claude-3-5": 200000,
+        "claude-4": 200000,
+        "gpt-4-turbo": 128000,
+        "gpt-4o": 128000,
+        "gpt-5": 128000,
+        "gemini-1.5": 1000000,
+        "gemini-2": 1000000,
     }
     for prefix, length in _KNOWN_CONTEXT_LENGTHS.items():
         if model_name.startswith(prefix):
@@ -287,6 +302,7 @@ def set_openai_reasoning_effort(value: str) -> None:
     normalized = value.strip().lower()
     if normalized not in allowed_values:
         from code_puppy.messaging import emit_error
+
         emit_error(
             f"Invalid reasoning effort '{value}'. "
             f"Allowed: {', '.join(sorted(allowed_values))}"
@@ -311,6 +327,7 @@ def set_openai_reasoning_summary(value: str) -> None:
     normalized = value.strip().lower()
     if normalized not in allowed_values:
         from code_puppy.messaging import emit_error
+
         emit_error(
             f"Invalid reasoning summary '{value}'. "
             f"Allowed: {', '.join(sorted(allowed_values))}"
@@ -335,9 +352,9 @@ def set_openai_verbosity(value: str) -> None:
     normalized = value.strip().lower()
     if normalized not in allowed_values:
         from code_puppy.messaging import emit_error
+
         emit_error(
-            f"Invalid verbosity '{value}'. "
-            f"Allowed: {', '.join(sorted(allowed_values))}"
+            f"Invalid verbosity '{value}'. Allowed: {', '.join(sorted(allowed_values))}"
         )
         return
     set_config_value("openai_verbosity", normalized)
@@ -357,7 +374,7 @@ def get_temperature() -> float | None:
     try:
         result = float(val)
         return max(0.0, min(2.0, result))
-    except (ValueError, TypeError):
+    except ValueError, TypeError:
         return None
 
 
@@ -365,6 +382,7 @@ def set_temperature(value: float | None) -> None:
     """Set the global temperature. Pass None to clear."""
     if value is None:
         from code_puppy.config.loader import reset_value
+
         reset_value("temperature")
     else:
         clamped = max(0.0, min(2.0, value))
@@ -381,9 +399,7 @@ def _sanitize_model_name_for_key(model_name: str) -> str:
     return _SANITIZE_MODEL_NAME_RE.sub("_", model_name).lower()
 
 
-def get_model_setting(
-    model_name: str, setting: str
-) -> float | bool | str | None:
+def get_model_setting(model_name: str, setting: str) -> float | bool | str | None:
     """Get a specific setting for a model. Returns None if not set."""
     # Check cache first (fixes CFG-H1)
     cache_key = f"{model_name}:{setting}"
@@ -426,7 +442,7 @@ def get_all_model_settings(model_name: str) -> dict:
     result = {}
     for k, v in config.items(DEFAULT_SECTION):
         if k.startswith(prefix) and v:
-            setting = k[len(prefix):]
+            setting = k[len(prefix) :]
             result[setting] = _parse_setting_value(v)
     return result
 
@@ -435,17 +451,18 @@ def clear_model_settings(model_name: str) -> None:
     """Clear all settings for a model."""
     prefix = f"model_settings_{_sanitize_model_name_for_key(model_name)}_"
     config = _get_config()
-    keys_to_clear = [
-        k for k in config[DEFAULT_SECTION] if k.startswith(prefix)
-    ] if DEFAULT_SECTION in config else []
+    keys_to_clear = (
+        [k for k in config[DEFAULT_SECTION] if k.startswith(prefix)]
+        if DEFAULT_SECTION in config
+        else []
+    )
 
     for key in keys_to_clear:
         set_config_value(key, "")
 
     # Clear cache entries
     keys_to_remove = [
-        k for k in _state.model_settings_cache
-        if k.startswith(f"{model_name}:")
+        k for k in _state.model_settings_cache if k.startswith(f"{model_name}:")
     ]
     for k in keys_to_remove:
         del _state.model_settings_cache[k]
@@ -519,7 +536,7 @@ def get_all_agent_pinned_models() -> dict[str, str]:
     if DEFAULT_SECTION not in config:
         return {}
     return {
-        key[len("agent_model_"):]: value
+        key[len("agent_model_") :]: value
         for key, value in config.items(DEFAULT_SECTION)
         if key.startswith("agent_model_") and value
     }

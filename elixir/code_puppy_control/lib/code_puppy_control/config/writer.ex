@@ -46,34 +46,87 @@ defmodule CodePuppyControl.Config.Writer do
 
   @doc """
   Set a single key in the default section and persist to disk.
+
+  Returns `{:error, %IsolationViolation{}}` when ADR-003 blocks the write
+  (target path is under the legacy home). The GenServer stays alive.
   """
-  @spec set_value(String.t(), String.t()) :: :ok
+  @spec set_value(String.t(), String.t()) :: :ok | {:error, Isolation.IsolationViolation.t()}
   def set_value(key, value) do
     GenServer.call(__MODULE__, {:set_value, key, value})
   end
 
   @doc """
-  Set multiple key-value pairs in the default section atomically.
+  Bang variant of `set_value/2`. Raises `IsolationViolation` on ADR-003 denial.
   """
-  @spec set_values(%{String.t() => String.t()}) :: :ok
+  @spec set_value!(String.t(), String.t()) :: :ok
+  def set_value!(key, value) do
+    case set_value(key, value) do
+      :ok -> :ok
+      {:error, exception} -> raise exception
+    end
+  end
+
+  @doc """
+  Set multiple key-value pairs in the default section atomically.
+
+  Returns `{:error, %IsolationViolation{}}` when ADR-003 blocks the write.
+  """
+  @spec set_values(%{String.t() => String.t()}) :: :ok | {:error, Isolation.IsolationViolation.t()}
   def set_values(kv_map) when is_map(kv_map) do
     GenServer.call(__MODULE__, {:set_values, kv_map})
   end
 
   @doc """
-  Remove a key from the default section.
+  Bang variant of `set_values/1`. Raises `IsolationViolation` on ADR-003 denial.
   """
-  @spec delete_value(String.t()) :: :ok
+  @spec set_values!(%{String.t() => String.t()}) :: :ok
+  def set_values!(kv_map) do
+    case set_values(kv_map) do
+      :ok -> :ok
+      {:error, exception} -> raise exception
+    end
+  end
+
+  @doc """
+  Remove a key from the default section.
+
+  Returns `{:error, %IsolationViolation{}}` when ADR-003 blocks the delete.
+  """
+  @spec delete_value(String.t()) :: :ok | {:error, Isolation.IsolationViolation.t()}
   def delete_value(key) do
     GenServer.call(__MODULE__, {:delete_value, key})
   end
 
   @doc """
-  Write an entire config map to disk (used by migrations and bulk updates).
+  Bang variant of `delete_value/1`. Raises `IsolationViolation` on ADR-003 denial.
   """
-  @spec write_config(Loader.config()) :: :ok
+  @spec delete_value!(String.t()) :: :ok
+  def delete_value!(key) do
+    case delete_value(key) do
+      :ok -> :ok
+      {:error, exception} -> raise exception
+    end
+  end
+
+  @doc """
+  Write an entire config map to disk (used by migrations and bulk updates).
+
+  Returns `{:error, %IsolationViolation{}}` when ADR-003 blocks the write.
+  """
+  @spec write_config(Loader.config()) :: :ok | {:error, Isolation.IsolationViolation.t()}
   def write_config(config) do
     GenServer.call(__MODULE__, {:write_config, config})
+  end
+
+  @doc """
+  Bang variant of `write_config/1`. Raises `IsolationViolation` on ADR-003 denial.
+  """
+  @spec write_config!(Loader.config()) :: :ok
+  def write_config!(config) do
+    case write_config(config) do
+      :ok -> :ok
+      {:error, exception} -> raise exception
+    end
   end
 
   @doc """
@@ -83,7 +136,7 @@ defmodule CodePuppyControl.Config.Writer do
   **Warning**: not safe for concurrent callers — use only when you know
   there are no other writers.
   """
-  @spec unsafe_set_value(String.t(), String.t()) :: :ok
+  @spec unsafe_set_value(String.t(), String.t()) :: :ok | {:error, Isolation.IsolationViolation.t()}
   def unsafe_set_value(key, value) do
     config = Loader.get_cached()
     section = Loader.default_section()
@@ -105,8 +158,7 @@ defmodule CodePuppyControl.Config.Writer do
     section = Loader.default_section()
     section_map = Map.get(config, section, %{})
     updated = Map.put(config, section, Map.put(section_map, key, value))
-    do_write(updated)
-    {:reply, :ok, state}
+    {:reply, do_write(updated), state}
   end
 
   @impl true
@@ -119,8 +171,7 @@ defmodule CodePuppyControl.Config.Writer do
       Enum.reduce(kv_map, section_map, fn {k, v}, acc -> Map.put(acc, k, v) end)
 
     updated = Map.put(config, section, updated_section)
-    do_write(updated)
-    {:reply, :ok, state}
+    {:reply, do_write(updated), state}
   end
 
   @impl true
@@ -130,27 +181,34 @@ defmodule CodePuppyControl.Config.Writer do
     section_map = Map.get(config, section, %{})
     updated_section = Map.delete(section_map, key)
     updated = Map.put(config, section, updated_section)
-    do_write(updated)
-    {:reply, :ok, state}
+    {:reply, do_write(updated), state}
   end
 
   @impl true
   def handle_call({:write_config, config}, _from, state) do
-    do_write(config)
-    {:reply, :ok, state}
+    {:reply, do_write(config), state}
   end
 
   # ── Private ─────────────────────────────────────────────────────────────
 
-  @spec do_write(Loader.config()) :: :ok
+  @spec do_write(Loader.config()) :: :ok | {:error, Isolation.IsolationViolation.t()}
   defp do_write(config) do
     path = Loader.loaded_path()
+
     # ADR-003: Verify the write target is NOT under the legacy home.
-    Isolation.ensure_allowed!(path, :write)
-    content = serialize(config)
-    atomic_write(path, content)
-    Loader.invalidate()
-    :ok
+    # Uses check_allowed/2 (non-raising) so the GenServer stays alive
+    # on isolation violations. Bang API variants (set_value!, etc.)
+    # re-raise at the caller level.
+    case Isolation.check_allowed(path, :write) do
+      :ok ->
+        content = serialize(config)
+        atomic_write(path, content)
+        Loader.invalidate()
+        :ok
+
+      {:error, _} = err ->
+        err
+    end
   end
 
   @spec serialize(Loader.config()) :: String.t()

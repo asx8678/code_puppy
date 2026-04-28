@@ -130,15 +130,43 @@ defmodule CodePuppyControl.Config.ADR003IsolationTest do
       File.rm_rf(ex_home)
     end
 
-    test "Writer.set_value raises IsolationViolation when path is under legacy home" do
+    test "Writer.set_value returns {:error, IsolationViolation} when path is under legacy home" do
+      # Configure Loader to think config lives in legacy home
+      legacy_cfg = Path.join(Paths.legacy_home_dir(), "puppy.cfg")
+      :persistent_term.put({:code_puppy_control, :puppy_cfg_path}, legacy_cfg)
+      :persistent_term.put({:code_puppy_control, :puppy_cfg}, %{"puppy" => %{}})
+
+      result = Writer.set_value("test_key", "test_value")
+      assert {:error, %Isolation.IsolationViolation{}} = result
+    after
+      :persistent_term.erase({:code_puppy_control, :puppy_cfg_path})
+      :persistent_term.erase({:code_puppy_control, :puppy_cfg})
+    end
+
+    test "Writer.set_value! raises IsolationViolation when path is under legacy home" do
       # Configure Loader to think config lives in legacy home
       legacy_cfg = Path.join(Paths.legacy_home_dir(), "puppy.cfg")
       :persistent_term.put({:code_puppy_control, :puppy_cfg_path}, legacy_cfg)
       :persistent_term.put({:code_puppy_control, :puppy_cfg}, %{"puppy" => %{}})
 
       assert_raise Isolation.IsolationViolation, fn ->
-        Writer.set_value("test_key", "test_value")
+        Writer.set_value!("test_key", "test_value")
       end
+    after
+      :persistent_term.erase({:code_puppy_control, :puppy_cfg_path})
+      :persistent_term.erase({:code_puppy_control, :puppy_cfg})
+    end
+
+    test "Writer survives isolation violation without GenServer crash" do
+      # Configure Loader to think config lives in legacy home
+      legacy_cfg = Path.join(Paths.legacy_home_dir(), "puppy.cfg")
+      :persistent_term.put({:code_puppy_control, :puppy_cfg_path}, legacy_cfg)
+      :persistent_term.put({:code_puppy_control, :puppy_cfg}, %{"puppy" => %{}})
+
+      # First call returns error without killing the GenServer
+      assert {:error, _} = Writer.set_value("bad_key", "bad_val")
+      # GenServer is still alive — a second call also returns error
+      assert {:error, _} = Writer.set_value("another_key", "another_val")
     after
       :persistent_term.erase({:code_puppy_control, :puppy_cfg_path})
       :persistent_term.erase({:code_puppy_control, :puppy_cfg})

@@ -77,6 +77,7 @@ def _get_xdg_dir(env_var: str, fallback: str) -> str:
         candidate = os.path.join(xdg_base, "code_puppy")
         # ADR-003: In pup-ex mode, XDG paths must be under active home
         from code_puppy.config_paths import _is_path_within_home
+
         if is_pup_ex() and not _is_path_within_home(candidate):
             return str(_home_dir())
         return candidate
@@ -204,6 +205,7 @@ def _invalidate_config() -> None:
         _state.cached_mtime = None
     # Also invalidate the protected token count cache
     from code_puppy.config.limits import get_protected_token_count
+
     get_protected_token_count.cache_clear()
     # Clear model caches
     _state.model_context_length_cache.clear()
@@ -258,7 +260,7 @@ def _make_int_getter(
             if max_val is not None:
                 result = min(max_val, result)
             return result
-        except (ValueError, TypeError):
+        except ValueError, TypeError:
             return default
 
     getter.__name__ = getter_name
@@ -288,7 +290,7 @@ def _make_float_getter(
             if max_val is not None:
                 result = min(max_val, result)
             return result
-        except (ValueError, TypeError):
+        except ValueError, TypeError:
             return default
 
     getter.__name__ = getter_name
@@ -389,6 +391,7 @@ def set_config_value(key: str, value: str) -> None:
     # Also invalidate the typed config singleton
     try:
         from code_puppy.config_package.loader import reset_puppy_config_for_tests
+
         reset_puppy_config_for_tests()
     except Exception:
         pass
@@ -414,6 +417,7 @@ def reset_value(key: str) -> None:
     _invalidate_config()
     try:
         from code_puppy.config_package.loader import reset_puppy_config_for_tests
+
         reset_puppy_config_for_tests()
     except Exception:
         pass
@@ -494,4 +498,5 @@ def _path_config_file() -> pathlib.Path:
     Import deferred to avoid circular imports at module load time.
     """
     from code_puppy.config.paths import _path_config_file as _pcf
+
     return _pcf()

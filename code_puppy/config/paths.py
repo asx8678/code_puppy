@@ -70,6 +70,7 @@ def _get_xdg_dir(env_var: str, fallback: str) -> str:
     Delegates to config_paths for the canonical implementation.
     """
     from code_puppy.config.loader import _get_xdg_dir as _loader_xdg
+
     return _loader_xdg(env_var, fallback)
 
 
@@ -191,7 +192,9 @@ _LAZY_PATH_FACTORIES: dict[str, Callable[[], object]] = {
     "SKILLS_DIR": lambda: _path_skills_dir(),
     "CONTEXTS_DIR": lambda: pathlib.Path(_xdg_data_dir()) / "contexts",
     "_DEFAULT_SQLITE_FILE": lambda: _path_default_sqlite_file(),
-    "CHATGPT_MODELS_FILE": lambda: pathlib.Path(_xdg_data_dir()) / "chatgpt_models.json",
+    "CHATGPT_MODELS_FILE": lambda: (
+        pathlib.Path(_xdg_data_dir()) / "chatgpt_models.json"
+    ),
     "CLAUDE_MODELS_FILE": lambda: pathlib.Path(_xdg_data_dir()) / "claude_models.json",
     "AUTOSAVE_DIR": lambda: _path_autosave_dir(),
     "COMMAND_HISTORY_FILE": lambda: _path_command_history_file(),
