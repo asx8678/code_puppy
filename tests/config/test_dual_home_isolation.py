@@ -68,9 +68,7 @@ class TestPupExDetection:
             assert is_pup_ex() is True
 
     def test_standard_mode(self):
-        with mock.patch.dict(
-            os.environ, {}, clear=True
-        ):
+        with mock.patch.dict(os.environ, {}, clear=True):
             # Remove PUP_EX_HOME and PUP_RUNTIME if set
             os.environ.pop("PUP_EX_HOME", None)
             os.environ.pop("PUP_RUNTIME", None)
@@ -87,9 +85,7 @@ class TestHomeDirResolution:
         assert str(home_dir()) == pup_ex_home
 
     def test_ex_home_default(self):
-        with mock.patch.dict(
-            os.environ, {}, clear=True
-        ):
+        with mock.patch.dict(os.environ, {}, clear=True):
             os.environ.pop("PUP_EX_HOME", None)
             os.environ.pop("PUP_RUNTIME", None)
             os.environ.pop("PUP_HOME", None)
@@ -132,9 +128,7 @@ class TestIsolationGuard:
 
     def test_allow_write_in_standard_mode(self):
         """Standard Python pup can write to ~/.code_puppy/."""
-        with mock.patch.dict(
-            os.environ, {}, clear=True
-        ):
+        with mock.patch.dict(os.environ, {}, clear=True):
             os.environ.pop("PUP_EX_HOME", None)
             os.environ.pop("PUP_RUNTIME", None)
             legacy_path = str(legacy_home_dir()) + "/test.txt"
@@ -214,6 +208,7 @@ class TestConfigSubmoduleIsolation:
             _path_config_file,
             _path_autosave_dir,
         )
+
         assert str(_xdg_config_dir()).startswith(pup_ex_home)
         assert str(_xdg_data_dir()).startswith(pup_ex_home)
         assert str(_xdg_cache_dir()).startswith(pup_ex_home)
@@ -224,6 +219,7 @@ class TestConfigSubmoduleIsolation:
     def test_lazy_path_constants_resolve_under_ex_home(self, pup_ex_home):
         """Lazy path constants (CONFIG_FILE etc.) must respect isolation."""
         from code_puppy.config import paths
+
         config_file = paths._LAZY_PATH_FACTORIES["CONFIG_FILE"]()
         assert str(config_file).startswith(pup_ex_home)
 
@@ -239,6 +235,7 @@ class TestConfigSubmoduleIsolation:
 
         # Point config file to legacy home via override
         from code_puppy.config.paths import _LAZY_PATH_OVERRIDES
+
         _LAZY_PATH_OVERRIDES["CONFIG_FILE"] = str(legacy_home_dir()) + "/puppy.cfg"
 
         try:
@@ -258,6 +255,7 @@ class TestBackwardCompatibility:
 
     def test_all_public_names_exported(self):
         from code_puppy import config
+
         # Core access
         assert callable(getattr(config, "get_value", None))
         assert callable(getattr(config, "set_value", None))
@@ -299,6 +297,7 @@ class TestBackwardCompatibility:
     def test_module_submodule_access(self):
         """Sub-modules should be accessible from the package."""
         from code_puppy.config import models, agents, tui, limits, debug, cache, mcp
+
         assert hasattr(models, "get_global_model_name")
         assert hasattr(agents, "get_default_agent")
         assert hasattr(tui, "DEFAULT_BANNER_COLORS")
@@ -315,6 +314,7 @@ class TestBackwardCompatibility:
             DEFAULT_BANNER_COLORS,
             CONFIG_FILE,
         )
+
         assert get_value is not None
         assert get_yolo_mode is not None
         assert isinstance(DEFAULT_BANNER_COLORS, dict)

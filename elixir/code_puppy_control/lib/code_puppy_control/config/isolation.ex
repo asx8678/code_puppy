@@ -185,8 +185,7 @@ defmodule CodePuppyControl.Config.Isolation do
        %IsolationViolation{
          path: resolved,
          action: action,
-         message:
-           "ConfigIsolationViolation: blocked #{action} to #{resolved} (under legacy home)"
+         message: "ConfigIsolationViolation: blocked #{action} to #{resolved} (under legacy home)"
        }}
     end
   end

@@ -71,7 +71,8 @@ defmodule CodePuppyControl.Config.Writer do
 
   Returns `{:error, %IsolationViolation{}}` when ADR-003 blocks the write.
   """
-  @spec set_values(%{String.t() => String.t()}) :: :ok | {:error, Isolation.IsolationViolation.t()}
+  @spec set_values(%{String.t() => String.t()}) ::
+          :ok | {:error, Isolation.IsolationViolation.t()}
   def set_values(kv_map) when is_map(kv_map) do
     GenServer.call(__MODULE__, {:set_values, kv_map})
   end
@@ -136,7 +137,8 @@ defmodule CodePuppyControl.Config.Writer do
   **Warning**: not safe for concurrent callers — use only when you know
   there are no other writers.
   """
-  @spec unsafe_set_value(String.t(), String.t()) :: :ok | {:error, Isolation.IsolationViolation.t()}
+  @spec unsafe_set_value(String.t(), String.t()) ::
+          :ok | {:error, Isolation.IsolationViolation.t()}
   def unsafe_set_value(key, value) do
     config = Loader.get_cached()
     section = Loader.default_section()
