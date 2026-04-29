@@ -35,8 +35,16 @@ defmodule CodePuppyControl.SessionStorage.StoreHelpers do
           boolean(),
           map() | nil
         ) :: map()
-  def build_entry(name, history, compacted_hashes, total_tokens,
-                  auto_saved, timestamp, has_terminal, terminal_meta) do
+  def build_entry(
+        name,
+        history,
+        compacted_hashes,
+        total_tokens,
+        auto_saved,
+        timestamp,
+        has_terminal,
+        terminal_meta
+      ) do
     %{
       name: name,
       history: history,
@@ -73,14 +81,17 @@ defmodule CodePuppyControl.SessionStorage.StoreHelpers do
   """
   @spec normalize_meta_keys(nil | map() | term()) :: nil | map() | term()
   def normalize_meta_keys(nil), do: nil
+
   def normalize_meta_keys(meta) when is_map(meta) do
     Map.new(meta, fn
       {k, v} when is_binary(k) ->
         {Map.get(@terminal_meta_whitelist, k, k), v}
+
       {k, v} when is_atom(k) ->
         {k, v}
     end)
   end
+
   def normalize_meta_keys(meta), do: meta
 
   @doc """
@@ -108,6 +119,7 @@ defmodule CodePuppyControl.SessionStorage.StoreHelpers do
   @spec chat_session_to_entry(map()) :: map()
   def chat_session_to_entry(session) when is_map(session) do
     raw_meta = get_key(session, :terminal_meta, "terminal_meta")
+
     %{
       name: get_key(session, :name, "name", ""),
       history: get_key(session, :history, "history", []),
@@ -129,6 +141,7 @@ defmodule CodePuppyControl.SessionStorage.StoreHelpers do
   @spec session_data_to_entry(String.t(), map()) :: map()
   def session_data_to_entry(name, data) do
     history = Map.get(data, :history, [])
+
     %{
       name: name,
       history: history,
@@ -198,7 +211,7 @@ defmodule CodePuppyControl.SessionStorage.StoreHelpers do
         ht =
           if has_terminal_explicit?,
             do: Keyword.get(opts, :has_terminal),
-            else: (if terminal_meta_explicit?, do: true, else: existing_ht)
+            else: if(terminal_meta_explicit?, do: true, else: existing_ht)
 
         tm =
           if terminal_meta_explicit?,
@@ -221,5 +234,53 @@ defmodule CodePuppyControl.SessionStorage.StoreHelpers do
       [{^name, entry}] -> {entry.has_terminal, entry.terminal_meta}
       [] -> {false, nil}
     end
+  end
+
+  # ---------------------------------------------------------------------------
+  # Search Filter Helpers (code_puppy-ctj.1 fresh port)
+  # ---------------------------------------------------------------------------
+
+  @doc "Filters session entries by name pattern (substring or regex)."
+  @spec filter_by_name([map()], String.t() | Regex.t() | nil) :: [map()]
+  def filter_by_name(sessions, nil), do: sessions
+
+  def filter_by_name(sessions, pattern) when is_binary(pattern) do
+    Enum.filter(sessions, fn e -> String.contains?(e.name, pattern) end)
+  end
+
+  def filter_by_name(sessions, %Regex{} = regex) do
+    Enum.filter(sessions, fn e -> Regex.match?(regex, e.name) end)
+  end
+
+  @doc "Filters session entries by auto_saved flag."
+  @spec filter_by_auto_saved([map()], boolean() | nil) :: [map()]
+  def filter_by_auto_saved(sessions, nil), do: sessions
+
+  def filter_by_auto_saved(sessions, flag) when is_boolean(flag) do
+    Enum.filter(sessions, fn e -> e.auto_saved == flag end)
+  end
+
+  @doc "Filters session entries by total_tokens range."
+  @spec filter_by_token_range([map()], non_neg_integer() | nil, non_neg_integer() | nil) :: [
+          map()
+        ]
+  def filter_by_token_range(sessions, nil, nil), do: sessions
+
+  def filter_by_token_range(sessions, min, max) do
+    Enum.filter(sessions, fn e ->
+      tokens = e.total_tokens || 0
+      (is_nil(min) or tokens >= min) and (is_nil(max) or tokens <= max)
+    end)
+  end
+
+  @doc "Filters session entries by timestamp range (ISO8601 strings)."
+  @spec filter_by_time_range([map()], String.t() | nil, String.t() | nil) :: [map()]
+  def filter_by_time_range(sessions, nil, nil), do: sessions
+
+  def filter_by_time_range(sessions, since, until) do
+    Enum.filter(sessions, fn e ->
+      ts = e.timestamp || ""
+      (is_nil(since) or ts >= since) and (is_nil(until) or ts <= until)
+    end)
   end
 end

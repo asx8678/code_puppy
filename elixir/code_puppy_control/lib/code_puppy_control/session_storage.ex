@@ -5,33 +5,24 @@ defmodule CodePuppyControl.SessionStorage do
 
   ## Storage backends
 
-  When running inside the OTP supervision tree, this module delegates to
-  `SessionStorage.Store` which provides:
+  When running inside the OTP supervision tree, delegates to
+  `SessionStorage.Store` (ETS + SQLite + PubSub).
+  Outside the OTP app (e.g. standalone scripts), falls back to
+  file-based JSON storage via `SessionStorage.FileBackend`.
 
-    - **ETS hot cache** for O(1) reads
-    - **SQLite durable store** via `CodePuppyControl.Sessions`
-    - **PubSub events** on session mutations (saved, deleted, cleaned)
-    - **Terminal session recovery** after crashes
+  ## PubSub Events
 
-  Outside the OTP app (e.g. standalone scripts), falls back to file-based
-  JSON storage via `SessionStorage.FileBackend`.
+  Two subscription modes with **different event shapes** (by design):
 
-  Never writes to `~/.code_puppy/` — migration is via `SessionStorage.Migrator`.
+  - **Per-session** (`subscribe/1`): receives `{:session_event, %{type:, name:, timestamp:, payload:}}`
+    on topic `"session:{name}"`. Event types: `:saved`, `:updated`, `:deleted`.
+  - **Global** (`subscribe_all/0`): receives `{:session_saved, name, meta}`,
+    `{:session_deleted, name}`, `{:sessions_cleaned, [name]}` on topic `"sessions:events"`.
 
-  ## Crash-survivability
+  The asymmetry preserves backwards compatibility with existing subscribers
+  that depend on the global tuple shape.
 
-  The write-through ordering (SQLite → ETS → PubSub) guarantees that a
-  crash mid-operation never leaves the cache ahead of disk. On restart,
-  the ETS cache is rebuilt from SQLite (see `SessionStorage.Store`).
-
-  ## Terminal session recovery
-
-  Sessions with active terminals are tracked in ETS with metadata
-  (cols, rows, shell). On crash recovery, `SessionStorage.TerminalRecovery`
-  attempts to recreate PTY sessions for tracked terminals.
-
-  (code_puppy-ctj.1): Port session_storage.py + session_storage_bridge.py
-  to Elixir with PubSub + ETS + disk crash-survivability.
+  (code_puppy-ctj.1)
   """
 
   require Logger
@@ -39,6 +30,7 @@ defmodule CodePuppyControl.SessionStorage do
   alias CodePuppyControl.SessionStorage.Format
   alias CodePuppyControl.SessionStorage.Store
   alias CodePuppyControl.SessionStorage.FileBackend
+  alias CodePuppyControl.SessionStorage.PubSub, as: SSPubSub
 
   # ---------------------------------------------------------------------------
   # Types
@@ -71,17 +63,11 @@ defmodule CodePuppyControl.SessionStorage do
   # Directory Management
   # ---------------------------------------------------------------------------
 
-  @doc """
-  Returns the base directory for Elixir session storage.
-
-  Delegates to `FileBackend.base_dir/0`.
-  """
+  @doc "Returns the base directory for Elixir session storage."
   @spec base_dir :: Path.t()
   defdelegate base_dir, to: FileBackend
 
-  @doc """
-  Ensures the session storage directory exists.
-  """
+  @doc "Ensures the session storage directory exists."
   @spec ensure_dir :: {:ok, Path.t()} | {:error, term()}
   def ensure_dir do
     dir = base_dir()
@@ -98,11 +84,6 @@ defmodule CodePuppyControl.SessionStorage do
 
   @doc """
   Saves a session (creates or updates).
-
-  When the OTP Store is running, delegates to Store for ETS caching +
-  PubSub notifications + SQLite persistence.
-  Falls back to file-based JSON storage otherwise.
-
   Options: `:compacted_hashes`, `:total_tokens`, `:auto_saved`, `:timestamp`,
   `:base_dir`, `:has_terminal`, `:terminal_meta`.
   """
@@ -135,8 +116,6 @@ defmodule CodePuppyControl.SessionStorage do
 
   @doc """
   Loads session messages and compacted hashes.
-
-  Uses ETS cache (via Store) when available, falls back to file-based.
   Options: `:base_dir`.
   """
   @spec load_session(session_name(), keyword()) ::
@@ -158,8 +137,6 @@ defmodule CodePuppyControl.SessionStorage do
 
   @doc """
   Loads full session data including format and metadata.
-
-  Uses ETS cache (via Store) when available, falls back to file-based.
   Options: `:base_dir`.
   """
   @spec load_session_full(session_name(), keyword()) ::
@@ -194,20 +171,21 @@ defmodule CodePuppyControl.SessionStorage do
 
   @doc """
   Updates session metadata fields.
-
+  When Store is available, delegates to Store (SQLite + ETS + PubSub).
   Options: `:auto_saved`, `:total_tokens`, `:timestamp`, `:base_dir`.
   """
   @spec update_session(session_name(), keyword()) ::
           {:ok, session_metadata()} | {:error, term()}
   def update_session(name, opts \\ []) do
-    FileBackend.update_session(name, opts)
+    if store_available?() and not Keyword.has_key?(opts, :base_dir) do
+      Store.update_session(name, opts)
+    else
+      FileBackend.update_session(name, opts)
+    end
   end
 
   @doc """
   Deletes a session by name (idempotent).
-
-  When the Store is available, deletes from SQLite + ETS + PubSub.
-  Otherwise falls back to file-based deletion.
   Options: `:base_dir`.
   """
   @spec delete_session(session_name(), keyword()) :: :ok | {:error, term()}
@@ -225,9 +203,6 @@ defmodule CodePuppyControl.SessionStorage do
 
   @doc """
   Lists all session names sorted alphabetically.
-
-  When the Store is available, reads from ETS (no disk I/O).
-  Otherwise falls back to file-based listing.
   Options: `:base_dir`.
   """
   @spec list_sessions(keyword()) :: {:ok, [session_name()]} | {:error, term()}
@@ -241,9 +216,6 @@ defmodule CodePuppyControl.SessionStorage do
 
   @doc """
   Lists sessions with metadata, sorted newest-first.
-
-  When the Store is available, reads from ETS.
-  Otherwise falls back to file-based listing.
   Options: `:base_dir`.
   """
   @spec list_sessions_with_metadata(keyword()) :: {:ok, [session_metadata()]} | {:error, term()}
@@ -259,13 +231,16 @@ defmodule CodePuppyControl.SessionStorage do
 
   @doc """
   Searches sessions by filters.
-
   Options: `:name_pattern`, `:auto_saved`, `:min_tokens`, `:max_tokens`,
   `:since`, `:until`, `:base_dir`, `:limit`.
   """
   @spec search_sessions(keyword()) :: {:ok, [session_metadata()]} | {:error, term()}
   def search_sessions(opts \\ []) do
-    FileBackend.search_sessions(opts)
+    if store_available?() and not Keyword.has_key?(opts, :base_dir) do
+      Store.search_sessions(opts)
+    else
+      FileBackend.search_sessions(opts)
+    end
   end
 
   # ---------------------------------------------------------------------------
@@ -274,8 +249,6 @@ defmodule CodePuppyControl.SessionStorage do
 
   @doc """
   Cleans up old sessions, keeping only the most recent N.
-
-  When the Store is available, delegates for ETS + SQLite + PubSub.
   Options: `:base_dir`.
   """
   @spec cleanup_sessions(non_neg_integer(), keyword()) ::
@@ -297,21 +270,98 @@ defmodule CodePuppyControl.SessionStorage do
   # ---------------------------------------------------------------------------
 
   @doc """
-  Exports a session to JSON. Options: `:base_dir`, `:output_path`.
+  Exports a session to JSON. Composes from Store or falls back to FileBackend.
+  Options: `:base_dir`, `:output_path`.
   """
   @spec export_session(session_name(), keyword()) ::
           {:ok, String.t() | Path.t()} | {:error, term()}
   def export_session(name, opts \\ []) do
-    FileBackend.export_session(name, opts)
+    if store_available?() and not Keyword.has_key?(opts, :base_dir) do
+      export_session_via_store(name, opts)
+    else
+      FileBackend.export_session(name, opts)
+    end
+  end
+
+  defp export_session_via_store(name, opts) do
+    case Store.load_session_full(name) do
+      {:ok, entry} ->
+        data = %{
+          "format" => Format.current_format(),
+          "payload" => %{
+            "messages" => entry.history,
+            "compacted_hashes" => entry.compacted_hashes
+          },
+          "metadata" => %{
+            "session_name" => entry.name,
+            "timestamp" => entry.timestamp,
+            "message_count" => entry.message_count,
+            "total_tokens" => entry.total_tokens,
+            "auto_saved" => entry.auto_saved
+          }
+        }
+
+        json = Jason.encode!(data, pretty: true)
+        write_or_return(json, Keyword.get(opts, :output_path))
+
+      {:error, reason} ->
+        {:error, reason}
+    end
   end
 
   @doc """
-  Exports all sessions as a JSON array. Options: `:base_dir`, `:output_path`.
+  Exports all sessions as a JSON array.
+  Options: `:base_dir`, `:output_path`.
   """
   @spec export_all_sessions(keyword()) ::
           {:ok, String.t() | Path.t()} | {:error, term()}
   def export_all_sessions(opts \\ []) do
-    FileBackend.export_all_sessions(opts)
+    if store_available?() and not Keyword.has_key?(opts, :base_dir) do
+      export_all_via_store(opts)
+    else
+      FileBackend.export_all_sessions(opts)
+    end
+  end
+
+  defp export_all_via_store(opts) do
+    {:ok, entries} = Store.list_sessions_with_metadata()
+
+    items =
+      Enum.map(entries, fn entry ->
+        case Store.load_session_full(entry.name) do
+          {:ok, full} ->
+            %{
+              "format" => Format.current_format(),
+              "payload" => %{
+                "messages" => full.history,
+                "compacted_hashes" => full.compacted_hashes
+              },
+              "metadata" => %{
+                "session_name" => full.name,
+                "timestamp" => full.timestamp,
+                "message_count" => full.message_count,
+                "total_tokens" => full.total_tokens,
+                "auto_saved" => full.auto_saved
+              }
+            }
+
+          {:error, _} ->
+            nil
+        end
+      end)
+      |> Enum.filter(&(&1 != nil))
+
+    json = Jason.encode!(items, pretty: true)
+    write_or_return(json, Keyword.get(opts, :output_path))
+  end
+
+  defp write_or_return(json, nil), do: {:ok, json}
+
+  defp write_or_return(json, path) do
+    case File.write(path, json) do
+      :ok -> {:ok, path}
+      {:error, reason} -> {:error, reason}
+    end
   end
 
   # ---------------------------------------------------------------------------
@@ -322,72 +372,65 @@ defmodule CodePuppyControl.SessionStorage do
   Non-blocking version of `save_session/3`. Snapshots history immediately,
   submits the save to a background Task, and returns `:ok`.
 
+  When Store is available, delegates to `save_session/3` (which routes to Store).
+  Only resolves `:base_dir` eagerly when Store is unavailable — fixing the
+  previous bug where `save_session_async/3` always forced FileBackend.
+
   Same options as `save_session/3`.
   """
   @spec save_session_async(session_name(), history(), keyword()) :: :ok
   def save_session_async(name, history, opts \\ []) do
     history_snapshot = history
 
-    case FileBackend.safe_resolve_base_dir(opts) do
-      {:ok, dir} ->
-        opts_with_dir = Keyword.put(opts, :base_dir, dir)
+    opts_resolved =
+      if store_available?() do
+        # Store path — no :base_dir needed; Store handles routing
+        opts
+      else
+        # FileBackend path — resolve base_dir eagerly (before Task spawn)
+        # to protect against env teardown races
+        case FileBackend.safe_resolve_base_dir(opts) do
+          {:ok, dir} ->
+            Keyword.put(opts, :base_dir, dir)
 
-        _ =
-          Task.start(fn ->
-            case save_session(name, history_snapshot, opts_with_dir) do
-              {:ok, _meta} ->
-                mark_autosave_complete(history_snapshot)
+          {:error, reason} ->
+            Logger.warning("Async session save skipped: #{inspect(reason)}")
+            nil
+        end
+      end
 
-              {:error, reason} ->
-                Logger.warning("Async session save failed: #{inspect(reason)}")
-            end
-          end)
+    if opts_resolved do
+      _ =
+        Task.start(fn ->
+          case save_session(name, history_snapshot, opts_resolved) do
+            {:ok, _meta} -> mark_autosave_complete(history_snapshot)
+            {:error, reason} -> Logger.warning("Async session save failed: #{inspect(reason)}")
+          end
+        end)
 
-        :ok
-
-      {:error, reason} ->
-        Logger.warning(
-          "Async session save skipped — failed to resolve base_dir: #{inspect(reason)}"
-        )
-
-        :ok
+      :ok
+    else
+      :ok
     end
   end
 
-  @doc """
-  Returns `true` if the autosave should be skipped.
-
-  Delegates to `CodePuppyControl.SessionStorage.AutosaveTracker`.
-  """
+  @doc "Returns `true` if the autosave should be skipped (debounce + dedup)."
   @spec should_skip_autosave?(history()) :: boolean()
   def should_skip_autosave?(history) do
     CodePuppyControl.SessionStorage.AutosaveTracker.should_skip_autosave?(history)
   end
 
-  @doc """
-  Records that an autosave has completed.
-
-  Delegates to `CodePuppyControl.SessionStorage.AutosaveTracker`.
-  """
+  @doc "Records that an autosave has completed."
   @spec mark_autosave_complete(history()) :: :ok
   def mark_autosave_complete(history) do
     CodePuppyControl.SessionStorage.AutosaveTracker.mark_autosave_complete(history)
   end
 
   # ---------------------------------------------------------------------------
-  # Terminal Session Tracking (code_puppy-ctj.1)
+  # Terminal Session Tracking
   # ---------------------------------------------------------------------------
 
-  @doc """
-  Registers a terminal session for crash recovery tracking.
-
-  When a PTY terminal is attached to a session, this records the terminal
-  metadata so that on crash/restart, `SessionStorage.TerminalRecovery`
-  can attempt to recreate the PTY session.
-
-  Durably persists to SQLite — terminal metadata survives node crashes.
-  Returns `{:error, :session_not_found}` if the session does not exist.
-  """
+  @doc "Registers a terminal session for crash recovery. Durably persists to SQLite."
   @spec register_terminal(session_name(), map()) :: :ok | {:error, term()}
   def register_terminal(session_name, meta) do
     if store_available?() do
@@ -397,13 +440,7 @@ defmodule CodePuppyControl.SessionStorage do
     end
   end
 
-  @doc """
-  Unregisters a terminal session from crash recovery tracking.
-
-  Called when a terminal session is closed gracefully.
-  Durably clears terminal metadata from SQLite.
-  Returns `{:error, :session_not_found}` if the session does not exist.
-  """
+  @doc "Unregisters a terminal session from crash recovery tracking."
   @spec unregister_terminal(session_name()) :: :ok | {:error, term()}
   def unregister_terminal(session_name) do
     if store_available?() do
@@ -413,11 +450,7 @@ defmodule CodePuppyControl.SessionStorage do
     end
   end
 
-  @doc """
-  Lists all tracked terminal sessions (for crash recovery diagnostics).
-
-  Returns an empty list if the Store is not running.
-  """
+  @doc "Lists all tracked terminal sessions. Returns `[]` if Store is not running."
   @spec list_terminal_sessions() :: [map()]
   def list_terminal_sessions do
     if store_available?() do
@@ -427,13 +460,49 @@ defmodule CodePuppyControl.SessionStorage do
     end
   end
 
+  # ---------------------------------------------------------------------------
+  # PubSub — Per-session and Global Subscriptions
+  # ---------------------------------------------------------------------------
+
+  @doc """
+  Subscribes the calling process to events for a specific session.
+
+  Events received: `{:session_event, %{type:, name:, timestamp:, payload:}}`
+  where `type` is `:saved`, `:updated`, `:deleted`, or `:custom`.
+  """
+  @spec subscribe(session_name()) :: :ok | {:error, term()}
+  def subscribe(name) do
+    SSPubSub.subscribe(name)
+  end
+
+  @doc "Unsubscribes from events for a specific session."
+  @spec unsubscribe(session_name()) :: :ok | {:error, term()}
+  def unsubscribe(name) do
+    SSPubSub.unsubscribe(name)
+  end
+
+  @doc """
+  Subscribes the calling process to global session lifecycle events.
+
+  Events received (different shape from per-session!):
+  - `{:session_saved, name, meta}` — after a session is saved
+  - `{:session_deleted, name}` — after a session is deleted
+  - `{:sessions_cleaned, [name]}` — after cleanup removes sessions
+  """
+  @spec subscribe_all() :: :ok | {:error, term()}
+  def subscribe_all do
+    SSPubSub.subscribe_all()
+  end
+
+  @doc "Unsubscribes from global session events."
+  @spec unsubscribe_all() :: :ok | {:error, term()}
+  def unsubscribe_all do
+    SSPubSub.unsubscribe_all()
+  end
+
   @doc """
   Subscribes the calling process to session lifecycle events via PubSub.
-
-  Events: `{:session_saved, name, metadata}`, `{:session_deleted, name}`,
-  `{:sessions_cleaned, deleted_names}`.
-
-  No-op if the Store is not running.
+  Alias for `subscribe_all/0`.
   """
   @spec subscribe_sessions() :: :ok | {:error, term()}
   def subscribe_sessions do
@@ -446,13 +515,6 @@ defmodule CodePuppyControl.SessionStorage do
 
   @doc """
   Subscribes the calling process to terminal recovery events via PubSub.
-
-  Events: `{:terminal_recovered, session_id, meta}`,
-  `{:terminal_recovery_failed, session_id, reason}`,
-  `{:terminal_registered, session_id}`,
-  `{:terminal_unregistered, session_id}`.
-
-  No-op if the Store is not running.
   """
   @spec subscribe_terminal() :: :ok | {:error, term()}
   def subscribe_terminal do
@@ -467,12 +529,7 @@ defmodule CodePuppyControl.SessionStorage do
   # Utility
   # ---------------------------------------------------------------------------
 
-  @doc """
-  Checks if a session exists.
-
-  When the Store is available, checks ETS (O(1), no disk I/O).
-  Options: `:base_dir`.
-  """
+  @doc "Checks if a session exists. Options: `:base_dir`."
   @spec session_exists?(session_name(), keyword()) :: boolean()
   def session_exists?(name, opts \\ []) do
     if store_available?() and not Keyword.has_key?(opts, :base_dir) do
@@ -482,12 +539,7 @@ defmodule CodePuppyControl.SessionStorage do
     end
   end
 
-  @doc """
-  Returns the count of stored sessions.
-
-  When the Store is available, reads from ETS.
-  Options: `:base_dir`.
-  """
+  @doc "Returns the count of stored sessions. Options: `:base_dir`."
   @spec count_sessions(keyword()) :: non_neg_integer()
   def count_sessions(opts \\ []) do
     if store_available?() and not Keyword.has_key?(opts, :base_dir) do

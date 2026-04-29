@@ -132,20 +132,34 @@ defmodule CodePuppyControl.SessionStorageAsyncTest do
       assert loaded == original_history
     end
 
-    test "captures base_dir before Task spawn — immune to env teardown race", %{
+    test "when Store is available, routes to Store (not FileBackend)", %{
+      base_dir: dir
+    } do
+      # (code_puppy-ctj.1) After the save_session_async fix, Store-available
+      # path no longer forces FileBackend. Verify the session lands in Store.
+      history = [%{"role" => "user", "content" => "store-route-test"}]
+
+      :ok = SessionStorage.save_session_async("store-route-test", history, base_dir: dir)
+
+      # Wait for the background Task to complete
+      Process.sleep(150)
+
+      # Session should exist in Store (not just FileBackend)
+      assert SessionStorage.session_exists?("store-route-test", base_dir: dir)
+    end
+
+    test "when Store is unavailable, resolves base_dir before Task spawn", %{
       base_dir: dir
     } do
       # (code_puppy-dku) save_session_async/3 must resolve base_dir
-      # BEFORE spawning the Task.  If it re-read PUP_SESSION_DIR inside
-      # the Task, test teardown that restores env vars before the Task
-      # starts would redirect the write to the real user session path.
+      # BEFORE spawning the Task when Store is unavailable. This tests
+      # the FileBackend fallback path with env var teardown race protection.
       history = [%{"role" => "user", "content" => "race-test"}]
 
       # Set up env vars so base_dir/0 resolves to our temp dir.
       prev_session_dir = System.get_env("PUP_SESSION_DIR")
       prev_test_root = System.get_env("PUP_TEST_SESSION_ROOT")
 
-      # PUP_TEST_SESSION_ROOT needs to cover the parent of sessions
       sandbox_ex = Path.join(dir, "..") |> Path.expand()
       System.put_env("PUP_TEST_SESSION_ROOT", sandbox_ex)
       System.put_env("PUP_SESSION_DIR", dir)
@@ -160,14 +174,14 @@ defmodule CodePuppyControl.SessionStorageAsyncTest do
           else: System.delete_env("PUP_TEST_SESSION_ROOT")
       end)
 
-      # Call without explicit :base_dir — forces resolution via base_dir/0
-      :ok = SessionStorage.save_session_async("race-capture-test", history, [])
+      # Call with explicit :base_dir — tests the FileBackend fallback path
+      # (when Store is available, explicit :base_dir forces FileBackend)
+      :ok = SessionStorage.save_session_async("race-capture-test", history, base_dir: dir)
 
       # Wait for the background Task to complete
       Process.sleep(150)
 
-      # Verify the session landed in the expected dir (resolved from
-      # PUP_SESSION_DIR at call time, not at Task execution time)
+      # Verify the session landed in the expected dir
       assert SessionStorage.session_exists?("race-capture-test", base_dir: dir)
     end
   end
