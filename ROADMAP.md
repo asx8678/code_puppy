@@ -60,9 +60,17 @@ Prerequisites before launching the Python-to-Elixir port.
 > Tracking: epic `code_puppy-ctj` (filed 2026-04-25), 6 child tasks: <D.1: `code_puppy-ctj.1`>, <D.2: `code_puppy-ctj.2`>, <D.3: `code_puppy-ctj.4`>, <D.4: `code_puppy-ctj.3`>, <D.5: `code_puppy-ctj.5`>, <D.6: `code_puppy-ctj.6`>
 
 
-- [ ] Port session storage (Phoenix PubSub + ETS + disk)
+- [x] Port session storage (Phoenix PubSub + ETS + disk) — code_puppy-ctj.1, merged 51a32908
 - [ ] Port config system (dual-home isolation, see ADR-003)
 - [ ] Port runtime state
+
+#### Phase D follow-ups (post-ctj.1)
+
+- [ ] Fix mislabeled `save_session_async/3` Store-routing test in `session_storage_async_test.exs:135-149` — currently passes `base_dir:` so it exercises FileBackend, not Store
+- [ ] Add explicit Store-backed facade tests for `search_sessions/1` and `export_*` (call without `base_dir`, assert Store-backed behavior)
+- [ ] Correct `load_session_full/2` type/spec — `@type session_data` uses atom keys but Store returns string-keyed maps (`session_storage.ex:54-62` vs `:149-163`)
+- [ ] Harden Store operation error returns — `Store.Operations.do_delete_session/1` and `do_recover_from_disk/0` pattern-match `:ok`/`{:ok, _}` and could crash on persistence errors
+- [ ] Clarify `application.ex` supervision tree comment — currently says "Session storage ETS cache + PubSub" which echoes the removed dual-cache; reword to "SessionStorage.Store — ETS-backed session store + PubSub"
 
 ### Phase E: Tools
 
