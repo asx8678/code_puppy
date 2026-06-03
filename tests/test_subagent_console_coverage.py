@@ -249,6 +249,46 @@ class TestAgentStateToStatusMessage:
         assert message.token_limit == 200000
         assert message.token_percent == pytest.approx(0.6)
 
+    def test_token_percent_normal(self):
+        state = AgentState(
+            session_id="sess",
+            agent_name="agent",
+            model_name="model",
+            token_count=1200,
+            token_limit=200000,
+        )
+        assert state.token_percent() == pytest.approx(0.6)
+
+    def test_token_percent_none_when_no_limit(self):
+        state = AgentState(
+            session_id="sess",
+            agent_name="agent",
+            model_name="model",
+            token_count=5,
+            token_limit=None,
+        )
+        assert state.token_percent() is None
+
+    def test_token_percent_none_when_zero_limit(self):
+        state = AgentState(
+            session_id="sess",
+            agent_name="agent",
+            model_name="model",
+            token_count=5,
+            token_limit=0,
+        )
+        assert state.token_percent() is None
+
+    def test_token_percent_over_limit(self):
+        state = AgentState(
+            session_id="sess",
+            agent_name="agent",
+            model_name="model",
+            token_count=999999,
+            token_limit=1000,
+        )
+        assert state.token_percent() == pytest.approx(99999.9)
+
 
 # =============================================================================
 # SubAgentConsoleManager Singleton Tests
