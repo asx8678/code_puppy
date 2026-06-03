@@ -17,7 +17,6 @@ from unittest.mock import MagicMock, Mock, patch
 
 import pytest
 from rich.console import Console, Group
-from rich.panel import Panel
 
 from code_puppy.messaging.messages import SubAgentStatusMessage
 from code_puppy.messaging.subagent_console import (
@@ -342,20 +341,31 @@ class TestAgentRegistration:
 
     @patch.object(SubAgentConsoleManager, "_start_display")
     @patch.object(SubAgentConsoleManager, "_stop_display")
-    def test_unregister_agent_removes_state(self, mock_stop, mock_start):
-        """Test that unregister_agent removes the agent state."""
+    def test_unregister_agent_lingers_in_state(self, mock_stop, mock_start):
+        """unregister_agent marks finished and lingers; the update loop prunes later."""
         self.manager.register_agent("sess-1", "agent", "model")
         self.manager.unregister_agent("sess-1")
 
-        assert self.manager.get_agent_state("sess-1") is None
+        # Agent is NOT deleted immediately - it lingers for the update loop to prune.
+        state = self.manager.get_agent_state("sess-1")
+        assert state is not None
+        assert state.status == "completed"
+        assert state.completed_at is not None
+        # _stop_display is NOT called from unregister_agent - the loop drives stop.
+        mock_stop.assert_not_called()
 
     @patch.object(SubAgentConsoleManager, "_start_display")
     @patch.object(SubAgentConsoleManager, "_stop_display")
-    def test_unregister_last_agent_stops_display(self, mock_stop, mock_start):
-        """Test that unregistering last agent stops display."""
+    def test_unregister_last_agent_does_not_stop_immediately(self, mock_stop, mock_start):
+        """unregister_agent does NOT call _stop_display; the update loop does after linger."""
         self.manager.register_agent("sess-1", "agent", "model")
         self.manager.unregister_agent("sess-1")
-        mock_stop.assert_called_once()
+        # _stop_display is NOT called from unregister_agent anymore.
+        mock_stop.assert_not_called()
+        # Agent is still present, waiting for the loop to prune after linger.
+        state = self.manager.get_agent_state("sess-1")
+        assert state is not None
+        assert state.completed_at is not None
 
     @patch.object(SubAgentConsoleManager, "_start_display")
     @patch.object(SubAgentConsoleManager, "_stop_display")
@@ -372,12 +382,13 @@ class TestAgentRegistration:
 
     @patch.object(SubAgentConsoleManager, "_start_display")
     def test_unregister_with_custom_final_status(self, mock_start):
-        """Test unregister_agent with custom final_status."""
+        """unregister_agent with custom final_status lingers so the status is verifiable."""
         self.manager.register_agent("sess-1", "agent", "model")
-        # The status is set before deletion, so we can't verify it after
-        # But we can verify the call doesn't raise
         self.manager.unregister_agent("sess-1", final_status="error")
-        assert self.manager.get_agent_state("sess-1") is None
+        state = self.manager.get_agent_state("sess-1")
+        assert state is not None
+        assert state.status == "error"
+        assert state.completed_at is not None
 
     @patch.object(SubAgentConsoleManager, "_start_display")
     def test_unregister_unknown_agent_silently_ignored(self, mock_start):
@@ -448,6 +459,8 @@ class TestDisplayManagement:
         mock_live_class.return_value = mock_live
 
         manager = SubAgentConsoleManager(console=Mock(spec=Console))
+        # Register an agent so the update loop doesn't self-stop between calls.
+        manager.register_agent("sess-1", "agent", "model")
         manager._start_display()
         manager._start_display()  # Second call should be no-op
 
@@ -506,10 +519,12 @@ class TestUpdateLoop:
         mock_live_class.return_value = mock_live
 
         manager = SubAgentConsoleManager(console=Mock(spec=Console))
+        # Register an agent so the loop doesn't self-stop.
+        manager.register_agent("sess-1", "agent", "model")
         manager._start_display()
 
-        # Let it run briefly
-        time.sleep(0.2)
+        # Wait long enough for at least one 2-FPS tick (loop sleeps 0.5s).
+        time.sleep(0.6)
 
         # Verify update was called at least once
         assert mock_live.update.call_count >= 1
@@ -524,10 +539,12 @@ class TestUpdateLoop:
         mock_live_class.return_value = mock_live
 
         manager = SubAgentConsoleManager(console=Mock(spec=Console))
+        # Register an agent so the loop doesn't self-stop.
+        manager.register_agent("sess-1", "agent", "model")
         manager._start_display()
 
-        # Let it attempt updates
-        time.sleep(0.2)
+        # Wait long enough for at least one 2-FPS tick.
+        time.sleep(0.6)
 
         # Should still be running (didn't crash)
         assert manager._update_thread is not None
@@ -538,6 +555,47 @@ class TestUpdateLoop:
 # =============================================================================
 # Rendering Tests
 # =============================================================================
+
+
+class TestUpdateLoopPruning:
+    """Test the update loop prunes expired finished rows after the linger window."""
+
+    def setup_method(self):
+        SubAgentConsoleManager.reset_instance()
+
+    def teardown_method(self):
+        SubAgentConsoleManager.reset_instance()
+
+    @patch("code_puppy.messaging.subagent_console.Live")
+    def test_update_loop_prunes_lingered_agent(self, mock_live_class):
+        """Update loop removes an agent whose completed_at is older than LINGER_SECONDS."""
+        mock_live = MagicMock()
+        mock_live_class.return_value = mock_live
+
+        manager = SubAgentConsoleManager(console=Mock(spec=Console))
+        # Speed up the test by using a very short linger window.
+        manager._LINGER_SECONDS = 0.1
+        manager.register_agent("sess-1", "agent", "model")
+        manager.unregister_agent("sess-1")
+
+        # Agent lingers immediately after unregister.
+        assert manager.get_agent_state("sess-1") is not None
+
+        # Start the loop and wait long enough for one tick (0.5s) to pass
+        # and for completed_at (now) to exceed the short linger window.
+        manager._start_display()
+        try:
+            deadline = time.time() + 2.0
+            while time.time() < deadline:
+                if manager.get_agent_state("sess-1") is None:
+                    break
+                time.sleep(0.1)
+        finally:
+            manager._stop_display()
+
+        # After the linger window, the agent is pruned.
+        assert manager.get_agent_state("sess-1") is None
+
 
 
 class TestRendering:
@@ -564,70 +622,47 @@ class TestRendering:
         result = self.manager._render_display()
         assert isinstance(result, Group)
 
-    def test_render_agent_panel_basic(self):
-        """Test _render_agent_panel with basic agent."""
-        state = AgentState(
-            session_id="sess-123",
-            agent_name="test-agent",
-            model_name="gpt-4o",
-            status="running",
+    def _render_to_text(self, rendered):
+        """Helper: render a Rich renderable to plain text for assertions."""
+        import io
+        from rich.console import Console as _Console
+        buf = io.StringIO()
+        console = _Console(file=buf, width=200, force_terminal=False, no_color=True)
+        console.print(rendered)
+        return buf.getvalue()
+
+    def test_render_display_compact_with_token_limit(self):
+        """Compact render shows the 'Active sub-agents' panel with token context cell."""
+        self.manager.register_agent(
+            "sess-1", "code-puppy", "gpt-4o",
+            token_count=1200, token_limit=200000,
         )
+        text = self._render_to_text(self.manager._render_display())
+        assert "Active sub-agents" in text
+        assert "1,200/200,000" in text
+        assert "0.6% used" in text
 
-        panel = self.manager._render_agent_panel(state)
-        assert isinstance(panel, Panel)
-
-    def test_render_agent_panel_with_tool(self):
-        """Test _render_agent_panel with current_tool."""
-        state = AgentState(
-            session_id="sess-123",
-            agent_name="test-agent",
-            model_name="gpt-4o",
-            status="tool_calling",
-            current_tool="read_file",
-            tool_call_count=3,
+    def test_render_display_compact_without_token_limit(self):
+        """Compact render falls back to plain 'Tokens: N' when token_limit is None."""
+        self.manager.register_agent(
+            "sess-1", "code-puppy", "gpt-4o",
+            token_count=5000, token_limit=None,
         )
+        text = self._render_to_text(self.manager._render_display())
+        assert "Active sub-agents" in text
+        assert "Tokens: 5,000" in text
+        # Should NOT show the percent-used form when no limit
+        assert "% used" not in text
 
-        panel = self.manager._render_agent_panel(state)
-        assert isinstance(panel, Panel)
+    def test_render_display_compact_with_current_tool(self):
+        """Compact render includes the current tool cell when set."""
+        self.manager.register_agent("sess-1", "code-puppy", "gpt-4o")
+        self.manager.update_agent("sess-1", current_tool="read_file")
+        text = self._render_to_text(self.manager._render_display())
+        assert "tool: read_file" in text
 
-    def test_render_agent_panel_with_error(self):
-        """Test _render_agent_panel with error message."""
-        state = AgentState(
-            session_id="sess-123",
-            agent_name="test-agent",
-            model_name="gpt-4o",
-            status="error",
-            error_message="Something went wrong!",
-        )
-
-        panel = self.manager._render_agent_panel(state)
-        assert isinstance(panel, Panel)
-
-    def test_render_agent_panel_long_session_id(self):
-        """Test _render_agent_panel truncates long session IDs."""
-        state = AgentState(
-            session_id="this-is-a-very-long-session-id-that-exceeds-24-chars",
-            agent_name="test-agent",
-            model_name="gpt-4o",
-        )
-
-        panel = self.manager._render_agent_panel(state)
-        assert isinstance(panel, Panel)
-
-    def test_render_agent_panel_with_tokens(self):
-        """Test _render_agent_panel with token count."""
-        state = AgentState(
-            session_id="sess-123",
-            agent_name="test-agent",
-            model_name="gpt-4o",
-            token_count=15000,
-        )
-
-        panel = self.manager._render_agent_panel(state)
-        assert isinstance(panel, Panel)
-
-    def test_render_agent_panel_all_statuses(self):
-        """Test rendering panels for all status types."""
+    def test_render_display_compact_all_statuses(self):
+        """Compact render handles every defined status without error."""
         for status in [
             "starting",
             "running",
@@ -636,27 +671,21 @@ class TestRendering:
             "completed",
             "error",
         ]:
-            state = AgentState(
-                session_id=f"sess-{status}",
-                agent_name="test-agent",
-                model_name="gpt-4o",
-                status=status,
+            self.manager.register_agent(
+                f"sess-{status}", "test-agent", "gpt-4o",
             )
-            panel = self.manager._render_agent_panel(state)
-            assert isinstance(panel, Panel)
+            self.manager.update_agent(f"sess-{status}", status=status)
+        text = self._render_to_text(self.manager._render_display())
+        assert "Active sub-agents" in text
 
-    def test_render_agent_panel_unknown_status(self):
-        """Test rendering with unknown status uses default style."""
-        state = AgentState(
-            session_id="sess-123",
-            agent_name="test-agent",
-            model_name="gpt-4o",
-        )
-        # Force an unknown status by directly setting it
-        state.status = "unknown_status"
-
-        panel = self.manager._render_agent_panel(state)
-        assert isinstance(panel, Panel)
+    def test_render_display_compact_unknown_status(self):
+        """Compact render falls back to DEFAULT_STYLE for unknown statuses."""
+        self.manager.register_agent("sess-1", "test-agent", "gpt-4o")
+        self.manager.update_agent("sess-1", status="unknown_status")
+        text = self._render_to_text(self.manager._render_display())
+        assert "Active sub-agents" in text
+        # The unknown status string is still rendered (no crash).
+        assert "unknown_status" in text
 
 
 # =============================================================================

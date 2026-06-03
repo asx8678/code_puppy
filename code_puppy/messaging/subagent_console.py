@@ -126,6 +126,7 @@ class SubAgentConsoleManager:
 
     _instance: Optional["SubAgentConsoleManager"] = None
     _lock = threading.Lock()
+    _LINGER_SECONDS: float = 1.5
 
     def __init__(self, console: Optional[Console] = None):
         """Initialize the manager.
@@ -242,23 +243,12 @@ class SubAgentConsoleManager:
     def unregister_agent(
         self, session_id: str, final_status: str = "completed"
     ) -> None:
-        """Remove an agent from tracking.
-
-        Args:
-            session_id: The session ID of the agent to remove.
-            final_status: Final status to set before removal (for display).
-                         Defaults to 'completed'.
-        """
+        """Mark an agent finished; the update loop removes it after a linger window."""
         with self._agents_lock:
-            if session_id in self._agents:
-                # Set final status
-                self._agents[session_id].status = final_status
-                # Remove from tracking
-                del self._agents[session_id]
-
-                # Stop display if no agents remain
-                if not self._agents:
-                    self._stop_display()
+            agent = self._agents.get(session_id)
+            if agent is not None:
+                agent.status = final_status
+                agent.completed_at = time.time()
 
     def get_agent_state(self, session_id: str) -> Optional[AgentState]:
         """Get the current state of an agent.
@@ -307,7 +297,7 @@ class SubAgentConsoleManager:
         self._live = Live(
             self._render_display(),
             console=self.console,
-            refresh_per_second=10,
+            refresh_per_second=2,
             transient=True,  # Clear when stopped
         )
         self._live.start()
@@ -319,132 +309,89 @@ class SubAgentConsoleManager:
         self._update_thread.start()
 
     def _stop_display(self) -> None:
-        """Stop the Rich Live display when no agents remain."""
-        # Signal stop
+        """Stop the Live display. Safe to call from the update thread itself."""
         self._stop_event.set()
-
-        # Stop update thread
-        if self._update_thread is not None:
+        if (
+            self._update_thread is not None
+            and self._update_thread is not threading.current_thread()
+        ):
             self._update_thread.join(timeout=1.0)
-            self._update_thread = None
-
-        # Stop Live display
+        self._update_thread = None
         if self._live is not None:
             try:
                 self._live.stop()
             except Exception:
-                pass  # Ignore errors during cleanup
+                pass
             self._live = None
-
-        # Resume the main spinner now that the dashboard has released the console.
         from code_puppy.messaging.spinner import resume_all_spinners
 
         resume_all_spinners()
 
     def _update_loop(self) -> None:
-        """Background thread that refreshes the display."""
+        """Background refresh: prune lingered rows, stop when empty."""
         while not self._stop_event.is_set():
             try:
+                now = time.time()
+                with self._agents_lock:
+                    expired = [
+                        sid
+                        for sid, a in self._agents.items()
+                        if a.completed_at is not None
+                        and (now - a.completed_at) >= self._LINGER_SECONDS
+                    ]
+                    for sid in expired:
+                        del self._agents[sid]
+                    empty = not self._agents
+                if empty:
+                    self._stop_display()
+                    return
                 if self._live is not None:
                     self._live.update(self._render_display())
             except Exception:
-                pass  # Ignore rendering errors, keep trying
-
-            # Sleep between updates (10 FPS)
-            time.sleep(0.1)
+                pass
+            time.sleep(0.5)
 
     # =========================================================================
     # Rendering
     # =========================================================================
 
     def _render_display(self) -> Group:
-        """Render all agent panels as a Rich Group.
+        from code_puppy.messaging.spinner import SpinnerBase
 
-        Returns:
-            A Group containing all agent panels stacked vertically.
-        """
         with self._agents_lock:
             if not self._agents:
-                return Group(Text("No active sub-agents", style="dim"))
-
-            panels = [
-                self._render_agent_panel(agent) for agent in self._agents.values()
-            ]
-            return Group(*panels)
-
-    def _render_agent_panel(self, agent: AgentState) -> Panel:
-        """Render a single agent's status panel.
-
-        Args:
-            agent: The AgentState to render.
-
-        Returns:
-            A Rich Panel containing the agent's status information.
-        """
-        style_config = STATUS_STYLES.get(agent.status, DEFAULT_STYLE)
-        color = style_config["color"]
-        spinner_name = style_config["spinner"]
-        emoji = style_config["emoji"]
-
-        # Build the content table
-        table = Table.grid(padding=(0, 2))
-        table.add_column("label", style="dim")
-        table.add_column("value")
-
-        # Status row with spinner (if active)
-        status_text = Text()
-        status_text.append(f"{emoji} ", style=color)
-        if spinner_name:
-            # For active statuses, we add the status text
-            # The spinner is visual only in Rich Live
-            status_text.append(agent.status.upper(), style=f"bold {color}")
-        else:
-            status_text.append(agent.status.upper(), style=f"bold {color}")
-
-        table.add_row("Status:", status_text)
-
-        # Model
-        table.add_row("Model:", Text(agent.model_name, style="cyan"))
-
-        # Session ID (truncated for display)
-        session_display = agent.session_id
-        if len(session_display) > 24:
-            session_display = session_display[:21] + "..."
-        table.add_row("Session:", Text(session_display, style="dim"))
-
-        # Tool calls
-        tool_text = Text()
-        tool_text.append(str(agent.tool_call_count), style="bold yellow")
-        if agent.current_tool:
-            tool_text.append(" (calling: ", style="dim")
-            tool_text.append(agent.current_tool, style="yellow")
-            tool_text.append(")", style="dim")
-        table.add_row("Tools:", tool_text)
-
-        # Token count
-        token_display = f"{agent.token_count:,}" if agent.token_count else "0"
-        table.add_row("Tokens:", Text(token_display, style="blue"))
-
-        # Elapsed time
-        table.add_row("Elapsed:", Text(agent.elapsed_formatted(), style="magenta"))
-
-        # Error message (if any)
-        if agent.error_message:
-            error_text = Text(agent.error_message, style="red")
-            table.add_row("Error:", error_text)
-
-        # Build panel title with spinner for active states
-        title = Text()
-        title.append("🐕 ", style="bold")
-        title.append(agent.agent_name, style=f"bold {color}")
-
-        # Create panel
-        return Panel(
-            table,
-            title=title,
-            border_style=color,
-            padding=(0, 1),
-        )
+                return Group(Text(""))
+            table = Table.grid(padding=(0, 2))
+            for _ in range(5):
+                table.add_column()
+            for agent in self._agents.values():
+                style_config = STATUS_STYLES.get(agent.status, DEFAULT_STYLE)
+                color = style_config["color"]
+                emoji = style_config["emoji"]
+                if agent.token_limit:
+                    proportion = agent.token_count / agent.token_limit
+                    tokens = SpinnerBase.format_context_info(
+                        agent.token_count, agent.token_limit, proportion
+                    )
+                else:
+                    tokens = f"Tokens: {agent.token_count:,}"
+                table.add_row(
+                    Text(f"{emoji} [{agent.agent_name}]", style=f"bold {color}"),
+                    Text(agent.model_name, style="cyan"),
+                    Text(agent.status, style=color),
+                    Text(tokens, style="white"),
+                    Text(
+                        f"tool: {agent.current_tool}" if agent.current_tool else "",
+                        style="yellow",
+                    ),
+                )
+            return Group(
+                Panel(
+                    table,
+                    title="Active sub-agents",
+                    border_style="bright_blue",
+                )
+            )
 
     # =========================================================================
     # Context Manager Support
