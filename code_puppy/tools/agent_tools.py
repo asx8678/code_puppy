@@ -394,7 +394,7 @@ def register_invoke_agent(agent):
         from code_puppy.config import get_show_subagent_status
         from code_puppy.messaging.subagent_console import get_subagent_console_manager
 
-        manager = get_subagent_console_manager()
+        console_mgr = get_subagent_console_manager()
         show_status = get_show_subagent_status()
         registered = False
         final_status = "completed"
@@ -534,7 +534,7 @@ def register_invoke_agent(agent):
                     )
                 except Exception:
                     token_limit, initial_tokens = None, 0
-                manager.register_agent(
+                console_mgr.register_agent(
                     session_id=session_id,
                     agent_name=agent_name,
                     model_name=model_name,
@@ -542,7 +542,7 @@ def register_invoke_agent(agent):
                     token_limit=token_limit,
                 )
                 registered = True
-                manager.update_agent(session_id, status="running")
+                console_mgr.update_agent(session_id, status="running")
 
             # Wrap the agent run in subagent context for tracking
             with subagent_context(agent_name):
@@ -607,7 +607,7 @@ def register_invoke_agent(agent):
             final_status = "error"
             if registered:
                 try:
-                    manager.update_agent(
+                    console_mgr.update_agent(
                         session_id, status="error", error_message=str(e)
                     )
                 except Exception:
@@ -654,7 +654,7 @@ def register_invoke_agent(agent):
         finally:
             if registered:
                 try:
-                    manager.unregister_agent(session_id, final_status=final_status)
+                    console_mgr.unregister_agent(session_id, final_status=final_status)
                 except Exception:
                     pass
             # Restore the previous session context
