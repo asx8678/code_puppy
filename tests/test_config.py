@@ -573,6 +573,63 @@ class TestGetYoloMode:
         mock_get_value.assert_called_once_with("yolo_mode")
 
 
+class TestShowSubagentStatus:
+    """Tests for the show-subagent status toggle and runtime override."""
+
+    def setup_method(self):
+        # Clear any runtime override before each test to avoid leaks.
+        cp_config.set_subagent_status_runtime_override(None)
+
+    @patch("code_puppy.config.get_value")
+    def test_default_when_no_config_value(self, mock_get_value):
+        mock_get_value.return_value = None
+        assert cp_config.get_show_subagent_status() is True
+        mock_get_value.assert_called_once_with("show_subagent_status")
+
+    @patch("code_puppy.config.get_value")
+    def test_truthy_values(self, mock_get_value):
+        for val in ("1", "true", "yes", "on"):
+            mock_get_value.return_value = val
+            assert cp_config.get_show_subagent_status() is True, f"failed for {val}"
+
+    @patch("code_puppy.config.get_value")
+    def test_falsey_values(self, mock_get_value):
+        for val in ("0", "false", "no", "off"):
+            mock_get_value.return_value = val
+            assert cp_config.get_show_subagent_status() is False, f"failed for {val}"
+
+    @patch("code_puppy.config.get_value")
+    def test_runtime_override_true_overrides_false_config(self, mock_get_value):
+        mock_get_value.return_value = "false"
+        cp_config.set_subagent_status_runtime_override(True)
+        try:
+            assert cp_config.get_show_subagent_status() is True
+        finally:
+            cp_config.set_subagent_status_runtime_override(None)
+
+    @patch("code_puppy.config.get_value")
+    def test_runtime_override_false_overrides_true_config(self, mock_get_value):
+        mock_get_value.return_value = "true"
+        cp_config.set_subagent_status_runtime_override(False)
+        try:
+            assert cp_config.get_show_subagent_status() is False
+        finally:
+            cp_config.set_subagent_status_runtime_override(None)
+
+    @patch("code_puppy.config.get_value")
+    def test_runtime_override_none_falls_back_to_config(self, mock_get_value):
+        mock_get_value.return_value = "false"
+        cp_config.set_subagent_status_runtime_override(None)
+        assert cp_config.get_show_subagent_status() is False
+
+    def test_override_reset_does_not_leak_between_tests(self):
+        cp_config.set_subagent_status_runtime_override(False)
+        cp_config.set_subagent_status_runtime_override(None)
+        # Without config, default must still be True.
+        with patch("code_puppy.config.get_value", return_value=None):
+            assert cp_config.get_show_subagent_status() is True
+
+
 class TestCommandHistory:
     @patch("os.path.isfile")
     @patch("pathlib.Path.touch")
