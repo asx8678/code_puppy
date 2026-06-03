@@ -409,7 +409,9 @@ class TestAgentRegistration:
 
     @patch.object(SubAgentConsoleManager, "_start_display")
     @patch.object(SubAgentConsoleManager, "_stop_display")
-    def test_unregister_last_agent_does_not_stop_immediately(self, mock_stop, mock_start):
+    def test_unregister_last_agent_does_not_stop_immediately(
+        self, mock_stop, mock_start
+    ):
         """unregister_agent does NOT call _stop_display; the update loop does after linger."""
         self.manager.register_agent("sess-1", "agent", "model")
         self.manager.unregister_agent("sess-1")
@@ -650,7 +652,6 @@ class TestUpdateLoopPruning:
         assert manager.get_agent_state("sess-1") is None
 
 
-
 class TestRendering:
     """Test rendering methods."""
 
@@ -679,6 +680,7 @@ class TestRendering:
         """Helper: render a Rich renderable to plain text for assertions."""
         import io
         from rich.console import Console as _Console
+
         buf = io.StringIO()
         console = _Console(file=buf, width=200, force_terminal=False, no_color=True)
         console.print(rendered)
@@ -687,8 +689,11 @@ class TestRendering:
     def test_render_display_compact_with_token_limit(self):
         """Compact render shows the 'Active sub-agents' panel with token context cell."""
         self.manager.register_agent(
-            "sess-1", "code-puppy", "gpt-4o",
-            token_count=1200, token_limit=200000,
+            "sess-1",
+            "code-puppy",
+            "gpt-4o",
+            token_count=1200,
+            token_limit=200000,
         )
         text = self._render_to_text(self.manager._render_display())
         assert "Active sub-agents" in text
@@ -698,8 +703,11 @@ class TestRendering:
     def test_render_display_compact_without_token_limit(self):
         """Compact render falls back to plain 'Tokens: N' when token_limit is None."""
         self.manager.register_agent(
-            "sess-1", "code-puppy", "gpt-4o",
-            token_count=5000, token_limit=None,
+            "sess-1",
+            "code-puppy",
+            "gpt-4o",
+            token_count=5000,
+            token_limit=None,
         )
         text = self._render_to_text(self.manager._render_display())
         assert "Active sub-agents" in text
@@ -725,7 +733,9 @@ class TestRendering:
             "error",
         ]:
             self.manager.register_agent(
-                f"sess-{status}", "test-agent", "gpt-4o",
+                f"sess-{status}",
+                "test-agent",
+                "gpt-4o",
             )
             self.manager.update_agent(f"sess-{status}", status=status)
         text = self._render_to_text(self.manager._render_display())
