@@ -30,6 +30,8 @@ from code_puppy.config import (
     initialize_command_history_file,
     record_terminal_session,
     save_command_to_history,
+    set_subagent_status_runtime_override,
+    set_value,
 )
 from code_puppy.http_utils import find_available_port
 from code_puppy.keymap import (
@@ -243,14 +245,10 @@ async def main():
 
     # ---- Sub-agent dashboard toggle (T5, code_puppy-9zt.14) ----
     # (1) Persist explicit user intent from --show-agents / --hide-agents.
-    #     Only one of these should normally be passed; if both are passed
-    #     the explicit --show-agents wins (it comes first in the cascade).
-    from code_puppy.config import (
-        set_subagent_status_runtime_override,
-        set_value,
-    )
-
-    if getattr(args, "show_agents", None):
+    #     Both flags are mutually exclusive; passing both is a usage error.
+    if getattr(args, "show_agents", None) and getattr(args, "hide_agents", False):
+        parser.error("--show-agents and --hide-agents are mutually exclusive")
+    elif getattr(args, "show_agents", None):
         set_value("show_subagent_status", "true")
     elif getattr(args, "hide_agents", False):
         set_value("show_subagent_status", "false")
@@ -261,7 +259,8 @@ async def main():
     #     saved preference. An explicit --show-agents in a TTY still wins
     #     because we only set the override for non-TTY or -p runs.
     _one_shot = bool(getattr(args, "prompt", None))
-    _not_tty = not sys.stdout.isatty()
+    _isatty = getattr(sys.stdout, "isatty", None)
+    _not_tty = not bool(_isatty and _isatty())
     if _one_shot or _not_tty:
         set_subagent_status_runtime_override(False)
 
