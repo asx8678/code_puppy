@@ -13,7 +13,7 @@ DBOS workflow-id tests were removed when DBOS moved to a plugin; see
 import tempfile
 from contextlib import ExitStack
 from pathlib import Path
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -1171,17 +1171,11 @@ class TestInvokeAgentSubagentConsoleLifecycle:
     # ------------------------------------------------------------------
 
     @pytest.mark.asyncio
-    async def test_cancelled_task_unregisters_error(self):
-        """CancelledError is a BaseException that propagates out of the
-        ``asyncio.create_task`` + ``await task`` block inside the
-        ``AsyncExitStack``.  It then lands in the outer
-        ``except Exception as e`` handler in invoke_agent, so the
-        observable contract here is ``final_status="error"``.
-
-        NOTE: if the implementation is later changed to catch
-        ``BaseException`` (or a dedicated ``except asyncio.CancelledError``)
-        and set ``final_status="completed"`` instead, update this test
-        to match the new contract.
+    async def test_cancelled_task_unregisters_completed_and_propagates(self):
+        """CancelledError (BaseException) propagates out of the task, bypasses
+        ``except Exception``, the outer ``finally`` runs, and
+        ``unregister_agent(final_status="completed")`` fires before the
+        CancelledError escapes invoke_agent.
         """
         import asyncio
 
@@ -1196,9 +1190,11 @@ class TestInvokeAgentSubagentConsoleLifecycle:
                 raise asyncio.CancelledError()
 
         patches["code_puppy.tools.agent_tools.Agent"] = FakeAgentCancelled
-        # Cancellation test needs a REAL asyncio.Task so CancelledError
-        # propagates through ``await``.  Remove the mock create_task.
+        # Use a REAL task so CancelledError propagates naturally.
         patches.pop("code_puppy.tools.agent_tools.asyncio.create_task", None)
+        # AsyncMock so ``await on_agent_run_cancel(...)`` doesn't spuriously
+        # raise TypeError and mask the real contract.
+        patches["code_puppy.tools.agent_tools.on_agent_run_cancel"] = AsyncMock()
         cm = patches[
             "code_puppy.messaging.subagent_console.get_subagent_console_manager"
         ].return_value
@@ -1206,21 +1202,20 @@ class TestInvokeAgentSubagentConsoleLifecycle:
         with ExitStack() as s:
             for t, v in patches.items():
                 s.enter_context(patch(t, v))
-            # CancelledError is BaseException; it bypasses ``except Exception``
-            # in invoke_agent but ``finally`` still runs.  We don't require
-            # pytest.raises here because anyio swallows the propagation.
-            await invoke_agent(
-                MagicMock(),
-                agent_name="test-agent",
-                prompt="Hello",
-                session_id="test-session-abc",
-            )
+            with pytest.raises(asyncio.CancelledError):
+                await invoke_agent(
+                    MagicMock(),
+                    agent_name="test-agent",
+                    prompt="Hello",
+                    session_id="test-session-abc",
+                )
 
         cm.register_agent.assert_called_once()
         sid = cm.register_agent.call_args.kwargs["session_id"]
         cm.update_agent.assert_any_call(sid, status="running")
-        # Current contract: CancelledError -> final_status="error"
-        cm.unregister_agent.assert_called_once_with(sid, final_status="error")
+        # CancelledError bypasses ``except Exception``; default final_status
+        # is "completed" in the outer finally.
+        cm.unregister_agent.assert_called_once_with(sid, final_status="completed")
 
 
 class TestSubagentStreamHandlerSeedSurvival:
