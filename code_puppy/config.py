@@ -75,8 +75,33 @@ def get_subagent_verbose() -> bool:
     return str(cfg_val).strip().lower() in {"1", "true", "yes", "on"}
 
 
+# Runtime-only override for the sub-agent status dashboard. When not None,
+# this wins over the persisted config value. Used by the CLI to suppress the
+# dashboard for non-TTY / one-shot (-p) invocations without touching the
+# user's saved preference.
+_runtime_subagent_status_override: Optional[bool] = None
+
+
+def set_subagent_status_runtime_override(value: Optional[bool]) -> None:
+    """Force the dashboard on/off for THIS process only (not written to config).
+
+    Used to suppress the dashboard in non-interactive contexts (piped output,
+    CI, -p one-shot) without changing the user's persisted preference.
+    """
+    global _runtime_subagent_status_override
+    _runtime_subagent_status_override = value
+
+
 def get_show_subagent_status() -> bool:
-    """Show the live sub-agent status dashboard (default True)."""
+    """Show the live sub-agent status dashboard (default True).
+
+    A runtime override (set via :func:`set_subagent_status_runtime_override`)
+    wins over the persisted config value when set. Otherwise the persisted
+    ``show_subagent_status`` key is consulted, defaulting to ``True`` when
+    the key is missing or empty.
+    """
+    if _runtime_subagent_status_override is not None:
+        return _runtime_subagent_status_override
     cfg_val = get_value("show_subagent_status")
     if cfg_val is None:
         return True
@@ -353,6 +378,9 @@ def get_config_keys():
     # Add banner color keys
     for banner_name in DEFAULT_BANNER_COLORS:
         default_keys.append(f"banner_color_{banner_name}")
+    # Add subagent status dashboard toggle (distinct from subagent_verbose;
+    # controls the live TTY dashboard only).
+    default_keys.append("show_subagent_status")
     # Add resume message count configuration
     default_keys.append("resume_message_count")
     # Add /goal iteration cap (owned by the wiggum plugin, surfaced here so

@@ -144,6 +144,18 @@ async def main():
         help="Resume a saved session from a .pkl file (e.g. ~/.code_puppy/contexts/foo.pkl)",
     )
     parser.add_argument(
+        "--show-agents",
+        action="store_true",
+        default=None,
+        help="Show the live sub-agent status dashboard (persists to config)",
+    )
+    parser.add_argument(
+        "--hide-agents",
+        action="store_true",
+        default=False,
+        help="Hide the live sub-agent status dashboard (persists to config)",
+    )
+    parser.add_argument(
         "command", nargs="*", help="Run a single command (deprecated, use -p instead)"
     )
     args = parser.parse_args()
@@ -228,6 +240,30 @@ async def main():
         set_model_name(early_model)
 
     ensure_config_exists()
+
+    # ---- Sub-agent dashboard toggle (T5, code_puppy-9zt.14) ----
+    # (1) Persist explicit user intent from --show-agents / --hide-agents.
+    #     Only one of these should normally be passed; if both are passed
+    #     the explicit --show-agents wins (it comes first in the cascade).
+    from code_puppy.config import (
+        set_subagent_status_runtime_override,
+        set_value,
+    )
+
+    if getattr(args, "show_agents", None):
+        set_value("show_subagent_status", "true")
+    elif getattr(args, "hide_agents", False):
+        set_value("show_subagent_status", "false")
+
+    # (2) Apply a runtime-only override for non-TTY / one-shot invocations.
+    #     A Rich Live would corrupt piped output and is meaningless in -p
+    #     mode, so we force the dashboard off WITHOUT touching the user's
+    #     saved preference. An explicit --show-agents in a TTY still wins
+    #     because we only set the override for non-TTY or -p runs.
+    _one_shot = bool(getattr(args, "prompt", None))
+    _not_tty = not sys.stdout.isatty()
+    if _one_shot or _not_tty:
+        set_subagent_status_runtime_override(False)
 
     # Validate cancel_agent_key configuration early
     try:
