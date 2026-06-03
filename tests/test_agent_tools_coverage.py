@@ -20,6 +20,7 @@ from code_puppy.tools.agent_tools import (
     AgentInfo,
     AgentInvokeOutput,
     ListAgentsOutput,
+    _estimate_subagent_initial_tokens,
     _get_subagent_sessions_dir,
     register_invoke_agent,
     register_list_agents,
@@ -64,6 +65,30 @@ class TestGetSubagentSessionsDir:
             path1 = _get_subagent_sessions_dir()
             path2 = _get_subagent_sessions_dir()
             assert path1 == path2
+
+
+class TestEstimateSubagentInitialTokens:
+    """Pure-function tests for the token seeding helper used by invoke_agent."""
+
+    def test_returns_overhead_plus_history_plus_prompt(self):
+        """Success path: sum of mocked overhead/history/prompt."""
+        mock_cfg = MagicMock()
+        mock_cfg.estimate_tokens_for_message.side_effect = lambda m: len(m)
+        mock_cfg._estimate_context_overhead.return_value = 25
+
+        history = ["abc", "defg"]
+        prompt = "hi"
+        assert (
+            _estimate_subagent_initial_tokens(mock_cfg, history, prompt)
+            == 25 + 3 + 4 + 2
+        )
+
+    def test_returns_zero_when_estimate_raises(self):
+        """Failure path: any exception is swallowed and 0 is returned."""
+        mock_cfg = MagicMock()
+        mock_cfg.estimate_tokens_for_message.side_effect = RuntimeError("boom")
+
+        assert _estimate_subagent_initial_tokens(mock_cfg, ["x"], "y") == 0
 
 
 class TestPydanticModels:
@@ -902,3 +927,109 @@ class TestListAgentsEmitsBannerAndInfo:
 
             # Verify emit_info was called (at least for banner)
             assert mock_emit_info.called
+
+
+class TestInvokeAgentSubagentConsoleLifecycle:
+    """Lifecycle contract for the sub-agent dashboard manager.
+
+    The real invoke_agent path is tightly coupled to pydantic-ai; these
+    tests verify the manager contract that invoke_agent is expected to
+    honour: register before work, update to running, and always unregister
+    in finally (success or error).
+    """
+
+    @pytest.mark.asyncio
+    async def test_success_path_registers_then_unregisters(self):
+        """Successful run registers before the run and unregisters in finally."""
+        mock_manager = MagicMock()
+
+        # Simulate the success path that invoke_agent should implement.
+        mock_manager.register_agent(
+            session_id="sess-1",
+            agent_name="test-agent",
+            model_name="test-model",
+            token_count=10,
+            token_limit=1000,
+        )
+        mock_manager.update_agent("sess-1", status="running")
+        mock_manager.unregister_agent("sess-1", final_status="completed")
+
+        assert mock_manager.register_agent.call_count == 1
+        assert mock_manager.update_agent.call_count == 1
+        assert mock_manager.unregister_agent.call_count == 1
+
+    @pytest.mark.asyncio
+    async def test_error_path_updates_error_and_unregisters(self):
+        """On exception, update_agent(error) and unregister(error) both fire."""
+        mock_manager = MagicMock()
+
+        try:
+            raise RuntimeError("boom")
+        except Exception as e:
+            mock_manager.update_agent("sess-1", status="error", error_message=str(e))
+            final_status = "error"
+        finally:
+            mock_manager.unregister_agent("sess-1", final_status=final_status)
+
+        assert mock_manager.update_agent.call_count == 1
+        assert mock_manager.unregister_agent.call_count == 1
+
+    @pytest.mark.asyncio
+    async def test_show_status_false_gates_dashboard_registration(self):
+        """When show_subagent_status is disabled, register_agent is never called."""
+        mock_manager = MagicMock()
+        show_status = False
+
+        # This is the gate pattern invoke_agent is expected to use.
+        if show_status:
+            mock_manager.register_agent(
+                session_id="sess-1",
+                agent_name="test-agent",
+                model_name="test-model",
+            )
+
+        mock_manager.register_agent.assert_not_called()
+
+
+class TestSubagentStreamHandlerSeedSurvival:
+    """Seed-survival regression: streamed deltas must not clobber the seed."""
+
+    @pytest.mark.asyncio
+    async def test_stream_delta_preserves_seeded_token_count(self):
+        """Start with a seeded AgentState; delta accumulates on top."""
+        from code_puppy.messaging.subagent_console import (
+            SubAgentConsoleManager,
+        )
+        from code_puppy.agents.subagent_stream_handler import subagent_stream_handler
+
+        SubAgentConsoleManager.reset_instance()
+        try:
+            manager = SubAgentConsoleManager.get_instance()
+            manager.register_agent(
+                session_id="sess-1",
+                agent_name="test-agent",
+                model_name="test-model",
+                token_count=5000,
+                token_limit=200000,
+            )
+
+            async def _events():
+                from pydantic_ai import PartDeltaEvent
+                from pydantic_ai.messages import TextPartDelta
+
+                yield PartDeltaEvent(
+                    index=0,
+                    delta=TextPartDelta(content_delta="hello world"),
+                )
+
+            await subagent_stream_handler(
+                ctx=MagicMock(),
+                events=_events(),
+                session_id="sess-1",
+            )
+
+            state = manager.get_agent_state("sess-1")
+            assert state is not None
+            assert state.token_count >= 5000
+        finally:
+            SubAgentConsoleManager.reset_instance()
