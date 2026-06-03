@@ -59,9 +59,11 @@ class AgentState:
     status: str = "starting"
     tool_call_count: int = 0
     token_count: int = 0
+    token_limit: Optional[int] = None
     current_tool: Optional[str] = None
     start_time: float = field(default_factory=time.time)
     error_message: Optional[str] = None
+    completed_at: Optional[float] = None
 
     def elapsed_seconds(self) -> float:
         """Calculate elapsed time since agent started."""
@@ -76,6 +78,12 @@ class AgentState:
         seconds = elapsed % 60
         return f"{minutes}m {seconds:.1f}s"
 
+    def token_percent(self) -> Optional[float]:
+        """Percent of the model's context window used (None when no limit)."""
+        if not self.token_limit:
+            return None
+        return (self.token_count / self.token_limit) * 100
+
     def to_status_message(self) -> SubAgentStatusMessage:
         """Convert to a SubAgentStatusMessage for bus emission."""
         return SubAgentStatusMessage(
@@ -85,6 +93,8 @@ class AgentState:
             status=self.status,  # type: ignore[arg-type]
             tool_call_count=self.tool_call_count,
             token_count=self.token_count,
+            token_limit=self.token_limit,
+            token_percent=self.token_percent(),
             current_tool=self.current_tool,
             elapsed_seconds=self.elapsed_seconds(),
             error_message=self.error_message,
