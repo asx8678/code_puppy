@@ -75,6 +75,14 @@ def get_subagent_verbose() -> bool:
     return str(cfg_val).strip().lower() in {"1", "true", "yes", "on"}
 
 
+def get_show_subagent_status() -> bool:
+    """Show the live sub-agent status dashboard (default True)."""
+    cfg_val = get_value("show_subagent_status")
+    if cfg_val is None:
+        return True
+    return str(cfg_val).strip().lower() in {"1", "true", "yes", "on"}
+
+
 # Pack agents - the specialized sub-agents coordinated by Pack Leader
 PACK_AGENT_NAMES = frozenset(
     [

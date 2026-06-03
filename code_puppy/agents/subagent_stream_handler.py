@@ -118,8 +118,10 @@ async def subagent_stream_handler(
     # Resolve session_id, falling back to context if not provided
     effective_session_id = session_id or get_session_context()
 
-    # Metrics tracking
-    token_count = 0
+    # Seed from the registered AgentState so streamed deltas accumulate ON TOP of the
+    # initial context budget instead of overwriting it (otherwise the % collapses to ~0).
+    _seed_state = manager.get_agent_state(effective_session_id)
+    token_count = _seed_state.token_count if _seed_state else 0
     tool_call_count = 0
     active_tool_parts: set[int] = set()  # Track active tool call indices
 

@@ -178,23 +178,34 @@ class SubAgentConsoleManager:
     # Agent Registration
     # =========================================================================
 
-    def register_agent(self, session_id: str, agent_name: str, model_name: str) -> None:
+    def register_agent(
+        self,
+        session_id: str,
+        agent_name: str,
+        model_name: str,
+        *,
+        token_count: int = 0,
+        token_limit: Optional[int] = None,
+    ) -> None:
         """Register a new sub-agent and start display if needed.
 
         Args:
             session_id: Unique identifier for this agent session.
             agent_name: Name of the agent (e.g., 'code-puppy', 'qa-kitten').
             model_name: Name of the model being used (e.g., 'gpt-4o').
+            token_count: Initial token count seed (e.g., from history + prompt
+                + system overhead). Streamed deltas accumulate on top of this.
+            token_limit: Optional model context-window size, used to render
+                the context-% in the dashboard.
         """
         with self._agents_lock:
-            # Create new agent state
             self._agents[session_id] = AgentState(
                 session_id=session_id,
                 agent_name=agent_name,
                 model_name=model_name,
+                token_count=token_count,
+                token_limit=token_limit,
             )
-
-            # Start display if this is the first agent
             if len(self._agents) == 1:
                 self._start_display()
 

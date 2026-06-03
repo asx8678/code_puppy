@@ -43,6 +43,21 @@ from code_puppy.tools.subagent_context import subagent_context
 _active_subagent_tasks: Set[asyncio.Task] = set()
 
 
+def _estimate_subagent_initial_tokens(
+    agent_config, message_history, prompt: str
+) -> int:
+    """Best-effort seed so the context % is meaningful before the first streamed token."""
+    try:
+        history_tokens = sum(
+            agent_config.estimate_tokens_for_message(m) for m in message_history
+        )
+        prompt_tokens = agent_config.estimate_tokens_for_message(prompt)
+        overhead = agent_config._estimate_context_overhead()
+        return max(0, overhead + history_tokens + prompt_tokens)
+    except Exception:
+        return 0
+
+
 def _generate_session_hash_suffix() -> str:
     """Generate a short SHA1 hash suffix based on current timestamp for uniqueness.
 
@@ -376,6 +391,14 @@ def register_invoke_agent(agent):
         # if load_agent() itself fails before assignment.
         agent_config = None
 
+        from code_puppy.config import get_show_subagent_status
+        from code_puppy.messaging.subagent_console import get_subagent_console_manager
+
+        manager = get_subagent_console_manager()
+        show_status = get_show_subagent_status()
+        registered = False
+        final_status = "completed"
+
         try:
             # Lazy import to break circular dependency with messaging module
             from code_puppy.model_factory import ModelFactory, make_model_settings
@@ -496,6 +519,31 @@ def register_invoke_agent(agent):
             # This ensures all sub-agent output goes through the aggregated dashboard
             stream_handler = partial(subagent_stream_handler, session_id=session_id)
 
+            # Register with the live sub-agent status dashboard (T2).
+            # Done in the parent context (NOT inside ``subagent_context``) so the
+            # stream handler -- which only sees events from the temp_agent run --
+            # can already find the AgentState by session_id when the first
+            # PartStartEvent arrives, and so the seeded token_count is
+            # visible before any streamed delta (prevents the seed-clobber
+            # bug that the T2 seed-clobber fix repairs).
+            if show_status:
+                try:
+                    token_limit = agent_config._get_model_context_length()
+                    initial_tokens = _estimate_subagent_initial_tokens(
+                        agent_config, message_history, prompt
+                    )
+                except Exception:
+                    token_limit, initial_tokens = None, 0
+                manager.register_agent(
+                    session_id=session_id,
+                    agent_name=agent_name,
+                    model_name=model_name,
+                    token_count=initial_tokens,
+                    token_limit=token_limit,
+                )
+                registered = True
+                manager.update_agent(session_id, status="running")
+
             # Wrap the agent run in subagent context for tracking
             with subagent_context(agent_name):
                 run_ctxs = on_agent_run_context(
@@ -556,6 +604,15 @@ def register_invoke_agent(agent):
             )
 
         except Exception as e:
+            final_status = "error"
+            if registered:
+                try:
+                    manager.update_agent(
+                        session_id, status="error", error_message=str(e)
+                    )
+                except Exception:
+                    pass
+
             # Emit clean failure summary
             emit_error(f"✗ {agent_name} failed: {str(e)}", message_group=group_id)
 
@@ -595,6 +652,11 @@ def register_invoke_agent(agent):
             )
 
         finally:
+            if registered:
+                try:
+                    manager.unregister_agent(session_id, final_status=final_status)
+                except Exception:
+                    pass
             # Restore the previous session context
             set_session_context(previous_session_id)
             # Reset browser session context
