@@ -158,6 +158,15 @@ async def main():
     # Create a shared console for both renderers
     display_console = Console()
 
+    # Wire the sub-agent status dashboard to the SAME console. This must happen
+    # BEFORE any sub-agent can run, so the lazy SubAgentConsoleManager.get_instance()
+    # call inside the stream handler / agent_tools returns this shared-console
+    # instance rather than creating one on a default Console. Reassigning the
+    # manager's console after a Live has been started is undefined.
+    from code_puppy.messaging.subagent_console import get_subagent_console_manager
+
+    get_subagent_console_manager(console=display_console)
+
     # Legacy renderer for backward compatibility (emits via get_global_queue)
     message_queue = get_global_queue()
     message_renderer = SynchronousInteractiveRenderer(message_queue, display_console)

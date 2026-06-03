@@ -296,6 +296,13 @@ class SubAgentConsoleManager:
 
         self._stop_event.clear()
 
+        # Pause the main spinner so its Live releases the shared console's single
+        # Live slot; otherwise Rich raises LiveError (only one Live per console).
+        # No-op when called from a sub-agent context (see spinner module).
+        from code_puppy.messaging.spinner import pause_all_spinners
+
+        pause_all_spinners()
+
         # Create Live display
         self._live = Live(
             self._render_display(),
@@ -328,6 +335,11 @@ class SubAgentConsoleManager:
             except Exception:
                 pass  # Ignore errors during cleanup
             self._live = None
+
+        # Resume the main spinner now that the dashboard has released the console.
+        from code_puppy.messaging.spinner import resume_all_spinners
+
+        resume_all_spinners()
 
     def _update_loop(self) -> None:
         """Background thread that refreshes the display."""
