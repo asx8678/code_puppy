@@ -1600,6 +1600,80 @@ class TestMainUvxAndEdgeCases:
         )
 
 
+class TestShowHideAgents(TestMain):
+    """T5 CLI coverage for --show-agents / --hide-agents and runtime override."""
+
+    @pytest.mark.anyio
+    async def test_show_agents_flag_persists_true(self):
+        """--show-agents persists show_subagent_status=true."""
+        set_value_mock = MagicMock()
+        override_mock = MagicMock()
+        await self._run_main(
+            ["code-puppy", "--show-agents", "-p", "hi"],
+            extra_patches={
+                "code_puppy.cli_runner.set_value": set_value_mock,
+                "code_puppy.cli_runner.set_subagent_status_runtime_override": override_mock,
+            },
+        )
+        set_value_mock.assert_called_once_with("show_subagent_status", "true")
+
+    @pytest.mark.anyio
+    async def test_hide_agents_flag_persists_false(self):
+        """--hide-agents persists show_subagent_status=false."""
+        set_value_mock = MagicMock()
+        override_mock = MagicMock()
+        await self._run_main(
+            ["code-puppy", "--hide-agents", "-p", "hi"],
+            extra_patches={
+                "code_puppy.cli_runner.set_value": set_value_mock,
+                "code_puppy.cli_runner.set_subagent_status_runtime_override": override_mock,
+            },
+        )
+        set_value_mock.assert_called_once_with("show_subagent_status", "false")
+
+    @pytest.mark.anyio
+    async def test_both_flags_errors(self):
+        """--show-agents and --hide-agents together are mutually exclusive."""
+        with pytest.raises(SystemExit):
+            await self._run_main(
+                ["code-puppy", "--show-agents", "--hide-agents", "-p", "hi"],
+                extra_patches={
+                    "code_puppy.cli_runner.set_value": MagicMock(),
+                    "code_puppy.cli_runner.set_subagent_status_runtime_override": MagicMock(),
+                },
+            )
+
+    @pytest.mark.anyio
+    async def test_prompt_flag_sets_runtime_override_false(self):
+        """One-shot -p mode sets runtime override False."""
+        set_value_mock = MagicMock()
+        override_mock = MagicMock()
+        await self._run_main(
+            ["code-puppy", "-p", "hello"],
+            extra_patches={
+                "code_puppy.cli_runner.set_value": set_value_mock,
+                "code_puppy.cli_runner.set_subagent_status_runtime_override": override_mock,
+            },
+        )
+        override_mock.assert_called_once_with(False)
+
+    @pytest.mark.anyio
+    async def test_non_tty_sets_runtime_override_false_no_persist(self):
+        """Non-TTY stdout (no isatty) forces runtime override False and does not persist."""
+        set_value_mock = MagicMock()
+        override_mock = MagicMock()
+        await self._run_main(
+            ["code-puppy", "-p", "hi"],
+            extra_patches={
+                "code_puppy.cli_runner.set_value": set_value_mock,
+                "code_puppy.cli_runner.set_subagent_status_runtime_override": override_mock,
+            },
+        )
+        # In test env sys.stdout has no isatty; the non-TTY override path fires.
+        override_mock.assert_called_once_with(False)
+        set_value_mock.assert_not_called()
+
+
 class TestRemainingEdgeCases:
     """Cover the hardest-to-reach lines."""
 

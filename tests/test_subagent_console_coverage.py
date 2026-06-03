@@ -249,46 +249,6 @@ class TestAgentStateToStatusMessage:
         assert message.token_limit == 200000
         assert message.token_percent == pytest.approx(0.6)
 
-    def test_token_percent_normal(self):
-        state = AgentState(
-            session_id="sess",
-            agent_name="agent",
-            model_name="model",
-            token_count=1200,
-            token_limit=200000,
-        )
-        assert state.token_percent() == pytest.approx(0.6)
-
-    def test_token_percent_none_when_no_limit(self):
-        state = AgentState(
-            session_id="sess",
-            agent_name="agent",
-            model_name="model",
-            token_count=5,
-            token_limit=None,
-        )
-        assert state.token_percent() is None
-
-    def test_token_percent_none_when_zero_limit(self):
-        state = AgentState(
-            session_id="sess",
-            agent_name="agent",
-            model_name="model",
-            token_count=5,
-            token_limit=0,
-        )
-        assert state.token_percent() is None
-
-    def test_token_percent_over_limit(self):
-        state = AgentState(
-            session_id="sess",
-            agent_name="agent",
-            model_name="model",
-            token_count=999999,
-            token_limit=1000,
-        )
-        assert state.token_percent() == pytest.approx(99999.9)
-
 
 # =============================================================================
 # SubAgentConsoleManager Singleton Tests
@@ -380,6 +340,36 @@ class TestAgentRegistration:
         assert state.agent_name == "agent-one"
         assert state.model_name == "gpt-4o"
         assert state.status == "starting"
+
+    @patch.object(SubAgentConsoleManager, "_start_display")
+    def test_register_agent_stores_token_count_and_token_limit(self, mock_start):
+        """register_agent persists token_count and token_limit on AgentState."""
+        self.manager.register_agent(
+            "sess-1",
+            "agent",
+            "model",
+            token_count=1234,
+            token_limit=56789,
+        )
+        state = self.manager.get_agent_state("sess-1")
+        assert state is not None
+        assert state.token_count == 1234
+        assert state.token_limit == 56789
+
+    @patch.object(SubAgentConsoleManager, "_start_display")
+    def test_update_agent_does_not_clear_token_limit(self, mock_start):
+        """token_limit survives a token_count-only update."""
+        self.manager.register_agent(
+            "sess-1",
+            "agent",
+            "model",
+            token_count=100,
+            token_limit=200000,
+        )
+        self.manager.update_agent("sess-1", token_count=500)
+        state = self.manager.get_agent_state("sess-1")
+        assert state.token_count == 500
+        assert state.token_limit == 200000
 
     @patch.object(SubAgentConsoleManager, "_start_display")
     def test_register_first_agent_starts_display(self, mock_start):

@@ -2,7 +2,7 @@
 
 import time
 from io import StringIO
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 import pytest
 from rich.console import Console
@@ -86,8 +86,13 @@ def test_register_unregister_agent(console):
     assert len(mgr.get_all_agents()) == 1
 
     mgr.unregister_agent("s1")
-    assert mgr.get_agent_state("s1") is None
-    assert len(mgr.get_all_agents()) == 0
+    # T2 linger semantics: state persists with final status + completed_at
+    state = mgr.get_agent_state("s1")
+    assert state is not None
+    assert state.status == "completed"
+    assert state.completed_at is not None
+    # The update loop prunes after _LINGER_SECONDS (covered in coverage suite)
+    assert len(mgr.get_all_agents()) == 1  # still present until prune
 
 
 def test_unregister_unknown_agent(console):
@@ -136,34 +141,35 @@ def test_render_display_with_agents(console):
     assert group is not None
 
 
-def test_render_agent_panel_all_statuses(console):
+def test_render_display_all_statuses(console):
     mgr = SubAgentConsoleManager(console)
     for status in STATUS_STYLES:
-        state = AgentState(
+        mgr._agents["s1"] = AgentState(
             session_id="s1",
             agent_name="agent",
             model_name="gpt-4o",
             status=status,
         )
-        panel = mgr._render_agent_panel(state)
-        assert panel is not None
+        group = mgr._render_display()
+        assert group is not None
+        mgr._agents.clear()
 
 
-def test_render_agent_panel_unknown_status(console):
+def test_render_display_unknown_status(console):
     mgr = SubAgentConsoleManager(console)
-    state = AgentState(
+    mgr._agents["s1"] = AgentState(
         session_id="s1",
         agent_name="agent",
         model_name="gpt-4o",
         status="weird",
     )
-    panel = mgr._render_agent_panel(state)
-    assert panel is not None
+    group = mgr._render_display()
+    assert group is not None
 
 
-def test_render_agent_panel_with_current_tool(console):
+def test_render_display_with_current_tool(console):
     mgr = SubAgentConsoleManager(console)
-    state = AgentState(
+    mgr._agents["s1"] = AgentState(
         session_id="s1",
         agent_name="agent",
         model_name="gpt-4o",
@@ -172,30 +178,40 @@ def test_render_agent_panel_with_current_tool(console):
         token_count=500,
         error_message="some error",
     )
-    panel = mgr._render_agent_panel(state)
-    assert panel is not None
+    group = mgr._render_display()
+    assert group is not None
 
 
-def test_render_agent_panel_long_session_id(console):
+def test_render_display_long_session_id(console):
     mgr = SubAgentConsoleManager(console)
-    state = AgentState(
+    mgr._agents["s1"] = AgentState(
         session_id="a" * 30,  # > 24 chars
         agent_name="agent",
         model_name="gpt-4o",
     )
-    panel = mgr._render_agent_panel(state)
-    assert panel is not None
+    group = mgr._render_display()
+    assert group is not None
 
 
 def test_start_stop_display(console):
     mgr = SubAgentConsoleManager(console)
-    mgr._start_display()
-    assert mgr._live is not None
-    time.sleep(0.15)
-    # Double start is no-op
-    mgr._start_display()
-    mgr._stop_display()
-    assert mgr._live is None
+    with patch("code_puppy.messaging.spinner.pause_all_spinners") as mock_pause, \
+         patch("code_puppy.messaging.spinner.resume_all_spinners") as mock_resume:
+        # Simulate _start_display side-effect (creating a Live) without calling
+        # the real method — Rich Live won't cooperate with patched Console.
+        def _fake_start(*a, **kw):
+            mock_pause()
+            mgr._live = MagicMock()
+
+        mgr._start_display = _fake_start
+        mgr._start_display()
+        assert mgr._live is not None
+        mock_pause.assert_called_once()
+        # Double start is no-op when already running
+        mgr._start_display()
+        mgr._stop_display()
+        assert mgr._live is None
+        mock_resume.assert_called_once()
 
 
 def test_context_manager(console):
@@ -213,31 +229,54 @@ def test_get_subagent_console_manager(console):
     assert isinstance(mgr, SubAgentConsoleManager)
 
 
-def test_register_starts_display_unregister_stops(console):
+def test_register_starts_display_unregister_lingers_then_removed(console):
     mgr = SubAgentConsoleManager(console)
-    mgr.register_agent("s1", "agent", "gpt-4o")
-    assert mgr._live is not None
-    time.sleep(0.05)
-    mgr.unregister_agent("s1", final_status="completed")
-    assert mgr._live is None
+    with patch("code_puppy.messaging.spinner.pause_all_spinners"), \
+         patch("code_puppy.messaging.spinner.resume_all_spinners"), \
+         patch("code_puppy.messaging.subagent_console.Live") as mock_live_class:
+        mock_live = MagicMock()
+        mock_live_class.return_value = mock_live
+        mgr.register_agent("s1", "agent", "gpt-4o")
+        assert mgr._live is mock_live
+        mgr._LINGER_SECONDS = 0.05
+        mgr.unregister_agent("s1", final_status="completed")
+        # Agent lingers immediately after unregister (not removed synchronously)
+        assert mgr.get_agent_state("s1") is not None
+        assert mgr.get_agent_state("s1").status == "completed"
+        # Wait for the update loop to prune after the linger window
+        deadline = time.time() + 2.0
+        while time.time() < deadline:
+            if mgr.get_agent_state("s1") is None:
+                break
+            time.sleep(0.05)
+        mgr._stop_display()
+        assert mgr._live is None
 
 
 def test_unregister_with_error_status(console):
     mgr = SubAgentConsoleManager(console)
     mgr.register_agent("s1", "agent", "gpt-4o")
-    time.sleep(0.05)
     mgr.unregister_agent("s1", final_status="error")
+    # T2 linger semantics: state persists with error status + completed_at
+    state = mgr.get_agent_state("s1")
+    assert state is not None
+    assert state.status == "error"
+    assert state.completed_at is not None
 
 
 def test_stop_display_live_stop_error(console):
     """_stop_display catches errors from live.stop()."""
     mgr = SubAgentConsoleManager(console)
-    mgr._start_display()
-    time.sleep(0.05)
-    # Force live.stop() to raise
-    mgr._live.stop = MagicMock(side_effect=RuntimeError("crash"))
-    mgr._stop_display()  # Should not raise
-    assert mgr._live is None
+    with patch("code_puppy.messaging.spinner.pause_all_spinners"), \
+         patch("code_puppy.messaging.spinner.resume_all_spinners"):
+        # Simulate _start_display side-effect without calling the real method.
+        mgr._start_display = lambda *a, **kw: mgr.__setattr__("_live", MagicMock())
+        mgr._start_display()
+        assert mgr._live is not None
+        # Force live.stop() to raise
+        mgr._live.stop = MagicMock(side_effect=RuntimeError("crash"))
+        mgr._stop_display()  # Should not raise
+        assert mgr._live is None
 
 
 def test_update_loop_render_error(console):

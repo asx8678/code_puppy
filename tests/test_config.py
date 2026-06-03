@@ -580,6 +580,10 @@ class TestShowSubagentStatus:
         # Clear any runtime override before each test to avoid leaks.
         cp_config.set_subagent_status_runtime_override(None)
 
+    def teardown_method(self):
+        # Clear any runtime override after each test to avoid leakage.
+        cp_config.set_subagent_status_runtime_override(None)
+
     @patch("code_puppy.config.get_value")
     def test_default_when_no_config_value(self, mock_get_value):
         mock_get_value.return_value = None

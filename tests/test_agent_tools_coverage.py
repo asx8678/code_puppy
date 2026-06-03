@@ -11,6 +11,7 @@ DBOS workflow-id tests were removed when DBOS moved to a plugin; see
 """
 
 import tempfile
+from contextlib import ExitStack
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -930,65 +931,296 @@ class TestListAgentsEmitsBannerAndInfo:
 
 
 class TestInvokeAgentSubagentConsoleLifecycle:
-    """Lifecycle contract for the sub-agent dashboard manager.
+    """Real-path lifecycle tests for invoke_agent's sub-agent dashboard hooks.
 
-    The real invoke_agent path is tightly coupled to pydantic-ai; these
-    tests verify the manager contract that invoke_agent is expected to
-    honour: register before work, update to running, and always unregister
-    in finally (success or error).
+    These tests drive the actual registered invoke_agent tool.  The
+    FakeAgent class is injected via code_puppy.tools.agent_tools.Agent
+    so that temp_agent.run(...) is an **awaitable coroutine** (not a
+    MagicMock).  That lets asyncio.create_task and await task run for
+    real, which in turn lets subagent_context / on_agent_run_context
+    and the success / error / finally blocks all execute on the real path.
+
+    If the console_mgr/manager shadowing bug is reintroduced, these tests
+    WILL fail because console_mgr.register_agent will hit MCPManager
+    (AttributeError).  They are therefore a genuine regression guard, not
+    hollow mocks.
     """
 
+    # ------------------------------------------------------------------
+    # Helpers
+    # ------------------------------------------------------------------
+
+    def _get_registered_invoke_agent(self):
+        """Capture the async tool function that register_invoke_agent registers."""
+        mock_agent = MagicMock()
+        registered = None
+
+        def capture(func):
+            nonlocal registered
+            registered = func
+            return func
+
+        mock_agent.tool = capture
+        register_invoke_agent(mock_agent)
+        return registered
+
+    def _base_invoke_patches(self, session_id="test-session-abc"):
+        """Common patch dict for a clean success-path run."""
+        fake_agent_config = MagicMock()
+        fake_agent_config.get_model_name.return_value = "test-model"
+        fake_agent_config._get_model_context_length.return_value = 200000
+        # _estimate_subagent_initial_tokens = overhead(25) + len(history)=0 + len(prompt)=4
+        fake_agent_config.estimate_tokens_for_message.side_effect = lambda m: len(m)
+        fake_agent_config._estimate_context_overhead.return_value = 25
+        fake_agent_config.get_full_system_prompt.return_value = "system prompt"
+        fake_agent_config.set_message_history = MagicMock()
+        fake_agent_config.get_message_history.return_value = []
+        fake_agent_config.name = "test-agent"
+        fake_agent_config.get_available_tools.return_value = []
+
+        return {
+            # Session / bus / emit plumbing
+            "code_puppy.tools.agent_tools.generate_group_id": MagicMock(
+                return_value="test-group"
+            ),
+            "code_puppy.tools.agent_tools.get_message_bus": MagicMock(
+                return_value=MagicMock(emit=MagicMock())
+            ),
+            "code_puppy.tools.agent_tools.get_session_context": MagicMock(
+                return_value="parent-session"
+            ),
+            "code_puppy.tools.agent_tools.set_session_context": MagicMock(),
+            "code_puppy.tools.agent_tools.emit_error": MagicMock(),
+            "code_puppy.tools.agent_tools.emit_info": MagicMock(),
+            "code_puppy.tools.agent_tools.emit_success": MagicMock(),
+            "code_puppy.tools.agent_tools._load_session_history": MagicMock(
+                return_value=[]
+            ),
+            "code_puppy.tools.agent_tools._generate_session_hash_suffix": MagicMock(
+                return_value="abc123"
+            ),
+            "code_puppy.tools.agent_tools._save_session_history": MagicMock(),
+            # Agent / model loading
+            "code_puppy.agents.agent_manager.load_agent": MagicMock(
+                return_value=fake_agent_config
+            ),
+            "code_puppy.model_factory.ModelFactory.load_config": MagicMock(
+                return_value={"test-model": {}}
+            ),
+            "code_puppy.model_factory.ModelFactory.get_model": MagicMock(),
+            # The temp_agent is built from this; we replace it with a FakeAgent
+            # whose run() is a REAL coroutine so  +
+            # execute the success/error/finally branches naturally.
+            "code_puppy.tools.agent_tools.Agent": None,  # set per-test
+            # Dashboard (T2)
+            "code_puppy.messaging.subagent_console.get_subagent_console_manager": MagicMock(
+                return_value=MagicMock(
+                    register_agent=MagicMock(),
+                    update_agent=MagicMock(),
+                    unregister_agent=MagicMock(),
+                )
+            ),
+            "code_puppy.config.get_show_subagent_status": MagicMock(return_value=True),
+            # Browser / cancel hooks
+            "code_puppy.tools.browser.browser_manager.set_browser_session": MagicMock(
+                return_value="token"
+            ),
+            "code_puppy.tools.browser.browser_manager._browser_session_var": MagicMock(
+                reset=MagicMock()
+            ),
+            "code_puppy.config.set_subagent_status_runtime_override": MagicMock(),
+            "code_puppy.tools.agent_tools.on_agent_run_cancel": MagicMock(),
+            # Context managers / callbacks
+            "code_puppy.tools.subagent_context.subagent_context": MagicMock(
+                __enter__=MagicMock(return_value=None),
+                __exit__=MagicMock(return_value=False),
+            ),
+            "code_puppy.callbacks.on_agent_run_context": MagicMock(return_value=[]),
+            "code_puppy.callbacks.on_wrap_pydantic_agent": MagicMock(
+                side_effect=lambda *a, **kw: MagicMock()
+            ),
+            "code_puppy.tools.agent_tools.get_message_limit": MagicMock(
+                return_value=100
+            ),
+        }
+
+    # ------------------------------------------------------------------
+    # (a) Success path
+    # ------------------------------------------------------------------
+
     @pytest.mark.asyncio
-    async def test_success_path_registers_then_unregisters(self):
-        """Successful run registers before the run and unregisters in finally."""
-        mock_manager = MagicMock()
+    async def test_success_path_registers_updates_running_and_unregisters(self):
+        """invoke_agent registers (seeded tokens), updates running, unregisters completed."""
+        invoke_agent = self._get_registered_invoke_agent()
+        mock_context = MagicMock()
+        patches = self._base_invoke_patches()
 
-        # Simulate the success path that invoke_agent should implement.
-        mock_manager.register_agent(
-            session_id="sess-1",
-            agent_name="test-agent",
-            model_name="test-model",
-            token_count=10,
-            token_limit=1000,
+        class FakeAgent:
+            def __init__(self, *a, **kw):
+                pass
+
+            async def run(self, *a, **kw):
+                return MagicMock(output="done", all_messages=MagicMock(return_value=[]))
+
+        patches["code_puppy.tools.agent_tools.Agent"] = FakeAgent
+        console_mgr = patches[
+            "code_puppy.messaging.subagent_console.get_subagent_console_manager"
+        ].return_value
+
+        with ExitStack() as _stack:
+            for _t, _v in patches.items():
+                _stack.enter_context(patch(_t, _v))
+            result = await invoke_agent(
+                mock_context,
+                agent_name="test-agent",
+                prompt="Hello",
+                session_id="test-session-abc",
+            )
+
+        assert result.response == "done"
+        assert result.error is None
+        console_mgr.register_agent.assert_called_once()
+        reg = console_mgr.register_agent.call_args
+        assert reg.kwargs["token_count"] > 0
+        assert reg.kwargs["token_limit"] > 0
+        console_mgr.update_agent.assert_any_call(
+            reg.kwargs["session_id"], status="running"
         )
-        mock_manager.update_agent("sess-1", status="running")
-        mock_manager.unregister_agent("sess-1", final_status="completed")
+        last = console_mgr.unregister_agent.call_args
+        assert last.kwargs["final_status"] == "completed"
 
-        assert mock_manager.register_agent.call_count == 1
-        assert mock_manager.update_agent.call_count == 1
-        assert mock_manager.unregister_agent.call_count == 1
+    # ------------------------------------------------------------------
+    # (b) Error path
+    # ------------------------------------------------------------------
 
     @pytest.mark.asyncio
     async def test_error_path_updates_error_and_unregisters(self):
-        """On exception, update_agent(error) and unregister(error) both fire."""
-        mock_manager = MagicMock()
+        """run() raises -> update_agent(error) + unregister_agent(error)."""
+        invoke_agent = self._get_registered_invoke_agent()
+        patches = self._base_invoke_patches()
 
-        try:
-            raise RuntimeError("boom")
-        except Exception as e:
-            mock_manager.update_agent("sess-1", status="error", error_message=str(e))
-            final_status = "error"
-        finally:
-            mock_manager.unregister_agent("sess-1", final_status=final_status)
+        class FakeAgentBoom:
+            def __init__(self, *a, **kw):
+                pass
 
-        assert mock_manager.update_agent.call_count == 1
-        assert mock_manager.unregister_agent.call_count == 1
+            async def run(self, *a, **kw):
+                raise RuntimeError("boom")
+
+        patches["code_puppy.tools.agent_tools.Agent"] = FakeAgentBoom
+        cm = patches[
+            "code_puppy.messaging.subagent_console.get_subagent_console_manager"
+        ].return_value
+
+        with ExitStack() as s:
+            for t, v in patches.items():
+                s.enter_context(patch(t, v))
+            result = await invoke_agent(
+                MagicMock(),
+                agent_name="test-agent",
+                prompt="Hello",
+                session_id="test-session-abc",
+            )
+
+        assert result.error is not None
+        assert "boom" in (result.error or "")
+        sid = cm.register_agent.call_args.kwargs["session_id"]
+        # error_message is the *stringified* exception; RuntimeError("boom") -> "boom"
+        cm.update_agent.assert_any_call(sid, status="error", error_message="boom")
+        assert cm.unregister_agent.call_args.kwargs["final_status"] == "error"
+
+    # ------------------------------------------------------------------
+    # (c) Gate: show_status=False -> nothing touches the console manager
+    # ------------------------------------------------------------------
 
     @pytest.mark.asyncio
     async def test_show_status_false_gates_dashboard_registration(self):
-        """When show_subagent_status is disabled, register_agent is never called."""
-        mock_manager = MagicMock()
-        show_status = False
+        """When show_subagent_status is False, register/update/unregister never fire."""
+        invoke_agent = self._get_registered_invoke_agent()
+        mock_context = MagicMock()
+        patches = self._base_invoke_patches()
+        patches["code_puppy.config.get_show_subagent_status"].return_value = False
+        console_mgr = patches[
+            "code_puppy.messaging.subagent_console.get_subagent_console_manager"
+        ].return_value
 
-        # This is the gate pattern invoke_agent is expected to use.
-        if show_status:
-            mock_manager.register_agent(
-                session_id="sess-1",
+        class FakeAgent:
+            def __init__(self, *a, **kw):
+                pass
+
+            async def run(self, *a, **kw):
+                return MagicMock(output="done", all_messages=MagicMock(return_value=[]))
+
+        patches["code_puppy.tools.agent_tools.Agent"] = FakeAgent
+
+        with ExitStack() as _stack:
+            for _t, _v in patches.items():
+                _stack.enter_context(patch(_t, _v))
+            await invoke_agent(
+                mock_context,
                 agent_name="test-agent",
-                model_name="test-model",
+                prompt="Hello",
+                session_id="test-session-abc",
             )
 
-        mock_manager.register_agent.assert_not_called()
+        console_mgr.register_agent.assert_not_called()
+        console_mgr.update_agent.assert_not_called()
+        console_mgr.unregister_agent.assert_not_called()
+
+    # ------------------------------------------------------------------
+    # (d) Cancellation: CancelledError is BaseException -> only finally runs
+    # ------------------------------------------------------------------
+
+    @pytest.mark.asyncio
+    async def test_cancelled_task_unregisters_error(self):
+        """CancelledError is a BaseException that propagates out of the
+        ``asyncio.create_task`` + ``await task`` block inside the
+        ``AsyncExitStack``.  It then lands in the outer
+        ``except Exception as e`` handler in invoke_agent, so the
+        observable contract here is ``final_status="error"``.
+
+        NOTE: if the implementation is later changed to catch
+        ``BaseException`` (or a dedicated ``except asyncio.CancelledError``)
+        and set ``final_status="completed"`` instead, update this test
+        to match the new contract.
+        """
+        import asyncio
+
+        invoke_agent = self._get_registered_invoke_agent()
+        patches = self._base_invoke_patches()
+
+        class FakeAgentCancelled:
+            def __init__(self, *a, **kw):
+                pass
+
+            async def run(self, *a, **kw):
+                raise asyncio.CancelledError()
+
+        patches["code_puppy.tools.agent_tools.Agent"] = FakeAgentCancelled
+        # Cancellation test needs a REAL asyncio.Task so CancelledError
+        # propagates through ``await``.  Remove the mock create_task.
+        patches.pop("code_puppy.tools.agent_tools.asyncio.create_task", None)
+        cm = patches[
+            "code_puppy.messaging.subagent_console.get_subagent_console_manager"
+        ].return_value
+
+        with ExitStack() as s:
+            for t, v in patches.items():
+                s.enter_context(patch(t, v))
+            # CancelledError is BaseException; it bypasses ``except Exception``
+            # in invoke_agent but ``finally`` still runs.  We don't require
+            # pytest.raises here because anyio swallows the propagation.
+            await invoke_agent(
+                MagicMock(),
+                agent_name="test-agent",
+                prompt="Hello",
+                session_id="test-session-abc",
+            )
+
+        cm.register_agent.assert_called_once()
+        sid = cm.register_agent.call_args.kwargs["session_id"]
+        cm.update_agent.assert_any_call(sid, status="running")
+        # Current contract: CancelledError -> final_status="error"
+        cm.unregister_agent.assert_called_once_with(sid, final_status="error")
 
 
 class TestSubagentStreamHandlerSeedSurvival:
