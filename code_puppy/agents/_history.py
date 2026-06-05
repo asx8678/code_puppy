@@ -12,11 +12,42 @@ import hashlib
 import json
 import math
 import re
-from typing import Any, Dict, List, Optional, Set
+import threading
+from collections import OrderedDict
+from typing import Any, Dict, List, Optional, Set, Tuple
 
 import pydantic
 from pydantic_ai import BinaryContent
 from pydantic_ai.messages import ModelMessage
+
+# ---------------------------------------------------------------------------
+# Per-message memoization
+#
+# ``hash_message`` and ``estimate_tokens_for_message`` both stringify every
+# part of a message (``stringify_part`` does a ``json.dumps`` of structured
+# content). The history processor runs before *every* model request and walks
+# the whole history twice (once for hashing, once for token counting) — and a
+# single agentic turn makes many requests. Since pydantic-ai messages are
+# immutable once created, the (raw_token_total, hash) pair never changes, so we
+# compute it once and cache it.
+#
+# The cache is keyed on ``id(message)``. To make that safe against id reuse we
+# also store a strong reference to the message and validate ``stored is message``
+# on every hit: while we hold the reference the object stays alive, so its id
+# cannot be handed to a different object. The cache is a bounded LRU so it can
+# never grow without limit.
+# ---------------------------------------------------------------------------
+_MESSAGE_STATS_MAX = 4096
+_message_stats_cache: "OrderedDict[int, Tuple[Any, int, int]]" = OrderedDict()
+_message_stats_lock = threading.Lock()
+
+# Per-tool overhead (name + description + JSON schema tokens). Tool objects are
+# stable for the life of a built agent and their schemas are immutable, so the
+# token contribution is computed once per tool object. Same id()+identity-guard
+# scheme as above.
+_TOOL_OVERHEAD_MAX = 1024
+_tool_overhead_cache: "OrderedDict[int, Tuple[Any, str, int]]" = OrderedDict()
+_tool_overhead_lock = threading.Lock()
 
 
 def stringify_part(part: Any) -> str:
@@ -59,8 +90,13 @@ def stringify_part(part: Any) -> str:
     return "|".join(attributes)
 
 
-def hash_message(message: Any) -> int:
-    """Stable hash for a ``ModelMessage`` that ignores timestamps."""
+def _compute_message_stats(message: Any) -> Tuple[int, int]:
+    """Stringify a message once; return ``(raw_token_total, stable_hash)``.
+
+    ``raw_token_total`` is the pre-multiplier token count (sum over parts);
+    ``stable_hash`` is the timestamp-free content hash. Both derive from a
+    single ``stringify_part`` pass so callers don't walk the message twice.
+    """
     role = getattr(message, "role", None)
     instructions = getattr(message, "instructions", None)
     header_bits: List[str] = []
@@ -69,9 +105,36 @@ def hash_message(message: Any) -> int:
     if instructions:
         header_bits.append(f"instructions={instructions}")
 
-    part_strings = [stringify_part(part) for part in getattr(message, "parts", [])]
+    part_strings = [
+        stringify_part(part) for part in getattr(message, "parts", []) or []
+    ]
     canonical = "||".join(header_bits + part_strings)
-    return hash(canonical)
+    raw_tokens = sum(estimate_tokens(ps) for ps in part_strings if ps)
+    return raw_tokens, hash(canonical)
+
+
+def _message_stats(message: Any) -> Tuple[int, int]:
+    """Memoized ``_compute_message_stats`` keyed on message identity."""
+    key = id(message)
+    with _message_stats_lock:
+        entry = _message_stats_cache.get(key)
+        if entry is not None and entry[0] is message:
+            _message_stats_cache.move_to_end(key)
+            return entry[1], entry[2]
+
+    raw_tokens, msg_hash = _compute_message_stats(message)
+
+    with _message_stats_lock:
+        _message_stats_cache[key] = (message, raw_tokens, msg_hash)
+        _message_stats_cache.move_to_end(key)
+        while len(_message_stats_cache) > _MESSAGE_STATS_MAX:
+            _message_stats_cache.popitem(last=False)
+    return raw_tokens, msg_hash
+
+
+def hash_message(message: Any) -> int:
+    """Stable hash for a ``ModelMessage`` that ignores timestamps."""
+    return _message_stats(message)[1]
 
 
 def estimate_tokens(text: str) -> int:
@@ -83,8 +146,26 @@ def estimate_tokens(text: str) -> int:
 # Bump these by a calibration factor so context-usage math stops lying to us.
 # Substring match is case-insensitive; both naming orders are accepted because
 # vendor naming is a coin flip.
+# The char/2.5 heuristic systematically under-counts Anthropic's Opus/Sonnet
+# 4.x tokenizer generation, which would let context math under-report usage and
+# defer compaction too long (overflow risk). Bump the whole family by the same
+# calibration factor measured for Opus 4.7. The token_ratio_learner plugin
+# overrides these with learned per-model ratios once real prompt_tokens are
+# observed, so this only affects the cold-start window.
 _TOKEN_MULTIPLIER_RULES: tuple[tuple[tuple[str, ...], float], ...] = (
-    (("opus-4-7", "4-7-opus"), 1.35),
+    (
+        (
+            "opus-4-6",
+            "4-6-opus",
+            "opus-4-7",
+            "4-7-opus",
+            "opus-4-8",
+            "4-8-opus",
+            "sonnet-4-6",
+            "4-6-sonnet",
+        ),
+        1.35,
+    ),
 )
 
 
@@ -119,12 +200,8 @@ def estimate_tokens_for_message(
     :func:`model_token_multiplier` to compensate for tokenizers that don't
     play nicely with our char/2.5 heuristic.
     """
-    total = 0
-    for part in getattr(message, "parts", []) or []:
-        part_str = stringify_part(part)
-        if part_str:
-            total += estimate_tokens(part_str)
-    return _apply_multiplier(max(1, total), model_name)
+    raw_tokens, _ = _message_stats(message)
+    return _apply_multiplier(max(1, raw_tokens), model_name)
 
 
 def _extract_tool_description(tool_obj: Any) -> str:
@@ -202,6 +279,40 @@ def _estimate_mcp_tool_tokens(mcp_servers: Optional[List[Any]]) -> int:
     return total
 
 
+def _tool_overhead_tokens(tool_name: str, tool_obj: Any) -> int:
+    """Token contribution of one pydantic tool (name + description + schema).
+
+    Memoized per tool object — schemas are immutable for the life of a built
+    agent, so the (often large) ``json.dumps(schema)`` runs once instead of on
+    every model request.
+    """
+    key = id(tool_obj)
+    with _tool_overhead_lock:
+        entry = _tool_overhead_cache.get(key)
+        if entry is not None and entry[0] is tool_obj and entry[1] == tool_name:
+            _tool_overhead_cache.move_to_end(key)
+            return entry[2]
+
+    tokens = estimate_tokens(tool_name)
+    description = _extract_tool_description(tool_obj)
+    if description:
+        tokens += estimate_tokens(description)
+    schema = _extract_tool_json_schema(tool_obj)
+    if schema is not None:
+        tokens += estimate_tokens(json.dumps(schema))
+    else:
+        annotations = getattr(tool_obj, "__annotations__", None)
+        if annotations:
+            tokens += estimate_tokens(str(annotations))
+
+    with _tool_overhead_lock:
+        _tool_overhead_cache[key] = (tool_obj, tool_name, tokens)
+        _tool_overhead_cache.move_to_end(key)
+        while len(_tool_overhead_cache) > _TOOL_OVERHEAD_MAX:
+            _tool_overhead_cache.popitem(last=False)
+    return tokens
+
+
 def estimate_context_overhead(
     system_prompt: str,
     pydantic_tools: Optional[Dict[str, Any]],
@@ -232,19 +343,7 @@ def estimate_context_overhead(
 
     if pydantic_tools:
         for tool_name, tool_obj in pydantic_tools.items():
-            total += estimate_tokens(tool_name)
-
-            description = _extract_tool_description(tool_obj)
-            if description:
-                total += estimate_tokens(description)
-
-            schema = _extract_tool_json_schema(tool_obj)
-            if schema is not None:
-                total += estimate_tokens(json.dumps(schema))
-            else:
-                annotations = getattr(tool_obj, "__annotations__", None)
-                if annotations:
-                    total += estimate_tokens(str(annotations))
+            total += _tool_overhead_tokens(tool_name, tool_obj)
 
     total += _estimate_mcp_tool_tokens(mcp_servers)
 
@@ -348,10 +447,21 @@ def has_pending_tool_calls(messages: List[ModelMessage]) -> bool:
 def filter_huge_messages(
     messages: List[ModelMessage],
     model_name: Optional[str] = None,
+    max_message_tokens: int = 50000,
 ) -> List[ModelMessage]:
-    """Drop individual messages above a 50k-token budget, then prune orphans."""
+    """Drop messages at/above the protected-zone budget, then prune orphans.
+
+    A single message whose own token count meets or exceeds
+    ``max_message_tokens`` can never fit inside the protected recent-message
+    zone, so it's dropped wholesale before summarization/truncation.
+    ``max_message_tokens`` defaults to the historical 50k cap; ``compact``
+    passes the live protected-token budget so the cull tracks the user's
+    configuration instead of a magic constant.
+    """
     filtered = [
-        m for m in messages if estimate_tokens_for_message(m, model_name) < 50000
+        m
+        for m in messages
+        if estimate_tokens_for_message(m, model_name) < max_message_tokens
     ]
     return prune_interrupted_tool_calls(filtered)
 

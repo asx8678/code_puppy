@@ -80,6 +80,10 @@ class BaseAgent(ABC):
         # so model swaps invalidate it via ``_probe_model_name``.
         self._tool_probe_agent: Any = None
         self._probe_model_name: Optional[str] = None
+        # Memo for the resolved context-window length, keyed by model name so a
+        # model switch recomputes it. Avoids re-reading model config on every
+        # per-request history-processor cycle.
+        self._ctx_len_cache: Optional[tuple[Optional[str], int]] = None
 
     # ---- Abstract interface ------------------------------------------------
     @property
@@ -170,12 +174,18 @@ class BaseAgent(ABC):
 
     def _get_model_context_length(self) -> int:
         """Context window for the agent's effective model (fallback: 128k)."""
+        model_name = self.get_model_name()
+        cached = self._ctx_len_cache
+        if cached is not None and cached[0] == model_name:
+            return cached[1]
         try:
             configs = ModelFactory.load_config()
-            cfg = configs.get(self.get_model_name(), {})
-            return int(cfg.get("context_length", 128000))
+            cfg = configs.get(model_name, {})
+            length = int(cfg.get("context_length", 128000))
         except Exception:
-            return 128000
+            length = 128000
+        self._ctx_len_cache = (model_name, length)
+        return length
 
     def _estimate_context_overhead(self) -> int:
         """Tokens used by system prompt + registered pydantic tools."""

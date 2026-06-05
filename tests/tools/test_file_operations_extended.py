@@ -104,14 +104,16 @@ class TestFileOperationsExtended:
     def test_read_file_large_file_token_limit(self, tmp_path):
         """Test handling of files that exceed token limits."""
         test_file = tmp_path / "large.txt"
-        # Create content that would exceed 10,000 tokens (40,000+ characters)
+        # 50k chars / 2.5 = 20k tokens, over the 16k whole-file read cap.
         large_content = "A" * 50000  # Should exceed the token limit
         test_file.write_text(large_content)
 
         result = _read_file(None, str(test_file))
 
         assert result.error is not None
-        assert "greater than 10,000 tokens" in result.error
+        # Assert the stable guidance rather than the exact token number so the
+        # test doesn't churn when the cap is recalibrated.
+        assert "read this file in chunks" in result.error
         assert result.content is None
         assert result.num_tokens == 0
 

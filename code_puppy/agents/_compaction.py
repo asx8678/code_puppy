@@ -339,7 +339,9 @@ def compact(
         pass
 
     protected_tokens = get_protected_token_count()
-    filtered = filter_huge_messages(messages, model_name)
+    filtered = filter_huge_messages(
+        messages, model_name, max_message_tokens=protected_tokens
+    )
 
     # filter_huge_messages() already runs prune_interrupted_tool_calls(),
     # so by this point any orphaned tool_call / tool_return pairs (from

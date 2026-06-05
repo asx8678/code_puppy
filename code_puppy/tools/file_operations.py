@@ -1,9 +1,14 @@
 # file_operations.py
 
+import atexit
+import hashlib
 import os
 import shutil
+import stat
 import subprocess
 import tempfile
+import threading
+from collections import OrderedDict
 from typing import List
 
 from pydantic import BaseModel, conint
@@ -20,6 +25,77 @@ from code_puppy.messaging import (  # New structured messaging types
     GrepResultMessage,
     get_message_bus,
 )
+
+# ---------------------------------------------------------------------------
+# read_file size accounting
+# ---------------------------------------------------------------------------
+# Token estimate divisor — kept in sync with _history.estimate_tokens (char/2.5)
+# so read_file's token count and cap reflect *real* context-budget tokens. The
+# old ``// 4`` divisor under-counted by ~60%, so the reported num_tokens lied
+# and the cap was effectively ~16k tokens while claiming 10k.
+_CHARS_PER_TOKEN = 2.5
+# Whole-file read cap, in tokens. 16k tokens ≈ 40k chars preserves the original
+# *effective* limit (10k × the old 4 chars/token) so normal multi-hundred-line
+# source files still read in one shot — only now the count is honest.
+_READ_FILE_TOKEN_CAP = 16000
+# Hard byte ceiling for a whole-file read: a file larger than the cap's char
+# budget (40k) times the max UTF-8 bytes/char (4) is guaranteed over the cap, so
+# we reject it without reading — a multi-MB file is never slurped into RAM just
+# to be rejected.
+_MAX_READ_BYTES = int(_READ_FILE_TOKEN_CAP * _CHARS_PER_TOKEN * 4)  # 160_000
+_FILE_TOO_LARGE_MSG = (
+    f"The file is massive, greater than {_READ_FILE_TOKEN_CAP:,} tokens which "
+    "is dangerous to read entirely. Please read this file in chunks."
+)
+
+# ---------------------------------------------------------------------------
+# Cached ripgrep ignore files
+# ---------------------------------------------------------------------------
+# grep / list_files used to write the ~200-entry DIR_IGNORE_PATTERNS list to a
+# fresh temp file (then unlink it) on *every* call. The pattern set is constant
+# per process, so we write each distinct ignore file once and reuse it. Keyed
+# by the pattern set so grep (full set) and list_files (per-directory filtered
+# set) each get the right file. Bounded LRU; evicted and at-exit files removed.
+_IGNORE_FILE_CACHE: "OrderedDict[str, str]" = OrderedDict()
+_IGNORE_FILE_CACHE_MAX = 64
+_IGNORE_FILE_LOCK = threading.Lock()
+
+
+def _get_cached_ignore_file(patterns) -> str:
+    """Return a reusable ripgrep ignore-file path for ``patterns``.
+
+    Writes the file once per distinct pattern set and reuses it across calls.
+    """
+    patterns = list(patterns)
+    key = hashlib.sha1("\n".join(patterns).encode("utf-8")).hexdigest()
+    with _IGNORE_FILE_LOCK:
+        cached = _IGNORE_FILE_CACHE.get(key)
+        if cached and os.path.exists(cached):
+            _IGNORE_FILE_CACHE.move_to_end(key)
+            return cached
+        fd, path = tempfile.mkstemp(suffix=".cpignore")
+        with os.fdopen(fd, "w", encoding="utf-8") as fh:
+            fh.write("".join(f"{p}\n" for p in patterns))
+        _IGNORE_FILE_CACHE[key] = path
+        _IGNORE_FILE_CACHE.move_to_end(key)
+        while len(_IGNORE_FILE_CACHE) > _IGNORE_FILE_CACHE_MAX:
+            _, stale = _IGNORE_FILE_CACHE.popitem(last=False)
+            try:
+                os.unlink(stale)
+            except OSError:
+                pass
+        return path
+
+
+@atexit.register
+def _cleanup_cached_ignore_files() -> None:
+    with _IGNORE_FILE_LOCK:
+        for path in _IGNORE_FILE_CACHE.values():
+            try:
+                os.unlink(path)
+            except OSError:
+                pass
+        _IGNORE_FILE_CACHE.clear()
 
 
 # Pydantic models for tool return types
@@ -38,7 +114,7 @@ class ListFileOutput(BaseModel):
 
 class ReadFileOutput(BaseModel):
     content: str | None
-    num_tokens: conint(lt=10000)
+    num_tokens: conint(lt=_READ_FILE_TOKEN_CAP)
     error: str | None = None
 
 
@@ -203,22 +279,18 @@ def _list_files(
             # Build command for ripgrep --files
             cmd = [rg_path, "--files"]
 
-            # Add ignore patterns to the command via a temporary file
-            from code_puppy.tools.common import (
-                DIR_IGNORE_PATTERNS,
-            )
+            # Add ignore patterns via a cached ignore file. Skip patterns that
+            # would match the search directory itself (e.g. searching
+            # /tmp/test-dir shouldn't honor **/tmp/**), so the cache is keyed on
+            # the per-directory filtered set.
+            from code_puppy.tools.common import DIR_IGNORE_PATTERNS
 
-            f = tempfile.NamedTemporaryFile(mode="w", delete=False, suffix=".ignore")
-            ignore_file = f.name
-            try:
-                for pattern in DIR_IGNORE_PATTERNS:
-                    # Skip patterns that would match the search directory itself
-                    # For example, if searching in /tmp/test-dir, skip **/tmp/**
-                    if would_match_directory(pattern, directory):
-                        continue
-                    f.write(f"{pattern}\n")
-            finally:
-                f.close()
+            filtered_patterns = [
+                p
+                for p in DIR_IGNORE_PATTERNS
+                if not would_match_directory(p, directory)
+            ]
+            ignore_file = _get_cached_ignore_file(filtered_patterns)
 
             cmd.extend(["--ignore-file", ignore_file])
             cmd.append(directory)
@@ -234,8 +306,13 @@ def _list_files(
                 if not full_path:  # Skip empty lines
                     continue
 
-                # Skip if file doesn't exist (though it should)
-                if not os.path.exists(full_path):
+                # Single stat replaces exists + isfile + getsize + isdir + a
+                # second os.stat (was up to 5 syscalls per file). Like the
+                # os.path.* helpers it replaces, this follows symlinks; a broken
+                # symlink / missing path raises OSError and is skipped.
+                try:
+                    stat_info = os.stat(full_path)
+                except OSError:
                     continue
 
                 # Extract relative path from the full path
@@ -244,26 +321,17 @@ def _list_files(
                 else:
                     file_path = full_path
 
-                # Check if path is a file or directory
-                if os.path.isfile(full_path):
+                if stat.S_ISREG(stat_info.st_mode):
                     entry_type = "file"
-                    size = os.path.getsize(full_path)
-                elif os.path.isdir(full_path):
+                    size = stat_info.st_size
+                elif stat.S_ISDIR(stat_info.st_mode):
                     entry_type = "directory"
                     size = 0
                 else:
-                    # Skip if it's neither a file nor directory
+                    # Skip if it's neither a regular file nor directory
                     continue
 
                 try:
-                    # Get stats for the entry
-                    stat_info = os.stat(full_path)
-                    actual_size = stat_info.st_size
-
-                    # For files, we use the actual size; for directories, we keep size=0
-                    if entry_type == "file":
-                        size = actual_size
-
                     # Calculate depth based on the relative path
                     depth = file_path.count(os.sep)
 
@@ -352,10 +420,6 @@ def _list_files(
     except Exception as e:
         error_msg = f"Error: Error during list files operation: {e}"
         return ListFileOutput(content=error_msg, error=error_msg)
-    finally:
-        # Clean up the temporary ignore file
-        if ignore_file and os.path.exists(ignore_file):
-            os.unlink(ignore_file)
 
     def format_size(size_bytes):
         if size_bytes < 1024:
@@ -493,6 +557,16 @@ def _read_file(
                 )
                 content = "".join(selected_lines)
             else:
+                # Avoid slurping a pathologically large file into memory only
+                # to reject it below: if the raw byte size already exceeds the
+                # most a sub-10k-token file could be, bail before reading.
+                try:
+                    if os.path.getsize(file_path) > _MAX_READ_BYTES:
+                        return ReadFileOutput(
+                            content=None, num_tokens=0, error=_FILE_TOO_LARGE_MSG
+                        )
+                except OSError:
+                    pass
                 # Read the entire file
                 content = f.read()
 
@@ -511,13 +585,14 @@ def _read_file(
                     for char in content
                 )
 
-            # Simple approximation: ~4 characters per token
-            num_tokens = len(content) // 4
-            if num_tokens > 10000:
+            # Estimate tokens with the same char/2.5 heuristic the context
+            # budget uses. Reject at/above the cap so the returned value always
+            # satisfies ReadFileOutput.num_tokens (conint lt=_READ_FILE_TOKEN_CAP)
+            # — the old ``> 10000`` let an exact-boundary value slip through.
+            num_tokens = int(len(content) / _CHARS_PER_TOKEN)
+            if num_tokens >= _READ_FILE_TOKEN_CAP:
                 return ReadFileOutput(
-                    content=None,
-                    error="The file is massive, greater than 10,000 tokens which is dangerous to read entirely. Please read this file in chunks.",
-                    num_tokens=0,
+                    content=None, error=_FILE_TOO_LARGE_MSG, num_tokens=0
                 )
 
             # Count total lines for the message
@@ -659,16 +734,11 @@ def _grep(context: RunContext, search_string: str, directory: str = ".") -> Grep
             "--type=all",
         ]
 
-        # Add ignore patterns to the command via a temporary file
+        # Add ignore patterns via a cached ignore file (full pattern set —
+        # grep, unlike list_files, doesn't filter per search directory).
         from code_puppy.tools.common import DIR_IGNORE_PATTERNS
 
-        f = tempfile.NamedTemporaryFile(mode="w", delete=False, suffix=".ignore")
-        ignore_file = f.name
-        try:
-            for pattern in DIR_IGNORE_PATTERNS:
-                f.write(f"{pattern}\n")
-        finally:
-            f.close()
+        ignore_file = _get_cached_ignore_file(DIR_IGNORE_PATTERNS)
 
         cmd.extend(["--ignore-file", ignore_file])
         # Split search_string to support ripgrep flags like --ignore-case
@@ -724,8 +794,11 @@ def _grep(context: RunContext, search_string: str, directory: str = ".") -> Grep
                         if data.get("lines", {}).get("text")
                         else ""
                     )
-                    if len(line_content.strip()) > 512:
-                        line_content = line_content.strip()[0:512]
+                    # Cap match line width: 50 matches × 512 chars ≈ 10k tokens
+                    # of grep output. 200 chars is plenty of context for a match
+                    # and keeps a full result set near ~4k tokens.
+                    if len(line_content.strip()) > 200:
+                        line_content = line_content.strip()[0:200]
                     if file_path and line_number:
                         # Sanitize content to handle any remaining encoding issues
                         match_info = MatchInfo(
@@ -749,10 +822,6 @@ def _grep(context: RunContext, search_string: str, directory: str = ".") -> Grep
         )
     except Exception as e:
         error_message = f"Error during grep operation: {e}"
-    finally:
-        # Clean up the temporary ignore file
-        if ignore_file and os.path.exists(ignore_file):
-            os.unlink(ignore_file)
 
     # Build structured GrepMatch objects for the UI
     grep_matches = [
@@ -806,7 +875,7 @@ def register_list_files(agent):
         # Context guard: if the listing is too chonky to dump straight into
         # the agent's context window, spill it to a temp file and hand the
         # agent a pointer instead. Keeps token usage sane on huge repos.
-        _LIST_FILES_CONTEXT_LIMIT = 20_000
+        _LIST_FILES_CONTEXT_LIMIT = 12_000
         if len(result.content) > _LIST_FILES_CONTEXT_LIMIT:
             from tempfile import NamedTemporaryFile, gettempdir
 

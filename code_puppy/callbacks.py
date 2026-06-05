@@ -160,7 +160,12 @@ def clear_callbacks(phase: Optional[PhaseType] = None) -> None:
 
 
 def get_callbacks(phase: PhaseType) -> List[CallbackFunc]:
-    return _callbacks.get(phase, []).copy()
+    # Copy only when the phase actually has callbacks (the common case on hot
+    # paths like on_load_prompt is zero/one). Avoids the default-list + copy
+    # double allocation per dispatch while still returning a fresh, safe-to-hold
+    # list when populated.
+    callbacks = _callbacks.get(phase)
+    return callbacks.copy() if callbacks else []
 
 
 def count_callbacks(phase: Optional[PhaseType] = None) -> int:

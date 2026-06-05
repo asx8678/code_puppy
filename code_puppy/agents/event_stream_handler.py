@@ -35,18 +35,36 @@ logger = logging.getLogger(__name__)
 def _fire_stream_event(event_type: str, event_data: Any) -> None:
     """Fire a stream event callback asynchronously (non-blocking).
 
+    This is called for *every* streamed part delta (hundreds–thousands per
+    response), so the common "nobody is listening" case must be essentially
+    free: we bail out before building a coroutine or scheduling a task.
+
     Args:
         event_type: Type of the event (e.g., 'part_start', 'part_delta', 'part_end')
         event_data: Data associated with the event
     """
     try:
         from code_puppy import callbacks
+
+        # Fast path: no stream_event subscribers → do nothing. Avoids the
+        # per-delta coroutine allocation + task scheduling + session-context
+        # lock when the feature is unused (the default).
+        if callbacks.count_callbacks("stream_event") == 0:
+            return
+
+        # We need a running loop to schedule the fire-and-forget callback.
+        # Without one (e.g. a synchronous call in tests) there's nothing to
+        # schedule onto, and building the coroutine here would only leak a
+        # "coroutine was never awaited" warning.
+        try:
+            loop = asyncio.get_running_loop()
+        except RuntimeError:
+            return
+
         from code_puppy.messaging import get_session_context
 
         agent_session_id = get_session_context()
-
-        # Use create_task to fire callback without blocking
-        asyncio.create_task(
+        loop.create_task(
             callbacks.on_stream_event(event_type, event_data, agent_session_id)
         )
     except ImportError:

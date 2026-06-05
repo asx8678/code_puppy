@@ -1,6 +1,5 @@
 import asyncio
 import fnmatch
-import hashlib
 import os
 import sys
 import tempfile
@@ -1136,7 +1135,6 @@ def _get_user_approval_impl(
     puppy_name: str | None = None,
 ) -> tuple[bool, str | None]:
     """Inner implementation of get_user_approval (lock-free)."""
-    import time
 
     from code_puppy.tools.command_runner import set_awaiting_user_input
 
@@ -1584,17 +1582,11 @@ def generate_group_id(tool_name: str, extra_context: str = "") -> str:
         extra_context: Optional extra context to make group_id more unique
 
     Returns:
-        A string in format: tool_name_hash
+        A string in format: ``tool_name_<8 hex chars>``.
     """
-    # Create a unique identifier using timestamp, context, and a random component
-    import random
+    # uuid4 is collision-safe and cheaper than the old timestamp+random+MD5
+    # dance. ``extra_context`` is accepted for signature compatibility but no
+    # longer needed for uniqueness.
+    import uuid
 
-    timestamp = str(int(time.time() * 1000000))  # microseconds for more uniqueness
-    random_component = random.randint(1000, 9999)  # Add randomness
-    context_string = f"{tool_name}_{timestamp}_{random_component}_{extra_context}"
-
-    # Generate a short hash
-    hash_obj = hashlib.md5(context_string.encode())
-    short_hash = hash_obj.hexdigest()[:8]
-
-    return f"{tool_name}_{short_hash}"
+    return f"{tool_name}_{uuid.uuid4().hex[:8]}"

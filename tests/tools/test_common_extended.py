@@ -1,5 +1,4 @@
 import time
-from unittest.mock import patch
 
 import pytest
 
@@ -237,23 +236,17 @@ class TestCommonExtended:
         assert file_group.startswith("file_operation_")
         assert shell_group.startswith("shell_command_")
 
-    @patch("random.randint")
-    @patch("time.time")
-    def test_generate_group_id_deterministic(self, mock_time, mock_randint):
-        """Test group ID generation with mocked time and random for deterministic testing."""
-        mock_time.return_value = 1234567890.123456
-        mock_randint.return_value = 42
+    def test_generate_group_id_format_and_uniqueness(self):
+        """ID is ``tool_<8 hex>`` and unique per call (uuid4 suffix)."""
+        id1 = generate_group_id("test_tool", "context")
+        id2 = generate_group_id("test_tool", "context")
 
-        group_id = generate_group_id("test_tool", "context")
-
-        # Should be deterministic with mocked values
-        expected_hash = "test_tool_1234567890123456_42_context"
-        import hashlib
-
-        expected_short_hash = hashlib.md5(expected_hash.encode()).hexdigest()[:8]
-        expected = f"test_tool_{expected_short_hash}"
-
-        assert group_id == expected
+        assert id1.startswith("test_tool_")
+        suffix = id1.rsplit("_", 1)[-1]
+        assert len(suffix) == 8
+        assert all(c in "0123456789abcdef" for c in suffix)
+        # uuid4 suffix -> unique even with identical inputs
+        assert id1 != id2
 
     def test_find_best_window(self):
         """Test the window finding function."""

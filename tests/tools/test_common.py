@@ -322,13 +322,13 @@ class TestGenerateGroupId:
         assert id1.startswith("tool1_")
         assert id2.startswith("tool2_")
 
-    def test_includes_extra_context_in_hash(self, mock_time_and_random):
-        """Test that extra_context affects the hash."""
+    def test_distinct_ids_for_distinct_contexts(self, mock_time_and_random):
+        """Distinct calls yield distinct ids (uuid4 suffix, context-independent)."""
         id1 = generate_group_id("tool", "ctx1")
         id2 = generate_group_id("tool", "ctx2")
 
         assert id1 != id2, (
-            f"Expected different IDs for different contexts, got {id1} and {id2}"
+            f"Expected different IDs across calls, got {id1} and {id2}"
         )
 
     def test_format_is_toolname_underscore_hash(self, mock_time_and_random):
@@ -361,11 +361,11 @@ class TestGenerateGroupId:
         assert result.startswith("tool_"), f"Expected 'tool_' prefix, got {result}"
         assert len(result) > 5, f"ID seems too short: {result}"
 
-    def test_deterministic_with_same_inputs(self, mock_time_and_random):
-        """Test that same inputs produce same output (with mocked time/random)."""
+    def test_unique_with_same_inputs(self, mock_time_and_random):
+        """Each call yields a unique id even with identical inputs (uuid4 suffix)."""
         id1 = generate_group_id("tool", "context")
         id2 = generate_group_id("tool", "context")
 
-        assert id1 == id2, (
-            f"Expected deterministic IDs with mocked time/random, got {id1} != {id2}"
+        assert id1 != id2, (
+            f"Expected unique IDs from the uuid4 suffix, got {id1} == {id2}"
         )

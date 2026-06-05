@@ -227,6 +227,30 @@ class AgentInvokeOutput(BaseModel):
     error: str | None = None
 
 
+# A sub-agent's final answer is injected verbatim into the *parent's* context.
+# A sub-agent that read files / ran commands can return a multi-thousand-token
+# blob, so cap what crosses the boundary (the full transcript is still saved to
+# the session file, and the UI still shows the untruncated text).
+_MAX_SUBAGENT_RESPONSE_CHARS = 20000  # ~8k tokens at the char/2.5 heuristic
+
+
+def _cap_subagent_response(response: str | None, session_id: str | None) -> str | None:
+    """Truncate an over-long sub-agent response head+tail, with a pointer."""
+    if not response or len(response) <= _MAX_SUBAGENT_RESPONSE_CHARS:
+        return response
+    keep = _MAX_SUBAGENT_RESPONSE_CHARS // 2
+    omitted = len(response) - 2 * keep
+    pointer = (
+        f"; full transcript saved as session '{session_id}'" if session_id else ""
+    )
+    return (
+        f"{response[:keep]}\n\n"
+        f"... [{omitted} characters truncated to protect the parent's context"
+        f"{pointer}] ...\n\n"
+        f"{response[-keep:]}"
+    )
+
+
 def register_list_agents(agent):
     """Register the list_agents tool with the provided agent.
 
@@ -550,7 +574,9 @@ def register_invoke_agent(agent):
             )
 
             return AgentInvokeOutput(
-                response=response, agent_name=agent_name, session_id=session_id
+                response=_cap_subagent_response(response, session_id),
+                agent_name=agent_name,
+                session_id=session_id,
             )
 
         except Exception as e:

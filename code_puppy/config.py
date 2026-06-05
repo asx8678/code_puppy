@@ -3,6 +3,7 @@ import datetime
 import json
 import os
 import pathlib
+import threading
 from typing import Optional
 
 from code_puppy.session_storage import save_session
@@ -198,6 +199,70 @@ _model_validation_cache = {}
 _default_model_cache = None
 _default_vision_model_cache = None
 
+# ---------------------------------------------------------------------------
+# Cached config reads
+#
+# ``get_value`` (and a few whole-config readers) used to build a fresh
+# ``ConfigParser`` and hit the disk on *every* call. There are 60+ call sites,
+# several on per-model-request hot paths (model settings, compaction
+# thresholds, streaming banner colors), so a single user turn triggered dozens
+# to hundreds of redundant ``puppy.cfg`` reads. We cache the parsed config
+# keyed on the file's ``(mtime_ns, size)`` so repeated reads within a turn are
+# free, while external edits (another terminal) and in-process writes still
+# invalidate correctly.
+# ---------------------------------------------------------------------------
+_CONFIG_CACHE: Optional[configparser.ConfigParser] = None
+_CONFIG_CACHE_SIG: Optional[tuple] = None
+_CONFIG_CACHE_LOCK = threading.Lock()
+
+
+def _config_file_signature() -> Optional[tuple]:
+    try:
+        st = os.stat(CONFIG_FILE)
+        return (st.st_mtime_ns, st.st_size)
+    except OSError:
+        return None
+
+
+def invalidate_config_cache() -> None:
+    """Drop the cached parsed config so the next read re-syncs from disk."""
+    global _CONFIG_CACHE, _CONFIG_CACHE_SIG
+    with _CONFIG_CACHE_LOCK:
+        _CONFIG_CACHE = None
+        _CONFIG_CACHE_SIG = None
+
+
+def _read_config_cached() -> configparser.ConfigParser:
+    """Return a process-cached ``ConfigParser``, re-reading only on change.
+
+    The returned object MUST be treated as read-only by callers — mutating it
+    would corrupt the shared cache. Writers (``set_*``) read their own fresh
+    parser via ``configparser`` directly, so they are unaffected.
+    """
+    global _CONFIG_CACHE, _CONFIG_CACHE_SIG
+    sig = _config_file_signature()
+    with _CONFIG_CACHE_LOCK:
+        # A missing file yields ``sig is None``; never treat that as a cache hit
+        # (``None == None`` would otherwise falsely match an earlier read).
+        if sig is not None and _CONFIG_CACHE is not None and sig == _CONFIG_CACHE_SIG:
+            return _CONFIG_CACHE
+        config = configparser.ConfigParser()
+        try:
+            config.read(CONFIG_FILE)
+        except (configparser.Error, OSError):
+            config = configparser.ConfigParser()
+            sig = None
+        if sig is not None:
+            _CONFIG_CACHE = config
+            _CONFIG_CACHE_SIG = sig
+        else:
+            # Missing/unreadable: don't pin a cache entry so the next read
+            # re-checks the file (and mocked-path tests stay isolated).
+            _CONFIG_CACHE = None
+            _CONFIG_CACHE_SIG = None
+        return config
+
+
 def _persist_config(config: configparser.ConfigParser) -> None:
     """Write puppy.cfg and lock its permissions to 0600.
 
@@ -209,6 +274,10 @@ def _persist_config(config: configparser.ConfigParser) -> None:
         os.chmod(CONFIG_FILE, 0o600)
     except OSError:
         pass
+    # Any in-process write invalidates the read cache so subsequent getters
+    # observe the new state immediately (mtime resolution can't be relied on
+    # for sub-second write-then-read sequences).
+    invalidate_config_cache()
 
 
 def ensure_config_exists():
@@ -264,8 +333,7 @@ def ensure_config_exists():
 
 
 def get_value(key: str):
-    config = configparser.ConfigParser()
-    config.read(CONFIG_FILE)
+    config = _read_config_cached()
     return config.get(DEFAULT_SECTION, key, fallback=None)
 
 
@@ -519,6 +587,14 @@ def clear_model_cache():
     _model_validation_cache.clear()
     _default_model_cache = None
     _default_vision_model_cache = None
+    # Also drop the assembled-config memo so model list/setting changes that
+    # don't touch a source file (e.g. plugin-registered providers) take effect.
+    try:
+        from code_puppy.model_factory import clear_load_config_cache
+
+        clear_load_config_cache()
+    except Exception:
+        pass
 
 
 def reset_session_model():
@@ -845,13 +921,10 @@ def get_all_model_settings(model_name: str) -> dict:
     Returns:
         Dictionary of setting_name -> value for all configured settings.
     """
-    import configparser
-
     sanitized_name = _sanitize_model_name_for_key(model_name)
     prefix = f"model_settings_{sanitized_name}_"
 
-    config = configparser.ConfigParser()
-    config.read(CONFIG_FILE)
+    config = _read_config_cached()
 
     settings = {}
     if DEFAULT_SECTION in config:

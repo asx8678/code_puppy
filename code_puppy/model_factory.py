@@ -2,6 +2,7 @@ import json
 import logging
 import os
 import pathlib
+import threading
 from typing import Any, Dict
 
 import httpx
@@ -118,7 +119,9 @@ def _is_anthropic_model(model_name: str, model_config: dict[str, Any]) -> bool:
 
 
 def make_model_settings(
-    model_name: str, max_tokens: int | None = None
+    model_name: str,
+    max_tokens: int | None = None,
+    models_config: Dict[str, Any] | None = None,
 ) -> ModelSettings:
     """Create appropriate ModelSettings for a given model.
 
@@ -145,24 +148,24 @@ def make_model_settings(
 
     model_settings_dict: dict = {}
 
-    # Calculate max_tokens if not explicitly provided
-    model_config: dict[str, Any] = {}
-    if max_tokens is None:
-        # Load model config to get context length
+    # Resolve the model config once (cheap now that load_config() is memoized).
+    # Callers in a build path already hold the assembled config and pass it in
+    # to skip even the cache-signature check.
+    if models_config is None:
         try:
             models_config = ModelFactory.load_config()
-            model_config = models_config.get(model_name, {})
-            context_length = model_config.get("context_length", 128000)
         except Exception:
             # Fallback if config loading fails (e.g., in CI environments)
-            context_length = 128000
+            models_config = {}
+    model_config: dict[str, Any] = (
+        models_config.get(model_name, {}) if models_config else {}
+    )
+
+    # Calculate max_tokens if not explicitly provided
+    if max_tokens is None:
+        context_length = model_config.get("context_length", 128000)
         # min 2048, 15% of context, max 65536
         max_tokens = max(2048, min(int(0.15 * context_length), 65536))
-    elif not model_config:
-        try:
-            model_config = ModelFactory.load_config().get(model_name, {})
-        except Exception:
-            model_config = {}
 
     model_settings_dict["max_tokens"] = max_tokens
     effective_settings = get_effective_model_settings(model_name)
@@ -403,11 +406,98 @@ def get_custom_config(model_config):
     return url, headers, verify, api_key, timeout
 
 
+# ---------------------------------------------------------------------------
+# load_config() memoization
+#
+# load_config() re-opened up to six JSON files (bundled models.json twice, plus
+# the extra/OAuth model overlays), fired three plugin callback fan-outs, and
+# merged dicts on EVERY call. It is reached on every model request via
+# BaseAgent._get_model_context_length() inside the history processor, plus from
+# make_model_settings, get_protected_token_count, etc. — i.e. tens of times per
+# user turn. We cache the assembled config keyed on a signature combining each
+# source file's (mtime_ns, size) and the identities of the registered model
+# callbacks, so file writes (e.g. an OAuth plugin dropping claude_models.json
+# after login) and callback (de)registration both invalidate automatically.
+# config.clear_model_cache() also clears this explicitly.
+# ---------------------------------------------------------------------------
+_LOAD_CONFIG_CACHE: Dict[str, Any] | None = None
+_LOAD_CONFIG_SIG: tuple | None = None
+_LOAD_CONFIG_LOCK = threading.Lock()
+
+
+def _load_config_source_paths() -> list[str]:
+    from code_puppy.config import (
+        CHATGPT_MODELS_FILE,
+        CLAUDE_MODELS_FILE,
+        COPILOT_MODELS_FILE,
+        GEMINI_MODELS_FILE,
+    )
+
+    bundled = pathlib.Path(__file__).parent / "models.json"
+    return [
+        str(bundled),
+        EXTRA_MODELS_FILE,
+        CHATGPT_MODELS_FILE,
+        CLAUDE_MODELS_FILE,
+        GEMINI_MODELS_FILE,
+        COPILOT_MODELS_FILE,
+    ]
+
+
+def _load_config_signature() -> tuple:
+    file_sig = []
+    for path in _load_config_source_paths():
+        try:
+            st = os.stat(path)
+            file_sig.append((path, st.st_mtime_ns, st.st_size))
+        except OSError:
+            file_sig.append((path, None, None))
+
+    # Callback identity: registering/unregistering a model callback (common in
+    # tests and when plugins load) must invalidate the cache even when no file
+    # changed. id() is stable for the lifetime of a registered callable.
+    cb_sig = tuple(
+        tuple(id(cb) for cb in callbacks.get_callbacks(phase))
+        for phase in (
+            "load_model_config",
+            "load_models_config",
+            "load_model_descriptions",
+        )
+    )
+    return (tuple(file_sig), cb_sig)
+
+
+def clear_load_config_cache() -> None:
+    """Drop the memoized model config (wired into config.clear_model_cache)."""
+    global _LOAD_CONFIG_CACHE, _LOAD_CONFIG_SIG
+    with _LOAD_CONFIG_LOCK:
+        _LOAD_CONFIG_CACHE = None
+        _LOAD_CONFIG_SIG = None
+
+
 class ModelFactory:
     """A factory for creating and managing different AI models."""
 
     @staticmethod
     def load_config() -> Dict[str, Any]:
+        global _LOAD_CONFIG_CACHE, _LOAD_CONFIG_SIG
+        # Fast path: reuse the assembled config when no source file or callback
+        # changed. Callers treat the result as read-only (verified: no call site
+        # mutates it), so we hand back the shared dict rather than a copy.
+        sig = _load_config_signature()
+        with _LOAD_CONFIG_LOCK:
+            if _LOAD_CONFIG_CACHE is not None and sig == _LOAD_CONFIG_SIG:
+                return _LOAD_CONFIG_CACHE
+
+        config = ModelFactory._build_config()
+
+        with _LOAD_CONFIG_LOCK:
+            _LOAD_CONFIG_CACHE = config
+            _LOAD_CONFIG_SIG = sig
+        return config
+
+    @staticmethod
+    def _build_config() -> Dict[str, Any]:
         load_model_config_callbacks = callbacks.get_callbacks("load_model_config")
         if len(load_model_config_callbacks) > 0:
             if len(load_model_config_callbacks) > 1:

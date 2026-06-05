@@ -101,6 +101,8 @@ def isolate_global_state_between_tests(tmp_path_factory):
     cp_config.clear_model_cache()
     # Clear session-local model cache (required for /model session sticky behavior).
     cp_config.reset_session_model()
+    # Drop the cached parsed config so each test reads its own temp puppy.cfg.
+    cp_config.invalidate_config_cache()
 
     yield
 
@@ -115,6 +117,8 @@ def isolate_global_state_between_tests(tmp_path_factory):
     cp_config.clear_model_cache()
     # Clear session-local model cache.
     cp_config.reset_session_model()
+    # Drop the cached parsed config so the next test starts clean.
+    cp_config.invalidate_config_cache()
 
     # Clean up the temp directory.
     try:

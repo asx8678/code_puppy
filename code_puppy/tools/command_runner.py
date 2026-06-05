@@ -9,6 +9,7 @@ import tempfile
 import threading
 import time
 import traceback
+from collections import deque
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import contextmanager
 from functools import partial
@@ -35,12 +36,42 @@ from code_puppy.tools.subagent_context import is_subagent
 # This helps avoid exceeding model context limits when commands produce very long lines
 MAX_LINE_LENGTH = 256
 
+# How much shell output we hand back to the model. The per-line cap above
+# bounds line *width*; these bound the *count* and the *total size*. Without an
+# aggregate char cap, 256 lines × ~256 chars ≈ 65k chars ≈ 26k tokens per
+# stream (×2 for stdout+stderr) could swamp the context window on a single
+# verbose build. We keep the head and tail of the character stream so both the
+# command's opening framing and its trailing error/summary survive.
+MAX_OUTPUT_LINES = 256
+MAX_OUTPUT_CHARS = 16000  # ~6.4k tokens per stream at the char/2.5 heuristic
+
 
 def _truncate_line(line: str) -> str:
     """Truncate a line to MAX_LINE_LENGTH if it exceeds the limit."""
     if len(line) > MAX_LINE_LENGTH:
         return line[:MAX_LINE_LENGTH] + "... [truncated]"
     return line
+
+
+def _bound_output(lines) -> str:
+    """Bound output for the model: last ``MAX_OUTPUT_LINES`` lines, char-capped.
+
+    Accepts any iterable of lines (list or bounded ``deque``). Keeps the head
+    and tail of the joined text with a marker in the middle when it exceeds
+    ``MAX_OUTPUT_CHARS``. Returns a ready-to-use string.
+    """
+    if not lines:
+        return ""
+    text = "\n".join(list(lines)[-MAX_OUTPUT_LINES:])
+    if len(text) <= MAX_OUTPUT_CHARS:
+        return text
+    keep = MAX_OUTPUT_CHARS // 2
+    omitted = len(text) - 2 * keep
+    return (
+        f"{text[:keep]}\n"
+        f"... [{omitted} characters truncated to fit context] ...\n"
+        f"{text[-keep:]}"
+    )
 
 
 # Windows-specific: Check if pipe has data available without blocking
@@ -695,8 +726,12 @@ def run_shell_command_streaming(
 
     ABSOLUTE_TIMEOUT_SECONDS = 270
 
-    stdout_lines = []
-    stderr_lines = []
+    # Bounded buffers: a runaway command (e.g. `yes`) can emit millions of
+    # lines before the inactivity/absolute timeout fires. maxlen keeps only the
+    # tail we'd return anyway, so memory stays flat instead of growing without
+    # limit during execution.
+    stdout_lines = deque(maxlen=MAX_OUTPUT_LINES)
+    stderr_lines = deque(maxlen=MAX_OUTPUT_LINES)
 
     stdout_thread = None
     stderr_thread = None
@@ -891,8 +926,8 @@ def run_shell_command_streaming(
             **{
                 "success": False,
                 "command": command,
-                "stdout": "\n".join(stdout_lines[-256:]),
-                "stderr": "\n".join(stderr_lines[-256:]),
+                "stdout": _bound_output(stdout_lines),
+                "stderr": _bound_output(stderr_lines),
                 "exit_code": -9,
                 "execution_time": execution_time,
                 "timeout": True,
@@ -948,16 +983,16 @@ def run_shell_command_streaming(
 
         _unregister_process(process)
 
-        # Apply line length limits to stdout/stderr before returning
-        truncated_stdout = stdout_lines[-256:]
-        truncated_stderr = stderr_lines[-256:]
+        # Bound stdout/stderr (line count + total chars, head+tail) before returning
+        bounded_stdout = _bound_output(stdout_lines)
+        bounded_stderr = _bound_output(stderr_lines)
 
         # Emit structured ShellOutputMessage for the UI (skip for silent sub-agents)
         if not silent:
             shell_output_msg = ShellOutputMessage(
                 command=command,
-                stdout="\n".join(truncated_stdout),
-                stderr="\n".join(truncated_stderr),
+                stdout=bounded_stdout,
+                stderr=bounded_stderr,
                 exit_code=exit_code,
                 duration_seconds=execution_time,
             )
@@ -978,8 +1013,8 @@ def run_shell_command_streaming(
                 command=command,
                 error="""The process didn't exit cleanly! If the user_interrupted flag is true,
                 please stop all execution and ask the user for clarification!""",
-                stdout="\n".join(truncated_stdout),
-                stderr="\n".join(truncated_stderr),
+                stdout=bounded_stdout,
+                stderr=bounded_stderr,
                 exit_code=exit_code,
                 execution_time=execution_time,
                 timeout=False,
@@ -989,8 +1024,8 @@ def run_shell_command_streaming(
         return ShellCommandOutput(
             success=True,
             command=command,
-            stdout="\n".join(truncated_stdout),
-            stderr="\n".join(truncated_stderr),
+            stdout=bounded_stdout,
+            stderr=bounded_stderr,
             exit_code=exit_code,
             execution_time=execution_time,
             timeout=False,
@@ -1003,8 +1038,8 @@ def run_shell_command_streaming(
             success=False,
             command=command,
             error=f"Error during streaming execution: {str(e)}",
-            stdout="\n".join(stdout_lines[-256:]),
-            stderr="\n".join(stderr_lines[-256:]),
+            stdout=_bound_output(stdout_lines),
+            stderr=_bound_output(stderr_lines),
             exit_code=-1,
             timeout=False,
         )
@@ -1340,16 +1375,14 @@ async def _run_command_inner(
         # Apply line length limits to stdout/stderr if they exist
         truncated_stdout = None
         if stdout:
-            stdout_lines = stdout.split("\n")
-            truncated_stdout = "\n".join(
-                [_truncate_line(line) for line in stdout_lines[-256:]]
+            truncated_stdout = _bound_output(
+                [_truncate_line(line) for line in stdout.split("\n")]
             )
 
         truncated_stderr = None
         if stderr:
-            stderr_lines = stderr.split("\n")
-            truncated_stderr = "\n".join(
-                [_truncate_line(line) for line in stderr_lines[-256:]]
+            truncated_stderr = _bound_output(
+                [_truncate_line(line) for line in stderr.split("\n")]
             )
 
         return ShellCommandOutput(

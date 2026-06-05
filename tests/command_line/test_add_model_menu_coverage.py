@@ -837,6 +837,11 @@ class TestRun:
     ):
         m = _make_model()
         p = _make_provider(env=[])
+        # _make_provider coerces a falsy env back to the default
+        # ["OPENAI_API_KEY"]; force it empty so this "credentials already
+        # satisfied" success path doesn't prompt (which would feed a MagicMock
+        # to set_config_value and leak OPENAI_API_KEY into os.environ).
+        p.env = []
         menu = _make_menu_with_providers([p])
         mock_app = MagicMock()
         mock_app_cls.return_value = mock_app
