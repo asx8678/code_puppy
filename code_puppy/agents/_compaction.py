@@ -339,6 +339,10 @@ def compact(
         pass
 
     protected_tokens = get_protected_token_count()
+    # Pass the protected-token budget as the per-message cull threshold so a
+    # generous config can be more lenient. filter_huge_messages clamps this
+    # *up* to HUGE_MESSAGE_FLOOR_TOKENS, so a small protected_token_count never
+    # turns routine, still-summarizable messages into wholesale drops.
     filtered = filter_huge_messages(
         messages, model_name, max_message_tokens=protected_tokens
     )

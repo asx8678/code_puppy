@@ -342,6 +342,27 @@ class TestFilterHugeMessages:
         assert small in result
         assert orphan not in result
 
+    def test_threshold_clamped_up_to_floor(self):
+        # A small max_message_tokens (e.g. a low protected_token_count or a
+        # small-context model's 75% clamp) must NOT drop a sub-floor message:
+        # it can still be summarized, so dropping it would lose content.
+        from code_puppy.agents._history import HUGE_MESSAGE_FLOOR_TOKENS
+
+        # ~12k estimated tokens: above the tiny 1000 budget, below the 50k floor.
+        medium = ModelRequest([TextPart("x" * 30000)])
+        medium_tokens = estimate_tokens_for_message(medium)
+        assert 1000 < medium_tokens < HUGE_MESSAGE_FLOOR_TOKENS
+        result = filter_huge_messages([medium], max_message_tokens=1000)
+        assert medium in result
+
+    def test_threshold_can_be_raised_above_floor(self):
+        # A generous budget above the floor is honored: a 60k-token message is
+        # kept when the threshold is raised past it.
+        big = ModelRequest([TextPart("x" * 150000)])  # ~60k estimated tokens
+        assert estimate_tokens_for_message(big) > 50000
+        assert big in filter_huge_messages([big], max_message_tokens=200000)
+        assert big not in filter_huge_messages([big])  # default floor drops it
+
 
 # ---- REGRESSION: builtin-tool parts + retry-prompt classification -----------
 

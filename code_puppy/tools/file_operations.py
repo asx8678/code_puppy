@@ -552,9 +552,19 @@ def _read_file(
                 import itertools
 
                 start_idx = start_line - 1
-                selected_lines = list(
-                    itertools.islice(f, start_idx, start_idx + num_lines)
-                )
+                # Bound memory the same way the whole-file branch does: a huge
+                # num_lines must not slurp an unbounded slice into RAM only to
+                # be rejected by the token cap below. Stop and reject as soon as
+                # the accumulated slice exceeds the byte ceiling.
+                selected_lines: list[str] = []
+                total_chars = 0
+                for line in itertools.islice(f, start_idx, start_idx + num_lines):
+                    total_chars += len(line)
+                    if total_chars > _MAX_READ_BYTES:
+                        return ReadFileOutput(
+                            content=None, num_tokens=0, error=_FILE_TOO_LARGE_MSG
+                        )
+                    selected_lines.append(line)
                 content = "".join(selected_lines)
             else:
                 # Avoid slurping a pathologically large file into memory only

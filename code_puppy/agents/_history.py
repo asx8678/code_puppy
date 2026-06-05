@@ -41,6 +41,14 @@ _MESSAGE_STATS_MAX = 4096
 _message_stats_cache: "OrderedDict[int, Tuple[Any, int, int]]" = OrderedDict()
 _message_stats_lock = threading.Lock()
 
+# A single message at/above this many tokens is too large to ever sit in the
+# protected recent-message zone, so it's dropped wholesale before
+# summarization/truncation. This is a *floor*: callers may raise it (e.g. a
+# generous protected-token budget) but must never lower it, because a message
+# below this size can still be summarized — dropping it would silently lose
+# content the user gathered.
+HUGE_MESSAGE_FLOOR_TOKENS = 50000
+
 # Per-tool overhead (name + description + JSON schema tokens). Tool objects are
 # stable for the life of a built agent and their schemas are immutable, so the
 # token contribution is computed once per tool object. Same id()+identity-guard
@@ -130,6 +138,17 @@ def _message_stats(message: Any) -> Tuple[int, int]:
         while len(_message_stats_cache) > _MESSAGE_STATS_MAX:
             _message_stats_cache.popitem(last=False)
     return raw_tokens, msg_hash
+
+
+def _invalidate_message_stats(message: Any) -> None:
+    """Drop any cached stats for ``message`` after an in-place mutation.
+
+    The stats cache is keyed on ``id(message)`` and guarded by object identity,
+    so mutating a message in place (rather than replacing it) would otherwise
+    keep serving the pre-mutation hash/token count for that same object.
+    """
+    with _message_stats_lock:
+        _message_stats_cache.pop(id(message), None)
 
 
 def hash_message(message: Any) -> int:
@@ -447,21 +466,24 @@ def has_pending_tool_calls(messages: List[ModelMessage]) -> bool:
 def filter_huge_messages(
     messages: List[ModelMessage],
     model_name: Optional[str] = None,
-    max_message_tokens: int = 50000,
+    max_message_tokens: int = HUGE_MESSAGE_FLOOR_TOKENS,
 ) -> List[ModelMessage]:
-    """Drop messages at/above the protected-zone budget, then prune orphans.
+    """Drop messages at/above the huge-message floor, then prune orphans.
 
-    A single message whose own token count meets or exceeds
-    ``max_message_tokens`` can never fit inside the protected recent-message
-    zone, so it's dropped wholesale before summarization/truncation.
-    ``max_message_tokens`` defaults to the historical 50k cap; ``compact``
-    passes the live protected-token budget so the cull tracks the user's
-    configuration instead of a magic constant.
+    A single message whose own token count meets or exceeds the effective
+    threshold can never fit inside the protected recent-message zone, so it's
+    dropped wholesale before summarization/truncation. The threshold is
+    clamped *up* to :data:`HUGE_MESSAGE_FLOOR_TOKENS`: ``compact`` passes the
+    live protected-token budget so a generous config can be more lenient, but a
+    small ``protected_token_count`` (or a small-context model's 75% clamp) must
+    never push the cull below the floor — a sub-floor message can still be
+    summarized, and dropping it would silently lose content.
     """
+    threshold = max(max_message_tokens, HUGE_MESSAGE_FLOOR_TOKENS)
     filtered = [
         m
         for m in messages
-        if estimate_tokens_for_message(m, model_name) < max_message_tokens
+        if estimate_tokens_for_message(m, model_name) < threshold
     ]
     return prune_interrupted_tool_calls(filtered)
 
@@ -563,6 +585,9 @@ def sanitize_tool_call_ids(
                 # If message replacement fails, try mutating in place.
                 try:
                     msg.parts = new_parts  # type: ignore[misc]
+                    # Mutated the same object — evict its stale cached stats so
+                    # hash_message/token counts reflect the sanitized parts.
+                    _invalidate_message_stats(msg)
                     sanitized.append(msg)
                 except (AttributeError, TypeError):
                     sanitized.append(msg)

@@ -117,6 +117,34 @@ class TestFileOperationsExtended:
         assert result.content is None
         assert result.num_tokens == 0
 
+    def test_read_file_ranged_read_is_bounded(self, tmp_path):
+        """A huge num_lines must be rejected without slurping the whole slice.
+
+        The ranged (start_line/num_lines) branch is byte-bounded just like the
+        whole-file branch, so a pathological num_lines on a large file returns
+        the too-large error instead of loading an unbounded slice into RAM.
+        """
+        test_file = tmp_path / "many_lines.txt"
+        # ~300k chars total, well over the read byte ceiling.
+        test_file.write_text("".join("A" * 99 + "\n" for _ in range(3000)))
+
+        result = _read_file(None, str(test_file), start_line=1, num_lines=10_000_000)
+
+        assert result.error is not None
+        assert "read this file in chunks" in result.error
+        assert result.content is None
+        assert result.num_tokens == 0
+
+    def test_read_file_ranged_read_small_slice_ok(self, tmp_path):
+        """A small ranged read of a large file still succeeds."""
+        test_file = tmp_path / "many_lines.txt"
+        test_file.write_text("".join(f"line {i}\n" for i in range(100000)))
+
+        result = _read_file(None, str(test_file), start_line=1, num_lines=3)
+
+        assert result.error is None
+        assert result.content == "line 0\nline 1\nline 2\n"
+
     def test_read_file_empty_file(self, tmp_path):
         """Test reading an empty file."""
         test_file = tmp_path / "empty.txt"
