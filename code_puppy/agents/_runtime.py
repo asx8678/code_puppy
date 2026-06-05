@@ -5,8 +5,8 @@ is a free function; the agent is passed in explicitly. Integration points
 preserved verbatim:
 
 - Plugin-supplied async context managers wrap the run (see
-  ``on_agent_run_context``); used e.g. by the DBOS plugin to set a workflow
-  ID and swap MCP toolsets in/out.
+  ``on_agent_run_context``); a plugin can use this to set a workflow ID and
+  swap MCP toolsets in/out.
 - Signal-vs-key-listener branch driven by ``cancel_agent_uses_signal()``
 - Windows terminal reset on graceful SIGINT
 - ``is_awaiting_user_input()`` guards interrupt handling
@@ -344,8 +344,8 @@ async def run_with_mcp(
             StreamingTextDetector(event_stream_handler) if use_streaming else None
         )
         stream_handler = detector if detector is not None else None
-        # Plugins (e.g. DBOS) can render their own output and ask us to skip
-        # the non-streaming fallback render.
+        # Plugins can render their own output and ask us to skip the
+        # non-streaming fallback render.
         skip_fallback_render = on_should_skip_fallback_render(agent)
 
         @streaming_retry()

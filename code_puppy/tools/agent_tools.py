@@ -486,9 +486,9 @@ def register_invoke_agent(agent):
             from code_puppy.agents._compaction import make_history_processor
 
             # Build the pydantic-ai agent. MCP servers are always included in
-            # the constructor; plugins (e.g. DBOS) may swap them out at run
-            # time via the ``agent_run_context`` hook if their wrapper can't
-            # handle them directly.
+            # the constructor; plugins may swap them out at run time via the
+            # ``agent_run_context`` hook if their wrapper can't handle them
+            # directly.
             temp_agent = Agent(
                 model=model,
                 instructions=instructions,
@@ -505,7 +505,7 @@ def register_invoke_agent(agent):
             agent_tools = agent_config.get_available_tools()
             register_tools_for_agent(temp_agent, agent_tools, model_name=model_name)
 
-            # Allow plugins to wrap the agent (e.g. DBOS durable-exec wrapper).
+            # Allow plugins to wrap the agent (e.g. a durable-exec wrapper).
             temp_agent = on_wrap_pydantic_agent(
                 agent_config,
                 temp_agent,

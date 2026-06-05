@@ -3,14 +3,12 @@
 from __future__ import annotations
 
 import importlib
-import sys
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 import pytest
 
 
 def _plugin_module():
-    sys.modules.setdefault("dbos", MagicMock())
     return importlib.import_module(
         "code_puppy.plugins.prompt_newline.register_callbacks"
     )

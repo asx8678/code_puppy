@@ -215,14 +215,6 @@ def handle_set_command(command: str) -> bool:
         )
         return True
     if key:
-        # Check if we're toggling DBOS enablement
-        if key == "enable_dbos":
-            emit_info(
-                Text.from_markup(
-                    "[yellow]⚠️ DBOS configuration changed. Please restart Code Puppy for this change to take effect.[/yellow]"
-                )
-            )
-
         # Validate cancel_agent_key before setting
         if key == "cancel_agent_key":
             from code_puppy.keymap import VALID_CANCEL_KEYS

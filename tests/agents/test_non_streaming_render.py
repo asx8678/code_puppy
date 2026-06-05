@@ -97,7 +97,7 @@ async def test_detector_ignores_empty_text_part():
 # --- should_render_fallback -------------------------------------------------
 
 
-def test_should_render_fallback_skip_dbos_wins():
+def test_should_render_fallback_skip_wins():
     detector = SimpleNamespace(streamed_text=False)
     assert should_render_fallback(detector, skip=True) is False
 

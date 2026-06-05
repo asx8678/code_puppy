@@ -53,7 +53,6 @@ classifiers = [
 
 [project.optional-dependencies]
 bedrock = ["boto3>=1.35.0"]
-durable = ["dbos>=2.11.0"]
 
 [project.urls]
 repository = "https://github.com/mpfaffenberger/code_puppy"

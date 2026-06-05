@@ -75,21 +75,6 @@ powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | ie
 uvx code-puppy
 ```
 
-#### Optional: DBOS durable execution
-
-Code Puppy ships with an optional [DBOS](https://github.com/dbos-inc/dbos-transact-py)-backed
-durable-execution plugin that survives crashes and lets you resume long agent runs.
-It's **off by default in the dependency tree** — install the `durable` extra to opt in:
-
-```bash
-pip install "code-puppy[durable]"
-# or
-uv pip install "code-puppy[durable]"
-```
-
-Then toggle it from inside the app via `/dbos on` (and restart). Use `/dbos status`
-to check, `/dbos off` to disable.
-
 ## Changelog (By Kittylog!)
 
 [📋 View the full changelog on Kittylog](https://kittylog.app/c/mpfaffenberger/code_puppy)
@@ -141,27 +126,6 @@ These providers are automatically configured with correct OpenAI-compatible endp
 
 - **⚠️ Unsupported Providers** - Providers like Amazon Bedrock and Google Vertex that require special authentication are clearly marked
 - **⚠️ No Tool Calling** - Models without tool calling support show a big warning since they can't use Code Puppy's file/shell tools
-
-### Durable Execution
-
-Code Puppy now supports **[DBOS](https://github.com/dbos-inc/dbos-transact-py)** durable execution.
-
-When enabled, every agent is automatically wrapped as a `DBOSAgent`, checkpointing key interactions (including agent inputs, LLM responses, MCP calls, and tool calls) in a database for durability and recovery.
-
-You can toggle DBOS via either of these options:
-
-- CLI config (persists): `/set enable_dbos false` to disable (enabled by default)
-
-
-Config takes precedence if set; otherwise the environment variable is used.
-
-### Configuration
-
-The following environment variables control DBOS behavior:
-- `DBOS_CONDUCTOR_KEY`: If set, Code Puppy connects to the [DBOS Management Console](https://console.dbos.dev/). Make sure you first register an app named `dbos-code-puppy` on the console to generate a Conductor key. Default: `None`.
-- `DBOS_LOG_LEVEL`: Logging verbosity: `CRITICAL`, `ERROR`, `WARNING`, `INFO`, or `DEBUG`. Default: `ERROR`.
-- `DBOS_SYSTEM_DATABASE_URL`: Database URL used by DBOS. Can point to a local SQLite file or a Postgres instance. Example: `postgresql://postgres:dbos@localhost:5432/postgres`. Default: `dbos_store.sqlite` file in the config directory.
-- `DBOS_APP_VERSION`: If set, Code Puppy uses it as the [DBOS application version](https://docs.dbos.dev/architecture#application-and-workflow-versions) and automatically tries to recover pending workflows for this version. Default: Code Puppy version + Unix timestamp in millisecond (disable automatic recovery).
 
 ### Custom Commands
 Create markdown files in `.claude/commands/`, `.github/prompts/`, or `.agents/commands/` to define custom slash commands. The filename becomes the command name and the content runs as a prompt.

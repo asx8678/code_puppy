@@ -123,42 +123,6 @@ class TestSummarizationAgent:
             assert call_kwargs["output_type"] is str
             assert call_kwargs["retries"] == 1
 
-    @pytest.mark.skip(
-        reason="DBOSAgent import issue - module doesn't have DBOSAgent attribute"
-    )
-    def test_reload_summarization_agent_with_dbos(self, mock_model, mock_models_config):
-        """Test agent reloading with DBOS enabled."""
-        with (
-            patch(
-                "code_puppy.summarization_agent.ModelFactory.load_config"
-            ) as mock_load_config,
-            patch(
-                "code_puppy.summarization_agent.ModelFactory.get_model"
-            ) as mock_get_model,
-            patch(
-                "code_puppy.summarization_agent.get_summarization_model_name"
-            ) as mock_get_name,
-            patch("pydantic_ai.durable_exec.dbos.DBOSAgent") as mock_dbos_agent,
-        ):
-            mock_load_config.return_value = mock_models_config
-            mock_get_model.return_value = mock_model
-            mock_get_name.return_value = "test-model"
-
-            # Reset reload count
-            import code_puppy.summarization_agent
-
-            original_count = code_puppy.summarization_agent._reload_count
-            code_puppy.summarization_agent._reload_count = 0
-
-            try:
-                reload_summarization_agent()
-
-                mock_dbos_agent.assert_called_once()
-                call_args = mock_dbos_agent.call_args[1]
-                assert call_args["name"] == "summarization-agent-1"
-            finally:
-                code_puppy.summarization_agent._reload_count = original_count
-
     def test_reload_summarization_agent_instructions(
         self, mock_model, mock_models_config
     ):
@@ -607,50 +571,6 @@ class TestSummarizationAgentEdgeCases:
             # All results should have agent types
             for worker_id, i, agent_type in results:
                 assert agent_type is not None
-
-    @pytest.mark.skip(
-        reason="DBOSAgent import issue - module doesn't have DBOSAgent attribute"
-    )
-    def test_dbos_agent_name_increment(self):
-        """Test DBOS agent name increments properly."""
-        with (
-            patch(
-                "code_puppy.summarization_agent.ModelFactory.load_config"
-            ) as mock_load_config,
-            patch(
-                "code_puppy.summarization_agent.ModelFactory.get_model"
-            ) as mock_get_model,
-            patch(
-                "code_puppy.summarization_agent.get_summarization_model_name"
-            ) as mock_get_name,
-            patch("pydantic_ai.durable_exec.dbos.DBOSAgent") as mock_dbos_agent,
-        ):
-            mock_load_config.return_value = {}
-            mock_get_model.return_value = MagicMock()
-            mock_get_name.return_value = "test-model"
-
-            import code_puppy.summarization_agent
-
-            original_count = code_puppy.summarization_agent._reload_count
-            code_puppy.summarization_agent._reload_count = 0
-
-            try:
-                # First reload
-                reload_summarization_agent()
-                call1 = mock_dbos_agent.call_args[1]
-                assert call1["name"] == "summarization-agent-1"
-
-                # Second reload
-                reload_summarization_agent()
-                call2 = mock_dbos_agent.call_args[1]
-                assert call2["name"] == "summarization-agent-2"
-
-                # Third reload
-                reload_summarization_agent()
-                call3 = mock_dbos_agent.call_args[1]
-                assert call3["name"] == "summarization-agent-3"
-            finally:
-                code_puppy.summarization_agent._reload_count = original_count
 
     def test_prompt_content_validation(self):
         """Test that prompt content is handled correctly."""

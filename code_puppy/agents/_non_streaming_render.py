@@ -133,7 +133,7 @@ def should_render_fallback(
 ) -> bool:
     """Return True if we should render the final result ourselves.
 
-    ``skip`` is honoured unconditionally (e.g. DBOS renders its own output).
+    ``skip`` is honoured unconditionally (e.g. a plugin renders its own output).
     Otherwise: render if there was no detector (streaming disabled) or the
     detector never saw a TextPart fire.
     """

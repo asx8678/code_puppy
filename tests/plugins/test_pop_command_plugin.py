@@ -17,7 +17,6 @@ from pydantic_ai.messages import (
 
 
 def _plugin_module():
-    sys.modules.setdefault("dbos", MagicMock())
     return importlib.import_module("code_puppy.plugins.pop_command.register_callbacks")
 
 

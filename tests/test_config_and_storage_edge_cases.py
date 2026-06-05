@@ -1,7 +1,6 @@
 """Edge case tests for config.py, callbacks.py, and session_storage.py.
 
 Focuses on areas that don't require complex mocking:
-- DBOS configuration testing
 - Allow recursion testing
 - Temperature configuration
 - Config key management

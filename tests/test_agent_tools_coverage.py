@@ -5,9 +5,6 @@ This module focuses on testing uncovered code paths including:
 - Pydantic models (AgentInfo, ListAgentsOutput, AgentInvokeOutput)
 - register_list_agents tool execution
 - register_invoke_agent tool execution with various code paths
-
-DBOS workflow-id tests were removed when DBOS moved to a plugin; see
-``code_puppy/plugins/dbos_durable_exec/`` for plugin-level tests (Phase 4).
 """
 
 import tempfile

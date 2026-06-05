@@ -1,6 +1,6 @@
 """Tests for the Phase-1 callback extensions in ``code_puppy.callbacks``.
 
-Covers four new hook phases added for the DBOS-extraction refactor:
+Covers four hook phases used for plugin agent-wrapping and run lifecycle:
 
 * ``wrap_pydantic_agent``       — sync, last-non-None wins
 * ``agent_run_context``         — sync, returns list of async CMs

@@ -2,7 +2,6 @@
 
 This module tests the run_with_mcp async method which handles:
 - Running the agent with attachments (binary and link attachments)
-- DBOS integration (with/without)
 - Delayed compaction triggering
 - Usage limits
 """

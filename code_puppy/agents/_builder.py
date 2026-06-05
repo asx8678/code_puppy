@@ -420,8 +420,8 @@ def build_pydantic_agent(
         )
 
     # Pass 2: real build. MCP servers are always included in the constructor;
-    # plugins (e.g. DBOS) may swap them out at run time via the
-    # ``agent_run_context`` hook if their wrapper can't handle them directly.
+    # plugins may swap them out at run time via the ``agent_run_context`` hook
+    # if their wrapper can't handle them directly.
     final_pydantic = _new_pydantic_agent(toolsets=filtered_mcp_servers)
     register_tools_for_agent(
         final_pydantic,

@@ -86,7 +86,6 @@ def glm51_agent(monkeypatch):
     """Fresh CodePuppyAgent pinned to synthetic-GLM-5.1 (200k ctx)."""
     from code_puppy import config as cp_config
     from code_puppy import summarization_agent as _sum_mod
-    from code_puppy.agents import _builder, _runtime
     from code_puppy.agents import base_agent as _base_agent_mod
     from code_puppy.agents.agent_code_puppy import CodePuppyAgent
 
@@ -104,11 +103,8 @@ def glm51_agent(monkeypatch):
     # 480k-token summarization payload — that's the whole point of this test.
     monkeypatch.setattr(_sum_mod, "get_summarization_model_name", lambda: pinned)
 
-    # No MCP / no DBOS — keep the test surface small.
+    # No MCP — keep the test surface small.
     monkeypatch.setenv("disable_mcp_servers", "true")
-    for mod in (cp_config, _builder, _runtime):
-        if hasattr(mod, "get_use_dbos"):
-            monkeypatch.setattr(mod, "get_use_dbos", lambda: False)
 
     return CodePuppyAgent()
 

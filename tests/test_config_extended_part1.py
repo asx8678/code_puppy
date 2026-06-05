@@ -43,7 +43,6 @@ class TestConfigExtendedPart1:
                 "protected_token_count": "25000",
                 "compaction_threshold": "0.8",
                 "diff_context_lines": "10",
-                "enable_dbos": "true",
                 "auto_save_session": "false",
             }
             with open(config_file, "w") as f:

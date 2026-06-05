@@ -1,85 +1,11 @@
 """Tests for plugin coverage gaps.
 
 Covers missed lines in:
-- example_custom_command/register_callbacks.py
 - universal_constructor/register_callbacks.py
 - agent_skills/discovery.py
 """
 
 from unittest.mock import MagicMock, patch
-
-# ─── example_custom_command/register_callbacks.py ──────────────────────
-
-
-class TestExampleCustomCommand:
-    """Tests for example custom command (lines 6, 23-47)."""
-
-    def _get_handler(self):
-        from code_puppy.plugins.example_custom_command.register_callbacks import (
-            _handle_custom_command,
-        )
-
-        return _handle_custom_command
-
-    def _get_help(self):
-        from code_puppy.plugins.example_custom_command.register_callbacks import (
-            _custom_help,
-        )
-
-        return _custom_help
-
-    def test_help(self):
-        entries = self._get_help()()
-        assert len(entries) == 2
-        names = [e[0] for e in entries]
-        assert "woof" in names
-        assert "echo" in names
-
-    def test_empty_name_returns_none(self):
-        assert self._get_handler()("/", "") is None
-
-    def test_unknown_command_returns_none(self):
-        assert self._get_handler()("unknown", "unknown") is None
-
-    def test_woof_no_args(self):
-        from code_puppy.plugins.customizable_commands.register_callbacks import (
-            MarkdownCommandResult,
-        )
-
-        result = self._get_handler()("woof", "woof")
-        assert isinstance(result, MarkdownCommandResult)
-        assert result.content == "Tell me a dog fact"
-
-    def test_woof_with_text(self):
-        from code_puppy.plugins.customizable_commands.register_callbacks import (
-            MarkdownCommandResult,
-        )
-
-        result = self._get_handler()("woof hello world", "woof")
-        assert isinstance(result, MarkdownCommandResult)
-        assert result.content == "hello world"
-
-    def test_woof_falls_back_to_string_when_markdown_result_unavailable(
-        self, monkeypatch
-    ):
-        """If the sibling ``customizable_commands`` plugin is absent, ``/woof``
-        should degrade gracefully to a bare-string (display-only) return
-        rather than break the plugin.
-        """
-        from code_puppy.plugins.example_custom_command import register_callbacks
-
-        monkeypatch.setattr(register_callbacks, "MarkdownCommandResult", None)
-        result = register_callbacks._handle_custom_command("woof", "woof")
-        assert result == "Tell me a dog fact"
-
-    def test_echo_no_args(self):
-        result = self._get_handler()("echo", "echo")
-        assert result == ""
-
-    def test_echo_with_text(self):
-        result = self._get_handler()("echo hello", "echo")
-        assert result == "hello"
-
 
 # ─── universal_constructor/register_callbacks.py ───────────────────────
 

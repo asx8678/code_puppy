@@ -217,18 +217,6 @@ class TestHandleSetCommand:
         ):
             assert handle_set_command("/set key") is True
 
-    def test_enable_dbos(self):
-        from code_puppy.command_line.config_commands import handle_set_command
-
-        mock_agent = MagicMock()
-        with (
-            patch("code_puppy.config.set_config_value"),
-            patch("code_puppy.messaging.emit_success"),
-            patch("code_puppy.messaging.emit_info"),
-            patch("code_puppy.agents.get_current_agent", return_value=mock_agent),
-        ):
-            assert handle_set_command("/set enable_dbos true") is True
-
     def test_cancel_agent_key_valid(self):
         from code_puppy.command_line.config_commands import handle_set_command
 

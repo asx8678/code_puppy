@@ -381,7 +381,6 @@ def test_network_traffic_on_simple_message(
 
     # STRICT WHITELIST - Only these two domains are allowed!
     ALLOWED_DOMAINS = {
-        "cloud.dbos.dev",
         "api.synthetic.new",
         "pypi.org",
     }

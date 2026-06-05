@@ -227,7 +227,6 @@ def pinned_code_puppy_agent(monkeypatch):
     """
     from code_puppy import config as cp_config
     from code_puppy import summarization_agent as _sum_mod
-    from code_puppy.agents import _builder, _runtime
     from code_puppy.agents import base_agent as _base_agent_mod
     from code_puppy.agents.agent_code_puppy import CodePuppyAgent
 
@@ -252,11 +251,6 @@ def pinned_code_puppy_agent(monkeypatch):
 
     # Disable MCP so the test doesn't try to connect to external MCP servers.
     monkeypatch.setenv("disable_mcp_servers", "true")
-
-    # Force DBOS off at every import site.
-    for mod in (cp_config, _builder, _runtime):
-        if hasattr(mod, "get_use_dbos"):
-            monkeypatch.setattr(mod, "get_use_dbos", lambda: False)
 
     agent = CodePuppyAgent()
     return agent
