@@ -33,7 +33,7 @@ class TestCodePuppyDynamicPrompt:
         prompt = agent.get_system_prompt()
 
         for expected in [
-            "the most loyal digital puppy",
+            "a code agent helping",
             "replace_in_file",
             "run_shell_command",
             "Zen of Python",
