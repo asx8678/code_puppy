@@ -156,7 +156,7 @@ def _iter_plugin_skill_registrations() -> Iterable[tuple[str, str, dict[str, Any
     callbacks = get_callbacks("register_skills")
     results = on_register_skills()
 
-    for callback, result in zip(callbacks, results):
+    for callback, result in zip(callbacks, results, strict=True):
         if not result:
             continue
         if not isinstance(result, list):

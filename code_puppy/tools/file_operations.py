@@ -154,6 +154,7 @@ def _list_files(
     import sys
 
     results = []
+    seen_dirs = set()
     directory = os.path.abspath(os.path.expanduser(directory))
 
     # Plain text output for LLM consumption
@@ -275,10 +276,8 @@ def _list_files(
                             for i in range(len(path_parts)):
                                 partial_path = os.sep.join(path_parts[: i + 1])
                                 # Check if we already added this directory
-                                if not any(
-                                    f.path == partial_path and f.type == "directory"
-                                    for f in results
-                                ):
+                                if partial_path not in seen_dirs:
+                                    seen_dirs.add(partial_path)
                                     results.append(
                                         ListedFile(
                                             path=partial_path,
@@ -674,7 +673,18 @@ def _grep(context: RunContext, search_string: str, directory: str = ".") -> Grep
         cmd.extend(["--ignore-file", ignore_file])
         # Split search_string to support ripgrep flags like --ignore-case
         # without corrupting Windows backslashes in regexes or file paths.
-        cmd.extend(_split_grep_search_string(search_string))
+        tokens = _split_grep_search_string(search_string)
+        # Reject ripgrep flags that execute arbitrary binaries: --pre runs a
+        # preprocessor command on every matched file (RCE-equivalent) and would
+        # bypass the shell-command approval flow.
+        dangerous_flags = {"--pre", "--pre-glob", "--hostname-bin"}
+        for tok in tokens:
+            if tok.split("=", 1)[0] in dangerous_flags:
+                return GrepOutput(
+                    matches=[],
+                    error=f"Disallowed ripgrep flag in search string: {tok.split('=', 1)[0]}",
+                )
+        cmd.extend(tokens)
         cmd.append(directory)
         # Use encoding with error handling to handle files with invalid UTF-8
         result = subprocess.run(

@@ -17,6 +17,7 @@ import json
 import logging
 import os
 import re
+import shlex
 import time
 from typing import Any, Dict, List, Optional
 
@@ -176,7 +177,10 @@ def _substitute_variables(
     event_data: EventData,
     env_vars: Dict[str, str],
 ) -> str:
-    substitutions = {
+    # Model/tool-derived values are shell-quoted to prevent command injection:
+    # a filename or tool result containing `; rm -rf ~` or `$(...)` must not
+    # break out of the substituted argument.
+    untrusted = {
         "CLAUDE_PROJECT_DIR": os.getcwd(),
         "tool_name": event_data.tool_name,
         "event_type": event_data.event_type,
@@ -185,16 +189,27 @@ def _substitute_variables(
     }
     if event_data.context:
         if "result" in event_data.context:
-            substitutions["result"] = str(event_data.context["result"])
+            untrusted["result"] = str(event_data.context["result"])
         if "duration_ms" in event_data.context:
-            substitutions["duration_ms"] = str(event_data.context["duration_ms"])
-    substitutions.update(env_vars)
+            untrusted["duration_ms"] = str(event_data.context["duration_ms"])
 
-    result = command
-    for var, value in substitutions.items():
-        result = result.replace(f"${{{var}}}", str(value))
-        result = re.sub(rf"\${re.escape(var)}(?=\W|$)", lambda m: str(value), result)
-    return result
+    substitutions: Dict[str, str] = {
+        var: shlex.quote(str(value)) for var, value in untrusted.items()
+    }
+    # User-configured env vars are trusted (they may intentionally expand to
+    # multiple shell tokens) and are substituted verbatim.
+    for var, value in env_vars.items():
+        substitutions.setdefault(var, str(value))
+
+    # Single pass: a value that itself contains "${other}" must not be
+    # re-expanded by a later variable.
+    keys = "|".join(re.escape(k) for k in substitutions)
+    pattern = re.compile(rf"\$\{{({keys})\}}|\$({keys})(?=\W|$)")
+
+    def _replace(match: "re.Match[str]") -> str:
+        return substitutions[match.group(1) or match.group(2)]
+
+    return pattern.sub(_replace, command)
 
 
 def _build_environment(

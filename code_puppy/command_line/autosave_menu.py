@@ -19,6 +19,7 @@ from prompt_toolkit.layout.controls import FormattedTextControl
 from prompt_toolkit.widgets import Frame
 from rich.console import Console
 from rich.markdown import Markdown
+from rich.markup import escape as escape_markup
 
 from code_puppy.command_line.pagination import (
     ensure_visible_page,
@@ -480,10 +481,10 @@ def display_resumed_history(
             # User messages don't have a banner in normal chat,
             # but we add one for clarity in resumed history
             console.print("[dim]> [/dim]", end="")
-            console.print(f"[bold]{content}[/bold]")
+            console.print(f"[bold]{escape_markup(content)}[/bold]")
         elif role == "tool":
             # Tool output is typically dim/collapsed
-            console.print(f"[dim]{content}[/dim]")
+            console.print(f"[dim]{escape_markup(content)}[/dim]")
         else:  # assistant
             # Use the exact same banner format as normal AGENT RESPONSE
             banner = f"[bold white on {response_color}] AGENT RESPONSE [/bold white on {response_color}]"

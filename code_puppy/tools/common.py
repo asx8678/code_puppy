@@ -433,8 +433,9 @@ DIR_IGNORE_PATTERNS = [
     "**/*.backup",
     "**/*.old",
     "**/*.save",
-    # Hidden files (but be careful with this one)
-    "**/.*",  # Commented out as it might be too aggressive
+    # NOTE: we intentionally do NOT blanket-ignore "**/.*" here. It hid legit
+    # dotfiles (.github/, .gitignore, .eslintrc, ...) from grep and list_files.
+    # Specific hidden dirs (.git, .venv, .env, ...) are already excluded above.
     # Directory-only section ends here
 ]
 

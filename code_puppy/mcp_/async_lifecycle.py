@@ -39,6 +39,7 @@ class AsyncServerLifecycleManager:
     def __init__(self):
         """Initialize the async lifecycle manager."""
         self._servers: Dict[str, ManagedServerContext] = {}
+        self._starting_servers: set = set()
         self._lock = asyncio.Lock()
         logger.info("AsyncServerLifecycleManager initialized")
 
@@ -73,6 +74,15 @@ class AsyncServerLifecycleManager:
                     )
                     await self._stop_server_internal(server_id)
 
+            # Guard against a concurrent start of the same server. The lifecycle
+            # task only registers into self._servers AFTER entering the server
+            # context (outside this lock), so without this flag a second caller
+            # would pass the "already running" check above and double-start it.
+            if server_id in self._starting_servers:
+                logger.info(f"Server {server_id} is already starting")
+                return False
+            self._starting_servers.add(server_id)
+
             # Create an event so we know when the server is actually registered
             ready_event = asyncio.Event()
 
@@ -84,26 +94,31 @@ class AsyncServerLifecycleManager:
 
         # Release the lock while waiting for the server to become ready
         try:
-            await asyncio.wait_for(ready_event.wait(), timeout=10.0)
-        except asyncio.TimeoutError:
-            logger.error(f"Timed out waiting for server {server_id} to start")
+            try:
+                await asyncio.wait_for(ready_event.wait(), timeout=10.0)
+            except asyncio.TimeoutError:
+                logger.error(f"Timed out waiting for server {server_id} to start")
+                # Cancel the orphaned lifecycle task so it doesn't leak.
+                task.cancel()
+                try:
+                    await task
+                except (asyncio.CancelledError, Exception) as e:
+                    logger.error(f"Server {server_id} task cancelled/failed: {e}")
+                return False
+
+            # Check if task failed during startup
             if task.done():
                 try:
                     await task
                 except Exception as e:
-                    logger.error(f"Server {server_id} task failed: {e}")
-            return False
+                    logger.error(f"Failed to start server {server_id}: {e}")
+                    return False
 
-        # Check if task failed during startup
-        if task.done():
-            try:
-                await task
-            except Exception as e:
-                logger.error(f"Failed to start server {server_id}: {e}")
-                return False
-
-        logger.info(f"Server {server_id} started successfully")
-        return True
+            logger.info(f"Server {server_id} started successfully")
+            return True
+        finally:
+            async with self._lock:
+                self._starting_servers.discard(server_id)
 
     async def _server_lifecycle_task(
         self,

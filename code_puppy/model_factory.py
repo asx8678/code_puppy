@@ -393,8 +393,8 @@ def get_custom_config(model_config):
         if isinstance(timeout, str):
             try:
                 timeout = float(timeout)
-            except ValueError:
-                raise ValueError("Custom endpoint timeout must be a number")
+            except ValueError as err:
+                raise ValueError("Custom endpoint timeout must be a number") from err
         if not isinstance(timeout, (int, float)):
             raise ValueError("Custom endpoint timeout must be a number")
         if timeout <= 0:

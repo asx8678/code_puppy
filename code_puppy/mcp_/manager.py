@@ -522,8 +522,6 @@ class MCPManager:
         try:
             # First enable the server
             managed_server.enable()
-            self.status_tracker.set_status(server_id, ServerState.RUNNING)
-            self.status_tracker.record_start_time(server_id)
 
             # Try to actually start it if we have an async context
             try:
@@ -535,6 +533,11 @@ class MCPManager:
                 started = await lifecycle_mgr.start_server(server_id, pydantic_server)
 
                 if started:
+                    # Only now is the process actually up — reflect that in
+                    # status (previously RUNNING was set before the start, so a
+                    # failed start still reported as running).
+                    self.status_tracker.set_status(server_id, ServerState.RUNNING)
+                    self.status_tracker.record_start_time(server_id)
                     logger.info(
                         f"Started server process: {managed_server.config.name} (ID: {server_id})"
                     )

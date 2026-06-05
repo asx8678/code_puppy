@@ -52,7 +52,7 @@ def _model_requires_thinking_summary(model_name):
 
 
 def _enforce_thinking_display_summary(payload):
-    # Belt-and-suspenders wire-level enforcement of thinking.display='summary'
+    # Belt-and-suspenders wire-level enforcement of thinking.display='summarized'
     # for Opus 4.7 payloads. Mutates payload in place; returns True if a
     # change was made. No-ops on non-matching models or payloads without a
     # thinking dict.

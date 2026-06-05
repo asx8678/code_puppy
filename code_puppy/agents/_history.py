@@ -8,6 +8,7 @@ needed, already-resolved strings / tool dicts) in explicitly.
 from __future__ import annotations
 
 import dataclasses
+import hashlib
 import json
 import math
 import re
@@ -406,7 +407,11 @@ def sanitize_tool_call_ids(
                     # hash suffix to avoid collisions from different dirty IDs
                     # that sanitize to the same string.
                     sanitized_base = _BAD_TOOL_ID_CHAR_RE.sub("_", tcid)
-                    collision_guard = format(abs(hash(tcid)) % (10**6), "06d")
+                    collision_guard = format(
+                        int(hashlib.sha1(tcid.encode("utf-8")).hexdigest(), 16)
+                        % (10**6),
+                        "06d",
+                    )
                     candidate = f"{sanitized_base}_{collision_guard}"
                     # Belt-and-suspenders: ensure the candidate itself conforms.
                     if not _ANTHROPIC_TOOL_ID_RE.match(candidate):

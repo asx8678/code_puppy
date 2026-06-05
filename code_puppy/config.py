@@ -198,6 +198,18 @@ _model_validation_cache = {}
 _default_model_cache = None
 _default_vision_model_cache = None
 
+def _persist_config(config: configparser.ConfigParser) -> None:
+    """Write puppy.cfg and lock its permissions to 0600.
+
+    puppy.cfg can hold API keys / tokens, so it must never be world-readable.
+    """
+    with open(CONFIG_FILE, "w", encoding="utf-8") as f:
+        config.write(f)
+    try:
+        os.chmod(CONFIG_FILE, 0o600)
+    except OSError:
+        pass
+
 
 def ensure_config_exists():
     """
@@ -208,6 +220,12 @@ def ensure_config_exists():
     for directory in [CONFIG_DIR, DATA_DIR, CACHE_DIR, STATE_DIR, SKILLS_DIR]:
         if not os.path.exists(directory):
             os.makedirs(directory, mode=0o700, exist_ok=True)
+    # Lock down the config dir even if it predates this (e.g. a legacy
+    # ~/.code_puppy created under a permissive umask) since puppy.cfg lives here.
+    try:
+        os.chmod(CONFIG_DIR, 0o700)
+    except OSError:
+        pass
     exists = os.path.isfile(CONFIG_FILE)
     config = configparser.ConfigParser()
     if exists:
@@ -241,16 +259,14 @@ def ensure_config_exists():
 
     # Write the config if we made any changes
     if missing or not exists:
-        with open(CONFIG_FILE, "w", encoding="utf-8") as f:
-            config.write(f)
+        _persist_config(config)
     return config
 
 
 def get_value(key: str):
     config = configparser.ConfigParser()
     config.read(CONFIG_FILE)
-    val = config.get(DEFAULT_SECTION, key, fallback=None)
-    return val
+    return config.get(DEFAULT_SECTION, key, fallback=None)
 
 
 def get_puppy_name():
@@ -367,8 +383,7 @@ def set_config_value(key: str, value: str):
     if DEFAULT_SECTION not in config:
         config[DEFAULT_SECTION] = {}
     config[DEFAULT_SECTION][key] = value
-    with open(CONFIG_FILE, "w", encoding="utf-8") as f:
-        config.write(f)
+    _persist_config(config)
 
 
 # Alias for API compatibility
@@ -383,8 +398,7 @@ def reset_value(key: str) -> None:
     config.read(CONFIG_FILE)
     if DEFAULT_SECTION in config and key in config[DEFAULT_SECTION]:
         del config[DEFAULT_SECTION][key]
-        with open(CONFIG_FILE, "w", encoding="utf-8") as f:
-            config.write(f)
+        _persist_config(config)
 
 
 # --- MODEL STICKY EXTENSION STARTS HERE ---
@@ -612,8 +626,7 @@ def set_model_name(model: str):
     if DEFAULT_SECTION not in config:
         config[DEFAULT_SECTION] = {}
     config[DEFAULT_SECTION]["model"] = model or ""
-    with open(CONFIG_FILE, "w", encoding="utf-8") as f:
-        config.write(f)
+    _persist_config(config)
 
     # Clear model cache when switching models to ensure fresh validation
     clear_model_cache()
@@ -886,8 +899,7 @@ def clear_model_settings(model_name: str) -> None:
         for key in keys_to_remove:
             del config[DEFAULT_SECTION][key]
 
-        with open(CONFIG_FILE, "w", encoding="utf-8") as f:
-            config.write(f)
+        _persist_config(config)
 
 
 def get_effective_model_settings(model_name: Optional[str] = None) -> dict:
@@ -1250,13 +1262,13 @@ def get_compaction_strategy() -> str:
     """
     Returns the user-configured compaction strategy.
     Options are 'summarization' or 'truncation'.
-    Defaults to 'summarization' if not set or misconfigured.
+    Defaults to 'truncation' if not set or misconfigured.
     Configurable by 'compaction_strategy' key.
     """
     val = get_value("compaction_strategy")
     if val and val.lower() in ["summarization", "truncation"]:
         return val.lower()
-    # Default to summarization
+    # Default to truncation
     return "truncation"
 
 

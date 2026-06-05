@@ -585,7 +585,7 @@ def _next_clone_index(
     base_name: str, existing_names: set[str], agents_dir: Path
 ) -> int:
     """Compute the next clone index for a base name."""
-    clone_pattern = re.compile(rf"^{re.escape(base_name)}-clone-(\\d+)$")
+    clone_pattern = re.compile(rf"^{re.escape(base_name)}-clone-(\d+)$")
     indices = []
     for name in existing_names:
         match = clone_pattern.match(name)

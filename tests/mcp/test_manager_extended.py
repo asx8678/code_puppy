@@ -309,7 +309,9 @@ class TestMCPManagerExtended:
             # Should still succeed (server enabled even if process start failed)
             assert result is True
             mock_server.enable.assert_called_once()
-            mock_set_status.assert_called_once_with("test-id", ServerState.RUNNING)
+            # The process failed to start, so it must NOT be reported as RUNNING
+            # (it's enabled and will start lazily on use).
+            mock_set_status.assert_not_called()
 
     def test_start_server_sync_success(self):
         """Test synchronous server start."""

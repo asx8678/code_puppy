@@ -120,7 +120,7 @@ class MCPConfigWizard:
 
         # Step 4: Create ServerConfig
         server_config = ServerConfig(
-            id=f"{name}_{hash(name)}",
+            id=name,
             name=name,
             type=server_type,
             enabled=True,

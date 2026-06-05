@@ -131,7 +131,7 @@ class HookEngine:
                 matching_hooks, event_data, self.env_vars
             )
 
-        for hook, result in zip(matching_hooks, results):
+        for hook, result in zip(matching_hooks, results, strict=True):
             if hook.once and result.success:
                 self._registry.mark_hook_executed(hook.id)
 

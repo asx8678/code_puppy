@@ -1104,7 +1104,12 @@ def main_entry():
     except KeyboardInterrupt:
         # Note: Using sys.stderr for crash output - messaging system may not be available
         sys.stderr.write(traceback.format_exc())
-        return 0
-    finally:
-        # Reset terminal on Unix-like systems (not Windows)
+        # An interrupt can leave the terminal in raw mode / cursor hidden, so
+        # reset it. Done only on abnormal exit: `reset` wipes the scrollback,
+        # which is destructive after a clean `/exit`.
         reset_unix_terminal()
+        return 0
+    except Exception:
+        # An unexpected crash may also have left the terminal in a bad state.
+        reset_unix_terminal()
+        raise

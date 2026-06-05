@@ -15,7 +15,7 @@ import json
 import os
 import traceback
 import warnings
-from typing import Annotated, Any, Dict, List, Union
+from typing import Annotated, Any, Dict, List, Optional, Union
 
 import json_repair
 from pydantic import BaseModel, BeforeValidator, WithJsonSchema
@@ -289,6 +289,15 @@ def _replace_in_file(
         for rep in replacements:
             old_snippet = rep.get("old_str", "")
             new_snippet = rep.get("new_str", "")
+
+            if not old_snippet:
+                return {
+                    "error": (
+                        "old_str must be non-empty; replace_in_file cannot "
+                        "match an empty string."
+                    ),
+                    "diff": "",
+                }
 
             if old_snippet and old_snippet in modified:
                 modified = modified.replace(old_snippet, new_snippet, 1)
@@ -838,7 +847,7 @@ def register_replace_in_file(agent):
     def replace_in_file(
         context: RunContext,
         file_path: str = "",
-        replacements: RepairableReplacementsList = [],
+        replacements: Optional[RepairableReplacementsList] = None,
     ) -> Dict[str, Any]:
         """Apply targeted text replacements to an existing file.
 
@@ -846,6 +855,8 @@ def register_replace_in_file(agent):
         Replacements are applied sequentially. Prefer this over full file rewrites.
         """
         group_id = generate_group_id("replace_in_file", file_path)
+        if replacements is None:
+            replacements = []
         try:
             # Validate replacements up front so a malformed payload from the
             # model returns a clean error instead of bubbling a KeyError up

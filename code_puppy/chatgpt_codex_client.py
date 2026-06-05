@@ -370,9 +370,18 @@ class ChatGPTCodexAsyncClient(httpx.AsyncClient):
         body_bytes = json.dumps(response_body).encode("utf-8")
         logger.debug(f"Reconstructed response body: {len(body_bytes)} bytes")
 
+        # Drop body-framing headers from the original streamed response: the
+        # reconstructed body is already-decoded plaintext, so a stale
+        # Content-Encoding/Transfer-Encoding would make httpx try to gzip- or
+        # chunk-decode it on .read()/.json() and raise. httpx recomputes a
+        # correct Content-Length from the new bytes.
+        stripped = {"content-encoding", "content-length", "transfer-encoding"}
+        clean_headers = [
+            (k, v) for k, v in response.headers.items() if k.lower() not in stripped
+        ]
         new_response = httpx.Response(
             status_code=response.status_code,
-            headers=response.headers,
+            headers=clean_headers,
             content=body_bytes,
             request=response.request,
         )

@@ -254,6 +254,7 @@ def install_server_from_catalog(
     Returns True if successful, False otherwise.
     """
     try:
+        import copy
         import json
         import os
 
@@ -267,11 +268,16 @@ def install_server_from_catalog(
         # Get server config with command line argument overrides
         config_dict = selected_server.to_server_config(server_name, **cmd_args)
 
-        # Update the config with actual environment variable values
+        # Keep the placeholder ($VAR) form for on-disk persistence so secrets
+        # (tokens, keys) are never written to mcp_servers.json in plaintext —
+        # they stay in the process environment only.
+        persist_config = copy.deepcopy(config_dict)
+
+        # Update the (live, in-memory) config with actual env var values.
         if "env" in config_dict:
             for env_key, env_value in config_dict["env"].items():
                 # If it's a placeholder like $GITHUB_TOKEN, replace with actual value
-                if env_value.startswith("$"):
+                if isinstance(env_value, str) and env_value.startswith("$"):
                     var_name = env_value[1:]  # Remove the $
                     if var_name in env_vars:
                         config_dict["env"][env_key] = env_vars[var_name]
@@ -304,16 +310,22 @@ def install_server_from_catalog(
             servers = {}
             data = {"mcp_servers": servers}
 
-        # Add new server
-        # Copy the config dict and add type before saving
-        save_config = config_dict.copy()
+        # Add new server. Persist the placeholder env (not resolved secrets).
+        save_config = persist_config.copy()
         save_config["type"] = selected_server.type
         servers[server_name] = save_config
 
-        # Save back
+        # Save back atomically with locked-down perms (config can reference
+        # secret-bearing env and a crash mid-write must not truncate it).
         os.makedirs(os.path.dirname(MCP_SERVERS_FILE), exist_ok=True)
-        with open(MCP_SERVERS_FILE, "w") as f:
+        tmp_path = f"{MCP_SERVERS_FILE}.{os.getpid()}.tmp"
+        with open(tmp_path, "w") as f:
             json.dump(data, f, indent=2)
+        try:
+            os.chmod(tmp_path, 0o600)
+        except OSError:
+            pass
+        os.replace(tmp_path, MCP_SERVERS_FILE)
 
         emit_info(
             Text.from_markup(

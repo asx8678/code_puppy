@@ -73,18 +73,15 @@ class TestCommonExtended:
         # Current directory
         assert not should_ignore_path(".")
 
-        # Parent directory (actually ignored due to some pattern)
-        assert should_ignore_path("..")
+        # Parent directory is no longer ignored: the blanket "**/.*" pattern was
+        # removed so grep/list_files can surface legit dotfiles.
+        assert not should_ignore_path("..")
 
-        # Hidden files that should be ignored
+        # Explicitly-listed hidden files still get ignored
         assert should_ignore_path(".env")
-        assert should_ignore_path(".hidden")
-
-        # Hidden files that might not be ignored (depends on pattern)
-        # This tests the commented out "**/.*" pattern
-        result = should_ignore_path(".config")
-        # Actually .config IS ignored (there must be some other pattern)
-        assert result is True
+        # Generic dotfiles are no longer blanket-ignored
+        assert not should_ignore_path(".hidden")
+        assert not should_ignore_path(".config")
 
     def test_should_ignore_dir_path_vs_file_patterns(self):
         """Test difference between directory and file ignore patterns."""
@@ -299,8 +296,9 @@ class TestCommonExtended:
         """Test edge cases in pattern matching."""
         # Test patterns with no wildcards
         assert should_ignore_path(".git")
-        # .git2 is actually ignored (probably by .git* pattern)
-        assert should_ignore_path(".git2")
+        # .git2 is NOT ignored: only exact ".git" is listed and the blanket
+        # "**/.*" dotfile pattern was removed.
+        assert not should_ignore_path(".git2")
 
         # Test patterns with single wildcard
         assert should_ignore_path("test.pyo")
@@ -354,13 +352,14 @@ class TestCommonExtended:
 
     def test_case_sensitivity(self):
         """Test case sensitivity in pattern matching."""
-        # Test case-sensitive patterns (actually seems case-insensitive)
+        # Explicitly-listed noise files stay ignored
         assert should_ignore_path(".DS_Store")
         assert should_ignore_path("Thumbs.db")
 
-        # Case sensitivity is inconsistent
-        assert should_ignore_path(".ds_store")
-        # thumbs.DB is actually NOT ignored (case sensitivity varies)
+        # The lowercase variant isn't listed and is no longer caught by the
+        # removed blanket "**/.*" pattern
+        assert not should_ignore_path(".ds_store")
+        # thumbs.DB is also NOT ignored (case sensitivity varies)
         assert not should_ignore_path("thumbs.DB")
 
         # Test file extensions (actually case sensitive)
@@ -370,9 +369,11 @@ class TestCommonExtended:
 
     def test_patterns_with_dots_and_slashes(self):
         """Test patterns containing dots and slashes."""
-        # Test patterns starting with dots
-        assert should_ignore_path(".gitignore")
-        assert should_ignore_path(".eslintignore")
+        # Dotfiles like .gitignore/.eslintignore are no longer blanket-ignored
+        # (so grep/list_files can surface them); only explicitly-listed hidden
+        # entries (.git, .env, .DS_Store, ...) are skipped.
+        assert not should_ignore_path(".gitignore")
+        assert not should_ignore_path(".eslintignore")
 
         # Test patterns with slashes
         assert should_ignore_path("dist/bundle.js")

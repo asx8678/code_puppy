@@ -228,6 +228,7 @@ class MessageBus:
 
         # Create a Future to wait on
         loop = asyncio.get_running_loop()
+        self._event_loop = loop  # enables thread-safe response completion
         future: asyncio.Future[str] = loop.create_future()
 
         with self._lock:
@@ -274,6 +275,7 @@ class MessageBus:
         prompt_id = str(uuid4())
 
         loop = asyncio.get_running_loop()
+        self._event_loop = loop  # enables thread-safe response completion
         future: asyncio.Future[Tuple[bool, Optional[str]]] = loop.create_future()
 
         with self._lock:
@@ -316,6 +318,7 @@ class MessageBus:
         prompt_id = str(uuid4())
 
         loop = asyncio.get_running_loop()
+        self._event_loop = loop  # enables thread-safe response completion
         future: asyncio.Future[Tuple[int, str]] = loop.create_future()
 
         with self._lock:

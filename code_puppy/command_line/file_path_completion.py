@@ -78,7 +78,7 @@ def _fuzzy_completions(query: str, start_position: int) -> List[Completion]:
     q_lower = query.lower()
     scored: List[Tuple[int, str, str]] = []  # (-score, path, basename)
     for path, path_lower, basename_lower in zip(
-        snap.paths, snap.lowered, snap.basenames_lower
+        snap.paths, snap.lowered, snap.basenames_lower, strict=True
     ):
         s = _score(basename_lower, path_lower, q_lower)
         if s > 0:

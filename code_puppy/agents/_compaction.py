@@ -485,12 +485,22 @@ def make_history_processor(agent: Any) -> Callable[..., List[ModelMessage]]:
         for m in dropped:
             compacted_hashes.add(hash_message(m))
 
+        pre_clean = list(agent._message_history)
         cleaned, filtered_count = _strip_empty_thinking_parts(agent._message_history)
 
         # Ensure history ends with a ModelRequest — otherwise Anthropic etc.
         # reject it with a "prefill" error.
         while cleaned and isinstance(cleaned[-1], ModelResponse):
             cleaned.pop()
+
+        # Record hashes of messages removed by the strip/pop cleanup so the next
+        # merge pass doesn't re-append them — that churn could otherwise
+        # reintroduce a trailing ModelResponse between the pop and the merge.
+        cleaned_hashes = {hash_message(m) for m in cleaned}
+        for m in pre_clean:
+            mh = hash_message(m)
+            if mh not in cleaned_hashes:
+                compacted_hashes.add(mh)
 
         # Sanitize tool_call_ids that don't match Anthropic's required pattern.
         # When switching from providers like Kimi (which may emit IDs with
