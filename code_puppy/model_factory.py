@@ -498,6 +498,20 @@ class ModelFactory:
 
     @staticmethod
     def _build_config() -> Dict[str, Any]:
+        # Read + parse the bundled models.json exactly once. It is used both as
+        # the base config (when no load_model_config callback overrides it) and
+        # as the source of the description overlay below. We snapshot the
+        # descriptions now, before any mutation, so the overlay reflects the
+        # pristine bundled file regardless of how ``config`` evolves.
+        bundled_models = pathlib.Path(__file__).parent / "models.json"
+        with open(bundled_models, "r") as f:
+            bundled_config = json.load(f)
+        bundled_descriptions = {
+            name: (cfg.get("description") or "")
+            for name, cfg in bundled_config.items()
+            if isinstance(cfg, dict)
+        }
+
         load_model_config_callbacks = callbacks.get_callbacks("load_model_config")
         if len(load_model_config_callbacks) > 0:
             if len(load_model_config_callbacks) > 1:
@@ -509,9 +523,7 @@ class ModelFactory:
             # Always load from the bundled models.json so upstream
             # updates propagate automatically.  User additions belong
             # in extra_models.json (overlay loaded below).
-            bundled_models = pathlib.Path(__file__).parent / "models.json"
-            with open(bundled_models, "r") as f:
-                config = json.load(f)
+            config = bundled_config
 
         # Import OAuth model file paths from main config
         from code_puppy.config import (
@@ -577,18 +589,9 @@ class ModelFactory:
 
         # Final pass: apply description-only overlays from bundled + plugins.
         # This avoids shallow update() calls clobbering remote model settings.
+        # ``bundled_descriptions`` was snapshotted from the single parse above.
         try:
             from code_puppy.model_descriptions import apply_description_overlays
-
-            bundled_models = pathlib.Path(__file__).parent / "models.json"
-            with open(bundled_models, "r") as f:
-                bundled_config = json.load(f)
-
-            bundled_descriptions = {
-                name: (cfg.get("description") or "")
-                for name, cfg in bundled_config.items()
-                if isinstance(cfg, dict)
-            }
 
             plugin_descriptions: dict[str, str] = {}
             try:

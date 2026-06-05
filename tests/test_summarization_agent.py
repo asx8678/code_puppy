@@ -220,36 +220,66 @@ class TestSummarizationAgent:
 
         # Set cached agent
         code_puppy.summarization_agent._summarization_agent = mock_model
+        # The cache is only reused when the tracked model matches the current
+        # one, so pin both to the same value.
+        with patch(
+            "code_puppy.summarization_agent.get_summarization_model_name",
+            return_value="model-x",
+        ):
+            code_puppy.summarization_agent._last_summarization_model_name = "model-x"
 
-        agent = get_summarization_agent(force_reload=False)
+            agent = get_summarization_agent(force_reload=False)
 
         assert agent == mock_model
 
-    def test_get_summarization_agent_default_force_reload(self, mock_model):
-        """Test get_summarization_agent default behavior (force_reload=True)."""
-        with patch(
-            "code_puppy.summarization_agent.reload_summarization_agent"
-        ) as mock_reload:
+    def test_get_summarization_agent_default_no_reload_when_cached(self, mock_model):
+        """Default (force_reload=False) does NOT reload a cached agent when the
+        summarization model is unchanged, but DOES build when none is cached."""
+        import code_puppy.summarization_agent
+
+        with (
+            patch(
+                "code_puppy.summarization_agent.reload_summarization_agent"
+            ) as mock_reload,
+            patch(
+                "code_puppy.summarization_agent.get_summarization_model_name",
+                return_value="model-x",
+            ),
+        ):
             mock_reload.return_value = mock_model
 
-            # Clear global agent
-            import code_puppy.summarization_agent
-
+            # No agent cached yet -> default call must build one.
             code_puppy.summarization_agent._summarization_agent = None
+            code_puppy.summarization_agent._last_summarization_model_name = None
 
             agent = get_summarization_agent()  # No force_reload parameter
 
             assert agent == mock_model
             mock_reload.assert_called_once()
 
+            # Agent now cached for the same model -> default call must NOT reload.
+            mock_reload.reset_mock()
+            agent_again = get_summarization_agent()
+
+            assert agent_again == mock_model
+            mock_reload.assert_not_called()
+
     def test_get_summarization_agent_existing_cached(self):
-        """Test get_summarization_agent returns existing cached agent."""
+        """Test get_summarization_agent returns existing cached agent when the
+        summarization model is unchanged."""
         import code_puppy.summarization_agent
 
         cached_agent = MagicMock()
         code_puppy.summarization_agent._summarization_agent = cached_agent
+        # The cache is only reused when the tracked model matches the current
+        # one, so pin both to the same value.
+        with patch(
+            "code_puppy.summarization_agent.get_summarization_model_name",
+            return_value="model-x",
+        ):
+            code_puppy.summarization_agent._last_summarization_model_name = "model-x"
 
-        agent = get_summarization_agent(force_reload=False)
+            agent = get_summarization_agent(force_reload=False)
 
         assert agent is cached_agent
 

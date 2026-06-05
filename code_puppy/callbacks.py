@@ -197,8 +197,17 @@ def _trigger_callbacks_sync(phase: PhaseType, *args, **kwargs) -> List[Any]:
                     results.append(None)
                     continue
                 except RuntimeError:
-                    # No running loop - we're in a sync/worker thread context
-                    # Use asyncio.run() which is safe here since we're in an isolated thread
+                    # No running loop - we're in a sync/worker thread context.
+                    # NOTE: This spins up a full event loop, which is expensive on
+                    # keystroke-driven sync triggers. We keep asyncio.run here
+                    # (rather than skipping) because callers/tests rely on the
+                    # coroutine's result being produced synchronously, and it is
+                    # only reached when there is genuinely NO running loop.
+                    logger.debug(
+                        "Running coroutine callback %s via asyncio.run on a sync "
+                        "trigger (no running loop)",
+                        getattr(callback, "__name__", callback),
+                    )
                     result = asyncio.run(result)
             results.append(result)
             logger.debug(f"Successfully executed callback {callback.__name__}")

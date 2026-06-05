@@ -4,23 +4,30 @@ Shared spinner implementation for CLI mode.
 This module provides consistent spinner animations across different UI modes.
 """
 
+import threading
+
 from .console_spinner import ConsoleSpinner
 from .spinner_base import SpinnerBase
 
-# Keep track of all active spinners to manage them globally
+# Keep track of all active spinners to manage them globally. Spinners are
+# registered/unregistered from spinner threads while pause/resume iterate the
+# list from the streaming handler and other threads, so guard with a lock.
 _active_spinners = []
+_spinners_lock = threading.Lock()
 
 
 def register_spinner(spinner):
     """Register an active spinner to be managed globally."""
-    if spinner not in _active_spinners:
-        _active_spinners.append(spinner)
+    with _spinners_lock:
+        if spinner not in _active_spinners:
+            _active_spinners.append(spinner)
 
 
 def unregister_spinner(spinner):
     """Remove a spinner from global management."""
-    if spinner in _active_spinners:
-        _active_spinners.remove(spinner)
+    with _spinners_lock:
+        if spinner in _active_spinners:
+            _active_spinners.remove(spinner)
 
 
 def pause_all_spinners():
@@ -34,7 +41,9 @@ def pause_all_spinners():
 
     if is_subagent():
         return  # Sub-agents don't control the main spinner
-    for spinner in _active_spinners:
+    with _spinners_lock:
+        spinners = list(_active_spinners)
+    for spinner in spinners:
         try:
             spinner.pause()
         except Exception:
@@ -53,7 +62,9 @@ def resume_all_spinners():
 
     if is_subagent():
         return  # Sub-agents don't control the main spinner
-    for spinner in _active_spinners:
+    with _spinners_lock:
+        spinners = list(_active_spinners)
+    for spinner in spinners:
         try:
             spinner.resume()
         except Exception:

@@ -78,12 +78,20 @@ class RoundRobinModel(Model):
     @property
     def system(self) -> str:
         """System prompt from the current model."""
-        return self.models[self._current_index].system
+        # Read the index under the same lock _get_next_model uses, so we never
+        # observe a torn/rotating index from another thread.
+        with self._lock:
+            current = self._current_index
+        return self.models[current].system
 
     @property
     def base_url(self) -> str | None:
         """Base URL from the current model."""
-        return self.models[self._current_index].base_url
+        # Read the index under the same lock _get_next_model uses, so we never
+        # observe a torn/rotating index from another thread.
+        with self._lock:
+            current = self._current_index
+        return self.models[current].base_url
 
     def _get_next_model(self) -> Model:
         """Get the next model in the round-robin sequence and update the index."""

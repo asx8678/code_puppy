@@ -139,7 +139,59 @@ _AWAITING_USER_INPUT = threading.Event()
 # Track running shell processes so we can kill them on Ctrl-C from the UI
 _RUNNING_PROCESSES: Set[subprocess.Popen] = set()
 _RUNNING_PROCESSES_LOCK = threading.Lock()
-_USER_KILLED_PROCESSES = set()
+
+
+class _BoundedPidSet:
+    """A set-like container of PIDs with a bounded size.
+
+    A plain ``set`` of user-killed PIDs leaked entries forever. This keeps the
+    familiar set API (``add``/``discard``/``remove``/``clear``/``in``/``len``)
+    but evicts the oldest PID once ``maxlen`` is reached (insertion-order
+    eviction), so memory stays bounded. ``O(1)`` membership via the backing set.
+    """
+
+    def __init__(self, maxlen: int = 512) -> None:
+        self._maxlen = maxlen
+        self._set: Set[int] = set()
+        self._order: deque = deque()
+
+    def add(self, pid: int) -> None:
+        if pid in self._set:
+            return
+        if len(self._order) >= self._maxlen:
+            oldest = self._order.popleft()
+            self._set.discard(oldest)
+        self._order.append(pid)
+        self._set.add(pid)
+
+    def discard(self, pid: int) -> None:
+        if pid in self._set:
+            self._set.discard(pid)
+            try:
+                self._order.remove(pid)
+            except ValueError:
+                pass
+
+    def remove(self, pid: int) -> None:
+        self._set.remove(pid)
+        try:
+            self._order.remove(pid)
+        except ValueError:
+            pass
+
+    def clear(self) -> None:
+        self._set.clear()
+        self._order.clear()
+
+    def __contains__(self, pid: object) -> bool:
+        return pid in self._set
+
+    def __len__(self) -> int:
+        return len(self._set)
+
+
+# Bounded record of PIDs the user explicitly killed (see _BoundedPidSet).
+_USER_KILLED_PROCESSES = _BoundedPidSet(maxlen=512)
 
 # Global state for shell command keyboard handling
 _SHELL_CTRL_X_STOP_EVENT: Optional[threading.Event] = None
@@ -1007,7 +1059,12 @@ def run_shell_command_streaming(
             # pause to let that record land before we read it below. Ordinary
             # non-zero exits (lint/grep/test returning 1) must not pay the price.
             if exit_code < 0 or exit_code in (130, 137, 143):
-                time.sleep(1)
+                # Poll up to ~1s for the keyboard-listener thread to record the
+                # kill, breaking as soon as it lands so the common case is fast.
+                for _ in range(10):
+                    if process.pid in _USER_KILLED_PROCESSES:
+                        break
+                    time.sleep(0.1)
             return ShellCommandOutput(
                 success=False,
                 command=command,
@@ -1309,17 +1366,19 @@ def _run_command_sync(
 ) -> ShellCommandOutput:
     """Synchronous command execution - runs in thread pool."""
     creationflags = 0
-    preexec_fn = None
     if sys.platform.startswith("win"):
         try:
             creationflags = subprocess.CREATE_NEW_PROCESS_GROUP  # type: ignore[attr-defined]
         except Exception:
             creationflags = 0
-    else:
-        preexec_fn = os.setsid if hasattr(os, "setsid") else None
 
     import io
 
+    # ``start_new_session=True`` is the fork-safe equivalent of
+    # ``preexec_fn=os.setsid`` -- ``preexec_fn`` is unsafe in a multithreaded
+    # process (this runs inside a ThreadPoolExecutor). On POSIX it puts the child
+    # in its own session/process group so we can kill the whole group; it is a
+    # no-op on Windows, where ``creationflags`` handles process-group creation.
     process = subprocess.Popen(
         command,
         shell=True,
@@ -1327,7 +1386,7 @@ def _run_command_sync(
         stderr=subprocess.PIPE,
         cwd=cwd,
         bufsize=0,  # Unbuffered for real-time output
-        preexec_fn=preexec_fn,
+        start_new_session=True,
         creationflags=creationflags,
     )
 
@@ -1367,30 +1426,17 @@ async def _run_command_inner(
     except Exception as e:
         if not silent:
             emit_error(traceback.format_exc(), message_group=group_id)
-        if "stdout" not in locals():
-            stdout = None
-        if "stderr" not in locals():
-            stderr = None
-
-        # Apply line length limits to stdout/stderr if they exist
-        truncated_stdout = None
-        if stdout:
-            truncated_stdout = _bound_output(
-                [_truncate_line(line) for line in stdout.split("\n")]
-            )
-
-        truncated_stderr = None
-        if stderr:
-            truncated_stderr = _bound_output(
-                [_truncate_line(line) for line in stderr.split("\n")]
-            )
-
+        # ``stdout``/``stderr`` are never bound in this scope -- the actual
+        # command output is captured inside ``_run_command_sync`` running in the
+        # executor. If that call raises, no output is available here, so return
+        # the error with empty output (the previous ``locals()`` truncation block
+        # was dead code that always nulled the output anyway).
         return ShellCommandOutput(
             success=False,
             command=command,
             error=f"Error executing command {str(e)}",
-            stdout=truncated_stdout,
-            stderr=truncated_stderr,
+            stdout=None,
+            stderr=None,
             exit_code=-1,
             timeout=False,
         )

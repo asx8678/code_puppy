@@ -11,6 +11,9 @@ from code_puppy.model_factory import ModelFactory, make_model_settings
 
 # Keep a module-level agent reference to avoid rebuilding per call
 _summarization_agent = None
+# Track the model the cached agent was built for, so we can reload only when the
+# summarization model actually changes (instead of forcing a reload every call).
+_last_summarization_model_name = None
 _agent_lock = threading.Lock()
 
 # Safe sync runner for async agent.run calls
@@ -162,13 +165,26 @@ def reload_summarization_agent():
     return agent
 
 
-def get_summarization_agent(force_reload=True):
+def get_summarization_agent(force_reload=False):
     """
     Retrieve the summarization agent with the currently set MODEL_NAME.
-    Forces a reload if the model has changed, or if force_reload is passed.
+
+    The agent is cached at module level. It is (re)built only when:
+      * ``force_reload`` is explicitly requested, or
+      * no agent has been built yet, or
+      * the summarization model has changed since the cached agent was built.
+
+    This makes the module-level cache actually effective (no rebuild on every
+    call) while still picking up model changes automatically.
     """
-    global _summarization_agent
+    global _summarization_agent, _last_summarization_model_name
     with _agent_lock:
-        if force_reload or _summarization_agent is None:
+        current_model = get_summarization_model_name()
+        if (
+            force_reload
+            or _summarization_agent is None
+            or current_model != _last_summarization_model_name
+        ):
             _summarization_agent = reload_summarization_agent()
+            _last_summarization_model_name = current_model
         return _summarization_agent

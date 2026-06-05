@@ -15,6 +15,7 @@ from pydantic_ai import RunContext
 
 from code_puppy.messaging import get_message_bus
 from code_puppy.messaging.messages import UniversalConstructorMessage
+from code_puppy.tools.common import atomic_write_text
 from code_puppy.plugins.universal_constructor.models import (
     UCCallOutput,
     UCCreateOutput,
@@ -541,7 +542,7 @@ def _handle_create_action(
     # Ensure directory exists and write file
     try:
         file_dir.mkdir(parents=True, exist_ok=True)
-        file_path.write_text(final_code, encoding="utf-8")
+        atomic_write_text(str(file_path), final_code)
     except Exception as e:
         return UniversalConstructorOutput(
             action="create",
@@ -677,8 +678,8 @@ def _handle_update_action(
                 error="Invalid TOOL_META: " + "; ".join(meta_errors),
             )
 
-        # Write updated code
-        source_path_obj.write_text(python_code, encoding="utf-8")
+        # Write updated code (atomic so a crash mid-write can't truncate it)
+        atomic_write_text(str(source_path_obj), python_code)
 
         # Run ruff format on the updated file
         format_warning = _run_ruff_format(source_path_obj)

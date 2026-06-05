@@ -84,6 +84,13 @@ class BaseAgent(ABC):
         # model switch recomputes it. Avoids re-reading model config on every
         # per-request history-processor cycle.
         self._ctx_len_cache: Optional[tuple[Optional[str], int]] = None
+        # Memo for the context-overhead estimate, keyed by
+        # ``(model_name, hash(resolved_system_prompt))`` so a model switch or a
+        # changed system prompt recomputes it. The history processor invokes
+        # ``_estimate_context_overhead`` on every model request; without this we
+        # re-resolve the system prompt + re-run prepare_prompt_for_model each
+        # time. Stored as ``(key, value)``; recompute only when the key changes.
+        self._ctx_overhead_cache: Optional[tuple[tuple[Optional[str], int], int]] = None
 
     # ---- Abstract interface ------------------------------------------------
     @property
@@ -188,13 +195,26 @@ class BaseAgent(ABC):
         return length
 
     def _estimate_context_overhead(self) -> int:
-        """Tokens used by system prompt + registered pydantic tools."""
+        """Tokens used by system prompt + registered pydantic tools.
+
+        Memoized on ``(model_name, hash(system_prompt))``: the history
+        processor calls this on every model request, and re-resolving the
+        system prompt + re-running ``prepare_prompt_for_model`` each time is
+        wasteful when neither the model nor the prompt has changed. Mirrors the
+        ``_ctx_len_cache`` pattern — recompute only when the key changes.
+        """
+        model_name = self.get_model_name()
         system_prompt = self.get_full_system_prompt()
+        key = (model_name, hash(system_prompt))
+        cached = self._ctx_overhead_cache
+        if cached is not None and cached[0] == key:
+            return cached[1]
+
         try:
             from code_puppy.model_utils import prepare_prompt_for_model
 
             prepared = prepare_prompt_for_model(
-                model_name=self.get_model_name() or "",
+                model_name=model_name or "",
                 system_prompt=system_prompt,
                 user_prompt="",
                 prepend_system_to_user=False,
@@ -206,12 +226,14 @@ class BaseAgent(ABC):
         tools_source = self.pydantic_agent or self._get_tool_probe()
         tools = _extract_pydantic_agent_tools(tools_source) if tools_source else None
         mcp_servers = getattr(self, "_mcp_servers", None) or None
-        return estimate_context_overhead(
+        overhead = estimate_context_overhead(
             resolved,
             tools,
-            self.get_model_name(),
+            model_name,
             mcp_servers=mcp_servers,
         )
+        self._ctx_overhead_cache = (key, overhead)
+        return overhead
 
     def _get_tool_probe(self) -> Any:
         """Lazily build (and cache) a tool-probe pydantic agent.

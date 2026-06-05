@@ -7,6 +7,7 @@ SDK dependency.
 
 from __future__ import annotations
 
+import asyncio
 import base64
 import json
 import logging
@@ -290,9 +291,19 @@ class GeminiModel(Model):
         return model_settings, model_request_parameters
 
     async def _get_client(self) -> httpx.AsyncClient:
-        """Get or create HTTP client."""
+        """Get or create HTTP client.
+
+        Builds the self-owned client via ``create_async_client`` so it picks
+        up the shared proxy/cert/http2/retry configuration instead of a bare
+        ``httpx.AsyncClient``.
+        """
         if self._http_client is None:
-            self._http_client = httpx.AsyncClient(timeout=180)
+            from code_puppy.http_utils import create_async_client
+
+            self._http_client = create_async_client(
+                timeout=httpx.Timeout(180.0, connect=15.0),
+                model_name=self._model_name,
+            )
         return self._http_client
 
     async def _close_client(self) -> None:
@@ -300,6 +311,32 @@ class GeminiModel(Model):
         if self._owns_client and self._http_client is not None:
             await self._http_client.aclose()
             self._http_client = None
+
+    async def aclose(self) -> None:
+        """Close the owned HTTP client (public, awaitable)."""
+        await self._close_client()
+
+    def __del__(self) -> None:
+        """Best-effort cleanup of the owned client to avoid a socket leak.
+
+        If the model is garbage-collected without an explicit ``aclose()``,
+        schedule the client close on the running loop when possible. Falls
+        back silently if no loop is available (interpreter shutdown, etc.).
+        """
+        client = self._http_client
+        if not self._owns_client or client is None:
+            return
+        try:
+            loop = asyncio.get_running_loop()
+        except RuntimeError:
+            return
+        if loop.is_closed():
+            return
+        try:
+            loop.create_task(client.aclose())
+            self._http_client = None
+        except Exception:
+            pass
 
     def _get_headers(self) -> dict[str, str]:
         """Get HTTP headers for the request."""

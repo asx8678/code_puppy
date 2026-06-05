@@ -91,7 +91,9 @@ class ModelNameCompleter(Completer):
 
         from code_puppy.model_descriptions import get_model_description
 
+        # Fetch config and active model once per keystroke (not per candidate).
         models_config = _load_models_config()
+        active_model_name = get_active_model().lower()
 
         # Filter model names based on what's typed after /model (case-insensitive)
         for model_name in self.model_names:
@@ -101,8 +103,7 @@ class ModelNameCompleter(Completer):
                 continue  # Skip models that don't match the typed text
 
             description = get_model_description(models_config, model_name)
-            active_model_name = get_active_model()
-            if model_name.lower() == active_model_name.lower():
+            if model_name.lower() == active_model_name:
                 short = (
                     description[:45] + "..." if len(description) > 48 else description
                 )

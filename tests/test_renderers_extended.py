@@ -325,7 +325,12 @@ class TestSynchronousInteractiveRendererLifecycle:
     """Test start/stop lifecycle."""
 
     def test_start_creates_thread(self):
-        """Test that start creates background thread."""
+        """Test that start activates the renderer and drives delivery via the queue.
+
+        The renderer no longer spawns its own consume thread; it relies on the
+        queue's processing thread delivering messages to its registered
+        listener (avoiding a second thread racing the same queue).
+        """
         queue = MessageQueue()
         output = StringIO()
         console = Console(file=output)
@@ -335,32 +340,31 @@ class TestSynchronousInteractiveRendererLifecycle:
 
         try:
             assert renderer._running is True
-            assert renderer._thread is not None
-            assert renderer._thread.is_alive()
+            assert queue._running is True
+            assert renderer._render_message in queue._listeners
             assert queue._has_active_renderer
         finally:
             renderer.stop()
 
     def test_start_double_start_safe(self):
-        """Test that starting twice is safe."""
+        """Test that starting twice is safe (idempotent)."""
         queue = MessageQueue()
         output = StringIO()
         console = Console(file=output)
 
         renderer = SynchronousInteractiveRenderer(queue, console)
         renderer.start()
-        thread1 = renderer._thread
-
-        renderer.start()  # Should be no-op
-        thread2 = renderer._thread
+        renderer.start()  # Should be a no-op
 
         try:
-            assert thread1 is thread2
+            assert renderer._running is True
+            # Listener registered exactly once despite the double start.
+            assert queue._listeners.count(renderer._render_message) == 1
         finally:
             renderer.stop()
 
     def test_stop_stops_thread(self):
-        """Test that stop stops the thread."""
+        """Test that stop deactivates the renderer and unregisters its listener."""
         queue = MessageQueue()
         output = StringIO()
         console = Console(file=output)
@@ -373,9 +377,7 @@ class TestSynchronousInteractiveRendererLifecycle:
 
         assert renderer._running is False
         assert not queue._has_active_renderer
-        # Thread should have joined
-        time.sleep(0.1)
-        assert not renderer._thread.is_alive()
+        assert renderer._render_message not in queue._listeners
 
     def test_stop_without_start(self):
         """Test that stop without start is safe."""

@@ -79,6 +79,11 @@ class MessageQueue:
         self._prompt_responses = {}  # Store responses to human input requests
         self._prompt_events = {}  # threading.Event per prompt_id
         self._prompt_id_counter = 0  # Counter for unique prompt IDs
+        # Locks guarding state shared across the _process_messages thread,
+        # emitter threads, and renderer/input threads.
+        self._listeners_lock = threading.Lock()
+        self._prompt_lock = threading.Lock()
+        self._startup_lock = threading.Lock()
 
     def start(self):
         """Start the queue processing."""
@@ -92,7 +97,8 @@ class MessageQueue:
     def get_buffered_messages(self):
         """Get all currently buffered messages without waiting."""
         # First get any startup buffered messages
-        messages = list(self._startup_buffer)
+        with self._startup_lock:
+            messages = list(self._startup_buffer)
 
         # Then get any queued messages
         while True:
@@ -105,7 +111,8 @@ class MessageQueue:
 
     def clear_startup_buffer(self):
         """Clear the startup buffer after processing."""
-        self._startup_buffer.clear()
+        with self._startup_lock:
+            self._startup_buffer.clear()
 
     def stop(self):
         """Stop the queue processing."""
@@ -117,7 +124,8 @@ class MessageQueue:
         """Emit a message to the queue."""
         # If no renderer is active yet, buffer the message for startup
         if not self._has_active_renderer:
-            self._startup_buffer.append(message)
+            with self._startup_lock:
+                self._startup_buffer.append(message)
             return
 
         try:
@@ -198,8 +206,12 @@ class MessageQueue:
                     except Exception as e:
                         logger.debug("Failed to enqueue message to async queue: %s", e)
 
-                # Notify listeners immediately for sync processing
-                for listener in self._listeners:
+                # Notify listeners immediately for sync processing.
+                # Snapshot under the lock so a concurrent add/remove_listener
+                # can't mutate the list mid-iteration.
+                with self._listeners_lock:
+                    listeners = list(self._listeners)
+                for listener in listeners:
                     try:
                         listener(message)
                     except Exception as e:
@@ -210,17 +222,19 @@ class MessageQueue:
 
     def add_listener(self, callback):
         """Add a listener for messages (for direct sync consumption)."""
-        self._listeners.append(callback)
-        # Mark that we have an active renderer
-        self._has_active_renderer = True
+        with self._listeners_lock:
+            self._listeners.append(callback)
+            # Mark that we have an active renderer
+            self._has_active_renderer = True
 
     def remove_listener(self, callback):
         """Remove a listener."""
-        if callback in self._listeners:
-            self._listeners.remove(callback)
-        # If no more listeners, mark as no active renderer
-        if not self._listeners:
-            self._has_active_renderer = False
+        with self._listeners_lock:
+            if callback in self._listeners:
+                self._listeners.remove(callback)
+            # If no more listeners, mark as no active renderer
+            if not self._listeners:
+                self._has_active_renderer = False
 
     def mark_renderer_active(self):
         """Mark that a renderer is now active and consuming messages."""
@@ -232,11 +246,11 @@ class MessageQueue:
 
     def create_prompt_request(self, prompt_text: str) -> str:
         """Create a human input request and return its unique ID."""
-        self._prompt_id_counter += 1
-        prompt_id = f"prompt_{self._prompt_id_counter}"
-
-        # Create event for this prompt
-        self._prompt_events[prompt_id] = threading.Event()
+        with self._prompt_lock:
+            self._prompt_id_counter += 1
+            prompt_id = f"prompt_{self._prompt_id_counter}"
+            # Create event for this prompt
+            self._prompt_events[prompt_id] = threading.Event()
 
         # Emit the human input request message
         message = UIMessage(
@@ -250,31 +264,37 @@ class MessageQueue:
 
     def wait_for_prompt_response(self, prompt_id: str, timeout: float = None) -> str:
         """Wait for a response to a human input request."""
-        # If response is already available, return immediately
-        if prompt_id in self._prompt_responses:
-            self._prompt_events.pop(prompt_id, None)
-            return self._prompt_responses.pop(prompt_id)
+        with self._prompt_lock:
+            # If response is already available, return immediately
+            if prompt_id in self._prompt_responses:
+                self._prompt_events.pop(prompt_id, None)
+                return self._prompt_responses.pop(prompt_id)
 
-        event = self._prompt_events.get(prompt_id)
-        if event is None:
-            # Fallback: create event if not already present
-            event = threading.Event()
-            self._prompt_events[prompt_id] = event
+            event = self._prompt_events.get(prompt_id)
+            if event is None:
+                # Fallback: create event if not already present
+                event = threading.Event()
+                self._prompt_events[prompt_id] = event
 
+        # Wait OUTSIDE the lock so the responding thread can deliver.
         signaled = event.wait(timeout=timeout)
 
-        # Clean up the event
-        self._prompt_events.pop(prompt_id, None)
+        with self._prompt_lock:
+            # Clean up the event
+            self._prompt_events.pop(prompt_id, None)
 
-        if not signaled:
-            raise TimeoutError(f"No response for prompt {prompt_id} within {timeout}s")
+            if not signaled:
+                raise TimeoutError(
+                    f"No response for prompt {prompt_id} within {timeout}s"
+                )
 
-        return self._prompt_responses.pop(prompt_id)
+            return self._prompt_responses.pop(prompt_id)
 
     def provide_prompt_response(self, prompt_id: str, response: str):
         """Provide a response to a human input request."""
-        self._prompt_responses[prompt_id] = response
-        event = self._prompt_events.get(prompt_id)
+        with self._prompt_lock:
+            self._prompt_responses[prompt_id] = response
+            event = self._prompt_events.get(prompt_id)
         if event is not None:
             event.set()
 

@@ -226,10 +226,12 @@ class StatusDisplay:
         # Update spinner
         self.spinner.update()
 
-        # Rotate through loading messages
-        self.current_message_index = (self.current_message_index + 1) % len(
-            self.loading_messages
-        )
+        # Rotate through loading messages on a time gate (matching
+        # _get_status_panel) so the message doesn't churn on every refresh.
+        if int(time.time() * 2) % 4 == 0:
+            self.current_message_index = (self.current_message_index + 1) % len(
+                self.loading_messages
+            )
         message = self.loading_messages[self.current_message_index]
 
         # Create a highly visible status text

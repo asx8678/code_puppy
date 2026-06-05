@@ -22,6 +22,7 @@ from code_puppy.config import get_subagent_verbose
 from code_puppy.tools.common import format_diff_with_colors
 from code_puppy.tools.subagent_context import is_subagent
 
+from ._render_lock import CONSOLE_RENDER_LOCK
 from .bus import MessageBus
 from .commands import (
     ConfirmationResponse,
@@ -221,20 +222,17 @@ class RichConsoleRenderer:
 
     def _consume_loop_sync(self) -> None:
         """Synchronous message consumption loop running in background thread."""
-        import time
-
         # First, process any buffered messages
         for msg in self._bus.get_buffered_messages():
             self._render_sync(msg)
         self._bus.clear_buffer()
 
-        # Then consume new messages
+        # Then consume new messages. Block on the queue (with a short timeout
+        # so we still notice _running going false) instead of busy-polling.
         while self._running:
-            message = self._bus.get_message_nowait()
-            if message:
+            message = self._bus.get_message_blocking(timeout=0.1)
+            if message is not None:
                 self._render_sync(message)
-            else:
-                time.sleep(0.01)
 
     def _render_sync(self, message: AnyMessage) -> None:
         """Render a message synchronously with error handling.
@@ -245,12 +243,18 @@ class RichConsoleRenderer:
         output leaked through the async path during steering. 🐛
         """
         try:
-            self._do_render(message)
+            # Serialize the whole per-message render against other threads
+            # printing to the same shared console (the queue-listener renderer,
+            # spinners, the streaming handler). A message's multi-line output
+            # stays contiguous instead of interleaving with another renderer.
+            with CONSOLE_RENDER_LOCK:
+                self._do_render(message)
         except Exception as e:
             # Don't let rendering errors crash the loop
             # Escape the error message to prevent nested markup errors
             safe_error = escape_rich_markup(str(e))
-            self._console.print(f"[dim red]Render error: {safe_error}[/dim red]")
+            with CONSOLE_RENDER_LOCK:
+                self._console.print(f"[dim red]Render error: {safe_error}[/dim red]")
 
     def _should_silence_during_pause(self, message: AnyMessage) -> bool:
         """Return True iff this message must be silently dropped right now.
@@ -462,6 +466,33 @@ class RichConsoleRenderer:
                 dir_stats[parent]["files"].append(entry)
                 dir_stats[parent]["total_size"] += entry.size
 
+        # Recursive size/file-count with memoization. Previously these were
+        # redefined on every render_dir_tree call AND each subtree was
+        # re-summed once per ancestor -> O(n*depth) on deep trees. Hoist them
+        # out and cache per directory so each subtree is summed once.
+        _rec_size_cache: dict = {}
+        _rec_count_cache: dict = {}
+
+        def get_recursive_size(d: str) -> int:
+            if d in _rec_size_cache:
+                return _rec_size_cache[d]
+            s = dir_stats.get(d, {"files": [], "subdirs": set(), "total_size": 0})
+            size = s["total_size"]
+            for sub in s["subdirs"]:
+                size += get_recursive_size(sub)
+            _rec_size_cache[d] = size
+            return size
+
+        def get_recursive_file_count(d: str) -> int:
+            if d in _rec_count_cache:
+                return _rec_count_cache[d]
+            s = dir_stats.get(d, {"files": [], "subdirs": set(), "total_size": 0})
+            count = len(s["files"])
+            for sub in s["subdirs"]:
+                count += get_recursive_file_count(sub)
+            _rec_count_cache[d] = count
+            return count
+
         def render_dir_tree(dir_path: str, depth: int = 0) -> None:
             """Recursively render directory with compact summary."""
             stats = dir_stats.get(
@@ -469,21 +500,6 @@ class RichConsoleRenderer:
             )
             files = stats["files"]
             subdirs = sorted(stats["subdirs"])
-
-            # Calculate total size including subdirectories (recursive)
-            def get_recursive_size(d: str) -> int:
-                s = dir_stats.get(d, {"files": [], "subdirs": set(), "total_size": 0})
-                size = s["total_size"]
-                for sub in s["subdirs"]:
-                    size += get_recursive_size(sub)
-                return size
-
-            def get_recursive_file_count(d: str) -> int:
-                s = dir_stats.get(d, {"files": [], "subdirs": set(), "total_size": 0})
-                count = len(s["files"])
-                for sub in s["subdirs"]:
-                    count += get_recursive_file_count(sub)
-                return count
 
             indent = "    " * depth
 
@@ -602,27 +618,32 @@ class RichConsoleRenderer:
                     f"\n[dim]📄 {file_path} ({len(file_matches)} {match_word})[/dim]"
                 )
 
+                # Extract the actual search term (not ripgrep flags) once — it
+                # is the same for every match in this file — and compile the
+                # highlight pattern once instead of recompiling per matched line.
+                parts = msg.search_term.split()
+                search_term = msg.search_term  # fallback
+                for part in parts:
+                    if not part.startswith("-"):
+                        search_term = part
+                        break
+                highlight_pat = None
+                if search_term and not search_term.startswith("-"):
+                    highlight_pat = re.compile(
+                        f"({re.escape(search_term)})", re.IGNORECASE
+                    )
+
                 # Show each match with line number and content
                 for match in file_matches:
-                    line = match.line_content
-                    # Extract the actual search term (not ripgrep flags)
-                    parts = msg.search_term.split()
-                    search_term = msg.search_term  # fallback
-                    for part in parts:
-                        if not part.startswith("-"):
-                            search_term = part
-                            break
-
-                    # Case-insensitive highlighting
-                    if search_term and not search_term.startswith("-"):
-                        highlighted_line = re.sub(
-                            f"({re.escape(search_term)})",
-                            r"[bold yellow]\1[/bold yellow]",
-                            line,
-                            flags=re.IGNORECASE,
+                    # Escape file content FIRST so stray [ ] in source code
+                    # isn't parsed as Rich markup, THEN inject highlight markup.
+                    safe_line = escape_rich_markup(match.line_content)
+                    if highlight_pat is not None:
+                        highlighted_line = highlight_pat.sub(
+                            r"[bold yellow]\1[/bold yellow]", safe_line
                         )
                     else:
-                        highlighted_line = line
+                        highlighted_line = safe_line
 
                     ln = match.line_number
                     self._console.print(f"  [dim]{ln:4d}[/dim] │ {highlighted_line}")

@@ -19,6 +19,11 @@ from .managed_server import ManagedMCPServer
 
 logger = logging.getLogger(__name__)
 
+# Minimum seconds between recovery attempts for a single server. Without this
+# cooldown, a server stuck at >= the failure threshold would have recovery
+# (disable -> sleep -> enable) triggered on EVERY failed poll, causing thrash.
+RECOVERY_COOLDOWN_SECONDS = 60.0
+
 
 @dataclass
 class HealthStatus:
@@ -76,7 +81,15 @@ class HealthMonitor:
         self.custom_health_checks: Dict[str, Callable] = {}
         self.consecutive_failures: Dict[str, int] = defaultdict(int)
         self.last_check_time: Dict[str, datetime] = {}
+        # Timestamp of the last recovery attempt per server, used to enforce a
+        # cooldown so we don't thrash disable/enable on every failed poll.
+        self.last_recovery_time: Dict[str, float] = {}
         self._lock = asyncio.Lock()
+
+        # A single long-lived HTTP client reused across all health checks.
+        # Creating a fresh client per check (on a repeating per-server loop)
+        # is wasteful and bypasses proxy/cert configuration. Created lazily.
+        self._http_client: Optional[httpx.AsyncClient] = None
 
         # Register default health checks for each server type
         self._register_default_health_checks()
@@ -144,6 +157,7 @@ class HealthMonitor:
             async with self._lock:
                 self.consecutive_failures.pop(server_id, None)
             self.last_check_time.pop(server_id, None)
+            self.last_recovery_time.pop(server_id, None)
         else:
             logger.warning(f"No monitoring task found for server {server_id}")
 
@@ -328,6 +342,9 @@ class HealthMonitor:
                                 f"Server {server_id} recovered after health check success"
                             )
                             self.consecutive_failures[server_id] = 0
+                            # Clear the recovery cooldown so a future failure
+                            # cycle can trigger recovery immediately.
+                            self.last_recovery_time.pop(server_id, None)
 
                 # Trigger recovery on consecutive failures (outside lock)
                 if not health_status.is_healthy:
@@ -375,17 +392,32 @@ class HealthMonitor:
         async with self._lock:
             failure_count = self.consecutive_failures[server_id]
 
-        # Trigger recovery actions based on failure count
+        # Trigger recovery actions based on failure count, but rate-limit them
+        # with a per-server cooldown so a persistently-failing server doesn't
+        # get its recovery (disable -> sleep -> enable) hammered on every poll.
         if failure_count >= 3:
-            logger.error(
-                f"Server {server_id} has {failure_count} consecutive failures, triggering recovery"
-            )
+            now = time.time()
+            last_recovery = self.last_recovery_time.get(server_id)
+            if (
+                last_recovery is None
+                or (now - last_recovery) >= RECOVERY_COOLDOWN_SECONDS
+            ):
+                self.last_recovery_time[server_id] = now
+                logger.error(
+                    f"Server {server_id} has {failure_count} consecutive failures, triggering recovery"
+                )
 
-            try:
-                # Attempt to recover the server
-                await self._trigger_recovery(server_id, server, failure_count)
-            except Exception as e:
-                logger.error(f"Recovery failed for server {server_id}: {e}")
+                try:
+                    # Attempt to recover the server
+                    await self._trigger_recovery(server_id, server, failure_count)
+                except Exception as e:
+                    logger.error(f"Recovery failed for server {server_id}: {e}")
+            else:
+                logger.debug(
+                    f"Server {server_id} has {failure_count} consecutive failures, "
+                    f"but recovery is in cooldown ({now - last_recovery:.0f}s "
+                    f"< {RECOVERY_COOLDOWN_SECONDS:.0f}s); skipping"
+                )
 
         # Quarantine server after many consecutive failures
         if failure_count >= 5:
@@ -429,6 +461,19 @@ class HealthMonitor:
             logger.error(f"Recovery action failed for server {server_id}: {e}")
             raise
 
+    def _get_http_client(self) -> httpx.AsyncClient:
+        """Return a shared, long-lived HTTP client for health checks.
+
+        Created lazily via ``create_async_client`` so it picks up proxy/cert
+        configuration and is reused across checks instead of being rebuilt on
+        every poll. Closed in :meth:`shutdown`.
+        """
+        if self._http_client is None:
+            from code_puppy.http_utils import create_async_client
+
+            self._http_client = create_async_client(timeout=10)
+        return self._http_client
+
     async def _check_sse_health(self, server: ManagedMCPServer) -> HealthCheckResult:
         """
         Health check for SSE servers using GET request.
@@ -454,25 +499,26 @@ class HealthMonitor:
                 f"{url.rstrip('/')}/health" if not url.endswith("/health") else url
             )
 
-            async with httpx.AsyncClient(timeout=10.0) as client:
-                response = await client.get(health_url)
+            # Reuse the long-lived client instead of creating one per check.
+            client = self._get_http_client()
+            response = await client.get(health_url)
 
-                if response.status_code == 404:
-                    # Try base URL if health endpoint doesn't exist
-                    response = await client.get(url)
+            if response.status_code == 404:
+                # Try base URL if health endpoint doesn't exist
+                response = await client.get(url)
 
-                success = 200 <= response.status_code < 400
-                error = (
-                    None
-                    if success
-                    else f"HTTP {response.status_code}: {response.reason_phrase}"
-                )
+            success = 200 <= response.status_code < 400
+            error = (
+                None
+                if success
+                else f"HTTP {response.status_code}: {response.reason_phrase}"
+            )
 
-                return HealthCheckResult(
-                    success=success,
-                    latency_ms=0.0,  # Will be filled by perform_health_check
-                    error=error,
-                )
+            return HealthCheckResult(
+                success=success,
+                latency_ms=0.0,  # Will be filled by perform_health_check
+                error=error,
+            )
 
         except Exception as e:
             return HealthCheckResult(success=False, latency_ms=0.0, error=str(e))
@@ -582,8 +628,18 @@ class HealthMonitor:
         if tasks:
             await asyncio.gather(*tasks, return_exceptions=True)
 
+        # Close the shared HTTP client if one was created.
+        if self._http_client is not None:
+            try:
+                await self._http_client.aclose()
+            except Exception as e:
+                logger.debug(f"Error closing health-check HTTP client: {e}")
+            finally:
+                self._http_client = None
+
         self.monitoring_tasks.clear()
         self.consecutive_failures.clear()
         self.last_check_time.clear()
+        self.last_recovery_time.clear()
 
         logger.info("Health monitor shutdown complete")

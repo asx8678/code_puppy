@@ -1,3 +1,5 @@
+import logging
+
 from code_puppy.callbacks import on_register_agent_tools, on_register_tools
 from code_puppy.messaging import emit_warning
 from code_puppy.tools.agent_tools import register_invoke_agent, register_list_agents
@@ -82,6 +84,8 @@ from code_puppy.tools.skills_tools import (
     register_list_or_search_skills,
 )
 from code_puppy.tools.universal_constructor import register_universal_constructor
+
+logger = logging.getLogger(__name__)
 
 # Map of tool names to their individual registration functions
 TOOL_REGISTRY = {
@@ -195,8 +199,9 @@ def _load_plugin_tools() -> None:
                     if callable(register_func):
                         TOOL_REGISTRY[tool_name] = register_func
     except Exception:
-        # Don't let plugin failures break core functionality
-        pass
+        # Don't let plugin failures break core functionality, but surface the
+        # cause for debugging instead of swallowing it silently.
+        logger.warning("Failed to load plugin tools", exc_info=True)
 
 
 # Appended to the system prompt when extended thinking is active and

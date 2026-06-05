@@ -1,5 +1,6 @@
 import asyncio
 import fnmatch
+import logging
 import os
 import sys
 import tempfile
@@ -104,6 +105,9 @@ except ImportError:
     # Fallback to regular Rich console if messaging system not available
     NO_COLOR = bool(int(os.environ.get("CODE_PUPPY_NO_COLOR", "0")))
     console = Console(no_color=NO_COLOR)
+    # Keep a shared real Rich console available under the same name used by the
+    # messaging-backed branch so approval prompts can reuse it in both cases.
+    _rich_console = console
 
     # Provide fallback emit functions
     def emit_error(msg: str) -> None:
@@ -117,6 +121,9 @@ except ImportError:
 
     def emit_warning(msg: str) -> None:
         console.print(f"[bold yellow]{msg}[/bold yellow]")
+
+
+logger = logging.getLogger(__name__)
 
 
 def should_suppress_browser() -> bool:
@@ -1192,13 +1199,13 @@ def _get_user_approval_impl(
         from code_puppy.messaging.spinner import pause_all_spinners
 
         pause_all_spinners()
-    except (ImportError, Exception):
-        pass
+    except Exception:
+        logger.debug("Failed to pause spinners before approval prompt", exc_info=True)
 
     time.sleep(0.3)  # Let spinners fully stop
 
-    # Display panel
-    local_console = Console()
+    # Display panel (reuse the shared module-level Rich console)
+    local_console = _rich_console
     emit_info("")
     local_console.print(panel)
     emit_info("")
@@ -1283,8 +1290,8 @@ def _get_user_approval_impl(
         from code_puppy.messaging.spinner import resume_all_spinners
 
         resume_all_spinners()
-    except (ImportError, Exception):
-        pass
+    except Exception:
+        logger.debug("Failed to resume spinners after approval prompt", exc_info=True)
 
     return confirmed, user_feedback
 
@@ -1389,13 +1396,13 @@ async def _get_user_approval_async_impl(
         from code_puppy.messaging.spinner import pause_all_spinners
 
         pause_all_spinners()
-    except (ImportError, Exception):
-        pass
+    except Exception:
+        logger.debug("Failed to pause spinners before approval prompt", exc_info=True)
 
     await asyncio.sleep(0.3)  # Let spinners fully stop
 
-    # Display panel
-    local_console = Console()
+    # Display panel (reuse the shared module-level Rich console)
+    local_console = _rich_console
     emit_info("")
     local_console.print(panel)
     emit_info("")
@@ -1475,8 +1482,8 @@ async def _get_user_approval_async_impl(
         from code_puppy.messaging.spinner import resume_all_spinners
 
         resume_all_spinners()
-    except (ImportError, Exception):
-        pass
+    except Exception:
+        logger.debug("Failed to resume spinners after approval prompt", exc_info=True)
 
     return confirmed, user_feedback
 
@@ -1549,6 +1556,27 @@ def atomic_write_text(
         pass  # directory fsync unsupported -- file content is still durable
 
 
+def read_text_sanitized(path: str) -> str:
+    """Read *path* as UTF-8 text, sanitizing any lone surrogate code points.
+
+    Files are opened with ``errors="surrogateescape"`` so invalid byte
+    sequences survive the read as surrogates; we then re-encode with
+    ``surrogatepass`` and decode with ``replace`` to turn those lone
+    surrogates into the Unicode replacement character. This mirrors the
+    read-then-sanitize logic previously duplicated across the file-modification
+    helpers, byte-for-byte.
+    """
+    with open(path, "r", encoding="utf-8", errors="surrogateescape") as f:
+        text = f.read()
+    try:
+        text = text.encode("utf-8", errors="surrogatepass").decode(
+            "utf-8", errors="replace"
+        )
+    except (UnicodeEncodeError, UnicodeDecodeError):
+        pass
+    return text
+
+
 def _find_best_window(
     haystack_lines: list[str],
     needle: str,
@@ -1561,11 +1589,18 @@ def _find_best_window(
     needle = needle.rstrip("\n")
     needle_lines = needle.splitlines()
     win_size = len(needle_lines)
+    needle_len = len(needle)
     best_score = 0.0
     best_span: Optional[Tuple[int, int]] = None
     # Pre-join the needle once; join windows on the fly
     for i in range(len(haystack_lines) - win_size + 1):
         window = "\n".join(haystack_lines[i : i + win_size])
+        # Cheap length pre-filter: windows whose length differs from the needle
+        # by more than ~50% can never clear JW_THRESHOLD, so skip the expensive
+        # Jaro-Winkler computation for them. The bound is loose enough that it
+        # never excludes a window that would actually be the best match.
+        if abs(len(window) - needle_len) > max(needle_len, len(window)) * 0.5:
+            continue
         score = JaroWinkler.normalized_similarity(window, needle)
         if score > best_score:
             best_score = score

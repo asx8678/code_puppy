@@ -29,6 +29,12 @@ logger = logging.getLogger(__name__)
 # Refresh token if it's older than the configured max age (seconds)
 TOKEN_MAX_AGE_SECONDS = 3600
 
+# How long (seconds) to trust the in-memory result of the disk-based stored
+# token expiry check before re-reading from disk. This avoids a synchronous
+# disk read on every single request when the JWT-age fast path can't decide.
+# Short enough that token refresh correctness is preserved.
+STORED_TOKEN_EXPIRY_CACHE_TTL_SECONDS = 30.0
+
 # Retry configuration
 RETRY_STATUS_CODES = (429, 500, 502, 503, 504)
 MAX_RETRIES = 5
@@ -98,6 +104,9 @@ class ClaudeCacheAsyncClient(httpx.AsyncClient):
         super().__init__(*args, **kwargs)
         self._oauth_reauthentication_callback = oauth_reauthentication_callback
         self._token_update_callback = token_update_callback
+        # In-memory cache for the disk-based stored-token-expiry check so we
+        # don't hit disk on every request. Stores (monotonic_timestamp, result).
+        self._stored_expiry_cache: tuple[float, bool] | None = None
         # The ``cp_`` tool-name prefix is a Claude Code OAuth quirk. Only the
         # claude_code_oauth plugin should enable it; custom_anthropic and
         # Anthropic-vanilla models keep tool names verbatim.
@@ -199,13 +208,43 @@ class ClaudeCacheAsyncClient(httpx.AsyncClient):
             return should_refresh
 
         # Strategy 2: Fall back to stored expires_at from token file
-        should_refresh = self._check_stored_token_expiry()
+        should_refresh = self._check_stored_token_expiry_cached()
         if should_refresh:
             logger.info(
                 "Stored token expires within %d seconds, will refresh proactively",
                 TOKEN_MAX_AGE_SECONDS,
             )
         return should_refresh
+
+    def _check_stored_token_expiry_cached(self) -> bool:
+        """Cached wrapper around :meth:`_check_stored_token_expiry`.
+
+        The underlying check reads token state from disk. On the request hot
+        path that fires for every request whose JWT can't be age-decoded, so
+        we memoize the boolean result for a short TTL and only re-read from
+        disk when the cache is missing or stale.
+
+        Conservative on purpose: once the stored token is detected as expiring
+        (result True) we drop the cache so the very next request re-checks
+        disk — that's the moment a refresh is expected to land, and we don't
+        want to keep serving a stale "needs refresh" or miss the fresh token.
+        """
+        now = time.monotonic()
+        cached = self._stored_expiry_cache
+        if cached is not None:
+            cached_at, cached_result = cached
+            if (now - cached_at) < STORED_TOKEN_EXPIRY_CACHE_TTL_SECONDS:
+                return cached_result
+
+        result = self._check_stored_token_expiry()
+
+        if result:
+            # Don't cache a positive result: a refresh is imminent and the
+            # next request should re-evaluate against fresh disk state.
+            self._stored_expiry_cache = None
+        else:
+            self._stored_expiry_cache = (now, result)
+        return result
 
     @staticmethod
     def _check_stored_token_expiry() -> bool:

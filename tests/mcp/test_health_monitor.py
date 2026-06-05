@@ -12,7 +12,7 @@ Tests health monitoring system including:
 
 import asyncio
 from datetime import datetime, timedelta
-from unittest.mock import Mock, patch
+from unittest.mock import AsyncMock, Mock, patch
 
 import httpx
 import pytest
@@ -443,11 +443,13 @@ class TestHealthMonitor:
         mock_response = Mock()
         mock_response.status_code = 200
 
-        with patch("httpx.AsyncClient") as mock_client:
-            mock_client.return_value.__aenter__.return_value.get.return_value = (
-                mock_response
-            )
-
+        # The monitor reuses a single long-lived client built via
+        # create_async_client; patch that factory and stub .get().
+        mock_client = Mock()
+        mock_client.get = AsyncMock(return_value=mock_response)
+        with patch(
+            "code_puppy.http_utils.create_async_client", return_value=mock_client
+        ):
             result = await health_monitor._check_sse_health(sse_server)
 
             assert result.success is True
@@ -459,11 +461,11 @@ class TestHealthMonitor:
         mock_response.status_code = 500
         mock_response.reason_phrase = "Internal Server Error"
 
-        with patch("httpx.AsyncClient") as mock_client:
-            mock_client.return_value.__aenter__.return_value.get.return_value = (
-                mock_response
-            )
-
+        mock_client = Mock()
+        mock_client.get = AsyncMock(return_value=mock_response)
+        with patch(
+            "code_puppy.http_utils.create_async_client", return_value=mock_client
+        ):
             result = await health_monitor._check_sse_health(sse_server)
 
             assert result.success is False
@@ -480,11 +482,11 @@ class TestHealthMonitor:
 
     async def test_sse_health_check_exception(self, health_monitor, sse_server):
         """Test SSE health check with exception."""
-        with patch("httpx.AsyncClient") as mock_client:
-            mock_client.return_value.__aenter__.return_value.get.side_effect = (
-                httpx.RequestError("Connection error")
-            )
-
+        mock_client = Mock()
+        mock_client.get = AsyncMock(side_effect=httpx.RequestError("Connection error"))
+        with patch(
+            "code_puppy.http_utils.create_async_client", return_value=mock_client
+        ):
             result = await health_monitor._check_sse_health(sse_server)
 
             assert result.success is False
@@ -502,14 +504,17 @@ class TestHealthMonitor:
         mock_base_response = Mock()
         mock_base_response.status_code = 200
 
-        with patch("httpx.AsyncClient") as mock_client:
-            client_instance = mock_client.return_value.__aenter__.return_value
-            client_instance.get.side_effect = [mock_health_response, mock_base_response]
-
+        mock_client = Mock()
+        mock_client.get = AsyncMock(
+            side_effect=[mock_health_response, mock_base_response]
+        )
+        with patch(
+            "code_puppy.http_utils.create_async_client", return_value=mock_client
+        ):
             result = await health_monitor._check_sse_health(sse_server)
 
             assert result.success is True
-            assert client_instance.get.call_count == 2
+            assert mock_client.get.call_count == 2
 
     async def test_http_health_check(self, health_monitor, http_server):
         """Test HTTP healthcheck uses same logic as SSE."""

@@ -29,6 +29,14 @@ MODELS_DEV_API_URL = "https://models.dev/api.json"
 # Bundled fallback JSON file (relative to this module)
 BUNDLED_JSON_FILENAME = "models_dev_api.json"
 
+# Process-wide cache of a successful live API payload. ``ModelsDevRegistry`` is
+# constructed in several code paths, and each construction previously issued a
+# fresh synchronous network fetch. We memoize the first *successful* fetch so
+# repeated constructions reuse it instead of hitting the network again. Only
+# real successful fetches are cached (failures leave it None so the bundled
+# fallback still kicks in). Tests reset this between cases for isolation.
+_CACHED_API_DATA: Optional[Dict[str, Any]] = None
+
 
 @dataclass(slots=True)
 class ProviderInfo:
@@ -144,15 +152,24 @@ class ModelsDevRegistry:
     def _fetch_from_api(self) -> Optional[Dict[str, Any]]:
         """Fetch data from the live models.dev API.
 
+        Reuses a process-wide cache of the last successful payload so repeated
+        registry constructions don't re-issue the network request.
+
         Returns:
             Parsed JSON data if successful, None otherwise.
         """
+        global _CACHED_API_DATA
+        # Reuse a previously fetched payload; never re-hit the network for it.
+        if _CACHED_API_DATA is not None:
+            return _CACHED_API_DATA
         try:
             with httpx.Client(timeout=10.0) as client:
                 response = client.get(MODELS_DEV_API_URL)
                 response.raise_for_status()
                 data = response.json()
                 if isinstance(data, dict) and len(data) > 0:
+                    # Cache only real successful fetches.
+                    _CACHED_API_DATA = data
                     return data
                 return None
         except httpx.TimeoutException:

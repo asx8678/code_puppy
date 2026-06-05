@@ -265,6 +265,37 @@ class TestEstimateContextOverhead:
         )
         assert with_empty == baseline
 
+    def test_mcp_tool_tokens_are_memoized(self):
+        """fix #7: per-MCP-tool schema serialization is cached per tool object,
+        so json.dumps doesn't re-run on every history-processor cycle."""
+        from unittest.mock import patch
+
+        import code_puppy.agents._history as h
+
+        class _FakeMcpTool:
+            name = "forecast"
+            description = "Get the forecast for a city."
+            inputSchema = {
+                "type": "object",
+                "properties": {"city": {"type": "string"}},
+            }
+
+        class _FakeServer:
+            tool_prefix = "wb"
+            _cached_tools = [_FakeMcpTool()]
+
+        h._mcp_tool_overhead_cache.clear()
+        server = _FakeServer()
+        first = h._estimate_mcp_tool_tokens([server])
+        # Second call must hit the cache — json.dumps must NOT run again.
+        with patch(
+            "code_puppy.agents._history.json.dumps",
+            side_effect=AssertionError("schema serialization not cached"),
+        ):
+            second = h._estimate_mcp_tool_tokens([server])
+        assert first == second
+        assert first > 0
+
 
 # ---- prune_interrupted_tool_calls ------------------------------------------
 

@@ -5,7 +5,9 @@ This allows tools to use the same Rich console interface while having
 their output captured and routed through our message queue system.
 """
 
+import threading
 import traceback
+from io import StringIO
 from typing import Any, Optional
 
 from rich.console import Console
@@ -14,6 +16,25 @@ from rich.table import Table
 from rich.text import Text
 
 from .message_queue import MessageQueue, MessageType, get_global_queue
+
+# Thread-local capture console reused for stringifying Rich renderables.
+# Building a fresh Console per call is wasteful; sharing one across threads
+# would be racy (it carries mutable output state), so keep one per thread.
+_capture_tls = threading.local()
+
+
+def _render_rich_to_text(renderable: Any) -> str:
+    """Render a Rich object to a plain string using a reusable capture console."""
+    string_io = StringIO()
+    console = getattr(_capture_tls, "console", None)
+    if console is None:
+        console = Console(file=string_io, width=80, legacy_windows=False, markup=True)
+        _capture_tls.console = console
+    else:
+        # Reuse the console; just point it at a fresh buffer for this render.
+        console.file = string_io
+    console.print(renderable)
+    return string_io.getvalue().rstrip("\n")
 
 
 class QueueConsole:
@@ -52,19 +73,9 @@ class QueueConsole:
             processed_values = []
             for v in values:
                 if hasattr(v, "__rich_console__"):
-                    # For Rich objects, try to extract their text content
-                    from io import StringIO
-
-                    from rich.console import Console
-
-                    string_io = StringIO()
-                    # Use markup=True to properly process rich styling
-                    # Use a reasonable width to prevent wrapping issues
-                    temp_console = Console(
-                        file=string_io, width=80, legacy_windows=False, markup=True
-                    )
-                    temp_console.print(v)
-                    processed_values.append(string_io.getvalue().rstrip("\n"))
+                    # For Rich objects, extract their text content via a
+                    # reused (thread-local) capture console.
+                    processed_values.append(_render_rich_to_text(v))
                 else:
                     processed_values.append(str(v))
 

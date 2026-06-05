@@ -23,6 +23,13 @@ _AGENT_REGISTRY: Dict[str, Union[Type[BaseAgent], str]] = {}
 _AGENT_HISTORIES: Dict[str, List[ModelMessage]] = {}
 _CURRENT_AGENT: Optional[BaseAgent] = None
 
+# Cache-buster signature for agent discovery. ``_discover_agents`` clears the
+# registry and re-imports/instantiates every agent module, which is expensive to
+# run on nearly every public call (load_agent, get_available_agents, ...).
+# ``_ensure_discovered`` skips the rebuild when this signature is unchanged.
+# ``None`` means "never discovered" so the first call always rebuilds.
+_DISCOVERY_SIGNATURE: Optional[tuple] = None
+
 # Terminal session-based agent selection
 _SESSION_AGENTS_CACHE: dict[str, str] = {}
 _SESSION_FILE_LOADED: bool = False
@@ -189,6 +196,82 @@ def _ensure_session_cache_loaded() -> None:
             _SESSION_FILE_LOADED = True
 
 
+def _compute_discovery_signature() -> Optional[tuple]:
+    """Cheap signature of everything ``_discover_agents`` depends on.
+
+    Combines:
+      * stat (path, mtime_ns, size) of every ``*.json`` in the user + project
+        agent directories, plus those directories' own mtimes, so a new/edited/
+        deleted JSON agent invalidates the cache even when mtime resolution is
+        coarse (the filename set changes).
+      * the count of registered ``register_agents`` plugin callbacks, so loading
+        or unloading a plugin that contributes agents invalidates the cache.
+
+    Returns ``None`` if the signature can't be computed (config not importable,
+    etc.); callers must then fall back to always rediscovering.
+    """
+    try:
+        from code_puppy.config import (
+            get_project_agents_directory,
+            get_user_agents_directory,
+        )
+
+        dir_candidates = [get_user_agents_directory(), get_project_agents_directory()]
+        file_sig: List[tuple] = []
+        for dir_str in dir_candidates:
+            if not dir_str:
+                continue
+            d = Path(dir_str)
+            if not d.is_dir():
+                continue
+            try:
+                file_sig.append((str(d), d.stat().st_mtime_ns))
+            except OSError:
+                pass
+            for json_file in sorted(d.glob("*.json")):
+                try:
+                    st = json_file.stat()
+                    file_sig.append((str(json_file), st.st_mtime_ns, st.st_size))
+                except OSError:
+                    # File vanished between glob and stat — its absence will be
+                    # reflected on the next signature computation.
+                    continue
+
+        try:
+            from code_puppy.callbacks import count_callbacks
+
+            plugin_count = count_callbacks("register_agents")
+        except Exception:
+            plugin_count = 0
+
+        return (tuple(file_sig), plugin_count)
+    except Exception:
+        return None
+
+
+def _ensure_discovered(message_group_id: Optional[str] = None) -> None:
+    """Discover agents only when the discovery signature has changed.
+
+    Skips the (expensive) ``_discover_agents`` rebuild when the registry is
+    already populated and nothing it depends on has changed. The first call
+    (empty registry) and any signature change force a rebuild. Use
+    :func:`refresh_agents` to force an unconditional rebuild.
+    """
+    global _DISCOVERY_SIGNATURE
+    signature = _compute_discovery_signature()
+    if (
+        _AGENT_REGISTRY
+        and signature is not None
+        and _DISCOVERY_SIGNATURE is not None
+        and signature == _DISCOVERY_SIGNATURE
+    ):
+        return
+    _discover_agents(message_group_id=message_group_id)
+    # Recompute after discovery: plugins or json_agent side effects could have
+    # touched the agent directories during the rebuild.
+    _DISCOVERY_SIGNATURE = _compute_discovery_signature()
+
+
 def _discover_agents(message_group_id: Optional[str] = None):
     """Dynamically discover all agent classes and JSON agents."""
     # Always clear the registry to force refresh
@@ -348,7 +431,7 @@ def get_available_agents() -> Dict[str, str]:
 
     # Generate a message group ID for this operation
     message_group_id = str(uuid.uuid4())
-    _discover_agents(message_group_id=message_group_id)
+    _ensure_discovered(message_group_id=message_group_id)
 
     # Check if pack agents are enabled
     pack_agents_enabled = get_pack_agents_enabled()
@@ -416,7 +499,7 @@ def set_current_agent(agent_name: str) -> bool:
         _AGENT_HISTORIES[curr_agent.name] = list(curr_agent.get_message_history())
     # Generate a message group ID for agent switching
     message_group_id = str(uuid.uuid4())
-    _discover_agents(message_group_id=message_group_id)
+    _ensure_discovered(message_group_id=message_group_id)
 
     # Save current agent's history before switching
 
@@ -467,7 +550,7 @@ def load_agent(agent_name: str) -> BaseAgent:
     """
     # Generate a message group ID for agent loading
     message_group_id = str(uuid.uuid4())
-    _discover_agents(message_group_id=message_group_id)
+    _ensure_discovered(message_group_id=message_group_id)
 
     if agent_name not in _AGENT_REGISTRY:
         # Fallback to code-puppy if agent not found
@@ -500,7 +583,7 @@ def get_agent_descriptions() -> Dict[str, str]:
 
     # Generate a message group ID for this operation
     message_group_id = str(uuid.uuid4())
-    _discover_agents(message_group_id=message_group_id)
+    _ensure_discovered(message_group_id=message_group_id)
 
     # Check if pack agents are enabled
     pack_agents_enabled = get_pack_agents_enabled()
@@ -533,11 +616,15 @@ def get_agent_descriptions() -> Dict[str, str]:
 def refresh_agents():
     """Refresh the agent discovery to pick up newly created agents.
 
-    This clears the agent registry cache and forces a rediscovery of all agents.
+    This forces an unconditional rediscovery of all agents, bypassing the
+    discovery-signature cache used by the read paths (it is the explicit
+    cache-buster).
     """
+    global _DISCOVERY_SIGNATURE
     # Generate a message group ID for agent refreshing
     message_group_id = str(uuid.uuid4())
     _discover_agents(message_group_id=message_group_id)
+    _DISCOVERY_SIGNATURE = _compute_discovery_signature()
 
 
 _CLONE_NAME_PATTERN = re.compile(r"^(?P<base>.+)-clone-(?P<index>\d+)$")
@@ -612,7 +699,7 @@ def clone_agent(agent_name: str) -> Optional[str]:
     """
     # Generate a message group ID for agent cloning
     message_group_id = str(uuid.uuid4())
-    _discover_agents(message_group_id=message_group_id)
+    _ensure_discovered(message_group_id=message_group_id)
 
     agent_ref = _AGENT_REGISTRY.get(agent_name)
     if agent_ref is None:
@@ -708,7 +795,7 @@ def delete_clone_agent(agent_name: str) -> bool:
         True if the clone was deleted, False otherwise.
     """
     message_group_id = str(uuid.uuid4())
-    _discover_agents(message_group_id=message_group_id)
+    _ensure_discovered(message_group_id=message_group_id)
 
     if not is_clone_agent_name(agent_name):
         emit_warning(f"Agent '{agent_name}' is not a clone.")

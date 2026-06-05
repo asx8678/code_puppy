@@ -13,6 +13,7 @@ from unittest.mock import AsyncMock, Mock, patch
 import pytest
 
 from code_puppy.mcp_.async_lifecycle import (
+    HEARTBEAT_INTERVAL_SECONDS,
     AsyncServerLifecycleManager,
     ManagedServerContext,
     get_lifecycle_manager,
@@ -327,8 +328,9 @@ class TestAsyncServerLifecycleTaskLifecycle:
         # Now mark server as not running
         server.is_running = False
 
-        # Give it time to detect
-        await asyncio.sleep(1.5)
+        # Give it time to detect. The heartbeat polls every
+        # HEARTBEAT_INTERVAL_SECONDS, so wait a bit beyond one interval.
+        await asyncio.sleep(HEARTBEAT_INTERVAL_SECONDS + 1.0)
 
         # Task should have exited and cleaned up
         assert "test-server" not in manager._servers

@@ -17,12 +17,26 @@ from unittest.mock import MagicMock, mock_open, patch
 import httpx
 import pytest
 
+import code_puppy.models_dev_parser as models_dev_parser
 from code_puppy.models_dev_parser import (
     ModelInfo,
     ModelsDevRegistry,
     ProviderInfo,
     convert_to_code_puppy_config,
 )
+
+
+@pytest.fixture(autouse=True)
+def _reset_models_dev_api_cache():
+    """Clear the process-wide live-API payload cache around every test.
+
+    ``ModelsDevRegistry._fetch_from_api`` memoizes a successful fetch so repeated
+    constructions reuse it. Tests mock the fetch with per-case data/behavior, so
+    a payload cached by one test must not leak into the next (e.g. a cached
+    success bypassing a test that expects the bundled fallback)."""
+    models_dev_parser._CACHED_API_DATA = None
+    yield
+    models_dev_parser._CACHED_API_DATA = None
 
 
 class TestProviderInfo:

@@ -135,6 +135,12 @@ class RetryingAsyncClient(httpx.AsyncClient):
                 if response.status_code not in self.retry_status_codes:
                     return response
 
+                # Don't retry if this is the last attempt: return the response
+                # un-closed so the caller can still read it (mirrors
+                # claude_cache_client._send_with_retries).
+                if attempt >= self.max_retries:
+                    return response
+
                 # Close response if we're going to retry
                 await response.aclose()
 

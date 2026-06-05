@@ -342,16 +342,54 @@ class TestCustomHelp:
             assert len(test_entry) == 2
             assert "Execute markdown command" in test_entry[1]
 
-    def test_reloads_commands_on_each_call(self):
-        """Test that _custom_help reloads commands each time."""
-        with patch(
-            "code_puppy.plugins.customizable_commands.register_callbacks._load_markdown_commands"
-        ) as mock_load:
-            mock_load.return_value = None
-            _custom_help()
-            _custom_help()
+    def test_skips_reload_when_signature_unchanged(self):
+        """_custom_help must NOT rescan every keystroke when nothing changed.
 
-        assert mock_load.call_count == 2
+        It loads once (cache cold), then reuses the cached parse on the second
+        call because the cheap directory signature is identical.
+        """
+        with tempfile.TemporaryDirectory() as tmpdir:
+            cmd_dir = Path(tmpdir)
+            (cmd_dir / "alpha.md").write_text("Alpha command")
+
+            with patch(
+                "code_puppy.plugins.customizable_commands.register_callbacks._COMMAND_DIRECTORIES",
+                [str(cmd_dir)],
+            ):
+                _reset_commands_cache()
+                callbacks_module._commands_signature = None
+                with patch(
+                    "code_puppy.plugins.customizable_commands.register_callbacks._load_markdown_commands",
+                    wraps=callbacks_module._load_markdown_commands,
+                ) as mock_load:
+                    _custom_help()
+                    _custom_help()
+
+            # Cold call rebuilds once; second identical-signature call is cached.
+            assert mock_load.call_count == 1
+
+    def test_reloads_when_command_file_changes(self):
+        """A changed/added .md file must flip the signature and trigger reload."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            cmd_dir = Path(tmpdir)
+            (cmd_dir / "alpha.md").write_text("Alpha command")
+
+            with patch(
+                "code_puppy.plugins.customizable_commands.register_callbacks._COMMAND_DIRECTORIES",
+                [str(cmd_dir)],
+            ):
+                _reset_commands_cache()
+                callbacks_module._commands_signature = None
+                first = _custom_help()
+                assert any(name == "alpha" for name, _ in first)
+
+                # Add a new command file -> signature changes -> reload picks it up.
+                (cmd_dir / "beta.md").write_text("Beta command")
+                second = _custom_help()
+
+            names = [name for name, _ in second]
+            assert "alpha" in names
+            assert "beta" in names
 
 
 class TestHandleCustomCommand:

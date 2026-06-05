@@ -12,6 +12,7 @@ Used by:
 
 from __future__ import annotations
 
+import logging
 import os
 from typing import Dict, List, Optional
 
@@ -55,9 +56,9 @@ def _load_merged_model_config() -> Dict[str, dict]:
         config = ModelFactory.load_config()
         if isinstance(config, dict):
             return config
-    except Exception:
+    except Exception as e:
         # Be resilient: a broken catalog must not break key hydration/UX.
-        pass
+        logging.getLogger(__name__).debug("Failed to load merged model config: %s", e)
     return {}
 
 

@@ -14,7 +14,7 @@ let the next ``history_processor`` invocation handle it.
 from __future__ import annotations
 
 import dataclasses
-from typing import Any, Callable, List, Optional, Set, Tuple
+from typing import Any, Callable, List, Optional, Set, Tuple, Union
 
 from pydantic_ai.messages import (
     ModelMessage,
@@ -25,6 +25,7 @@ from pydantic_ai.messages import (
 )
 
 from code_puppy.agents._history import (
+    _classify_tool_part,
     estimate_tokens_for_message,
     filter_huge_messages,
     has_pending_tool_calls,
@@ -57,19 +58,42 @@ _SUMMARIZATION_INSTRUCTIONS = (
     "Recent messages are preserved separately."
 )
 
+# Strong references to in-flight pre_compact hook tasks. asyncio only holds a
+# weak reference to scheduled tasks, so without this set a fire-and-forget task
+# can be garbage-collected mid-flight (and its exception silently dropped). The
+# done-callback discards the task and retrieves any exception so it's observed.
+_PENDING_PRECOMPACT_TASKS: Set[Any] = set()
+
+
+def _on_precompact_task_done(task: Any) -> None:
+    """Discard a finished pre_compact task and surface any swallowed error."""
+    _PENDING_PRECOMPACT_TASKS.discard(task)
+    if not task.cancelled():
+        exc = task.exception()
+        if exc is not None:
+            import logging
+
+            logging.getLogger(__name__).debug(
+                "on_pre_compact hook task failed: %s", exc, exc_info=exc
+            )
+
 
 def _find_safe_split_index(messages: List[ModelMessage], initial_split_idx: int) -> int:
-    """Adjust split index so we never sever a tool_call from its tool_return."""
+    """Adjust split index so we never sever a tool_call from its tool_return.
+
+    Uses the shared :func:`_history._classify_tool_part` classifier so builtin
+    tool-call/return pairs (``builtin-tool-call`` / ``builtin-tool-return``,
+    used by Claude extended-thinking etc.) are kept together too — matching
+    plain ``tool-call`` / ``tool-return`` only would silently sever those pairs.
+    """
     if initial_split_idx <= 1:
         return initial_split_idx
 
     protected_tool_return_ids: Set[str] = set()
     for msg in messages[initial_split_idx:]:
         for part in getattr(msg, "parts", []) or []:
-            if getattr(part, "part_kind", None) == "tool-return":
-                tcid = getattr(part, "tool_call_id", None)
-                if tcid:
-                    protected_tool_return_ids.add(tcid)
+            if _classify_tool_part(part) == "return":
+                protected_tool_return_ids.add(part.tool_call_id)
 
     if not protected_tool_return_ids:
         return initial_split_idx
@@ -80,11 +104,12 @@ def _find_safe_split_index(messages: List[ModelMessage], initial_split_idx: int)
         msg = messages[i]
         has_match = False
         for part in getattr(msg, "parts", []) or []:
-            if getattr(part, "part_kind", None) == "tool-call":
-                tcid = getattr(part, "tool_call_id", None)
-                if tcid and tcid in protected_tool_return_ids:
-                    has_match = True
-                    break
+            if (
+                _classify_tool_part(part) == "call"
+                and part.tool_call_id in protected_tool_return_ids
+            ):
+                has_match = True
+                break
         if has_match:
             adjusted_idx = i
         else:
@@ -281,7 +306,7 @@ def compact(
     agent: Any,
     messages: List[ModelMessage],
     model_max: int,
-    context_overhead: int,
+    context_overhead: Union[int, Callable[[], int]],
 ) -> Tuple[List[ModelMessage], List[ModelMessage]]:
     """Unified compaction entrypoint. Replaces ``message_history_processor``.
 
@@ -291,6 +316,11 @@ def compact(
         messages: Current message history (already accumulated by the caller).
         model_max: Effective model context window in tokens.
         context_overhead: Estimated overhead for system prompt + tool schemas.
+            May be passed as a plain int OR as a zero-arg callable (thunk) so
+            the (potentially expensive) overhead estimate is only computed at
+            the point it's actually needed — i.e. when we compute
+            ``proportion_used`` — rather than eagerly on every history-processor
+            cycle before any threshold check.
 
     Returns:
         ``(new_messages, dropped_messages_for_hash_tracking)``.
@@ -305,7 +335,10 @@ def compact(
             model_name = None
 
     message_tokens = sum(estimate_tokens_for_message(m, model_name) for m in messages)
-    total_tokens = message_tokens + context_overhead
+    # Resolve the overhead thunk only here, where it's first needed (to compute
+    # proportion_used). Backward compatible: a plain int is used directly.
+    overhead = context_overhead() if callable(context_overhead) else context_overhead
+    total_tokens = message_tokens + overhead
     proportion_used = total_tokens / model_max if model_max else 0.0
 
     context_summary = SpinnerBase.format_context_info(
@@ -331,7 +364,11 @@ def compact(
         try:
             asyncio.get_running_loop()
             # Inside running loop — schedule but don't await (compact() is sync).
-            asyncio.ensure_future(coro)
+            # Keep a strong reference and retrieve the exception in a done
+            # callback so the task isn't GC'd mid-flight and errors aren't lost.
+            task = asyncio.ensure_future(coro)
+            _PENDING_PRECOMPACT_TASKS.add(task)
+            task.add_done_callback(_on_precompact_task_done)
         except RuntimeError:
             asyncio.run(coro)
     except Exception:
@@ -485,7 +522,11 @@ def make_history_processor(agent: Any) -> Callable[..., List[ModelMessage]]:
             agent,
             history,
             agent._get_model_context_length(),
-            agent._estimate_context_overhead(),
+            # Pass the bound method UNcalled as a thunk; compact() resolves it
+            # lazily, only when it actually needs the overhead. Avoids
+            # re-resolving the system prompt + re-running prepare_prompt_for_model
+            # on every model request.
+            agent._estimate_context_overhead,
         )
         agent._message_history = new_history
         for m in dropped:

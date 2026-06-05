@@ -14,6 +14,8 @@ from typing import List
 from unittest.mock import patch
 
 from pydantic_ai.messages import (
+    BuiltinToolCallPart,
+    BuiltinToolReturnPart,
     ModelMessage,
     ModelRequest,
     ModelResponse,
@@ -26,6 +28,7 @@ from pydantic_ai.messages import (
 
 from code_puppy.agents import _compaction
 from code_puppy.agents._compaction import (
+    _find_safe_split_index,
     compact,
     make_history_processor,
     split_for_protected_summarization,
@@ -235,6 +238,78 @@ class TestSplitForProtectedSummarization:
             )
 
 
+class TestFindSafeSplitIndex:
+    """REGRESSION (fix #8): _find_safe_split_index must keep BUILTIN tool
+    call/return pairs together too, not just plain tool-call/tool-return.
+    Severing a builtin-tool-call from its builtin-tool-return yields a history
+    the model rejects."""
+
+    def _builtin_call(self, call_id: str) -> ModelMessage:
+        return ModelResponse(
+            parts=[
+                BuiltinToolCallPart(
+                    tool_name="web_search", args={}, tool_call_id=call_id
+                )
+            ]
+        )
+
+    def _builtin_return(self, call_id: str) -> ModelMessage:
+        return ModelRequest(
+            parts=[
+                BuiltinToolReturnPart(
+                    tool_name="web_search", content="results", tool_call_id=call_id
+                )
+            ]
+        )
+
+    def test_builtin_pair_not_severed(self):
+        # System, then a builtin call/return pair. A naive split at index 2
+        # (between the call and the return) would orphan the return; the safe
+        # index must back up to include the call.
+        msgs = [
+            _sys_msg(),
+            self._builtin_call("b1"),
+            self._builtin_return("b1"),
+        ]
+        # Initial split at 2 isolates the return (idx 2) from its call (idx 1).
+        adjusted = _find_safe_split_index(msgs, 2)
+        assert adjusted == 1, (
+            "builtin-tool-call must be pulled into the protected zone with its "
+            f"builtin-tool-return (got split index {adjusted})"
+        )
+
+    def test_builtin_pair_protected_via_split(self):
+        # End-to-end through split_for_protected_summarization: if the builtin
+        # return lands in the protected zone, its call must too.
+        msgs = [_sys_msg()]
+        for i in range(5):
+            msgs.append(_user_msg(f"q{i}: " + "x" * 400))
+            msgs.append(_assistant_text("ok " + "y" * 400))
+        msgs.append(_user_msg("do a builtin thing"))
+        msgs.append(self._builtin_call("final_builtin"))
+        msgs.append(self._builtin_return("final_builtin"))
+        msgs.append(_assistant_text("answered"))
+
+        _, protected = split_for_protected_summarization(msgs, protected_tokens=300)
+
+        call_ids = set()
+        return_ids = set()
+        for msg in protected:
+            for part in msg.parts:
+                cid = getattr(part, "tool_call_id", None)
+                if not cid:
+                    continue
+                if part.part_kind == "builtin-tool-call":
+                    call_ids.add(cid)
+                elif part.part_kind == "builtin-tool-return":
+                    return_ids.add(cid)
+        if "final_builtin" in return_ids:
+            assert "final_builtin" in call_ids, (
+                "builtin-tool-return pulled into protected zone without its "
+                "matching builtin-tool-call"
+            )
+
+
 # ---------- compact() --------------------------------------------------------
 
 
@@ -247,6 +322,48 @@ class TestCompact:
             )
         assert new_msgs is msgs, "under threshold must return the input unchanged"
         assert dropped == []
+
+    def test_context_overhead_accepts_callable_thunk(self):
+        """fix #1b: compact() accepts context_overhead as a zero-arg callable
+        and resolves it lazily (when proportion_used is computed)."""
+        msgs = _build_long_history(n_turns=2)
+        calls = {"n": 0}
+
+        def thunk() -> int:
+            calls["n"] += 1
+            return 0
+
+        with patch.object(_compaction, "get_compaction_threshold", return_value=0.95):
+            new_msgs, dropped = compact(
+                agent=None,
+                messages=msgs,
+                model_max=1_000_000,
+                context_overhead=thunk,
+            )
+        assert new_msgs is msgs
+        assert dropped == []
+        # The thunk was invoked exactly once (to compute proportion_used).
+        assert calls["n"] == 1, "overhead thunk must be resolved exactly once"
+
+    def test_context_overhead_callable_affects_threshold(self):
+        """A large overhead from the thunk pushes us over threshold just like a
+        large int would — the callable path is wired into the same math."""
+        msgs = _build_long_history(n_turns=20)
+        with patch.multiple(
+            _compaction,
+            get_compaction_threshold=lambda: 0.5,
+            get_compaction_strategy=lambda: "truncation",
+            get_protected_token_count=lambda: 500,
+        ):
+            # Overhead alone exceeds the model window → must compact.
+            new_msgs, dropped = compact(
+                agent=None,
+                messages=msgs,
+                model_max=10_000,
+                context_overhead=lambda: 9_000,
+            )
+        assert len(new_msgs) < len(msgs)
+        assert len(dropped) > 0
 
     def test_over_threshold_truncation_strategy(self):
         msgs = _build_long_history(n_turns=20)

@@ -1,10 +1,10 @@
 # agent_tools.py
 import asyncio
-import hashlib
 import json
 import pickle
 import re
 import traceback
+import uuid
 from contextlib import AsyncExitStack
 from datetime import datetime
 from functools import partial
@@ -44,13 +44,15 @@ _active_subagent_tasks: Set[asyncio.Task] = set()
 
 
 def _generate_session_hash_suffix() -> str:
-    """Generate a short SHA1 hash suffix based on current timestamp for uniqueness.
+    """Generate a short random hex suffix for uniqueness.
+
+    Uses ``uuid.uuid4`` rather than a timestamp-derived hash so that parallel
+    invocations within the same instant cannot collide.
 
     Returns:
         A 6-character hex string, e.g., "a3f2b1"
     """
-    timestamp = str(datetime.now().timestamp())
-    return hashlib.sha1(timestamp.encode()).hexdigest()[:6]
+    return uuid.uuid4().hex[:6]
 
 
 def _sanitize_for_session_id(value: str) -> str:
@@ -240,9 +242,7 @@ def _cap_subagent_response(response: str | None, session_id: str | None) -> str 
         return response
     keep = _MAX_SUBAGENT_RESPONSE_CHARS // 2
     omitted = len(response) - 2 * keep
-    pointer = (
-        f"; full transcript saved as session '{session_id}'" if session_id else ""
-    )
+    pointer = f"; full transcript saved as session '{session_id}'" if session_id else ""
     return (
         f"{response[:keep]}\n\n"
         f"... [{omitted} characters truncated to protect the parent's context"

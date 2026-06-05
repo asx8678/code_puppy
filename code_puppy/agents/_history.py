@@ -57,6 +57,16 @@ _TOOL_OVERHEAD_MAX = 1024
 _tool_overhead_cache: "OrderedDict[int, Tuple[Any, str, int]]" = OrderedDict()
 _tool_overhead_lock = threading.Lock()
 
+# Per-MCP-tool overhead (prefixed name + description + JSON input schema tokens).
+# MCP tool objects (and their schemas) are immutable once a server caches them,
+# so the (often large) ``json.dumps(inputSchema)`` should run once per tool
+# object instead of on every model request. Same id()+identity-guard scheme as
+# ``_tool_overhead_cache``; the prefix is part of the guard because the same
+# tool object can be served under different server prefixes.
+_MCP_TOOL_OVERHEAD_MAX = 1024
+_mcp_tool_overhead_cache: "OrderedDict[int, Tuple[Any, str, int]]" = OrderedDict()
+_mcp_tool_overhead_lock = threading.Lock()
+
 
 def stringify_part(part: Any) -> str:
     """Return a stable, timestamp-free string representation of a message part.
@@ -257,6 +267,46 @@ def _extract_tool_json_schema(tool_obj: Any) -> Optional[dict]:
     return None
 
 
+def _mcp_tool_tokens(mcp_tool: Any, prefix: str) -> int:
+    """Token contribution of one MCP tool (prefixed name + desc + input schema).
+
+    Memoized per tool object (guarded by ``prefix``) — MCP tool schemas are
+    immutable once cached, so the (often large) ``json.dumps(inputSchema)`` runs
+    once per tool object instead of on every model request. Mirrors
+    :func:`_tool_overhead_tokens`.
+    """
+    key = id(mcp_tool)
+    with _mcp_tool_overhead_lock:
+        entry = _mcp_tool_overhead_cache.get(key)
+        if entry is not None and entry[0] is mcp_tool and entry[1] == prefix:
+            _mcp_tool_overhead_cache.move_to_end(key)
+            return entry[2]
+
+    tokens = 0
+    name = getattr(mcp_tool, "name", "") or ""
+    full_name = f"{prefix}_{name}" if prefix else name
+    if full_name:
+        tokens += estimate_tokens(full_name)
+    description = getattr(mcp_tool, "description", "") or ""
+    if description:
+        tokens += estimate_tokens(description)
+    schema = getattr(mcp_tool, "inputSchema", None)
+    if schema:
+        try:
+            tokens += estimate_tokens(json.dumps(schema, sort_keys=True))
+        except (TypeError, ValueError):
+            # Schema isn't JSON-serializable for some reason — fall
+            # back to repr so we at least account for *something*.
+            tokens += estimate_tokens(repr(schema))
+
+    with _mcp_tool_overhead_lock:
+        _mcp_tool_overhead_cache[key] = (mcp_tool, prefix, tokens)
+        _mcp_tool_overhead_cache.move_to_end(key)
+        while len(_mcp_tool_overhead_cache) > _MCP_TOOL_OVERHEAD_MAX:
+            _mcp_tool_overhead_cache.popitem(last=False)
+    return tokens
+
+
 def _estimate_mcp_tool_tokens(mcp_servers: Optional[List[Any]]) -> int:
     """Count tokens contributed by MCP toolsets' tool definitions.
 
@@ -268,7 +318,9 @@ def _estimate_mcp_tool_tokens(mcp_servers: Optional[List[Any]]) -> int:
 
     Each ``mcp_types.Tool`` contributes its (prefixed) name, description, and
     JSON input schema — the same three things pydantic-ai serializes into
-    the request payload.
+    the request payload. Per-tool contributions are memoized (see
+    :func:`_mcp_tool_tokens`) so the schema serialization isn't repeated on
+    every model request.
     """
     if not mcp_servers:
         return 0
@@ -280,21 +332,7 @@ def _estimate_mcp_tool_tokens(mcp_servers: Optional[List[Any]]) -> int:
             continue
         prefix = getattr(server, "tool_prefix", None) or ""
         for mcp_tool in cached:
-            name = getattr(mcp_tool, "name", "") or ""
-            full_name = f"{prefix}_{name}" if prefix else name
-            if full_name:
-                total += estimate_tokens(full_name)
-            description = getattr(mcp_tool, "description", "") or ""
-            if description:
-                total += estimate_tokens(description)
-            schema = getattr(mcp_tool, "inputSchema", None)
-            if schema:
-                try:
-                    total += estimate_tokens(json.dumps(schema, sort_keys=True))
-                except (TypeError, ValueError):
-                    # Schema isn't JSON-serializable for some reason — fall
-                    # back to repr so we at least account for *something*.
-                    total += estimate_tokens(repr(schema))
+            total += _mcp_tool_tokens(mcp_tool, prefix)
     return total
 
 
@@ -481,9 +519,7 @@ def filter_huge_messages(
     """
     threshold = max(max_message_tokens, HUGE_MESSAGE_FLOOR_TOKENS)
     filtered = [
-        m
-        for m in messages
-        if estimate_tokens_for_message(m, model_name) < threshold
+        m for m in messages if estimate_tokens_for_message(m, model_name) < threshold
     ]
     return prune_interrupted_tool_calls(filtered)
 

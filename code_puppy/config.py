@@ -1,6 +1,7 @@
 import configparser
 import datetime
 import json
+import logging
 import os
 import pathlib
 import threading
@@ -512,7 +513,8 @@ def _default_model_from_models_json():
         _default_model_cache = "gpt-5"
         return "gpt-5"
     except Exception:
-        _default_model_cache = "gpt-5"
+        # A transient load_config error must not permanently poison the cached
+        # default — return the fallback WITHOUT memoizing it.
         return "gpt-5"
 
 
@@ -554,7 +556,8 @@ def _default_vision_model_from_models_json() -> str:
         _default_vision_model_cache = "gpt-4.1"
         return "gpt-4.1"
     except Exception:
-        _default_vision_model_cache = "gpt-4.1"
+        # A transient load_config error must not permanently poison the cached
+        # default — return the fallback WITHOUT memoizing it.
         return "gpt-4.1"
 
 
@@ -576,25 +579,34 @@ def _validate_model_exists(model_name: str) -> bool:
         _model_validation_cache[model_name] = exists
         return exists
     except Exception:
-        # If we can't validate, assume it exists to avoid breaking things
-        _model_validation_cache[model_name] = True
+        # If we can't validate, assume it exists to avoid breaking things.
+        # Do NOT memoize this fallback — a transient error must not pin a model
+        # as "valid" forever.
         return True
 
 
 def clear_model_cache():
     """Clear the model validation cache. Call this when models.json changes."""
-    global _model_validation_cache, _default_model_cache, _default_vision_model_cache
+    global \
+        _model_validation_cache, \
+        _default_model_cache, \
+        _default_vision_model_cache, \
+        _SESSION_MODEL
     _model_validation_cache.clear()
     _default_model_cache = None
     _default_vision_model_cache = None
+    # Reset the session model too: if it was set to a fallback while the catalog
+    # was unavailable, a stale fallback must not persist after the catalog
+    # changes. The next get_global_model_name() will re-resolve it.
+    _SESSION_MODEL = None
     # Also drop the assembled-config memo so model list/setting changes that
     # don't touch a source file (e.g. plugin-registered providers) take effect.
     try:
         from code_puppy.model_factory import clear_load_config_cache
 
         clear_load_config_cache()
-    except Exception:
-        pass
+    except Exception as e:
+        logging.getLogger(__name__).debug("Failed to clear load_config cache: %s", e)
 
 
 def reset_session_model():
@@ -704,8 +716,11 @@ def set_model_name(model: str):
     config[DEFAULT_SECTION]["model"] = model or ""
     _persist_config(config)
 
-    # Clear model cache when switching models to ensure fresh validation
+    # Clear model cache when switching models to ensure fresh validation.
+    # clear_model_cache() also resets _SESSION_MODEL, so re-assert the explicit
+    # selection afterward — the user picked this model deliberately.
     clear_model_cache()
+    _SESSION_MODEL = model
 
 
 def get_summarization_model_name() -> str:

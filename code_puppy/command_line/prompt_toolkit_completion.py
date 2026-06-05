@@ -339,8 +339,12 @@ class CDCompleter(Completer):
                     display=d + os.sep,
                     display_meta="Directory",
                 )
-        except Exception:
-            # Silently ignore errors (e.g., permission issues, non-existent dir)
+        except (OSError, PermissionError, RuntimeError):
+            # Non-fatal: ignore filesystem errors (permission issues,
+            # non-existent dir). ``list_directory`` wraps the underlying OSError
+            # in a RuntimeError, so we catch that here too. Narrowed from a bare
+            # ``except Exception`` so genuinely unexpected error types surface
+            # instead of being silently swallowed on the completion path.
             pass
 
 
@@ -402,6 +406,140 @@ class SlashCompleter(Completer):
     to show all available slash commands.
     """
 
+    def __init__(self):
+        # Cached, fully-assembled+sorted candidate list (built with an empty
+        # prefix). Each '/'-keystroke only FILTERS this cached list instead of
+        # re-querying the registry, re-running plugin help, and re-sorting.
+        self._cached_completions: Optional[list] = None
+        self._cached_signature: Optional[tuple] = None
+
+    def _candidates_signature(self):
+        """Cheap signature that flips when the candidate set could change.
+
+        Combines the command-registry size with the markdown custom-command
+        directory signature from the customizable_commands plugin. Computing it
+        is just a dict ``len`` plus a few ``stat`` calls, which is what keeps
+        the keystroke path fast while still rebuilding when commands change.
+        """
+        try:
+            from code_puppy.command_line.command_registry import _COMMAND_REGISTRY
+
+            registry_size = len(_COMMAND_REGISTRY)
+        except Exception:
+            registry_size = -1
+
+        custom_sig = None
+        try:
+            from code_puppy.plugins.customizable_commands.register_callbacks import (
+                _compute_commands_signature,
+            )
+
+            custom_sig = _compute_commands_signature()
+        except Exception:
+            custom_sig = None
+
+        return (registry_size, custom_sig)
+
+    def _build_all_candidates(self) -> Optional[list]:
+        """Assemble and sort the full (unfiltered) candidate list.
+
+        Mirrors the original per-keystroke assembly with an empty prefix, so
+        filtering the result by the typed prefix yields identical entries and
+        ordering. ``sort_key`` is the lowercased match text, which is
+        prefix-independent — that is what makes prefix-filtering the cached
+        sorted list equivalent to building-then-sorting per prefix.
+
+        Returns ``None`` when the command registry lookup itself fails, which
+        preserves the original behavior of yielding *no* completions at all in
+        that case (the caller skips caching too, so it retries next keystroke).
+        """
+        all_completions = []
+
+        # Load all available commands. If this fails, signal "no completions"
+        # exactly like the original early-return did.
+        try:
+            commands = get_unique_commands()
+        except Exception:
+            return None
+
+        for cmd in commands:
+            all_completions.append(
+                {
+                    "text": cmd.name,
+                    "display": f"/{cmd.name}",
+                    "meta": cmd.description,
+                    "sort_key": cmd.name.lower(),  # Case-insensitive sort
+                }
+            )
+
+            # Add all aliases
+            for alias in cmd.aliases:
+                all_completions.append(
+                    {
+                        "text": alias,
+                        "display": f"/{alias} (alias for /{cmd.name})",
+                        "meta": cmd.description,
+                        "sort_key": alias.lower(),  # Sort by alias name, not primary command
+                    }
+                )
+
+        # Also include custom commands from plugins (like claude-code-auth)
+        try:
+            from code_puppy import callbacks, plugins
+
+            # Ensure plugins are loaded so custom commands are registered
+            plugins.load_plugin_callbacks()
+            custom_help_results = callbacks.on_custom_command_help()
+            for res in custom_help_results:
+                if not res:
+                    continue
+                # Format 1: List of tuples (command_name, description)
+                if isinstance(res, list):
+                    for item in res:
+                        if isinstance(item, tuple) and len(item) == 2:
+                            cmd_name = str(item[0])
+                            description = str(item[1])
+                            all_completions.append(
+                                {
+                                    "text": cmd_name,
+                                    "display": f"/{cmd_name}",
+                                    "meta": description,
+                                    "sort_key": cmd_name.lower(),
+                                }
+                            )
+                # Format 2: Single tuple (command_name, description)
+                elif isinstance(res, tuple) and len(res) == 2:
+                    cmd_name = str(res[0])
+                    description = str(res[1])
+                    all_completions.append(
+                        {
+                            "text": cmd_name,
+                            "display": f"/{cmd_name}",
+                            "meta": description,
+                            "sort_key": cmd_name.lower(),
+                        }
+                    )
+        except Exception:
+            # If custom command loading fails, continue with registered commands only
+            pass
+
+        # Sort all completions alphabetically
+        all_completions.sort(key=lambda x: x["sort_key"])
+        return all_completions
+
+    def _get_candidates(self) -> list:
+        """Return the cached candidate list, rebuilding only on signature change."""
+        signature = self._candidates_signature()
+        if self._cached_completions is None or signature != self._cached_signature:
+            built = self._build_all_candidates()
+            if built is None:
+                # Registry lookup failed — yield nothing and don't cache, so the
+                # next keystroke retries (matches original early-return behavior).
+                return []
+            self._cached_completions = built
+            self._cached_signature = signature
+        return self._cached_completions
+
     def get_completions(self, document, complete_event):
         text_before_cursor = document.text_before_cursor
         stripped_text = text_before_cursor.lstrip()
@@ -420,93 +558,17 @@ class SlashCompleter(Completer):
             partial = stripped_text[1:]  # text after '/'
             start_position = -(len(partial))  # Replace what was typed after '/'
 
-        # Load all available commands
-        try:
-            commands = get_unique_commands()
-        except Exception:
-            # If command loading fails, return no completions
-            return
-
-        # Collect all primary commands and their aliases for proper alphabetical sorting
-        all_completions = []
-
         # Convert partial to lowercase for case-insensitive matching
         partial_lower = partial.lower()
 
-        for cmd in commands:
-            # Add primary command (case-insensitive matching)
-            if cmd.name.lower().startswith(partial_lower):
-                all_completions.append(
-                    {
-                        "text": cmd.name,
-                        "display": f"/{cmd.name}",
-                        "meta": cmd.description,
-                        "sort_key": cmd.name.lower(),  # Case-insensitive sort
-                    }
-                )
-
-            # Add all aliases (case-insensitive matching)
-            for alias in cmd.aliases:
-                if alias.lower().startswith(partial_lower):
-                    all_completions.append(
-                        {
-                            "text": alias,
-                            "display": f"/{alias} (alias for /{cmd.name})",
-                            "meta": cmd.description,
-                            "sort_key": alias.lower(),  # Sort by alias name, not primary command
-                        }
-                    )
-
-        # Also include custom commands from plugins (like claude-code-auth)
-        try:
-            from code_puppy import callbacks, plugins
-
-            # Ensure plugins are loaded so custom commands are registered
-            plugins.load_plugin_callbacks()
-            custom_help_results = callbacks.on_custom_command_help()
-            for res in custom_help_results:
-                if not res:
-                    continue
-                # Format 1: List of tuples (command_name, description)
-                if isinstance(res, list):
-                    for item in res:
-                        if isinstance(item, tuple) and len(item) == 2:
-                            cmd_name = str(item[0])
-                            description = str(item[1])
-                            if cmd_name.lower().startswith(partial_lower):
-                                all_completions.append(
-                                    {
-                                        "text": cmd_name,
-                                        "display": f"/{cmd_name}",
-                                        "meta": description,
-                                        "sort_key": cmd_name.lower(),
-                                    }
-                                )
-                # Format 2: Single tuple (command_name, description)
-                elif isinstance(res, tuple) and len(res) == 2:
-                    cmd_name = str(res[0])
-                    description = str(res[1])
-                    if cmd_name.lower().startswith(partial_lower):
-                        all_completions.append(
-                            {
-                                "text": cmd_name,
-                                "display": f"/{cmd_name}",
-                                "meta": description,
-                                "sort_key": cmd_name.lower(),
-                            }
-                        )
-        except Exception:
-            # If custom command loading fails, continue with registered commands only
-            pass
-
-        # Sort all completions alphabetically
-        all_completions.sort(key=lambda x: x["sort_key"])
-
+        # Filter the cached, pre-sorted candidate list by the typed prefix.
         # Yield the sorted completions.
         # Strip variation selectors (U+FE00-FE0F) from display strings to avoid
         # width-calculation mismatches between prompt_toolkit and the terminal,
         # which manifest as phantom spaces in the input line (e.g. /judges ⚖️).
-        for completion in all_completions:
+        for completion in self._get_candidates():
+            if not completion["sort_key"].startswith(partial_lower):
+                continue
             yield Completion(
                 completion["text"],
                 start_position=start_position,

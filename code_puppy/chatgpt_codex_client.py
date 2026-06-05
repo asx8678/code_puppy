@@ -24,6 +24,12 @@ import httpx
 
 logger = logging.getLogger(__name__)
 
+# Upper bound on how much SSE data we'll accumulate when converting a forced
+# stream into a single response. Without a cap, a runaway/never-terminating
+# stream would buffer unboundedly in memory. 32 MB is far above any legitimate
+# Codex response while still bounding worst-case memory.
+MAX_STREAM_ACCUMULATION_CHARS = 32 * 1024 * 1024
+
 
 def _is_reasoning_model(model_name: str) -> bool:
     """Check if a model supports reasoning parameters."""
@@ -242,6 +248,11 @@ class ChatGPTCodexAsyncClient(httpx.AsyncClient):
         # floor and pydantic_ai retries forever.
         completed_output_items: list[dict] = []
 
+        # Guard against an unbounded / runaway stream: track how much SSE
+        # payload we've consumed and bail cleanly past a generous cap so we
+        # never buffer the whole world in memory.
+        total_accumulated_chars = 0
+
         # Read the entire stream
         async for line in response.aiter_lines():
             if not line or not line.startswith("data:"):
@@ -250,6 +261,14 @@ class ChatGPTCodexAsyncClient(httpx.AsyncClient):
             data_str = line[5:].strip()  # Remove "data:" prefix
             if data_str == "[DONE]":
                 break
+
+            total_accumulated_chars += len(data_str)
+            if total_accumulated_chars > MAX_STREAM_ACCUMULATION_CHARS:
+                raise RuntimeError(
+                    "Codex SSE stream exceeded the maximum accumulation size "
+                    f"of {MAX_STREAM_ACCUMULATION_CHARS} characters; aborting "
+                    "stream-to-response conversion to avoid unbounded memory use."
+                )
 
             try:
                 event = json.loads(data_str)

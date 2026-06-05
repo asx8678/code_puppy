@@ -12,6 +12,19 @@ Plugins can register:
 
 from dataclasses import dataclass
 
+# Model alias/id substrings that should default to adaptive thinking. Defined at
+# module scope so it isn't rebuilt on every supports_adaptive_thinking() call.
+_ADAPTIVE_TAGS = (
+    "opus-4-6",
+    "4-6-opus",
+    "opus-4-7",
+    "4-7-opus",
+    "opus-4-8",
+    "4-8-opus",
+    "sonnet-4-6",
+    "4-6-sonnet",
+)
+
 
 @dataclass
 class PreparedPrompt:
@@ -127,16 +140,6 @@ def supports_adaptive_thinking(
     if actual_model_id:
         candidates.append(actual_model_id.lower())
 
-    _ADAPTIVE_TAGS = (
-        "opus-4-6",
-        "4-6-opus",
-        "opus-4-7",
-        "4-7-opus",
-        "opus-4-8",
-        "4-8-opus",
-        "sonnet-4-6",
-        "4-6-sonnet",
-    )
     return any(tag in c for c in candidates for tag in _ADAPTIVE_TAGS)
 
 

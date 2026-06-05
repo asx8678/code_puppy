@@ -65,7 +65,7 @@ class RetryManager:
         self,
         func: Callable,
         max_attempts: int = 3,
-        strategy: str = "exponential",
+        strategy: str = "exponential_jitter",
         server_id: str = "unknown",
     ) -> Any:
         """
@@ -74,7 +74,9 @@ class RetryManager:
         Args:
             func: The async function to execute
             max_attempts: Maximum number of retry attempts
-            strategy: Backoff strategy ('fixed', 'linear', 'exponential', 'exponential_jitter')
+            strategy: Backoff strategy ('fixed', 'linear', 'exponential', 'exponential_jitter').
+                Defaults to 'exponential_jitter' so concurrent retries spread
+                out and don't form a thundering herd against a recovering server.
             server_id: ID of the server for tracking stats
 
         Returns:
@@ -210,9 +212,12 @@ class RetryManager:
         if "schema" in error_str or "validation" in error_str:
             return False
 
-        # By default, consider other errors as potentially retryable
-        # This is conservative but helps handle unknown transient issues
-        return True
+        # Default: do NOT retry unrecognized exceptions. MCP calls are not
+        # guaranteed to be idempotent, so blindly retrying an unknown error
+        # risks re-invoking a side-effecting tool. Only the known-transient
+        # types handled above (network errors, timeouts, 5xx/429/408, JSON
+        # decode errors) are retried.
+        return False
 
     async def record_retry(self, server_id: str, attempts: int, success: bool) -> None:
         """

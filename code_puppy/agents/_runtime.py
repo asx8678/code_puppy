@@ -313,9 +313,13 @@ async def run_with_mcp(
         for r in submit_results:
             if isinstance(r, str) and r:
                 prompt = r
-    except Exception:
+    except Exception as exc:
         # Hook failures must never block the run.
-        pass
+        import logging
+
+        logging.getLogger(__name__).debug(
+            "on_user_prompt_submit hook failed: %s", exc, exc_info=True
+        )
 
     if agent._code_generation_agent is None:
         build_pydantic_agent(agent)
@@ -510,9 +514,13 @@ async def run_with_mcp(
             model_name=agent.get_model_name(),
             session_id=group_id,
         )
-    except Exception:
+    except Exception as exc:
         # Hook failures never block the agent.
-        pass
+        import logging
+
+        logging.getLogger(__name__).debug(
+            "on_agent_run_start hook failed: %s", exc, exc_info=True
+        )
 
     agent_task = asyncio.create_task(run_agent_task())
 
@@ -597,8 +605,12 @@ async def run_with_mcp(
                 response_text=run_response_text,
                 metadata={"model": agent.get_model_name()},
             )
-        except Exception:
-            pass
+        except Exception as exc:
+            import logging
+
+            logging.getLogger(__name__).debug(
+                "on_agent_run_end hook failed: %s", exc, exc_info=True
+            )
 
         if key_listener_handle is not None:
             _key_listeners.set_active_handle(None)

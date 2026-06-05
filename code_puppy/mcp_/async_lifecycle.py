@@ -16,6 +16,12 @@ from pydantic_ai.mcp import MCPServerSSE, MCPServerStdio, MCPServerStreamableHTT
 
 logger = logging.getLogger(__name__)
 
+# How often the per-server lifecycle task wakes to check whether the server is
+# still running. This only gates how quickly an unexpected stop is *detected*
+# (explicit stop_server cancels the task immediately and is unaffected), so a
+# longer interval is fine and avoids waking every second forever per server.
+HEARTBEAT_INTERVAL_SECONDS = 5
+
 
 @dataclass
 class ManagedServerContext:
@@ -167,7 +173,7 @@ class AsyncServerLifecycleManager:
             # Keep the task alive until cancelled
             loop_count = 0
             while True:
-                await asyncio.sleep(1)
+                await asyncio.sleep(HEARTBEAT_INTERVAL_SECONDS)
                 loop_count += 1
 
                 # Check if server is still running

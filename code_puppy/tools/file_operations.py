@@ -376,35 +376,44 @@ def _list_files(
         # ripgrep's --files option only returns files; we add directories and files ourselves
         if not recursive:
             try:
-                entries = os.listdir(directory)
-                for entry in sorted(entries):
-                    full_entry_path = os.path.join(directory, entry)
-                    if not os.path.exists(full_entry_path):
+                # os.scandir() caches stat info on each DirEntry, so is_dir()/
+                # is_file()/stat() avoid the extra per-entry syscalls that
+                # os.listdir() + os.path.exists/isdir/isfile/getsize incurred.
+                with os.scandir(directory) as scan:
+                    entries = sorted(scan, key=lambda e: e.name)
+                for entry in entries:
+                    full_entry_path = entry.path
+                    try:
+                        is_dir = entry.is_dir()
+                        is_file = entry.is_file()
+                    except OSError:
+                        # Broken symlink or otherwise inaccessible; skip it
+                        # (matches the old os.path.exists()-based skip).
                         continue
 
-                    if os.path.isdir(full_entry_path):
+                    if is_dir:
                         # In non-recursive mode, only skip obviously system/hidden directories
                         # Don't use the full should_ignore_dir_path which is too aggressive
-                        if entry.startswith("."):
+                        if entry.name.startswith("."):
                             continue
                         results.append(
                             ListedFile(
-                                path=entry,
+                                path=entry.name,
                                 type="directory",
                                 size=0,
                                 full_path=full_entry_path,
                                 depth=0,
                             )
                         )
-                    elif os.path.isfile(full_entry_path):
+                    elif is_file:
                         # Include top-level files (including binaries)
                         try:
-                            size = os.path.getsize(full_entry_path)
+                            size = entry.stat().st_size
                         except OSError:
                             size = 0
                         results.append(
                             ListedFile(
-                                path=entry,
+                                path=entry.name,
                                 type="file",
                                 size=size,
                                 full_path=full_entry_path,

@@ -4,7 +4,34 @@ import tempfile
 from pathlib import Path
 from unittest.mock import patch
 
+import code_puppy.agents.agent_manager as am
 from code_puppy.agents import get_available_agents, refresh_agents
+
+
+def test_discovery_is_cached_between_unchanged_calls():
+    """fix #4: read paths must NOT rebuild the registry when nothing changed.
+
+    After an explicit refresh (which forces discovery + records the signature),
+    a subsequent read with no filesystem/plugin change must skip the expensive
+    ``_discover_agents`` rebuild.
+    """
+    # Establish a known-good baseline: registry populated, signature recorded.
+    refresh_agents()
+    assert len(am._AGENT_REGISTRY) > 0
+
+    with patch.object(am, "_discover_agents") as mock_discover:
+        get_available_agents()  # signature unchanged → cache hit
+        mock_discover.assert_not_called()
+
+
+def test_refresh_forces_rediscovery():
+    """fix #4: refresh_agents() is the explicit cache-buster — it must always
+    call _discover_agents even right after a cached read."""
+    # Prime the cache so a naive implementation might skip discovery.
+    get_available_agents()
+    with patch.object(am, "_discover_agents") as mock_discover:
+        refresh_agents()
+        mock_discover.assert_called_once()
 
 
 def test_refresh_agents_function():

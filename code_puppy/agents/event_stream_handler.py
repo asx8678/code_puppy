@@ -31,6 +31,22 @@ from code_puppy.tools.subagent_context import is_subagent
 
 logger = logging.getLogger(__name__)
 
+# Strong references to in-flight stream-event callback tasks. asyncio keeps only
+# a weak reference to scheduled tasks, so without this set a per-delta
+# fire-and-forget task can be garbage-collected mid-flight (dropping its
+# exception). The done-callback discards the task and retrieves any exception so
+# it's observed rather than lost.
+_pending_stream_event_tasks: set = set()
+
+
+def _on_stream_event_task_done(task) -> None:
+    """Discard a finished stream-event task and surface any swallowed error."""
+    _pending_stream_event_tasks.discard(task)
+    if not task.cancelled():
+        exc = task.exception()
+        if exc is not None:
+            logger.debug("stream_event callback task failed: %s", exc, exc_info=exc)
+
 
 def _fire_stream_event(event_type: str, event_data: Any) -> None:
     """Fire a stream event callback asynchronously (non-blocking).
@@ -64,9 +80,11 @@ def _fire_stream_event(event_type: str, event_data: Any) -> None:
         from code_puppy.messaging import get_session_context
 
         agent_session_id = get_session_context()
-        loop.create_task(
+        task = loop.create_task(
             callbacks.on_stream_event(event_type, event_data, agent_session_id)
         )
+        _pending_stream_event_tasks.add(task)
+        task.add_done_callback(_on_stream_event_task_done)
     except ImportError:
         logger.debug("callbacks or messaging module not available for stream event")
     except Exception as e:
@@ -231,14 +249,18 @@ async def event_stream_handler(
         )
         did_stream_anything = True
 
+    # Resolve the pause controller once, before the per-event loop: only
+    # ``is_paused()`` needs polling per event. The config read for the pause
+    # timeout stays inside the paused branch (it only runs when paused).
+    from code_puppy.messaging.pause_controller import get_pause_controller
+
+    _pc = get_pause_controller()
+
     async for event in events:
         # ---- Pause gate ------------------------------------------------
         # If the user has paused the agent, suppress rendering and block
         # at this safe boundary until resume (or until the safety timeout
         # expires, to avoid SSE upstream timeouts).
-        from code_puppy.messaging.pause_controller import get_pause_controller
-
-        _pc = get_pause_controller()
         if _pc.is_paused():
             # Hide the spinner while paused so nothing animates.
             pause_all_spinners()

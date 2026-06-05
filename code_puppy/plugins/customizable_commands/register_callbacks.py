@@ -8,6 +8,10 @@ from code_puppy.messaging import emit_error, emit_info
 _custom_commands: Dict[str, str] = {}
 _command_descriptions: Dict[str, str] = {}
 _commands_loaded: bool = False  # Sentinel to track if commands have been loaded
+# Cheap signature (set of (dir, mtime) for the command directories) captured at
+# the last load. Used by _custom_help() to skip the expensive glob+read_text
+# rescan on every '/'-keystroke when nothing on disk has changed.
+_commands_signature: Optional[frozenset] = None
 
 # Directories to scan for commands (in priority order - later directories override earlier)
 _COMMAND_DIRECTORIES = [
@@ -90,10 +94,50 @@ def _load_markdown_commands() -> None:
                 emit_error(f"Failed to load command from {md_file}: {e}")
 
 
+def _compute_commands_signature() -> frozenset:
+    """Return a cheap signature of the command directories' on-disk state.
+
+    The signature is the set of ``(directory, file, mtime_ns)`` for every
+    command file across the configured directories. A changed, added, or
+    removed ``.md`` file flips the signature, which is what lets
+    :func:`_custom_help` skip the expensive rescan while still picking up
+    edits. Only ``stat`` calls are made here (no ``read_text``), so this stays
+    cheap enough for the ``/``-keystroke hot path.
+    """
+    entries = []
+    for directory in _COMMAND_DIRECTORIES:
+        dir_path = Path(directory).expanduser()
+        try:
+            if not dir_path.exists():
+                continue
+            pattern = "*.md" if directory != ".github/prompts" else "*.prompt.md"
+            for md_file in dir_path.glob(pattern):
+                try:
+                    mtime_ns = md_file.stat().st_mtime_ns
+                except OSError:
+                    mtime_ns = None
+                entries.append((directory, md_file.name, mtime_ns))
+        except OSError:
+            # Treat an unreadable directory like a missing one for signature
+            # purposes; the rebuild path applies the same try/except guards.
+            continue
+    return frozenset(entries)
+
+
 def _custom_help() -> List[Tuple[str, str]]:
-    """Return help entries for loaded markdown commands."""
-    # Reload commands to pick up any changes
-    _load_markdown_commands()
+    """Return help entries for loaded markdown commands.
+
+    Runs on every ``/``-keystroke via the slash completer, so we avoid the
+    full glob + ``read_text`` rescan unless the cheap directory signature has
+    changed (or commands have never been loaded). The signature picks up
+    added/removed/edited command files.
+    """
+    global _commands_signature
+
+    signature = _compute_commands_signature()
+    if not _commands_loaded or signature != _commands_signature:
+        _load_markdown_commands()
+        _commands_signature = signature
 
     help_entries = []
     for name, description in sorted(_command_descriptions.items()):

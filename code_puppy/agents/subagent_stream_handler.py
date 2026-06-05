@@ -29,6 +29,22 @@ from pydantic_ai.messages import (
 
 logger = logging.getLogger(__name__)
 
+# Strong references to in-flight stream-event callback tasks. asyncio keeps only
+# a weak reference to scheduled tasks, so without this set a per-delta
+# fire-and-forget task can be garbage-collected mid-flight (dropping its
+# exception). The done-callback discards the task and retrieves any exception so
+# it's observed rather than lost.
+_pending_stream_event_tasks: set = set()
+
+
+def _on_stream_event_task_done(task) -> None:
+    """Discard a finished stream-event task and surface any swallowed error."""
+    _pending_stream_event_tasks.discard(task)
+    if not task.cancelled():
+        exc = task.exception()
+        if exc is not None:
+            logger.debug("stream_event callback task failed: %s", exc, exc_info=exc)
+
 
 # =============================================================================
 # Callback Helper
@@ -50,8 +66,19 @@ def _fire_callback(event_type: str, event_data: Any, session_id: Optional[str]) 
     try:
         from code_puppy import callbacks
 
+        # Fast path: no stream_event subscribers → do nothing. This is called
+        # for every streamed part delta, so the common "nobody is listening"
+        # case must avoid the coroutine allocation + task scheduling. Mirrors
+        # the fast-path in event_stream_handler._fire_stream_event.
+        if callbacks.count_callbacks("stream_event") == 0:
+            return
+
         loop = asyncio.get_running_loop()
-        loop.create_task(callbacks.on_stream_event(event_type, event_data, session_id))
+        task = loop.create_task(
+            callbacks.on_stream_event(event_type, event_data, session_id)
+        )
+        _pending_stream_event_tasks.add(task)
+        task.add_done_callback(_on_stream_event_task_done)
     except RuntimeError:
         # No event loop running - this can happen during shutdown
         logger.debug("No event loop available for stream event callback")

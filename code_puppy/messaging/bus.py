@@ -442,6 +442,18 @@ class MessageBus:
         except queue.Empty:
             return None
 
+    def get_message_blocking(self, timeout: float = 0.1) -> Optional[AnyMessage]:
+        """Block up to ``timeout`` seconds for the next outgoing message.
+
+        Lets a sync consumer wait efficiently on the queue instead of
+        busy-polling ``get_message_nowait`` with a sleep. Returns None if no
+        message arrives within ``timeout`` (so callers can re-check liveness).
+        """
+        try:
+            return self._outgoing.get(timeout=timeout)
+        except queue.Empty:
+            return None
+
     async def get_command(self) -> AnyCommand:
         """Get the next incoming command (async).
 

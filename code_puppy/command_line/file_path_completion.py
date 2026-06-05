@@ -17,6 +17,7 @@ Fallback chain so nothing ever feels broken:
 from __future__ import annotations
 
 import glob
+import heapq
 import os
 from typing import Iterable, List, Tuple
 
@@ -76,30 +77,32 @@ def _fuzzy_completions(query: str, start_position: int) -> List[Completion]:
         return []
 
     q_lower = query.lower()
-    scored: List[Tuple[int, str, str]] = []  # (-score, path, basename)
+    scored: List[Tuple[int, str]] = []  # (-score, path)
     for path, path_lower, basename_lower in zip(
         snap.paths, snap.lowered, snap.basenames_lower, strict=True
     ):
         s = _score(basename_lower, path_lower, q_lower)
         if s > 0:
-            # Negate score so a normal ascending sort gives us best-first.
-            scored.append((-s, path, os.path.basename(path)))
+            # Negate score so "smallest" == best; ties break on path ascending.
+            scored.append((-s, path))
 
     if not scored:
         return []
 
-    # Stable secondary sort on path keeps deterministic ordering for ties.
-    scored.sort()
-    top = scored[:MAX_FUZZY_RESULTS]
+    # heapq.nsmallest avoids fully sorting the (up-to-200k) match list each
+    # keystroke. On (-score, path) tuples it is equivalent to the previous
+    # ``sorted(scored)[:MAX_FUZZY_RESULTS]``: best score first, then path
+    # ascending for ties — same top-N entries in the same order.
+    top = heapq.nsmallest(MAX_FUZZY_RESULTS, scored)
 
     return [
         Completion(
             path,
             start_position=start_position,
-            display=basename,
+            display=os.path.basename(path),
             display_meta=path,  # show full relpath so users see disambiguation
         )
-        for _neg_score, path, basename in top
+        for _neg_score, path in top
     ]
 
 

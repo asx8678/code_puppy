@@ -190,7 +190,7 @@ def handle_command(command: str):
 
     # Check if this is a registered command
     if command.startswith("/"):
-        # Extract command name (first word after /)
+        # Extract command name (first word after /) once and reuse below.
         cmd_name = command[1:].split()[0] if len(command) > 1 else ""
 
         # Try to find in registry
@@ -199,47 +199,10 @@ def handle_command(command: str):
             # Execute the registered handler
             return cmd_info.handler(command)
 
-    # ========================================================================
-    # LEGACY COMMAND FALLBACK
-    # ========================================================================
-    # This section is kept as a fallback mechanism for commands added in other
-    # branches that haven't been migrated to the registry system yet.
-    #
-    # All current commands are registered above using @register_command, so
-    # they won't fall through to this section.
-    #
-    # If you're rebasing and your branch adds a new command using the old
-    # if/elif style, it will still work! Just add your if block below.
-    #
-    # EXAMPLE: How to add a legacy command:
-    #
-    #   if command.startswith("/mycommand"):
-    #       from code_puppy.messaging import emit_info
-    #       emit_info("My command executed!")
-    #       return True
-    #
-    # NOTE: For new commands, please use @register_command instead (see above).
-    # ========================================================================
-
-    # Legacy commands from other branches/rebases go here:
-    # (All current commands are in the registry above)
-
-    # Example placeholder (remove this and add your command if needed):
-    # if command.startswith("/my_new_command"):
-    #     from code_puppy.messaging import emit_info
-    #     emit_info("Command executed!")
-    #     return True
-
-    # End of legacy fallback section
-    # ========================================================================
-
-    # All legacy command implementations have been moved to @register_command handlers above.
-    # If you're adding a new command via rebase, add your if block here.
-
     # Try plugin-provided custom commands before unknown warning
     if command.startswith("/"):
-        # Extract command name without leading slash and arguments intact
-        name = command[1:].split()[0] if len(command) > 1 else ""
+        # Reuse the command name parsed above (without leading slash).
+        name = cmd_name
         try:
             from code_puppy import callbacks
 

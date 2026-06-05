@@ -30,6 +30,7 @@ from rich.markdown import Markdown
 from rich.markup import escape as escape_rich_markup
 from rich.text import Text
 
+from ._render_lock import CONSOLE_RENDER_LOCK
 from .message_queue import MessageQueue, MessageType, UIMessage
 
 # Threshold for emitting a ``[buffered N messages during pause]`` indicator
@@ -135,24 +136,26 @@ def _print_message(console: Console, message: UIMessage) -> None:
     """Print ``message`` to ``console`` using the standard styling rules."""
     style = _classify_style(message)
     content = message.content
-    if isinstance(content, str):
-        if message.type == MessageType.AGENT_RESPONSE:
-            try:
-                console.print(Markdown(content))
-            except Exception:
+    # Serialize against other threads writing the same shared console.
+    with CONSOLE_RENDER_LOCK:
+        if isinstance(content, str):
+            if message.type == MessageType.AGENT_RESPONSE:
+                try:
+                    console.print(Markdown(content))
+                except Exception:
+                    console.print(escape_rich_markup(content))
+            elif style:
+                console.print(escape_rich_markup(content), style=style)
+            else:
                 console.print(escape_rich_markup(content))
-        elif style:
-            console.print(escape_rich_markup(content), style=style)
         else:
-            console.print(escape_rich_markup(content))
-    else:
-        # Complex Rich objects (Tables, Markdown, Text, etc.) pass through.
-        console.print(content)
+            # Complex Rich objects (Tables, Markdown, Text, etc.) pass through.
+            console.print(content)
 
-    # Ensure output is immediately flushed to the terminal so messages
-    # don't get stuck waiting for the next user input.
-    if hasattr(console.file, "flush"):
-        console.file.flush()
+        # Ensure output is immediately flushed to the terminal so messages
+        # don't get stuck waiting for the next user input.
+        if hasattr(console.file, "flush"):
+            console.file.flush()
 
 
 class InteractiveRenderer(MessageRenderer):
@@ -189,7 +192,8 @@ class InteractiveRenderer(MessageRenderer):
             self._paused_buffer = []
             if len(pending) >= _BUFFER_FLUSH_INDICATOR_THRESHOLD:
                 try:
-                    self.console.print(_flush_indicator(len(pending)))
+                    with CONSOLE_RENDER_LOCK:
+                        self.console.print(_flush_indicator(len(pending)))
                 except Exception:
                     pass
             for msg in pending:
@@ -233,6 +237,11 @@ class SynchronousInteractiveRenderer:
 
         self._running = True
         self.queue.mark_renderer_active()
+        # Ensure the queue's processing thread is running so our listener
+        # actually fires. In production get_global_queue() already started it
+        # (this call is idempotent); for a bare MessageQueue (e.g. tests) this
+        # is what drives delivery to the listener below.
+        self.queue.start()
         self.queue.add_listener(self._render_message)
 
         # Register active-flush listener so we drain even when nothing else
@@ -245,8 +254,11 @@ class SynchronousInteractiveRenderer:
             # Never let listener registration take down the renderer.
             pass
 
-        self._thread = threading.Thread(target=self._consume_messages, daemon=True)
-        self._thread.start()
+        # NOTE: we deliberately do NOT spawn a separate consume thread.
+        # The queue's _process_messages thread already delivers every message
+        # to our registered listener; a second draining thread would race it
+        # for the same queue.Queue — scrambling message order and contending
+        # on the shared console for no benefit.
 
     def stop(self):
         """Stop the synchronous renderer.
@@ -271,18 +283,6 @@ class SynchronousInteractiveRenderer:
         # Drain any stragglers — we're shutting down, don't silently lose them.
         self._flush_paused_buffer()
 
-    def _consume_messages(self):
-        """Consume messages synchronously."""
-        while self._running:
-            message = self.queue.get_nowait()
-            if message:
-                self._render_message(message)
-            else:
-                # No messages, sleep briefly
-                import time
-
-                time.sleep(0.01)
-
     def _render_message(self, message: UIMessage):
         """Render or buffer one message based on the PauseController state."""
         if message.type == MessageType.HUMAN_INPUT_REQUEST:
@@ -306,7 +306,8 @@ class SynchronousInteractiveRenderer:
             self._paused_buffer = []
             if len(pending) >= _BUFFER_FLUSH_INDICATOR_THRESHOLD:
                 try:
-                    self.console.print(_flush_indicator(len(pending)))
+                    with CONSOLE_RENDER_LOCK:
+                        self.console.print(_flush_indicator(len(pending)))
                 except Exception:
                     pass
             for buffered in pending:
@@ -326,7 +327,8 @@ class SynchronousInteractiveRenderer:
             self._paused_buffer = []
             if len(pending) >= _BUFFER_FLUSH_INDICATOR_THRESHOLD:
                 try:
-                    self.console.print(_flush_indicator(len(pending)))
+                    with CONSOLE_RENDER_LOCK:
+                        self.console.print(_flush_indicator(len(pending)))
                 except Exception:
                     pass
             for buffered in pending:

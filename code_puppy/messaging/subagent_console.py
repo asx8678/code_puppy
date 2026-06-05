@@ -11,6 +11,7 @@ Usage:
     >>> manager.unregister_agent("session-123")
 """
 
+import logging
 import threading
 import time
 from dataclasses import dataclass, field
@@ -23,6 +24,8 @@ from rich.table import Table
 from rich.text import Text
 
 from code_puppy.messaging.messages import SubAgentStatusMessage
+
+logger = logging.getLogger(__name__)
 
 # =============================================================================
 # Status Configuration
@@ -314,11 +317,15 @@ class SubAgentConsoleManager:
             try:
                 if self._live is not None:
                     self._live.update(self._render_display())
-            except Exception:
-                pass  # Ignore rendering errors, keep trying
+            except Exception as e:
+                # Keep trying, but don't fail silently — a persistent render
+                # bug would otherwise just freeze the dashboard with no trace.
+                logger.debug("Sub-agent dashboard render error: %s", e)
 
-            # Sleep between updates (10 FPS)
-            time.sleep(0.1)
+            # Sleep between updates. The only per-frame-changing content is the
+            # elapsed timer (second granularity), so ~4 FPS is plenty and far
+            # cheaper than rebuilding every panel 10x/second.
+            self._stop_event.wait(0.25)
 
     # =========================================================================
     # Rendering
