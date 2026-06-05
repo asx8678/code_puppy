@@ -15,7 +15,7 @@ from code_puppy.messaging import (
     emit_warning,
 )
 
-from . import state
+from . import beads, state
 from .judge import GoalJudgement, judge_goal
 from .judge_config import JudgeConfig, get_enabled_judges_or_default, load_judges
 
@@ -45,12 +45,16 @@ def _get_goal_max_iterations() -> int:
 @register_command(
     name="wiggum",
     description="Loop mode: re-run the same prompt when agent finishes 🍩",
-    usage="/wiggum <prompt>",
+    usage="/wiggum <prompt>  (or /wiggum bd to work all ready beads)",
     category="plugin",
 )
 def handle_wiggum_command(command: str) -> str | bool:
     """Start Wiggum loop mode and execute the prompt immediately."""
     prompt = _extract_prompt(command)
+    # /wiggum bd → drain the ready bd-beads queue one at a time (see beads.py).
+    parts = prompt.strip().split()
+    if parts and parts[0].lower() in ("bd", "beads"):
+        return beads.start()
     if not prompt:
         emit_warning("Usage: /wiggum <prompt>")
         emit_info("Example: /wiggum say hello world")
@@ -436,6 +440,8 @@ async def _on_interactive_turn_end(
         return None
 
     loop_num = state.increment()
+    if state.get_state().mode == "wiggum_bd":
+        return beads.on_turn_end()  # beads mode: own stop on empty bd ready
     if state.is_goal_mode():
         try:
             complete, notes, _verdicts = await _run_goal_judges(
