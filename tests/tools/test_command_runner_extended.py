@@ -32,6 +32,9 @@ spec = importlib.util.spec_from_file_location(
     Path(__file__).parent.parent.parent / "code_puppy" / "tools" / "command_runner.py",
 )
 command_runner_module = importlib.util.module_from_spec(spec)
+# Register before exec so pydantic can resolve string annotations (the module
+# uses `from __future__ import annotations`) against this module's namespace.
+sys.modules[spec.name] = command_runner_module
 spec.loader.exec_module(command_runner_module)
 
 # Extract functions and classes
