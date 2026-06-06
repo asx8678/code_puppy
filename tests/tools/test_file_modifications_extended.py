@@ -1,6 +1,6 @@
 import os
 import tempfile
-from unittest.mock import Mock
+from unittest.mock import Mock, patch
 
 import pytest
 
@@ -12,6 +12,15 @@ from code_puppy.tools.file_modifications import (
     _delete_file,
     _edit_file,
 )
+
+
+@pytest.fixture(autouse=True)
+def _auto_approve_file_permission_prompts():
+    with patch(
+        "code_puppy.plugins.file_permission_handler.register_callbacks.get_yolo_mode",
+        return_value=True,
+    ):
+        yield
 
 
 class TestFileModificationsExtended:

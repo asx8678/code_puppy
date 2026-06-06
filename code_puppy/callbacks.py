@@ -1,5 +1,6 @@
 import asyncio
 import logging
+import threading
 import traceback
 from typing import Any, Callable, Dict, List, Literal, Optional
 
@@ -113,6 +114,29 @@ _callbacks: Dict[PhaseType, List[CallbackFunc]] = {
 logger = logging.getLogger(__name__)
 
 
+def _run_coroutine_in_worker_thread(coro) -> Any:
+    """Run a coroutine for a sync hook while the caller's loop is already active."""
+    result_box: dict[str, Any] = {}
+
+    def _runner() -> None:
+        try:
+            result_box["result"] = asyncio.run(coro)
+        except BaseException as exc:
+            result_box["error"] = exc
+
+    thread = threading.Thread(
+        target=_runner,
+        name="code-puppy-sync-callback",
+        daemon=True,
+    )
+    thread.start()
+    thread.join()
+
+    if "error" in result_box:
+        raise result_box["error"]
+    return result_box.get("result")
+
+
 def register_callback(phase: PhaseType, func: CallbackFunc) -> None:
     if phase not in _callbacks:
         raise ValueError(
@@ -189,13 +213,6 @@ def _trigger_callbacks_sync(phase: PhaseType, *args, **kwargs) -> List[Any]:
                 # Try to get the running event loop
                 try:
                     asyncio.get_running_loop()
-                    # We're in an async context already - this shouldn't happen for sync triggers
-                    # but if it does, we can't use run_until_complete
-                    logger.warning(
-                        f"Async callback {callback.__name__} called from async context in sync trigger"
-                    )
-                    results.append(None)
-                    continue
                 except RuntimeError:
                     # No running loop - we're in a sync/worker thread context.
                     # NOTE: This spins up a full event loop, which is expensive on
@@ -209,6 +226,17 @@ def _trigger_callbacks_sync(phase: PhaseType, *args, **kwargs) -> List[Any]:
                         getattr(callback, "__name__", callback),
                     )
                     result = asyncio.run(result)
+                else:
+                    # The public sync hook API still needs to return callback
+                    # results. Run the coroutine on a private event loop in a
+                    # worker thread instead of dropping it.
+                    logger.debug(
+                        "Running coroutine callback %s in a worker thread for "
+                        "sync trigger '%s'",
+                        getattr(callback, "__name__", callback),
+                        phase,
+                    )
+                    result = _run_coroutine_in_worker_thread(result)
             results.append(result)
             logger.debug(f"Successfully executed callback {callback.__name__}")
         except Exception as e:

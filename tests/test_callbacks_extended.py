@@ -11,6 +11,7 @@ from code_puppy.callbacks import (
     on_custom_command,
     on_delete_snippet,
     on_edit_file,
+    on_load_prompt,
     on_load_model_config,
     on_post_tool_call,
     on_pre_tool_call,
@@ -213,6 +214,20 @@ class TestCallbacksExtended:
 
         assert len(results) == 1
         assert results[0] == "async_result"
+
+    @pytest.mark.asyncio
+    async def test_execute_async_callback_in_sync_trigger_with_running_loop(self):
+        """Async callbacks on sync hooks still run inside an active event loop."""
+
+        async def async_callback():
+            await asyncio.sleep(0.001)
+            return "prompt_result"
+
+        register_callback("load_prompt", async_callback)
+
+        results = on_load_prompt()
+
+        assert results == ["prompt_result"]
 
     @pytest.mark.asyncio
     async def test_no_callbacks_registered(self):

@@ -1101,6 +1101,39 @@ class TestInteractiveMode:
         assert mock_run.await_count == 2
 
     @pytest.mark.anyio
+    async def test_continuation_loop_stops_at_core_cap(self):
+        mock_result = MagicMock(output="done")
+        mock_result.all_messages.return_value = []
+
+        mock_run = AsyncMock(return_value=(mock_result, MagicMock()))
+        mock_turn_end = AsyncMock(return_value=[{"prompt": "repeat"}])
+        mock_warning = MagicMock()
+
+        await _run_interactive(
+            _mock_renderer(),
+            _interactive_patches(),
+            _seq_input("write hello", "/exit"),
+            extra_patches={
+                "code_puppy.cli_runner.run_prompt_with_attachments": mock_run,
+                "code_puppy.cli_runner.parse_prompt_attachments": MagicMock(
+                    return_value=_mock_parse_result("write hello")
+                ),
+                "code_puppy.callbacks.on_interactive_turn_end": mock_turn_end,
+                "code_puppy.cli_runner.get_max_continuation_iterations": MagicMock(
+                    return_value=1
+                ),
+                "code_puppy.messaging.emit_warning": mock_warning,
+            },
+        )
+
+        assert mock_run.await_count == 2
+        assert mock_turn_end.await_count == 2
+        assert any(
+            "Continuation stopped" in str(call.args[0])
+            for call in mock_warning.call_args_list
+        )
+
+    @pytest.mark.anyio
     async def test_continuation_loop_cancelled(self):
         mock_result = MagicMock(output="done")
         mock_result.all_messages.return_value = []

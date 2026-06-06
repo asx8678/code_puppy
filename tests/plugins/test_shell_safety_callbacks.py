@@ -77,6 +77,42 @@ class TestShellSafetyCallbackYoloModeBypass:
             )
             assert result is None
 
+    @pytest.mark.anyio
+    async def test_callback_checks_subagent_when_yolo_mode_false(self):
+        """Sub-agents cannot prompt manually, so shell safety still runs."""
+        cached = CachedAssessment(risk="high", reasoning="Dangerous command")
+
+        with (
+            patch(
+                "code_puppy.plugins.shell_safety.register_callbacks.get_global_model_name",
+                return_value="claude-opus-4",
+            ),
+            patch(
+                "code_puppy.plugins.shell_safety.register_callbacks.get_yolo_mode",
+                return_value=False,
+            ),
+            patch(
+                "code_puppy.plugins.shell_safety.register_callbacks.is_subagent",
+                return_value=True,
+            ),
+            patch(
+                "code_puppy.plugins.shell_safety.register_callbacks.get_safety_permission_level",
+                return_value="medium",
+            ),
+            patch(
+                "code_puppy.plugins.shell_safety.register_callbacks.get_cached_assessment",
+                return_value=cached,
+            ),
+            patch("code_puppy.plugins.shell_safety.register_callbacks.emit_info"),
+        ):
+            result = await shell_safety_callback(
+                context=None, command="rm -rf /", cwd=None, timeout=60
+            )
+
+        assert result is not None
+        assert result["blocked"] is True
+        assert result["risk"] == "high"
+
 
 class TestShellSafetyCallbackCacheHit:
     """Test shell_safety_callback with cached assessments."""

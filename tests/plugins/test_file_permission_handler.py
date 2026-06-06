@@ -138,6 +138,20 @@ class TestPreviewDeletion:
             finally:
                 os.unlink(f.name)
 
+    def test_preview_delete_snippet_only_first_match(self):
+        """Preview should match delete_snippet_from_file's first-match behavior."""
+        with tempfile.NamedTemporaryFile(mode="w", delete=False, suffix=".py") as f:
+            f.write("x x x\n")
+            f.flush()
+
+            try:
+                preview = _preview_delete_snippet(f.name, "x ")
+                assert preview is not None
+                assert "+x x\n" in preview
+                assert "+x\n" not in preview
+            finally:
+                os.unlink(f.name)
+
     def test_preview_delete_snippet_nonexistent_file(self):
         """Test deletion preview with nonexistent file."""
         preview = _preview_delete_snippet("/nonexistent/file.py", "snippet")
@@ -192,6 +206,7 @@ class TestPreviewWriting:
                 preview = _preview_write_to_file(f.name, new_content, overwrite=True)
                 assert preview is not None
                 assert "new content" in preview
+                assert "-old content" in preview
             finally:
                 os.unlink(f.name)
 
@@ -251,6 +266,21 @@ class TestPreviewReplacements:
                 ]
                 preview = _preview_replace_in_file(f.name, replacements)
                 assert preview is not None
+            finally:
+                os.unlink(f.name)
+
+    def test_preview_replace_only_first_exact_match(self):
+        """Preview should match replace_in_file's first exact-match behavior."""
+        with tempfile.NamedTemporaryFile(mode="w", delete=False, suffix=".py") as f:
+            f.write("old old\n")
+            f.flush()
+
+            try:
+                replacements = [{"old_str": "old", "new_str": "new"}]
+                preview = _preview_replace_in_file(f.name, replacements)
+                assert preview is not None
+                assert "+new old" in preview
+                assert "+new new" not in preview
             finally:
                 os.unlink(f.name)
 

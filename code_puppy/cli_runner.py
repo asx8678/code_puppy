@@ -26,6 +26,7 @@ from code_puppy.config import (
     COMMAND_HISTORY_FILE,
     ensure_config_exists,
     finalize_autosave_session,
+    get_max_continuation_iterations,
     get_current_autosave_session_name,
     initialize_command_history_file,
     record_terminal_session,
@@ -864,12 +865,14 @@ async def interactive_mode(message_renderer, initial_command: str = None) -> Non
                 on_interactive_turn_cancel,
                 on_interactive_turn_end,
             )
-            from code_puppy.messaging import emit_system_message
+            from code_puppy.messaging import emit_system_message, emit_warning
 
             continuation_prompt = task
             continuation_result = turn_result
             continuation_success = turn_success
             continuation_error = turn_error
+            continuation_count = 0
+            max_continuations = get_max_continuation_iterations()
 
             while True:
                 continuation_requests = await on_interactive_turn_end(
@@ -889,6 +892,14 @@ async def interactive_mode(message_renderer, initial_command: str = None) -> Non
                 next_prompt = str(continuation.get("prompt") or "").strip()
                 if not next_prompt:
                     break
+                if continuation_count >= max_continuations:
+                    emit_warning(
+                        "Continuation stopped after "
+                        f"{max_continuations} follow-up turns. "
+                        "Raise the cap with /set max_continuation_iterations=<int>."
+                    )
+                    break
+                continuation_count += 1
 
                 if continuation.get("clear_context", False):
                     new_session_id = finalize_autosave_session()

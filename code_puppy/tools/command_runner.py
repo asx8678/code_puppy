@@ -1204,7 +1204,7 @@ async def run_shell_command(
     # Generate unique group_id for this command execution
     group_id = generate_group_id("shell_command", command)
 
-    # Invoke safety check callbacks (only active in yolo_mode)
+    # Invoke safety check callbacks before any execution path.
     # This allows plugins to intercept and assess commands before execution
     from code_puppy.callbacks import on_run_shell_command
 

@@ -327,9 +327,7 @@ class TestGenerateGroupId:
         id1 = generate_group_id("tool", "ctx1")
         id2 = generate_group_id("tool", "ctx2")
 
-        assert id1 != id2, (
-            f"Expected different IDs across calls, got {id1} and {id2}"
-        )
+        assert id1 != id2, f"Expected different IDs across calls, got {id1} and {id2}"
 
     def test_format_is_toolname_underscore_hash(self, mock_time_and_random):
         """Test that format is 'toolname_XXXXXXXX'."""

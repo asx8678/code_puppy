@@ -68,6 +68,7 @@ EXPECTED_DEFAULT_KEYS = [
     "frontend_emitter_queue_size",
     "goal_max_iterations",
     "http2",
+    "max_continuation_iterations",
     "max_hook_retries",
     "max_pause_seconds",
     "max_saved_sessions",
@@ -143,6 +144,11 @@ class TestEnsureConfigExists:
         assert config_parser.sections() == [DEFAULT_SECTION_NAME]
         assert config_parser.get(DEFAULT_SECTION_NAME, "puppy_name") == "TestPuppy"
         assert config_parser.get(DEFAULT_SECTION_NAME, "owner_name") == "TestOwner"
+        assert config_parser.get(DEFAULT_SECTION_NAME, "yolo_mode") == "false"
+        assert (
+            config_parser.get(DEFAULT_SECTION_NAME, "safety_permission_level")
+            == "medium"
+        )
 
     def test_config_dir_exists_file_does_not_prompts_and_creates(
         self, mock_config_paths, monkeypatch
@@ -473,7 +479,7 @@ class TestBooleanGetters:
             (cp_config.get_frontend_emitter_enabled, "frontend_emitter_enabled", True),
             (cp_config.get_allow_recursion, "allow_recursion", True),
             (cp_config.get_auto_save_session, "auto_save_session", True),
-            (cp_config.get_yolo_mode, "yolo_mode", True),
+            (cp_config.get_yolo_mode, "yolo_mode", False),
         ],
     )
     def test_default(self, getter, key, default):
@@ -592,6 +598,11 @@ class TestNumericGetters:
                 "frontend_emitter_queue_size",
                 100,
             ),
+            (
+                cp_config.get_max_continuation_iterations,
+                "max_continuation_iterations",
+                25,
+            ),
         ],
     )
     def test_default(self, getter, key, default):
@@ -616,6 +627,11 @@ class TestNumericGetters:
                 "frontend_emitter_queue_size",
                 100,
             ),
+            (
+                cp_config.get_max_continuation_iterations,
+                "max_continuation_iterations",
+                25,
+            ),
         ],
     )
     def test_invalid_falls_back_to_default(self, getter, key, default):
@@ -635,6 +651,12 @@ class TestNumericGetters:
                 "protected_token_count",
                 "10000",
                 10000,
+            ),
+            (
+                cp_config.get_max_continuation_iterations,
+                "max_continuation_iterations",
+                "7",
+                7,
             ),
         ],
     )

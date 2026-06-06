@@ -122,8 +122,8 @@ class TestLoadBuiltinPlugins:
             assert result == []
             mock_import.assert_not_called()
 
-    def test_skips_shell_safety_when_safety_level_high(self, tmp_path):
-        """Test shell_safety plugin is skipped when safety_permission_level is high."""
+    def test_loads_shell_safety_when_safety_level_high(self, tmp_path):
+        """Test shell_safety plugin is loaded when safety_permission_level is high."""
         # Create shell_safety plugin directory
         plugin_dir = tmp_path / "shell_safety"
         plugin_dir.mkdir()
@@ -134,11 +134,13 @@ class TestLoadBuiltinPlugins:
             patch("code_puppy.plugins.importlib.import_module") as mock_import,
         ):
             result = _load_builtin_plugins(tmp_path)
-            assert "shell_safety" not in result
-            mock_import.assert_not_called()
+            assert "shell_safety" in result
+            mock_import.assert_called_once_with(
+                "code_puppy.plugins.shell_safety.register_callbacks"
+            )
 
-    def test_skips_shell_safety_when_safety_level_medium(self, tmp_path):
-        """Test shell_safety plugin is skipped when safety_permission_level is medium."""
+    def test_loads_shell_safety_when_safety_level_medium(self, tmp_path):
+        """Test shell_safety plugin is loaded when safety_permission_level is medium."""
         plugin_dir = tmp_path / "shell_safety"
         plugin_dir.mkdir()
         (plugin_dir / "register_callbacks.py").write_text("# Shell safety")
@@ -150,8 +152,10 @@ class TestLoadBuiltinPlugins:
             patch("code_puppy.plugins.importlib.import_module") as mock_import,
         ):
             result = _load_builtin_plugins(tmp_path)
-            assert "shell_safety" not in result
-            mock_import.assert_not_called()
+            assert "shell_safety" in result
+            mock_import.assert_called_once_with(
+                "code_puppy.plugins.shell_safety.register_callbacks"
+            )
 
     def test_loads_shell_safety_when_safety_level_low(self, tmp_path):
         """Test shell_safety plugin is loaded when safety_permission_level is low."""

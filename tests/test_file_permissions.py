@@ -134,7 +134,9 @@ class TestFilePermissions(unittest.TestCase):
             content = f.read()
         self.assertEqual(content, "New content")
 
-    @patch("code_puppy.config.get_yolo_mode")
+    @patch(
+        "code_puppy.plugins.file_permission_handler.register_callbacks.get_yolo_mode"
+    )
     def test_write_to_file_in_yolo_mode(self, mock_yolo):
         """Test write_to_file in yolo mode (no permission prompt)."""
         mock_yolo.return_value = True

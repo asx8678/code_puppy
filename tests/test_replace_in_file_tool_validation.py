@@ -5,8 +5,20 @@ because that's where malformed payloads from a model would arrive.
 """
 
 from typing import Callable, Dict, Any
+from unittest.mock import patch
+
+import pytest
 
 from code_puppy.tools.file_modifications import register_replace_in_file
+
+
+@pytest.fixture(autouse=True)
+def _auto_approve_file_permission_prompts():
+    with patch(
+        "code_puppy.plugins.file_permission_handler.register_callbacks.get_yolo_mode",
+        return_value=True,
+    ):
+        yield
 
 
 class _CapturingAgent:

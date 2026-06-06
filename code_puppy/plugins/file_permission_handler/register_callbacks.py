@@ -16,6 +16,7 @@ from code_puppy.config import get_diff_context_lines, get_yolo_mode
 from code_puppy.tools.common import (
     _find_best_window,
     get_user_approval,
+    read_text_sanitized,
 )
 
 # NOTE: The previous module-level ``_FILE_CONFIRMATION_LOCK`` was
@@ -90,7 +91,7 @@ def _preview_delete_snippet(file_path: str, snippet: str) -> str | None:
         if snippet not in original:
             return None
 
-        modified = original.replace(snippet, "")
+        modified = original.replace(snippet, "", 1)
         diff_text = "".join(
             difflib.unified_diff(
                 original.splitlines(keepends=True),
@@ -116,8 +117,12 @@ def _preview_write_to_file(
         if exists and not overwrite:
             return None
 
+        old_lines = []
+        if exists:
+            old_lines = read_text_sanitized(file_path).splitlines(keepends=True)
+
         diff_lines = difflib.unified_diff(
-            [] if not exists else [""],
+            old_lines,
             content.splitlines(keepends=True),
             fromfile="/dev/null" if not exists else f"a/{os.path.basename(file_path)}",
             tofile=f"b/{os.path.basename(file_path)}",
@@ -152,7 +157,7 @@ def _preview_replace_in_file(
             new_snippet = rep.get("new_str", "")
 
             if old_snippet and old_snippet in modified:
-                modified = modified.replace(old_snippet, new_snippet)
+                modified = modified.replace(old_snippet, new_snippet, 1)
                 continue
 
             # Use the same logic as file_modifications for fuzzy matching

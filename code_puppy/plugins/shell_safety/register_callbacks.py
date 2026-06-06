@@ -1,7 +1,8 @@
 """Callback registration for shell command safety checking.
 
-This module registers a callback that intercepts shell commands in yolo_mode
-and assesses their safety risk before execution.
+This module registers a callback that intercepts shell commands in yolo_mode,
+or in non-interactive sub-agent runs, and assesses their safety risk before
+execution.
 """
 
 from typing import Any, Dict, Optional
@@ -18,6 +19,7 @@ from code_puppy.plugins.shell_safety.command_cache import (
     get_cached_assessment,
 )
 from code_puppy.tools.command_runner import ShellSafetyAssessment
+from code_puppy.tools.subagent_context import is_subagent
 
 # OAuth model prefixes - these models have their own safety mechanisms
 OAUTH_MODEL_PREFIXES = (
@@ -85,8 +87,8 @@ async def shell_safety_callback(
 ) -> Optional[Dict[str, Any]]:
     """Callback to assess shell command safety before execution.
 
-    This callback is only active when yolo_mode is True. When yolo_mode is False,
-    the user manually reviews every command, so we don't need the agent.
+    This callback is active when yolo_mode is True. It also runs for sub-agents
+    because they cannot prompt for manual command approval.
 
     Args:
         context: The execution context
@@ -103,9 +105,11 @@ async def shell_safety_callback(
     if is_oauth_model(current_model):
         return None
 
-    # Only check safety in yolo_mode - otherwise user is reviewing manually
+    # Main-agent non-yolo commands are reviewed manually. Sub-agents cannot
+    # prompt, so route them through the safety assessor instead of silently
+    # bypassing review.
     yolo_mode = get_yolo_mode()
-    if not yolo_mode:
+    if not yolo_mode and not is_subagent():
         return None
 
     # Get configured risk threshold

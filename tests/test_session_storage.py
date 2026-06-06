@@ -13,6 +13,8 @@ from code_puppy import session_storage
 from code_puppy.session_storage import (
     _LEGACY_SIGNATURE_SIZE,
     _LEGACY_SIGNED_HEADER,
+    _SIGNED_HEADER,
+    SessionSecurityError,
     cleanup_sessions,
     list_sessions,
     load_session,
@@ -36,9 +38,25 @@ def token_estimator() -> Callable[[Any], int]:
 
 
 def _signed(history: Any) -> bytes:
-    """Wrap a pickle payload in the legacy signed-header format."""
+    """Wrap a pickle payload in the legacy unauthenticated header format."""
     return (
         _LEGACY_SIGNED_HEADER + (b"x" * _LEGACY_SIGNATURE_SIZE) + pickle.dumps(history)
+    )
+
+
+def _save_signed_session(
+    base_dir: Path,
+    name: str,
+    history: List[Any],
+    *,
+    timestamp: str = "2024-01-01T00:00:00",
+) -> None:
+    save_session(
+        history=history,
+        session_name=name,
+        base_dir=base_dir,
+        timestamp=timestamp,
+        token_estimator=lambda message: len(str(message)),
     )
 
 
@@ -71,6 +89,7 @@ def test_save_and_load_session(tmp_path: Path, history, token_estimator):
     assert stored["total_tokens"] == metadata.total_tokens
     assert stored["auto_saved"] is False
 
+    assert metadata.pickle_path.read_bytes().startswith(_SIGNED_HEADER)
     assert load_session("demo_session", tmp_path) == history
 
 
@@ -260,13 +279,42 @@ def test_load_missing_session_raises(tmp_path: Path):
 
 def test_load_empty_signed_pickle(tmp_path: Path):
     (tmp_path / "empty.pkl").write_bytes(_signed([]))
-    assert load_session("empty", tmp_path) == []
+    assert load_session("empty", tmp_path, allow_legacy=True) == []
 
 
 def test_load_signed_history_exact(tmp_path: Path):
     original = [{"id": 1, "data": [1, 2, 3]}, None, "string"]
     (tmp_path / "test.pkl").write_bytes(_signed(original))
-    assert load_session("test", tmp_path) == original
+    assert load_session("test", tmp_path, allow_legacy=True) == original
+
+
+def test_legacy_signed_session_rejected_by_default(tmp_path: Path):
+    (tmp_path / "legacy.pkl").write_bytes(_signed(["old"]))
+    with pytest.raises(SessionSecurityError):
+        load_session("legacy", tmp_path)
+
+
+def test_unsigned_raw_pickle_rejected_by_default(tmp_path: Path):
+    (tmp_path / "raw.pkl").write_bytes(pickle.dumps(["old"]))
+    with pytest.raises(SessionSecurityError):
+        load_session("raw", tmp_path)
+    assert load_session("raw", tmp_path, allow_legacy=True) == ["old"]
+
+
+def test_tampered_signed_session_rejected(tmp_path: Path, history, token_estimator):
+    metadata = save_session(
+        history=history,
+        session_name="tampered",
+        base_dir=tmp_path,
+        timestamp="2024-01-01T00:00:00",
+        token_estimator=token_estimator,
+    )
+    raw = bytearray(metadata.pickle_path.read_bytes())
+    raw[-1] ^= 1
+    metadata.pickle_path.write_bytes(bytes(raw))
+
+    with pytest.raises(SessionSecurityError):
+        load_session("tampered", tmp_path)
 
 
 # ---------------------------------------------------------------------------
@@ -372,6 +420,14 @@ def test_build_session_paths(tmp_path: Path):
     paths = session_storage.build_session_paths(tmp_path, name)
     assert paths.pickle_path == tmp_path / f"{name}.pkl"
     assert paths.metadata_path == tmp_path / f"{name}_meta.json"
+
+
+@pytest.mark.parametrize(
+    "session_name", ["../escape", "nested/name", "nested\\name", ""]
+)
+def test_build_session_paths_rejects_path_traversal(tmp_path: Path, session_name: str):
+    with pytest.raises(ValueError):
+        session_storage.build_session_paths(tmp_path, session_name)
 
 
 def test_ensure_directory_creates_nested(tmp_path: Path):
@@ -645,7 +701,7 @@ async def test_restore_last_page_shows_return_to_first(tmp_path):
 @pytest.mark.asyncio
 async def test_restore_numeric_and_name_selection_loads(tmp_path, selection):
     history = [{"role": "user", "content": "test message"}]
-    (tmp_path / "my_specific_session.pkl").write_bytes(_signed(history))
+    _save_signed_session(tmp_path, "my_specific_session", history)
     (tmp_path / "my_specific_session_meta.json").write_text(
         json.dumps({"timestamp": "2024-01-01T00:00:00", "message_count": 1}),
         encoding="utf-8",
@@ -740,7 +796,7 @@ async def test_restore_load_errors_warn(tmp_path, exc, expected):
 @pytest.mark.asyncio
 async def test_restore_set_autosave_id_failure_ignored(tmp_path):
     history = [{"role": "user", "content": "test"}]
-    (tmp_path / "session.pkl").write_bytes(_signed(history))
+    _save_signed_session(tmp_path, "session", history)
     (tmp_path / "session_meta.json").write_text(
         json.dumps({"timestamp": "2024-01-01T00:00:00", "message_count": 1}),
         encoding="utf-8",
@@ -764,7 +820,7 @@ async def test_restore_success_emits_message(tmp_path):
         {"role": "user", "content": "Hello"},
         {"role": "assistant", "content": "Hi there!"},
     ]
-    (tmp_path / "success.pkl").write_bytes(_signed(history))
+    _save_signed_session(tmp_path, "success", history)
     (tmp_path / "success_meta.json").write_text(
         json.dumps({"timestamp": "2024-01-01T00:00:00", "message_count": 2}),
         encoding="utf-8",

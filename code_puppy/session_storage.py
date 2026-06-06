@@ -9,21 +9,32 @@ is better than complex, nested side effects are worse than deliberate helpers.
 from __future__ import annotations
 
 import json
+import hashlib
+import hmac
+import os
 import pickle
+import secrets
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable, List
-
-
-def _safe_loads(data: bytes) -> Any:
-    """Deserialize pickle data."""
-    return pickle.loads(data)  # noqa: S301
 
 
 _LEGACY_SIGNED_HEADER = b"CPSESSION\x01"
 _LEGACY_SIGNATURE_SIZE = (
     32  # legacy signature bytes, retained only for backward-compat parsing
 )
+_SIGNED_HEADER = b"CPSESSION\x02"
+_SIGNATURE_SIZE = 32
+
+
+class SessionSecurityError(ValueError):
+    """Raised when a session file fails path or signature validation."""
+
+
+def _safe_loads(data: bytes) -> Any:
+    """Deserialize authenticated pickle data."""
+    return pickle.loads(data)  # noqa: S301
+
 
 SessionHistory = List[Any]
 TokenEstimator = Callable[[Any], int]
@@ -56,17 +67,102 @@ class SessionMetadata:
         }
 
 
-def _extract_pickle_payload(raw: bytes) -> bytes:
+def _validate_session_name(session_name: str) -> str:
+    if not isinstance(session_name, str):
+        raise TypeError("session_name must be a string")
+
+    name = session_name.strip()
+    if not name or name in {".", ".."}:
+        raise ValueError("session_name must be a non-empty leaf filename")
+
+    if "\x00" in name or "/" in name or "\\" in name:
+        raise ValueError("session_name must not contain path separators")
+
+    return name
+
+
+def _session_signing_key_path() -> Path:
+    from code_puppy import config as cp_config
+
+    return Path(cp_config.CONFIG_DIR) / "session_signing.key"
+
+
+def _load_session_signing_key() -> bytes:
+    path = _session_signing_key_path()
+    try:
+        key = path.read_bytes()
+        if len(key) >= 32:
+            return key
+        raise SessionSecurityError("Session signing key is invalid")
+    except FileNotFoundError:
+        pass
+
+    key = secrets.token_bytes(32)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        os.chmod(path.parent, 0o700)
+    except OSError:
+        pass
+
+    tmp_path = path.with_name(f"{path.name}.tmp")
+    try:
+        with tmp_path.open("wb") as key_file:
+            key_file.write(key)
+        try:
+            os.chmod(tmp_path, 0o600)
+        except OSError:
+            pass
+        tmp_path.replace(path)
+    finally:
+        try:
+            tmp_path.unlink()
+        except FileNotFoundError:
+            pass
+
+    try:
+        os.chmod(path, 0o600)
+    except OSError:
+        pass
+    return key
+
+
+def _sign_payload(payload: bytes) -> bytes:
+    signature = hmac.new(_load_session_signing_key(), payload, hashlib.sha256).digest()
+    return _SIGNED_HEADER + signature + payload
+
+
+def _extract_pickle_payload(raw: bytes, *, allow_legacy: bool = False) -> bytes:
     """Return the pickle payload from raw session file bytes.
 
-    New format is raw pickle bytes.
+    New format is HMAC-authenticated pickle bytes.
     Legacy format was: header + 32-byte signature + pickle payload.
-    We no longer verify or generate signatures.
+    Raw and legacy payloads are only accepted with explicit legacy opt-in.
     """
+    if raw.startswith(_SIGNED_HEADER):
+        offset = len(_SIGNED_HEADER) + _SIGNATURE_SIZE
+        if len(raw) < offset:
+            raise SessionSecurityError("Session file is truncated")
+        signature = raw[len(_SIGNED_HEADER) : offset]
+        payload = raw[offset:]
+        expected = hmac.new(
+            _load_session_signing_key(), payload, hashlib.sha256
+        ).digest()
+        if not hmac.compare_digest(signature, expected):
+            raise SessionSecurityError("Session signature verification failed")
+        return payload
+
     if raw.startswith(_LEGACY_SIGNED_HEADER):
+        if not allow_legacy:
+            raise SessionSecurityError(
+                "Legacy unsigned session requires explicit allow_legacy=True"
+            )
         offset = len(_LEGACY_SIGNED_HEADER) + _LEGACY_SIGNATURE_SIZE
         return raw[offset:]
-    return raw
+
+    if allow_legacy:
+        return raw
+
+    raise SessionSecurityError("Unsigned session file rejected")
 
 
 def ensure_directory(path: Path) -> Path:
@@ -75,8 +171,9 @@ def ensure_directory(path: Path) -> Path:
 
 
 def build_session_paths(base_dir: Path, session_name: str) -> SessionPaths:
-    pickle_path = base_dir / f"{session_name}.pkl"
-    metadata_path = base_dir / f"{session_name}_meta.json"
+    safe_name = _validate_session_name(session_name)
+    pickle_path = base_dir / f"{safe_name}.pkl"
+    metadata_path = base_dir / f"{safe_name}_meta.json"
     return SessionPaths(pickle_path=pickle_path, metadata_path=metadata_path)
 
 
@@ -92,7 +189,7 @@ def save_session(
     ensure_directory(base_dir)
     paths = build_session_paths(base_dir, session_name)
 
-    pickle_data = pickle.dumps(history)
+    pickle_data = _sign_payload(pickle.dumps(history))
     tmp_pickle = paths.pickle_path.with_suffix(".tmp")
     with tmp_pickle.open("wb") as pickle_file:
         pickle_file.write(pickle_data)
@@ -120,15 +217,12 @@ def save_session(
 def load_session(
     session_name: str, base_dir: Path, *, allow_legacy: bool = False
 ) -> SessionHistory:
-    # Kept for API compatibility; legacy loading is always supported now.
-    _ = allow_legacy
-
     paths = build_session_paths(base_dir, session_name)
     if not paths.pickle_path.exists():
         raise FileNotFoundError(paths.pickle_path)
 
     raw = paths.pickle_path.read_bytes()
-    pickle_data = _extract_pickle_payload(raw)
+    pickle_data = _extract_pickle_payload(raw, allow_legacy=allow_legacy)
     return _safe_loads(pickle_data)
 
 

@@ -558,9 +558,10 @@ def load_agent(agent_name: str) -> BaseAgent:
     if agent_name not in _AGENT_REGISTRY:
         # Back-compat: sessions/configs from before the rename ask for the
         # legacy "code-puppy" id; transparently resolve it to "fast-puppy".
-        if agent_name in _LEGACY_AGENT_ALIASES and _LEGACY_AGENT_ALIASES[
-            agent_name
-        ] in _AGENT_REGISTRY:
+        if (
+            agent_name in _LEGACY_AGENT_ALIASES
+            and _LEGACY_AGENT_ALIASES[agent_name] in _AGENT_REGISTRY
+        ):
             agent_name = _LEGACY_AGENT_ALIASES[agent_name]
         # Fallback to fast-puppy if agent not found
         elif "fast-puppy" in _AGENT_REGISTRY:

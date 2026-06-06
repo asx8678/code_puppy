@@ -220,6 +220,22 @@ def get_max_hook_retries() -> int:
         return 3
 
 
+def get_max_continuation_iterations() -> int:
+    """Return the max plugin-requested follow-up turns after one user prompt.
+
+    Continuation plugins are useful, but core still needs a hard stop so a
+    plugin bug cannot run forever. Defaults to 25 and clamps to [1, 1000].
+    """
+    val = get_value("max_continuation_iterations")
+    if val is None:
+        return 25
+    try:
+        n = int(val)
+        return min(1000, max(1, n))
+    except (ValueError, TypeError):
+        return 25
+
+
 def get_enable_streaming() -> bool:
     """
     Get the enable_streaming configuration value.
@@ -379,6 +395,10 @@ def ensure_config_exists():
     # Set default values for important config keys if they don't exist
     if not config[DEFAULT_SECTION].get("auto_save_session"):
         config[DEFAULT_SECTION]["auto_save_session"] = "true"
+    if not config[DEFAULT_SECTION].get("yolo_mode"):
+        config[DEFAULT_SECTION]["yolo_mode"] = "false"
+    if not config[DEFAULT_SECTION].get("safety_permission_level"):
+        config[DEFAULT_SECTION]["safety_permission_level"] = "medium"
 
     # Write the config if we made any changes
     if missing or not exists:
@@ -462,6 +482,7 @@ def get_config_keys():
         "frontend_emitter_enabled",
         "frontend_emitter_max_recent_events",
         "frontend_emitter_queue_size",
+        "max_continuation_iterations",
     ]
     # Add pack agents control key
     default_keys.append("enable_pack_agents")
@@ -1280,7 +1301,7 @@ def initialize_command_history_file():
 def get_yolo_mode():
     """
     Checks puppy.cfg for 'yolo_mode' (case-insensitive in value only).
-    Defaults to True if not set.
+    Defaults to False if not set.
     Allowed values for ON: 1, '1', 'true', 'yes', 'on' (all case-insensitive for value).
     """
     true_vals = {"1", "true", "yes", "on"}
@@ -1289,7 +1310,7 @@ def get_yolo_mode():
         if str(cfg_val).strip().lower() in true_vals:
             return True
         return False
-    return True
+    return False
 
 
 def get_safety_permission_level():
