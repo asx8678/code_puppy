@@ -299,82 +299,6 @@ wheels = [
 ]
 
 [[package]]
-name = "code-puppy"
-version = "0.0.545"
-source = { editable = "." }
-dependencies = [
-    { name = "anthropic" },
-    { name = "azure-identity" },
-    { name = "boto3" },
-    { name = "httpx", extra = ["http2"] },
-    { name = "json-repair" },
-    { name = "mcp" },
-    { name = "openai" },
-    { name = "pillow" },
-    { name = "playwright" },
-    { name = "prompt-toolkit" },
-    { name = "pydantic" },
-    { name = "pydantic-ai-slim", extra = ["anthropic", "mcp", "openai"] },
-    { name = "pyfiglet" },
-    { name = "python-dotenv" },
-    { name = "rapidfuzz" },
-    { name = "requests" },
-    { name = "rich" },
-    { name = "ripgrep" },
-    { name = "termflow-md" },
-    { name = "typer" },
-]
-
-[package.optional-dependencies]
-bedrock = [
-    { name = "boto3" },
-]
-
-[package.dev-dependencies]
-dev = [
-    { name = "pexpect" },
-    { name = "pytest" },
-    { name = "pytest-asyncio" },
-    { name = "pytest-cov" },
-    { name = "ruff" },
-]
-
-[package.metadata]
-requires-dist = [
-    { name = "anthropic", specifier = "==0.79.0" },
-    { name = "azure-identity", specifier = ">=1.15.0" },
-    { name = "boto3", specifier = ">=1.43.9" },
-    { name = "boto3", marker = "extra == 'bedrock'", specifier = ">=1.35.0" },
-    { name = "httpx", extras = ["http2"], specifier = ">=0.24.1" },
-    { name = "json-repair", specifier = ">=0.46.2" },
-    { name = "mcp", specifier = ">=1.9.4" },
-    { name = "openai", specifier = ">=1.99.1" },
-    { name = "pillow", specifier = ">=10.0.0" },
-    { name = "playwright", specifier = ">=1.40.0" },
-    { name = "prompt-toolkit", specifier = ">=3.0.52" },
-    { name = "pydantic", specifier = ">=2.4.0" },
-    { name = "pydantic-ai-slim", extras = ["openai", "anthropic", "mcp"], specifier = "==1.56.0" },
-    { name = "pyfiglet", specifier = ">=0.8.post1" },
-    { name = "python-dotenv", specifier = ">=1.0.0" },
-    { name = "rapidfuzz", specifier = ">=3.13.0" },
-    { name = "requests", specifier = ">=2.28.0" },
-    { name = "rich", specifier = ">=13.4.2" },
-    { name = "ripgrep", specifier = "==14.1.0" },
-    { name = "termflow-md", specifier = ">=0.1.11" },
-    { name = "typer", specifier = ">=0.12.0" },
-]
-provides-extras = ["bedrock"]
-
-[package.metadata.requires-dev]
-dev = [
-    { name = "pexpect", specifier = ">=4.9.0" },
-    { name = "pytest", specifier = ">=8.3.4" },
-    { name = "pytest-asyncio", specifier = ">=0.23.1" },
-    { name = "pytest-cov", specifier = ">=6.1.1" },
-    { name = "ruff", specifier = ">=0.11.11" },
-]
-
-[[package]]
 name = "colorama"
 version = "0.4.6"
 source = { registry = "https://pypi.org/simple" }
@@ -562,6 +486,82 @@ source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/e0/4d/f332313098c1de1b2d2ff91cf2674415cc7cddab2ca1b01ae29774bd5fdf/docstring_parser-0.18.0.tar.gz", hash = "sha256:292510982205c12b1248696f44959db3cdd1740237a968ea1e2e7a900eeb2015", size = 29341, upload-time = "2026-04-14T04:09:19.867Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/a7/5f/ed01f9a3cdffbd5a008556fc7b2a08ddb1cc6ace7effa7340604b1d16699/docstring_parser-0.18.0-py3-none-any.whl", hash = "sha256:b3fcbed555c47d8479be0796ef7e19c2670d428d72e96da63f3a40122860374b", size = 22484, upload-time = "2026-04-14T04:09:18.638Z" },
+]
+
+[[package]]
+name = "fast-puppy"
+version = "0.1.0"
+source = { editable = "." }
+dependencies = [
+    { name = "anthropic" },
+    { name = "azure-identity" },
+    { name = "boto3" },
+    { name = "httpx", extra = ["http2"] },
+    { name = "json-repair" },
+    { name = "mcp" },
+    { name = "openai" },
+    { name = "pillow" },
+    { name = "playwright" },
+    { name = "prompt-toolkit" },
+    { name = "pydantic" },
+    { name = "pydantic-ai-slim", extra = ["anthropic", "mcp", "openai"] },
+    { name = "pyfiglet" },
+    { name = "python-dotenv" },
+    { name = "rapidfuzz" },
+    { name = "requests" },
+    { name = "rich" },
+    { name = "ripgrep" },
+    { name = "termflow-md" },
+    { name = "typer" },
+]
+
+[package.optional-dependencies]
+bedrock = [
+    { name = "boto3" },
+]
+
+[package.dev-dependencies]
+dev = [
+    { name = "pexpect" },
+    { name = "pytest" },
+    { name = "pytest-asyncio" },
+    { name = "pytest-cov" },
+    { name = "ruff" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "anthropic", specifier = "==0.79.0" },
+    { name = "azure-identity", specifier = ">=1.15.0" },
+    { name = "boto3", specifier = ">=1.43.9" },
+    { name = "boto3", marker = "extra == 'bedrock'", specifier = ">=1.35.0" },
+    { name = "httpx", extras = ["http2"], specifier = ">=0.24.1" },
+    { name = "json-repair", specifier = ">=0.46.2" },
+    { name = "mcp", specifier = ">=1.9.4" },
+    { name = "openai", specifier = ">=1.99.1" },
+    { name = "pillow", specifier = ">=10.0.0" },
+    { name = "playwright", specifier = ">=1.40.0" },
+    { name = "prompt-toolkit", specifier = ">=3.0.52" },
+    { name = "pydantic", specifier = ">=2.4.0" },
+    { name = "pydantic-ai-slim", extras = ["openai", "anthropic", "mcp"], specifier = "==1.56.0" },
+    { name = "pyfiglet", specifier = ">=0.8.post1" },
+    { name = "python-dotenv", specifier = ">=1.0.0" },
+    { name = "rapidfuzz", specifier = ">=3.13.0" },
+    { name = "requests", specifier = ">=2.28.0" },
+    { name = "rich", specifier = ">=13.4.2" },
+    { name = "ripgrep", specifier = "==14.1.0" },
+    { name = "termflow-md", specifier = ">=0.1.11" },
+    { name = "typer", specifier = ">=0.12.0" },
+]
+provides-extras = ["bedrock"]
+
+[package.metadata.requires-dev]
+dev = [
+    { name = "pexpect", specifier = ">=4.9.0" },
+    { name = "pytest", specifier = ">=8.3.4" },
+    { name = "pytest-asyncio", specifier = ">=0.23.1" },
+    { name = "pytest-cov", specifier = ">=6.1.1" },
+    { name = "ruff", specifier = ">=0.11.11" },
 ]
 
 [[package]]

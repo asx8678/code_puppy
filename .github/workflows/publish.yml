@@ -1,15 +1,16 @@
-# Publishes your package to PyPI using Astral/uv for builds.
-# Set PYPI_API_TOKEN in repo secrets.
+# DEPRECATED: token-based publish of the upstream `code-puppy` package.
+# Superseded by `workflow.yml`, which publishes `fast-puppy` via PyPI Trusted
+# Publishing (OIDC). Trigger left as manual-only so it no longer auto-publishes
+# on every push to main (which would auto-bump the version and conflict with the
+# OIDC release flow). Kept for reference; safe to delete.
 
 permissions:
   contents: write # Allows writing to the repository
 
-name: Build and Publish to PyPI
+name: Build and Publish to PyPI (deprecated)
 
 on:
-  push:
-    branches:
-      - main
+  workflow_dispatch:
 
 jobs:
   test:

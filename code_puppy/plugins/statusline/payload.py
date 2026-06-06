@@ -108,7 +108,7 @@ def build_payload() -> Dict[str, Any]:
     try:
         from importlib.metadata import version
 
-        payload["version"] = version("code-puppy")
+        payload["version"] = version("fast-puppy")
     except Exception:
         pass
 
