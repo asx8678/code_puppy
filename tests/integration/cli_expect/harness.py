@@ -190,7 +190,7 @@ class CliHarness:
         if existing_home is not None:
             temp_home = pathlib.Path(existing_home)
             config_dir = temp_home / ".config" / "code_puppy"
-            code_puppy_dir = temp_home / ".code_puppy"
+            code_puppy_dir = temp_home / ".fast_puppy"
             config_dir.mkdir(parents=True, exist_ok=True)
             code_puppy_dir.mkdir(parents=True, exist_ok=True)
             write_config = not (config_dir / "puppy.cfg").exists()
@@ -199,24 +199,24 @@ class CliHarness:
                 tempfile.mkdtemp(prefix=f"code_puppy_home_{_random_name()}_")
             )
             config_dir = temp_home / ".config" / "code_puppy"
-            code_puppy_dir = temp_home / ".code_puppy"
+            code_puppy_dir = temp_home / ".fast_puppy"
             config_dir.mkdir(parents=True, exist_ok=True)
             code_puppy_dir.mkdir(parents=True, exist_ok=True)
             write_config = True
 
         if write_config:
-            # Write config to both XDG config dir and ~/.code_puppy for compatibility
+            # Write config to both XDG config dir and ~/.fast_puppy for compatibility
             (config_dir / "puppy.cfg").write_text(CONFIG_TEMPLATE, encoding="utf-8")
             (code_puppy_dir / "puppy.cfg").write_text(CONFIG_TEMPLATE, encoding="utf-8")
 
         log_path = temp_home / f"cli_output_{uuid.uuid4().hex}.log"
-        cmd_args = ["code-puppy"] + (args or [])
+        cmd_args = ["fast-puppy"] + (args or [])
 
         spawn_env = os.environ.copy()
         spawn_env.update(env or {})
         spawn_env["HOME"] = str(temp_home)
         spawn_env.pop("PYTHONPATH", None)  # avoid accidental venv confusion
-        # Clear XDG vars so the spawned CLI uses ~/.code_puppy (temp home)
+        # Clear XDG vars so the spawned CLI uses ~/.fast_puppy (temp home)
         spawn_env.pop("XDG_CONFIG_HOME", None)
         spawn_env.pop("XDG_DATA_HOME", None)
         spawn_env.pop("XDG_CACHE_HOME", None)

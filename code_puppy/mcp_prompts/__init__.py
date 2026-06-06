@@ -1,1 +1,1 @@
-# MCP Prompts for Code Puppy
+# MCP Prompts for Fast Puppy

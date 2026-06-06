@@ -382,7 +382,7 @@ class TestMain:
     async def test_prompt_mode(self):
         mock_exec = AsyncMock()
         await _run_main(
-            ["code-puppy", "-p", "hello world"],
+            ["fast-puppy", "-p", "hello world"],
             extra_patches={"code_puppy.cli_runner.execute_single_prompt": mock_exec},
         )
         mock_exec.assert_called_once()
@@ -391,7 +391,7 @@ class TestMain:
     async def test_interactive_mode_default(self):
         mock_inter = AsyncMock()
         await _run_main(
-            ["code-puppy"],
+            ["fast-puppy"],
             extra_patches={
                 "code_puppy.cli_runner.interactive_mode": mock_inter,
                 "pyfiglet.figlet_format": MagicMock(return_value="LOGO\n\n"),
@@ -403,7 +403,7 @@ class TestMain:
     async def test_with_command_args(self):
         mock_inter = AsyncMock()
         await _run_main(
-            ["code-puppy", "do", "something"],
+            ["fast-puppy", "do", "something"],
             extra_patches={
                 "code_puppy.cli_runner.interactive_mode": mock_inter,
                 "pyfiglet.figlet_format": MagicMock(return_value="LOGO\n\n"),
@@ -414,7 +414,7 @@ class TestMain:
     @pytest.mark.anyio
     async def test_no_available_port(self):
         await _run_main(
-            ["code-puppy", "-p", "test"],
+            ["fast-puppy", "-p", "test"],
             base_overrides={
                 "code_puppy.cli_runner.find_available_port": MagicMock(
                     return_value=None
@@ -428,7 +428,7 @@ class TestMain:
 
         with pytest.raises(SystemExit):
             await _run_main(
-                ["code-puppy", "-p", "test"],
+                ["fast-puppy", "-p", "test"],
                 base_overrides={
                     "code_puppy.cli_runner.validate_cancel_agent_key": MagicMock(
                         side_effect=KeymapError("bad key")
@@ -440,7 +440,7 @@ class TestMain:
     async def test_model_valid(self):
         mock_set = MagicMock()
         await _run_main(
-            ["code-puppy", "-m", "gpt-5", "-p", "hi"],
+            ["fast-puppy", "-m", "gpt-5", "-p", "hi"],
             extra_patches={
                 "code_puppy.cli_runner.execute_single_prompt": AsyncMock(),
                 "code_puppy.config.set_model_name": mock_set,
@@ -457,7 +457,7 @@ class TestMain:
         mock_mf.load_config.return_value = {"gpt-5": {}}
         with pytest.raises(SystemExit):
             await _run_main(
-                ["code-puppy", "-m", "bad-model", "-p", "hi"],
+                ["fast-puppy", "-m", "bad-model", "-p", "hi"],
                 extra_patches={
                     "code_puppy.config.set_model_name": MagicMock(),
                     "code_puppy.config._validate_model_exists": MagicMock(
@@ -471,7 +471,7 @@ class TestMain:
     async def test_model_validation_exception(self):
         with pytest.raises(SystemExit):
             await _run_main(
-                ["code-puppy", "-m", "bad", "-p", "hi"],
+                ["fast-puppy", "-m", "bad", "-p", "hi"],
                 extra_patches={
                     "code_puppy.config.set_model_name": MagicMock(),
                     "code_puppy.config._validate_model_exists": MagicMock(
@@ -484,25 +484,25 @@ class TestMain:
     async def test_agent_valid(self):
         mock_set = MagicMock()
         await _run_main(
-            ["code-puppy", "-a", "code-puppy", "-p", "hi"],
+            ["fast-puppy", "-a", "fast-puppy", "-p", "hi"],
             extra_patches={
                 "code_puppy.cli_runner.execute_single_prompt": AsyncMock(),
                 "code_puppy.agents.agent_manager.get_available_agents": MagicMock(
-                    return_value={"code-puppy": {}}
+                    return_value={"fast-puppy": {}}
                 ),
                 "code_puppy.agents.agent_manager.set_current_agent": mock_set,
             },
         )
-        mock_set.assert_called_with("code-puppy")
+        mock_set.assert_called_with("fast-puppy")
 
     @pytest.mark.anyio
     async def test_agent_invalid(self):
         with pytest.raises(SystemExit):
             await _run_main(
-                ["code-puppy", "-a", "bad-agent", "-p", "hi"],
+                ["fast-puppy", "-a", "bad-agent", "-p", "hi"],
                 extra_patches={
                     "code_puppy.agents.agent_manager.get_available_agents": MagicMock(
-                        return_value={"code-puppy": {}}
+                        return_value={"fast-puppy": {}}
                     ),
                 },
             )
@@ -511,7 +511,7 @@ class TestMain:
     async def test_agent_exception(self):
         with pytest.raises(SystemExit):
             await _run_main(
-                ["code-puppy", "-a", "bad", "-p", "hi"],
+                ["fast-puppy", "-a", "bad", "-p", "hi"],
                 extra_patches={
                     "code_puppy.agents.agent_manager.get_available_agents": MagicMock(
                         side_effect=RuntimeError("boom")
@@ -528,7 +528,7 @@ class TestMain:
             get_callbacks=MagicMock(return_value=[lambda: None]),
         )
         await _run_main(
-            ["code-puppy", "-p", "hi"],
+            ["fast-puppy", "-p", "hi"],
             no_version=False,
             base_overrides={"code_puppy.cli_runner.callbacks": cb_mock},
             extra_patches={
@@ -541,7 +541,7 @@ class TestMain:
     async def test_version_check_no_callbacks(self):
         """Version check falls back to default_version_mismatch_behavior."""
         await _run_main(
-            ["code-puppy", "-p", "hi"],
+            ["fast-puppy", "-p", "hi"],
             no_version=False,
             extra_patches={
                 "code_puppy.cli_runner.execute_single_prompt": AsyncMock(),
@@ -560,7 +560,7 @@ class TestMain:
             return real_import(name, *args, **kwargs)
 
         await _run_main(
-            ["code-puppy"],
+            ["fast-puppy"],
             extra_patches={
                 "code_puppy.cli_runner.interactive_mode": AsyncMock(),
                 "builtins.__import__": fake_import,
@@ -571,7 +571,7 @@ class TestMain:
     async def test_uvx_alternate_cancel_key(self):
         """uvx should_use_alternate_cancel_key returns True branch."""
         await _run_main(
-            ["code-puppy", "-p", "hi"],
+            ["fast-puppy", "-p", "hi"],
             extra_patches={
                 "code_puppy.cli_runner.execute_single_prompt": AsyncMock(),
                 "code_puppy.uvx_detection.should_use_alternate_cancel_key": MagicMock(

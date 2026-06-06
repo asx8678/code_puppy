@@ -63,7 +63,7 @@ def _extract_pydantic_agent_tools(pyd_agent: Any) -> Optional[Dict[str, Any]]:
 
 
 class BaseAgent(ABC):
-    """Abstract base for all Code Puppy agents."""
+    """Abstract base for all Fast Puppy agents."""
 
     def __init__(self) -> None:
         self.id: str = str(uuid.uuid4())

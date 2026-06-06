@@ -161,7 +161,7 @@ def spawn_key_listener(
             emit_warning("Key listener stopped unexpectedly; press Ctrl+C to cancel.")
 
     thread = threading.Thread(
-        target=listener, name="code-puppy-key-listener", daemon=True
+        target=listener, name="fast-puppy-key-listener", daemon=True
     )
     thread.start()
     return KeyListenerHandle(

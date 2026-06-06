@@ -1,7 +1,7 @@
 """Build the JSON session payload fed to the status line command on stdin.
 
 Schema mirrors Claude Code's ``statusLine`` stdin contract where the data
-exists in Code Puppy, so scripts written for one are easy to port. Every field
+exists in Fast Puppy, so scripts written for one are easy to port. Every field
 is best-effort: a failure in one source must never break the payload.
 """
 
@@ -90,7 +90,7 @@ def build_payload() -> Dict[str, Any]:
     cwd = _safe(os.getcwd, "") or ""
     payload: Dict[str, Any] = {
         "cwd": cwd,
-        "puppy_name": _safe(get_puppy_name) or "code-puppy",
+        "puppy_name": _safe(get_puppy_name) or "fast-puppy",
         "model": _model_block(),
         "workspace": {"current_dir": cwd},
         "context_window": _context_block(),

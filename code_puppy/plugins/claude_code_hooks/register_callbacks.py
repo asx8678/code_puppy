@@ -33,6 +33,9 @@ _SUBAGENT_NAMES = frozenset(
     {
         "pack_leader",
         "bloodhound",
+        "fast-puppy",
+        "fast_puppy",
+        # legacy ids kept so pre-rename sessions still classify as subagents
         "code-puppy",
         "code_puppy",
         "retriever",

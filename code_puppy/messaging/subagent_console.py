@@ -6,7 +6,7 @@ status badges, and performance metrics.
 
 Usage:
     >>> manager = SubAgentConsoleManager.get_instance()
-    >>> manager.register_agent("session-123", "code-puppy", "gpt-4o")
+    >>> manager.register_agent("session-123", "fast-puppy", "gpt-4o")
     >>> manager.update_agent("session-123", status="running", tool_call_count=5)
     >>> manager.unregister_agent("session-123")
 """
@@ -176,7 +176,7 @@ class SubAgentConsoleManager:
 
         Args:
             session_id: Unique identifier for this agent session.
-            agent_name: Name of the agent (e.g., 'code-puppy', 'qa-kitten').
+            agent_name: Name of the agent (e.g., 'fast-puppy', 'qa-kitten').
             model_name: Name of the model being used (e.g., 'gpt-4o').
         """
         with self._agents_lock:

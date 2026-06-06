@@ -26,7 +26,7 @@ _NAME_RE = re.compile(r"^[a-zA-Z0-9_\-]{1,64}$")
 
 
 DEFAULT_JUDGE_PROMPT = """\
-You are Code Puppy's goal-completion judge.
+You are Fast Puppy's goal-completion judge.
 
 Decide whether the user's goal is verifiably complete based on the
 implementor's latest response and (optionally) its message history.

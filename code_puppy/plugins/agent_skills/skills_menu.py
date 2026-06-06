@@ -129,7 +129,7 @@ class SkillsMenu:
             lines.append(("", "\n"))
             lines.append(("fg:ansibrightblack", "  Create skills in:"))
             lines.append(("", "\n"))
-            lines.append(("fg:ansibrightblack", "    ~/.code_puppy/skills/"))
+            lines.append(("fg:ansibrightblack", "    ~/.fast_puppy/skills/"))
             lines.append(("", "\n"))
             lines.append(("fg:ansibrightblack", "    ./skills/"))
             lines.append(("", "\n\n"))
@@ -624,7 +624,7 @@ def list_skills() -> bool:
 
         if not skills:
             emit_info(
-                "No skills found. Create skills in ~/.code_puppy/skills/ or ./skills/"
+                "No skills found. Create skills in ~/.fast_puppy/skills/ or ./skills/"
             )
             return True
 

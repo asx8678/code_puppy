@@ -379,7 +379,7 @@ def test_agent_switch_triggers_autosave_rotation():
     mock_emit_success = mocks["emit_success"].start()
 
     try:
-        current_agent = SimpleNamespace(name="code-puppy", display_name="Code Puppy")
+        current_agent = SimpleNamespace(name="fast-puppy", display_name="Fast Puppy")
         new_agent = SimpleNamespace(
             name="reviewer",
             display_name="Reviewer",
@@ -394,7 +394,7 @@ def test_agent_switch_triggers_autosave_rotation():
             ),
             patch(
                 "code_puppy.agents.get_available_agents",
-                return_value={"code-puppy": "Code Puppy", "reviewer": "Reviewer"},
+                return_value={"fast-puppy": "Fast Puppy", "reviewer": "Reviewer"},
             ),
             patch(
                 "code_puppy.command_line.core_commands.finalize_autosave_session",
@@ -428,7 +428,7 @@ def test_agent_switch_same_agent_skips_rotation():
     mock_emit_info = mocks["emit_info"].start()
 
     try:
-        current_agent = SimpleNamespace(name="code-puppy", display_name="Code Puppy")
+        current_agent = SimpleNamespace(name="fast-puppy", display_name="Fast Puppy")
         with (
             patch(
                 "code_puppy.agents.get_current_agent",
@@ -436,7 +436,7 @@ def test_agent_switch_same_agent_skips_rotation():
             ),
             patch(
                 "code_puppy.agents.get_available_agents",
-                return_value={"code-puppy": "Code Puppy"},
+                return_value={"fast-puppy": "Fast Puppy"},
             ),
             patch(
                 "code_puppy.command_line.core_commands.finalize_autosave_session",
@@ -445,7 +445,7 @@ def test_agent_switch_same_agent_skips_rotation():
                 "code_puppy.agents.set_current_agent",
             ) as mock_set,
         ):
-            result = handle_command("/agent code-puppy")
+            result = handle_command("/agent fast-puppy")
             assert result is True
             mock_finalize.assert_not_called()
             mock_set.assert_not_called()
@@ -465,7 +465,7 @@ def test_agent_switch_unknown_agent_skips_rotation():
         with (
             patch(
                 "code_puppy.agents.get_available_agents",
-                return_value={"code-puppy": "Code Puppy"},
+                return_value={"fast-puppy": "Fast Puppy"},
             ),
             patch(
                 "code_puppy.command_line.core_commands.finalize_autosave_session",

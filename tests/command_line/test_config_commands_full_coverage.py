@@ -40,7 +40,7 @@ class TestHandleShowCommand:
                 "code_puppy.config.get_effective_temperature",
                 return_value=effective_temp,
             ),
-            patch("code_puppy.config.get_default_agent", return_value="code-puppy"),
+            patch("code_puppy.config.get_default_agent", return_value="fast-puppy"),
             patch("code_puppy.config.get_resume_message_count", return_value=50),
             patch(
                 "code_puppy.config.get_openai_reasoning_effort", return_value="medium"
@@ -293,7 +293,7 @@ class TestHandlePinModelCommand:
         defaults = {
             "discover_json_agents": {},
             "load_model_names": ["gpt-5", "claude"],
-            "get_agent_descriptions": {"code-puppy": "Default agent"},
+            "get_agent_descriptions": {"fast-puppy": "Default agent"},
         }
         defaults.update(overrides)
         return [
@@ -370,7 +370,7 @@ class TestHandlePinModelCommand:
         from code_puppy.command_line.config_commands import handle_pin_model_command
 
         mock_agent = MagicMock()
-        mock_agent.name = "code-puppy"
+        mock_agent.name = "fast-puppy"
         patches = self._make_patches()
         with (
             patches[0],
@@ -381,7 +381,7 @@ class TestHandlePinModelCommand:
             patch("code_puppy.messaging.emit_info"),
             patch("code_puppy.agents.get_current_agent", return_value=mock_agent),
         ):
-            assert handle_pin_model_command("/pin_model code-puppy gpt-5") is True
+            assert handle_pin_model_command("/pin_model fast-puppy gpt-5") is True
 
     def test_pin_json_agent(self, tmp_path):
         from code_puppy.command_line.config_commands import handle_pin_model_command
@@ -489,19 +489,19 @@ class TestHandleUnpinCommand:
         from code_puppy.command_line.config_commands import handle_unpin_command
 
         mock_agent = MagicMock()
-        mock_agent.name = "code-puppy"
+        mock_agent.name = "fast-puppy"
         with (
             patch("code_puppy.agents.json_agent.discover_json_agents", return_value={}),
             patch(
                 "code_puppy.agents.agent_manager.get_agent_descriptions",
-                return_value={"code-puppy": "desc"},
+                return_value={"fast-puppy": "desc"},
             ),
             patch("code_puppy.config.clear_agent_pinned_model"),
             patch("code_puppy.messaging.emit_success"),
             patch("code_puppy.agents.get_current_agent", return_value=mock_agent),
             patch("code_puppy.messaging.emit_info"),
         ):
-            assert handle_unpin_command("/unpin code-puppy") is True
+            assert handle_unpin_command("/unpin fast-puppy") is True
 
     def test_unpin_json_agent(self, tmp_path):
         from code_puppy.command_line.config_commands import handle_unpin_command

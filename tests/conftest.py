@@ -1,4 +1,4 @@
-"""Pytest configuration and fixtures for code-puppy tests.
+"""Pytest configuration and fixtures for fast-puppy tests.
 
 This file intentionally keeps the test environment lean (no extra deps).
 To support `async def` tests without pytest-asyncio, we provide a minimal
@@ -38,7 +38,7 @@ def _ensure_builtin_plugin_callback_registrations() -> None:
     cp_callbacks.register_callback("custom_command", foundry._handle_custom_command)
     cp_callbacks.register_callback("register_model_type", foundry._register_model_types)
     # Keep hook callbacks registered for wiring tests, but do not let local
-    # ~/.code_puppy or project .claude hook configuration affect test runs.
+    # ~/.fast_puppy or project .claude hook configuration affect test runs.
     hooks._hook_engine = None
     cp_callbacks.register_callback("pre_tool_call", hooks.on_pre_tool_call_hook)
     cp_callbacks.register_callback("post_tool_call", hooks.on_post_tool_call_hook)
@@ -69,7 +69,7 @@ def isolate_global_state_between_tests(tmp_path_factory):
     """Isolate mutable global state between tests.
 
     Tests must be deterministic locally and in CI. Do not seed test config from
-    the developer's real ``~/.code_puppy/puppy.cfg`` because user defaults such
+    the developer's real ``~/.fast_puppy/puppy.cfg`` because user defaults such
     as ``default_agent`` or ``compaction_threshold`` change expected defaults.
     Also snapshot callback registrations so tests exercising callback mutation
     cannot wipe plugin registrations needed by later tests.
@@ -83,12 +83,15 @@ def isolate_global_state_between_tests(tmp_path_factory):
     # Save original config path and callback registry.
     original_config_file = cp_config.CONFIG_FILE
     original_config_dir = cp_config.CONFIG_DIR
+    original_data_dir = cp_config.DATA_DIR
+    original_cache_dir = cp_config.CACHE_DIR
+    original_state_dir = cp_config.STATE_DIR
     original_callbacks = deepcopy(cp_callbacks._callbacks)
 
     # Create a completely separate temp directory for config isolation
     # (not using tmp_path which tests may use for their own purposes).
     config_temp_dir = tempfile.mkdtemp(prefix="code_puppy_test_config_")
-    temp_config_dir = os.path.join(config_temp_dir, ".code_puppy")
+    temp_config_dir = os.path.join(config_temp_dir, ".fast_puppy")
     os.makedirs(temp_config_dir, exist_ok=True)
     temp_config_file = os.path.join(temp_config_dir, "puppy.cfg")
 
@@ -96,6 +99,11 @@ def isolate_global_state_between_tests(tmp_path_factory):
     # defaults, not the local developer's personal settings.
     cp_config.CONFIG_FILE = temp_config_file
     cp_config.CONFIG_DIR = temp_config_dir
+    # Point the other XDG dir globals at the temp dir too, so the legacy-config
+    # migration (which reads these) can never touch the developer's real home.
+    cp_config.DATA_DIR = temp_config_dir
+    cp_config.CACHE_DIR = temp_config_dir
+    cp_config.STATE_DIR = temp_config_dir
 
     # Clear model cache to ensure fresh state.
     cp_config.clear_model_cache()
@@ -109,6 +117,9 @@ def isolate_global_state_between_tests(tmp_path_factory):
     # Restore original config paths and callback registrations.
     cp_config.CONFIG_FILE = original_config_file
     cp_config.CONFIG_DIR = original_config_dir
+    cp_config.DATA_DIR = original_data_dir
+    cp_config.CACHE_DIR = original_cache_dir
+    cp_config.STATE_DIR = original_state_dir
     cp_callbacks._callbacks.clear()
     cp_callbacks._callbacks.update(original_callbacks)
     _ensure_builtin_plugin_callback_registrations()

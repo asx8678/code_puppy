@@ -7,7 +7,7 @@ from pathlib import Path
 logger = logging.getLogger(__name__)
 
 # User plugins directory
-USER_PLUGINS_DIR = Path.home() / ".code_puppy" / "plugins"
+USER_PLUGINS_DIR = Path.home() / ".fast_puppy" / "plugins"
 
 # Track if plugins have already been loaded to prevent duplicate registration
 _PLUGINS_LOADED = False
@@ -55,7 +55,7 @@ def _load_builtin_plugins(plugins_dir: Path) -> list[str]:
 
 
 def _load_user_plugins(user_plugins_dir: Path) -> list[str]:
-    """Load user plugins from ~/.code_puppy/plugins/.
+    """Load user plugins from ~/.fast_puppy/plugins/.
 
     Each plugin should be a directory containing a register_callbacks.py file.
     Plugins are loaded by adding their parent to sys.path and importing them.
@@ -144,7 +144,7 @@ def load_plugin_callbacks() -> dict[str, list[str]]:
 
     Loads plugins from:
     1. Built-in plugins in the code_puppy/plugins/ directory
-    2. User plugins in ~/.code_puppy/plugins/
+    2. User plugins in ~/.fast_puppy/plugins/
 
     Returns dict with 'builtin' and 'user' keys containing lists of loaded plugin names.
 

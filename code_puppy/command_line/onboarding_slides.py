@@ -42,11 +42,11 @@ def get_nav_footer() -> str:
 
 
 def get_gradient_banner() -> str:
-    """Generate the gradient CODE PUPPY banner."""
+    """Generate the gradient FAST PUPPY banner."""
     try:
         import pyfiglet
 
-        lines = pyfiglet.figlet_format("CODE PUPPY", font="ansi_shadow").split("\n")
+        lines = pyfiglet.figlet_format("FAST PUPPY", font="ansi_shadow").split("\n")
         colors = ["bright_blue", "bright_cyan", "bright_green"]
         result = []
         for i, line in enumerate(lines):
@@ -55,7 +55,7 @@ def get_gradient_banner() -> str:
                 result.append(f"[{color}]{line}[/{color}]")
         return "\n".join(result)
     except ImportError:
-        return "[bold bright_cyan]═══ CODE PUPPY 🐶 ═══[/bold bright_cyan]"
+        return "[bold bright_cyan]═══ FAST PUPPY 🐶 ═══[/bold bright_cyan]"
 
 
 # ============================================================================
@@ -136,7 +136,7 @@ def slide_use_cases() -> str:
     """Slide 4: When to use which agent - THE IMPORTANT ONE."""
     content = "[bold cyan]🎯 When to Use What[/bold cyan]\n\n"
 
-    content += "[bold yellow]🐶 Code Puppy (default)[/bold yellow]\n"
+    content += "[bold yellow]🐶 Fast Puppy (default)[/bold yellow]\n"
     content += "  [green]USE FOR:[/green] Direct coding tasks\n"
     content += "  • Fix this bug\n"
     content += "  • Add a feature to this file\n"

@@ -262,7 +262,7 @@ def _resolve_judges(implementor_agent: Any) -> list[JudgeConfig]:
         try:
             fallback_model = implementor_agent.get_model_name()
         except Exception:
-            fallback_model = "code-puppy"
+            fallback_model = "fast-puppy"
 
     return get_enabled_judges_or_default(str(fallback_model))
 

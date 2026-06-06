@@ -1,4 +1,4 @@
-"""Command handlers for Code Puppy - CONFIG commands.
+"""Command handlers for Fast Puppy - CONFIG commands.
 
 This module contains @register_command decorated handlers that are automatically
 discovered by the command registry system.
@@ -228,7 +228,7 @@ def handle_set_command(command: str) -> bool:
             value = normalized_value  # Use normalized value
             emit_info(
                 Text.from_markup(
-                    "[yellow]⚠️ cancel_agent_key changed. Please restart Code Puppy for this change to take effect.[/yellow]"
+                    "[yellow]⚠️ cancel_agent_key changed. Please restart Fast Puppy for this change to take effect.[/yellow]"
                 )
             )
 

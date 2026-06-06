@@ -10,7 +10,7 @@ from pathlib import Path
 
 # Root directory for the kennel on disk.
 KENNEL_ROOT = Path(
-    os.environ.get("PUPPY_KENNEL_ROOT", Path.home() / ".code_puppy" / "kennel")
+    os.environ.get("PUPPY_KENNEL_ROOT", Path.home() / ".fast_puppy" / "kennel")
 )
 
 # The SQLite database file lives inside the kennel root.

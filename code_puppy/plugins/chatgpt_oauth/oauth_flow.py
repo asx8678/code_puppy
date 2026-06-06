@@ -160,7 +160,7 @@ class _CallbackHandler(BaseHTTPRequestHandler):
         if path == "/success":
             success_html = oauth_success_html(
                 "ChatGPT",
-                "You can now close this window and return to Code Puppy.",
+                "You can now close this window and return to Fast Puppy.",
             )
             self._send_html(success_html)
             self._shutdown_after_delay(2.0)

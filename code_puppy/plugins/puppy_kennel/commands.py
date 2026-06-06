@@ -117,7 +117,7 @@ def _cmd_search(query: str) -> bool:
     if not query.strip():
         emit_warning("Usage: /kennel search <your query>")
         return True
-    wings = default_recall_scope("code-puppy", detect_cwd())
+    wings = default_recall_scope("fast-puppy", detect_cwd())
     hits = kennel.search_drawers_multi(query, wing_names=wings, limit=5)
     if not hits:
         emit_warning(f"No hits for '{query}' in scope {wings}")

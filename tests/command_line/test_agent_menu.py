@@ -57,7 +57,7 @@ class TestGetAgentEntries:
     @patch("code_puppy.command_line.agent_menu.get_available_agents")
     def test_returns_single_agent(self, mock_available, mock_descriptions):
         """Test that single agent is returned correctly."""
-        mock_available.return_value = {"code_puppy": "Code Puppy 🐶"}
+        mock_available.return_value = {"code_puppy": "Fast Puppy 🐶"}
         mock_descriptions.return_value = {"code_puppy": "A friendly coding assistant."}
 
         result = _get_agent_entries()
@@ -65,7 +65,7 @@ class TestGetAgentEntries:
         assert len(result) == 1
         assert result[0] == (
             "code_puppy",
-            "Code Puppy 🐶",
+            "Fast Puppy 🐶",
             "A friendly coding assistant.",
         )
 
@@ -178,7 +178,7 @@ class TestRenderMenuPanel:
 
         Note: Emojis are stripped from display names for clean terminal rendering.
         """
-        entries = [("code_puppy", "Code Puppy 🐶", "A friendly assistant.")]
+        entries = [("code_puppy", "Fast Puppy 🐶", "A friendly assistant.")]
 
         result = _render_menu_panel(
             entries, page=0, selected_idx=0, current_agent_name=""
@@ -186,7 +186,7 @@ class TestRenderMenuPanel:
 
         text = _get_text_from_formatted(result)
         # Emojis are sanitized for clean terminal rendering
-        assert "Code Puppy" in text
+        assert "Fast Puppy" in text
         assert "Page 1/1" in text
 
     def test_highlights_selected_agent(self):
@@ -369,7 +369,7 @@ class TestRenderPreviewPanel:
 
     def test_renders_agent_name(self):
         """Test that agent name is displayed."""
-        entry = ("code_puppy", "Code Puppy 🐶", "A friendly assistant.")
+        entry = ("code_puppy", "Fast Puppy 🐶", "A friendly assistant.")
 
         result = _render_preview_panel(entry, current_agent_name="")
 
@@ -382,20 +382,20 @@ class TestRenderPreviewPanel:
 
         Note: Emojis are stripped from display names for clean terminal rendering.
         """
-        entry = ("code_puppy", "Code Puppy 🐶", "A friendly assistant.")
+        entry = ("code_puppy", "Fast Puppy 🐶", "A friendly assistant.")
 
         result = _render_preview_panel(entry, current_agent_name="")
 
         text = _get_text_from_formatted(result)
         assert "Display Name:" in text
         # Emojis are sanitized for clean terminal rendering
-        assert "Code Puppy" in text
+        assert "Fast Puppy" in text
 
     @patch("code_puppy.command_line.agent_menu.get_agent_pinned_model")
     def test_renders_pinned_model(self, mock_pinned_model):
         """Test that pinned model is shown in the preview panel."""
         mock_pinned_model.return_value = "gpt-4"
-        entry = ("code_puppy", "Code Puppy 🐶", "A friendly assistant.")
+        entry = ("code_puppy", "Fast Puppy 🐶", "A friendly assistant.")
 
         result = _render_preview_panel(entry, current_agent_name="")
 
@@ -407,7 +407,7 @@ class TestRenderPreviewPanel:
     def test_renders_unpinned_model_shows_default(self, mock_pinned_model):
         """Test that unpinned model shows 'default' in preview."""
         mock_pinned_model.return_value = None
-        entry = ("code_puppy", "Code Puppy 🐶", "A friendly assistant.")
+        entry = ("code_puppy", "Fast Puppy 🐶", "A friendly assistant.")
 
         result = _render_preview_panel(entry, current_agent_name="")
 
@@ -417,7 +417,7 @@ class TestRenderPreviewPanel:
 
     def test_renders_description(self):
         """Test that description is displayed."""
-        entry = ("code_puppy", "Code Puppy 🐶", "A friendly coding assistant dog.")
+        entry = ("code_puppy", "Fast Puppy 🐶", "A friendly coding assistant dog.")
 
         result = _render_preview_panel(entry, current_agent_name="")
 
@@ -427,7 +427,7 @@ class TestRenderPreviewPanel:
 
     def test_renders_status_not_active(self):
         """Test that status shows 'Not active' for non-current agent."""
-        entry = ("code_puppy", "Code Puppy 🐶", "A friendly assistant.")
+        entry = ("code_puppy", "Fast Puppy 🐶", "A friendly assistant.")
 
         result = _render_preview_panel(entry, current_agent_name="other_agent")
 
@@ -437,7 +437,7 @@ class TestRenderPreviewPanel:
 
     def test_renders_status_currently_active(self):
         """Test that status shows active for current agent."""
-        entry = ("code_puppy", "Code Puppy 🐶", "A friendly assistant.")
+        entry = ("code_puppy", "Fast Puppy 🐶", "A friendly assistant.")
 
         result = _render_preview_panel(entry, current_agent_name="code_puppy")
 
@@ -519,7 +519,7 @@ class TestGetAgentEntriesIntegration:
     def test_typical_usage_scenario(self, mock_available, mock_descriptions):
         """Test a typical usage scenario with realistic agent data."""
         mock_available.return_value = {
-            "code_puppy": "Code Puppy 🐶",
+            "code_puppy": "Fast Puppy 🐶",
             "pack_leader": "Pack Leader 🦮",
             "code_reviewer": "Code Reviewer 🔍",
         }
@@ -540,7 +540,7 @@ class TestGetAgentEntriesIntegration:
         # Check full tuple structure
         assert result[0] == (
             "code_puppy",
-            "Code Puppy 🐶",
+            "Fast Puppy 🐶",
             "A friendly AI coding assistant.",
         )
 

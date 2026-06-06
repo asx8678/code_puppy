@@ -211,7 +211,7 @@ class StatusDisplay:
         # Use expanded panel with more visible formatting
         return Panel(
             status_text,
-            title="[bold blue]Code Puppy Status[/bold blue]",
+            title="[bold blue]Fast Puppy Status[/bold blue]",
             border_style="bright_blue",
             expand=False,
             padding=(1, 2),

@@ -1,7 +1,7 @@
 """Ollama cloud model setup — /ollama-setup command.
 
 Pulls an Ollama `:cloud` model and registers it in extra_models.json so the
-model is immediately available for use in Code Puppy.
+model is immediately available for use in Fast Puppy.
 
 Cloud models supported (the Ollama "Recommended Models" cloud tier):
     kimi-k2.6:cloud, kimi-k2.5:cloud, glm-5:cloud, glm-5.1:cloud, minimax-m2.7:cloud, qwen3.5:cloud

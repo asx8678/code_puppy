@@ -1,7 +1,7 @@
 """Tests for code_puppy.tools.tools_content.
 
 This module tests the tools_content string constant that provides
-user-facing documentation about Code Puppy's available tools.
+user-facing documentation about Fast Puppy's available tools.
 """
 
 # Import directly from the module file to avoid heavy dependencies in __init__.py

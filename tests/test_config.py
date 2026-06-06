@@ -28,7 +28,7 @@ import pytest
 from code_puppy import callbacks, session_storage
 from code_puppy import config as cp_config
 
-CONFIG_DIR_NAME = ".code_puppy"
+CONFIG_DIR_NAME = ".fast_puppy"
 CONFIG_FILE_NAME = "puppy.cfg"
 DEFAULT_SECTION_NAME = "puppy"
 
@@ -91,9 +91,9 @@ def mock_config_paths(monkeypatch):
     mock_home = "/mock_home"
     mock_config_dir = os.path.join(mock_home, CONFIG_DIR_NAME)
     mock_config_file = os.path.join(mock_config_dir, CONFIG_FILE_NAME)
-    mock_data_dir = os.path.join(mock_home, ".local", "share", "code_puppy")
-    mock_cache_dir = os.path.join(mock_home, ".cache", "code_puppy")
-    mock_state_dir = os.path.join(mock_home, ".local", "state", "code_puppy")
+    mock_data_dir = os.path.join(mock_home, ".local", "share", "fast_puppy")
+    mock_cache_dir = os.path.join(mock_home, ".cache", "fast_puppy")
+    mock_state_dir = os.path.join(mock_home, ".local", "state", "fast_puppy")
     mock_skills_dir = os.path.join(mock_data_dir, "skills")
 
     monkeypatch.setattr(cp_config, "CONFIG_DIR", mock_config_dir)
@@ -126,7 +126,7 @@ class TestEnsureConfigExists:
 
         mock_input_values = {
             "What should we name the puppy? ": "TestPuppy",
-            "What's your name (so Code Puppy knows its owner)? ": "TestOwner",
+            "What's your name (so Fast Puppy knows its owner)? ": "TestOwner",
         }
         monkeypatch.setattr(
             "builtins.input",
@@ -156,7 +156,7 @@ class TestEnsureConfigExists:
 
         mock_input_values = {
             "What should we name the puppy? ": "DirExistsPuppy",
-            "What's your name (so Code Puppy knows its owner)? ": "DirExistsOwner",
+            "What's your name (so Fast Puppy knows its owner)? ": "DirExistsOwner",
         }
         monkeypatch.setattr(
             "builtins.input",
@@ -219,7 +219,7 @@ class TestEnsureConfigExists:
         )
 
         mock_input_values = {
-            "What's your name (so Code Puppy knows its owner)? ": "PartialOwnerFilled"
+            "What's your name (so Fast Puppy knows its owner)? ": "PartialOwnerFilled"
         }
         mock_input = MagicMock(side_effect=lambda prompt: mock_input_values[prompt])
         monkeypatch.setattr("builtins.input", mock_input)
@@ -379,7 +379,7 @@ class TestSimpleGetters:
             mock_get_value.assert_called_once_with(key)
 
     def test_default_agent(self):
-        assert cp_config.get_default_agent() == "code-puppy"
+        assert cp_config.get_default_agent() == "fast-puppy"
         cp_config.set_default_agent("custom-agent")
         assert cp_config.get_default_agent() == "custom-agent"
 
@@ -433,14 +433,14 @@ class TestGetXdgDir:
     def test_returns_xdg_path_when_env_set(self, monkeypatch):
         monkeypatch.setenv("XDG_CONFIG_HOME", "/custom/config")
         assert cp_config._get_xdg_dir("XDG_CONFIG_HOME", ".config") == (
-            "/custom/config/code_puppy"
+            "/custom/config/fast_puppy"
         )
 
     def test_returns_legacy_path_when_env_not_set(self, monkeypatch):
         monkeypatch.delenv("XDG_CONFIG_HOME", raising=False)
         with patch("os.path.expanduser", return_value="/home/user"):
             assert cp_config._get_xdg_dir("XDG_CONFIG_HOME", ".config") == (
-                "/home/user/.code_puppy"
+                "/home/user/.fast_puppy"
             )
 
 
@@ -1444,7 +1444,7 @@ class TestAgentsDirectories:
         assert os.path.isdir(cp_config.get_user_agents_directory())
 
     def test_get_project_agents_directory_exists(self, tmp_path, monkeypatch):
-        (tmp_path / ".code_puppy" / "agents").mkdir(parents=True)
+        (tmp_path / ".fast_puppy" / "agents").mkdir(parents=True)
         monkeypatch.chdir(tmp_path)
         assert cp_config.get_project_agents_directory() is not None
 

@@ -28,8 +28,8 @@ class TestSanitizeDisplayText:
         assert _sanitize_display_text("Hello World") == "Hello World"
 
     def test_strips_emojis(self):
-        result = _sanitize_display_text("Code Puppy \U0001f436")
-        assert "Code Puppy" in result
+        result = _sanitize_display_text("Fast Puppy \U0001f436")
+        assert "Fast Puppy" in result
 
     def test_keeps_punctuation(self):
         result = _sanitize_display_text("hello-world_v2.0")

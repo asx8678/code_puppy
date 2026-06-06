@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "fast-puppy"
-version = "0.1.0"
+version = "0.2.0"
 description = "Code generation agent"
 readme = "README.md"
 requires-python = ">=3.11,<3.15"
@@ -60,7 +60,7 @@ HomePage = "https://github.com/asx8678/code_puppy"
 
 
 [project.scripts]
-code-puppy = "code_puppy.main:main_entry"
+fast-puppy = "code_puppy.main:main_entry"
 pup = "code_puppy.main:main_entry"
 
 [tool.logfire]

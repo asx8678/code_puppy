@@ -6,7 +6,7 @@ agent; we hand you a working template you can tweak immediately).
 
 Subcommands:
     /statusline                 Show current status + quick help
-    /statusline init            Write a starter ~/.code_puppy/statusline.sh,
+    /statusline init            Write a starter ~/.fast_puppy/statusline.sh,
                                 point config at it, and enable
     /statusline on | off        Enable / disable rendering
     /statusline show            Run the command once and preview its output
@@ -27,13 +27,13 @@ _COMMAND_NAME = "statusline"
 
 _STARTER_SCRIPT = """\
 #!/usr/bin/env bash
-# Code Puppy status line. Receives session JSON on stdin; prints one line.
+# Fast Puppy status line. Receives session JSON on stdin; prints one line.
 # In the default "replace" mode this line REPLACES the default prompt content
 # (so include a name/emoji if you want one). Edit freely.
 # Requires `jq` for the parsing below (or parse however you like).
 input=$(cat)
 
-puppy=$(printf '%s' "$input" | jq -r '.puppy_name // "code-puppy"')
+puppy=$(printf '%s' "$input" | jq -r '.puppy_name // "fast-puppy"')
 model=$(printf '%s' "$input" | jq -r '.model.display_name // "model"')
 dir=$(printf '%s' "$input" | jq -r '.workspace.current_dir // .cwd // ""')
 branch=$(printf '%s' "$input" | jq -r '.workspace.git_branch // empty')
@@ -60,7 +60,7 @@ def statusline_command_help() -> List[Tuple[str, str]]:
 
 
 def _default_script_path() -> Path:
-    return Path.home() / ".code_puppy" / "statusline.sh"
+    return Path.home() / ".fast_puppy" / "statusline.sh"
 
 
 def _status_text() -> str:

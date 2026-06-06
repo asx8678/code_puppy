@@ -16,7 +16,7 @@ def get_skill_directories() -> List[str]:
     Returns:
         List of skill directory paths from configuration.
         Reads from puppy.cfg [puppy] section under 'skill_directories' key.
-        Default: ['~/.code_puppy/skills', './.code_puppy/skills', './skills']
+        Default: ['~/.fast_puppy/skills', './.fast_puppy/skills', './skills']
 
     The directories are stored as a JSON list in the config.
     """
@@ -34,8 +34,8 @@ def get_skill_directories() -> List[str]:
             logger.error(f"Failed to parse skill_directories config: {e}")
 
     # Fallback to defaults
-    home_skills = str(Path.home() / ".code_puppy" / "skills")
-    project_config_skills = str(Path.cwd() / ".code_puppy" / "skills")
+    home_skills = str(Path.home() / ".fast_puppy" / "skills")
+    project_config_skills = str(Path.cwd() / ".fast_puppy" / "skills")
     local_skills = str(Path.cwd() / "skills")
     return [
         home_skills,

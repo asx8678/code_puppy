@@ -214,8 +214,8 @@ def discover_json_agents() -> Dict[str, str]:
     """Discover JSON agent files in the user's and project's agents directories.
 
     Searches two locations:
-    1. User agents directory (~/.code_puppy/agents/)
-    2. Project agents directory (<CWD>/.code_puppy/agents/) - if it exists
+    1. User agents directory (~/.fast_puppy/agents/)
+    2. Project agents directory (<CWD>/.fast_puppy/agents/) - if it exists
 
     Project agents take priority over user agents when names collide.
 

@@ -55,7 +55,7 @@ class _FakeAgent:
         return fn
 
 
-def _ctx(agent_name: str = "code-puppy") -> Any:
+def _ctx(agent_name: str = "fast-puppy") -> Any:
     return SimpleNamespace(agent_name=agent_name, deps=None)
 
 
@@ -97,7 +97,7 @@ def test_recorder_skips_when_disabled(kennel_root: Path) -> None:
 
     state.set_enabled(False)
     recorder.record_run_end(
-        agent_name="code-puppy",
+        agent_name="fast-puppy",
         model_name="m",
         success=True,
         response_text="Should not be recorded.",
@@ -110,14 +110,14 @@ def test_recorder_resumes_after_re_enable(kennel_root: Path) -> None:
 
     state.set_enabled(False)
     recorder.record_run_end(
-        agent_name="code-puppy",
+        agent_name="fast-puppy",
         model_name="m",
         success=True,
         response_text="Lost.",
     )
     state.set_enabled(True)
     recorder.record_run_end(
-        agent_name="code-puppy",
+        agent_name="fast-puppy",
         model_name="m",
         success=True,
         response_text="Saved.",
@@ -132,7 +132,7 @@ def test_retriever_returns_none_when_disabled(kennel_root: Path) -> None:
     # Has to be longer than MIN_DRAWER_CHARS (80) to clear the packer's
     # noise filter; otherwise the block would be empty for unrelated reasons.
     recorder.record_run_end(
-        agent_name="code-puppy",
+        agent_name="fast-puppy",
         model_name="m",
         success=True,
         response_text=(
@@ -258,7 +258,7 @@ def test_stats_command_works_when_disabled(kennel_root: Path) -> None:
     from code_puppy.plugins.puppy_kennel import commands, recorder, state
 
     recorder.record_run_end(
-        agent_name="code-puppy",
+        agent_name="fast-puppy",
         model_name="m",
         success=True,
         response_text="something",
@@ -271,7 +271,7 @@ def test_wings_command_works_when_disabled(kennel_root: Path) -> None:
     from code_puppy.plugins.puppy_kennel import commands, recorder, state
 
     recorder.record_run_end(
-        agent_name="code-puppy",
+        agent_name="fast-puppy",
         model_name="m",
         success=True,
         response_text="something",
@@ -285,7 +285,7 @@ def test_search_command_works_when_disabled(kennel_root: Path) -> None:
     from code_puppy.plugins.puppy_kennel import commands, recorder, state
 
     recorder.record_run_end(
-        agent_name="code-puppy",
+        agent_name="fast-puppy",
         model_name="m",
         success=True,
         response_text="The pangolin is a scaly mammal.",

@@ -48,7 +48,7 @@ class TestEstimateContextOverheadMemoization:
 
 
 class TestCodePuppyDynamicPrompt:
-    """Test that the Code-Puppy system prompt no longer references the retired reasoning tool."""
+    """Test that the Fast-Puppy system prompt no longer references the retired reasoning tool."""
 
     @pytest.fixture
     def agent(self):

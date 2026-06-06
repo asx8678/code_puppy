@@ -47,7 +47,7 @@ class TestAutostartBoundServers:
             "code_puppy.mcp_.agent_bindings.get_bound_servers",
             return_value={"srv-1": {"auto_start": True}},
         ):
-            _builder._autostart_bound_servers(mock_manager, "code-puppy")
+            _builder._autostart_bound_servers(mock_manager, "fast-puppy")
 
         mock_manager.start_server_sync.assert_called_once_with("srv-1")
 
@@ -59,7 +59,7 @@ class TestAutostartBoundServers:
             "code_puppy.mcp_.agent_bindings.get_bound_servers",
             return_value={"srv-1": {"auto_start": True}},
         ):
-            _builder._autostart_bound_servers(mock_manager, "code-puppy")
+            _builder._autostart_bound_servers(mock_manager, "fast-puppy")
         mock_manager.start_server_sync.assert_not_called()
 
     def test_skips_when_already_starting(self, mock_manager):
@@ -70,7 +70,7 @@ class TestAutostartBoundServers:
             "code_puppy.mcp_.agent_bindings.get_bound_servers",
             return_value={"srv-1": {"auto_start": True}},
         ):
-            _builder._autostart_bound_servers(mock_manager, "code-puppy")
+            _builder._autostart_bound_servers(mock_manager, "fast-puppy")
         mock_manager.start_server_sync.assert_not_called()
 
     def test_skips_when_auto_start_false(self, mock_manager):
@@ -78,12 +78,12 @@ class TestAutostartBoundServers:
             "code_puppy.mcp_.agent_bindings.get_bound_servers",
             return_value={"srv-1": {"auto_start": False}},
         ):
-            _builder._autostart_bound_servers(mock_manager, "code-puppy")
+            _builder._autostart_bound_servers(mock_manager, "fast-puppy")
         mock_manager.start_server_sync.assert_not_called()
 
     def test_no_bindings_is_noop(self, mock_manager):
         with patch("code_puppy.mcp_.agent_bindings.get_bound_servers", return_value={}):
-            _builder._autostart_bound_servers(mock_manager, "code-puppy")
+            _builder._autostart_bound_servers(mock_manager, "fast-puppy")
         mock_manager.start_server_sync.assert_not_called()
 
     def test_unknown_server_is_skipped(self, mock_manager):
@@ -92,7 +92,7 @@ class TestAutostartBoundServers:
             "code_puppy.mcp_.agent_bindings.get_bound_servers",
             return_value={"phantom": {"auto_start": True}},
         ):
-            _builder._autostart_bound_servers(mock_manager, "code-puppy")
+            _builder._autostart_bound_servers(mock_manager, "fast-puppy")
         mock_manager.start_server_sync.assert_not_called()
 
     def test_start_failure_is_swallowed(self, mock_manager):
@@ -105,7 +105,7 @@ class TestAutostartBoundServers:
             return_value={"srv-1": {"auto_start": True}},
         ):
             # Should NOT raise — defensive logging only.
-            _builder._autostart_bound_servers(mock_manager, "code-puppy")
+            _builder._autostart_bound_servers(mock_manager, "fast-puppy")
 
 
 class TestMissingServerWarning:
@@ -202,7 +202,7 @@ class TestAutostartBoundServersAsync:
             "code_puppy.mcp_.agent_bindings.get_bound_servers",
             return_value={"srv-1": {"auto_start": True}},
         ):
-            await _builder.autostart_bound_servers_async(mock_manager, "code-puppy")
+            await _builder.autostart_bound_servers_async(mock_manager, "fast-puppy")
         mock_manager.start_server.assert_awaited_once_with("srv-1")
 
     async def test_skips_already_running(self, mock_manager):
@@ -216,7 +216,7 @@ class TestAutostartBoundServersAsync:
             "code_puppy.mcp_.agent_bindings.get_bound_servers",
             return_value={"srv-1": {"auto_start": True}},
         ):
-            await _builder.autostart_bound_servers_async(mock_manager, "code-puppy")
+            await _builder.autostart_bound_servers_async(mock_manager, "fast-puppy")
         mock_manager.start_server.assert_not_awaited()
 
     async def test_skips_when_auto_start_false(self, mock_manager):
@@ -227,7 +227,7 @@ class TestAutostartBoundServersAsync:
             "code_puppy.mcp_.agent_bindings.get_bound_servers",
             return_value={"srv-1": {"auto_start": False}},
         ):
-            await _builder.autostart_bound_servers_async(mock_manager, "code-puppy")
+            await _builder.autostart_bound_servers_async(mock_manager, "fast-puppy")
         mock_manager.start_server.assert_not_awaited()
 
     async def test_start_failure_is_swallowed(self, mock_manager):
@@ -242,14 +242,14 @@ class TestAutostartBoundServersAsync:
             return_value={"srv-1": {"auto_start": True}},
         ):
             # Should NOT raise.
-            await _builder.autostart_bound_servers_async(mock_manager, "code-puppy")
+            await _builder.autostart_bound_servers_async(mock_manager, "fast-puppy")
 
     async def test_no_bindings_is_noop(self, mock_manager):
         from unittest.mock import AsyncMock
 
         mock_manager.start_server = AsyncMock(return_value=True)
         with patch("code_puppy.mcp_.agent_bindings.get_bound_servers", return_value={}):
-            await _builder.autostart_bound_servers_async(mock_manager, "code-puppy")
+            await _builder.autostart_bound_servers_async(mock_manager, "fast-puppy")
         mock_manager.start_server.assert_not_awaited()
 
 
@@ -266,8 +266,8 @@ class TestLoadMcpServersWiring:
             ) as mock_autostart,
             patch("code_puppy.agents._builder.get_value", return_value=None),
         ):
-            _builder.load_mcp_servers(agent_name="code-puppy")
-        mock_autostart.assert_called_once_with(mock_manager, "code-puppy")
+            _builder.load_mcp_servers(agent_name="fast-puppy")
+        mock_autostart.assert_called_once_with(mock_manager, "fast-puppy")
 
     def test_autostart_skipped_when_agent_name_none(self, mock_manager):
         with (
@@ -292,7 +292,7 @@ class TestLoadMcpServersWiring:
             ) as mock_autostart,
             patch("code_puppy.agents._builder.get_value", return_value="true"),
         ):
-            result = _builder.load_mcp_servers(agent_name="code-puppy")
+            result = _builder.load_mcp_servers(agent_name="fast-puppy")
         assert result == []
         mock_autostart.assert_not_called()
 
@@ -370,8 +370,8 @@ class TestPreMcpAutostartHook:
             ),
             patch("code_puppy.agents._builder.on_pre_mcp_autostart_sync") as mock_hook,
         ):
-            _builder._autostart_bound_servers(mock_manager, "code-puppy")
-        mock_hook.assert_called_once_with("code-puppy", ["srv-1"])
+            _builder._autostart_bound_servers(mock_manager, "fast-puppy")
+        mock_hook.assert_called_once_with("fast-puppy", ["srv-1"])
 
     @pytest.mark.asyncio
     async def test_async_fires_hook_with_agent_and_server_names(self, mock_manager):
@@ -398,8 +398,8 @@ class TestPreMcpAutostartHook:
                 return []
 
             mock_hook.side_effect = _async_ok
-            await _builder.autostart_bound_servers_async(mock_manager, "code-puppy")
-        mock_hook.assert_called_once_with("code-puppy", ["srv-1"])
+            await _builder.autostart_bound_servers_async(mock_manager, "fast-puppy")
+        mock_hook.assert_called_once_with("fast-puppy", ["srv-1"])
 
     def test_hook_fires_before_start_server(self, mock_manager):
         """Order matters: hook must fire BEFORE any start_server call so
@@ -425,7 +425,7 @@ class TestPreMcpAutostartHook:
                 "code_puppy.mcp_.agent_bindings.get_bound_servers",
                 return_value={"srv-1": {"auto_start": True}},
             ):
-                _builder._autostart_bound_servers(mock_manager, "code-puppy")
+                _builder._autostart_bound_servers(mock_manager, "fast-puppy")
         finally:
             unregister_callback("pre_mcp_autostart", _hook)
 
@@ -440,7 +440,7 @@ class TestPreMcpAutostartHook:
             ),
             patch("code_puppy.agents._builder.on_pre_mcp_autostart_sync") as mock_hook,
         ):
-            _builder._autostart_bound_servers(mock_manager, "code-puppy")
+            _builder._autostart_bound_servers(mock_manager, "fast-puppy")
         mock_hook.assert_not_called()
 
     def test_hook_exception_does_not_abort_autostart(self, mock_manager):
@@ -463,7 +463,7 @@ class TestPreMcpAutostartHook:
                 "code_puppy.mcp_.agent_bindings.get_bound_servers",
                 return_value={"srv-1": {"auto_start": True}},
             ):
-                _builder._autostart_bound_servers(mock_manager, "code-puppy")
+                _builder._autostart_bound_servers(mock_manager, "fast-puppy")
         finally:
             unregister_callback("pre_mcp_autostart", _bad_hook)
 
@@ -486,10 +486,10 @@ class TestPreMcpAutostartHook:
             ),
             patch("code_puppy.agents._builder.on_pre_mcp_autostart_sync") as mock_hook,
         ):
-            _builder._autostart_bound_servers(mock_manager, "code-puppy")
+            _builder._autostart_bound_servers(mock_manager, "fast-puppy")
         mock_hook.assert_called_once()
         agent_arg, names_arg = mock_hook.call_args.args
-        assert agent_arg == "code-puppy"
+        assert agent_arg == "fast-puppy"
         assert names_arg == ["srv-yes"]
 
 

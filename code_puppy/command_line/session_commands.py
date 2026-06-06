@@ -1,4 +1,4 @@
-"""Command handlers for Code Puppy - SESSION commands.
+"""Command handlers for Fast Puppy - SESSION commands.
 
 This module contains @register_command decorated handlers that are automatically
 discovered by the command registry system.

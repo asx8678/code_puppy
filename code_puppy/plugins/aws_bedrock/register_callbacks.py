@@ -1,6 +1,6 @@
-"""AWS Bedrock Plugin callbacks for Code Puppy CLI.
+"""AWS Bedrock Plugin callbacks for Fast Puppy CLI.
 
-This plugin enables Code Puppy to use Anthropic Claude models hosted on
+This plugin enables Fast Puppy to use Anthropic Claude models hosted on
 AWS Bedrock with standard AWS credential chain authentication.
 """
 

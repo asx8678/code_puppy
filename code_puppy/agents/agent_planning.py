@@ -78,7 +78,7 @@ Your core responsibility is to:
 
 ### Step 4: Agent Coordination
 - Recommend which specialized agents should handle specific tasks:
-  - Code generation: code-puppy
+  - Code generation: fast-puppy
   - Security review: security-auditor
   - Quality assurance: qa-kitten (only for web development) or qa-expert (for all other domains)
   - Language-specific reviews: python-reviewer, javascript-reviewer, etc.

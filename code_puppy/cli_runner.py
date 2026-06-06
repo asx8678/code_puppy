@@ -1,4 +1,4 @@
-"""CLI runner for Code Puppy.
+"""CLI runner for Fast Puppy.
 
 Contains the main application logic, interactive mode, and entry point.
 """
@@ -103,8 +103,8 @@ def _resume_session_from_path(raw_path: str) -> None:
 
 
 async def main():
-    """Main async entry point for Code Puppy CLI."""
-    parser = argparse.ArgumentParser(description="Code Puppy - A code generation agent")
+    """Main async entry point for Fast Puppy CLI."""
+    parser = argparse.ArgumentParser(description="Fast Puppy - A code generation agent")
     parser.add_argument(
         "--version",
         "-v",
@@ -128,7 +128,7 @@ async def main():
         "--agent",
         "-a",
         type=str,
-        help="Specify which agent to use (e.g., --agent code-puppy)",
+        help="Specify which agent to use (e.g., --agent fast-puppy)",
     )
     parser.add_argument(
         "--model",
@@ -141,7 +141,7 @@ async def main():
         "-r",
         type=str,
         metavar="PATH",
-        help="Resume a saved session from a .pkl file (e.g. ~/.code_puppy/contexts/foo.pkl)",
+        help="Resume a saved session from a .pkl file (e.g. ~/.fast_puppy/contexts/foo.pkl)",
     )
     parser.add_argument(
         "command", nargs="*", help="Run a single command (deprecated, use -p instead)"
@@ -171,15 +171,15 @@ async def main():
     initialize_command_history_file()
     from code_puppy.messaging import emit_error, emit_system_message
 
-    # Show the awesome Code Puppy logo when entering interactive mode
+    # Show the awesome Fast Puppy logo when entering interactive mode
     # This happens when: no -p flag (prompt-only mode) is used
-    # The logo should appear for both `code-puppy` and `code-puppy -i`
+    # The logo should appear for both `fast-puppy` and `fast-puppy -i`
     if not args.prompt:
         try:
             import pyfiglet
 
             intro_lines = pyfiglet.figlet_format(
-                "CODE PUPPY", font="ansi_shadow"
+                "FAST PUPPY", font="ansi_shadow"
             ).split("\n")
 
             # Simple blue to green gradient (top to bottom)
@@ -199,7 +199,7 @@ async def main():
             # Print directly to console to avoid the 'dim' style from emit_system_message
             display_console.print("\n".join(lines))
         except ImportError:
-            emit_system_message("🐶 Code Puppy is Loading...")
+            emit_system_message("🐶 Fast Puppy is Loading...")
 
         # Truecolor warning moved to interactive_mode() so it prints LAST
         # after all the help stuff - max visibility for the ugly red box!

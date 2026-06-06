@@ -55,7 +55,7 @@ def test_recorder_writes_only_to_repo_wing(kennel_root: Path) -> None:
     from code_puppy.plugins.puppy_kennel import kennel, recorder
 
     recorder.record_run_end(
-        agent_name="code-puppy",
+        agent_name="fast-puppy",
         model_name="test-model",
         session_id="sess-abc",
         success=True,
@@ -65,7 +65,7 @@ def test_recorder_writes_only_to_repo_wing(kennel_root: Path) -> None:
     assert kennel.count_drawers() == 1
     wings = kennel.list_wings()
     assert any(w.startswith("repo:") for w in wings)
-    assert "agent:code-puppy" not in wings
+    assert "agent:fast-puppy" not in wings
 
 
 def test_recorder_skips_blank_or_failed_runs(kennel_root: Path) -> None:
@@ -87,7 +87,7 @@ def test_fts5_search_finds_drawers(kennel_root: Path) -> None:
     from code_puppy.plugins.puppy_kennel import kennel, recorder
 
     recorder.record_run_end(
-        agent_name="code-puppy",
+        agent_name="fast-puppy",
         model_name="m",
         session_id="s1",
         success=True,
@@ -102,14 +102,14 @@ def test_fts5_search_scoped_to_wing(kennel_root: Path) -> None:
     from code_puppy.plugins.puppy_kennel import kennel, recorder, wings
 
     recorder.record_run_end(
-        agent_name="code-puppy",
+        agent_name="fast-puppy",
         model_name="m",
         session_id="s1",
         success=True,
         response_text="The fox jumps over the lazy puppy.",
     )
     repo_w = wings.repo_wing()
-    agent_w = wings.agent_wing("code-puppy")
+    agent_w = wings.agent_wing("fast-puppy")
     # Autosave only lands in the repo wing now.
     assert len(kennel.search_drawers("fox", wing_name=repo_w)) == 1
     assert len(kennel.search_drawers("fox", wing_name=agent_w)) == 0
@@ -136,7 +136,7 @@ def test_passive_recall_block_renders_when_drawers_exist(kennel_root: Path) -> N
 
     # Has to exceed MIN_DRAWER_CHARS (80) or the packer correctly drops it.
     recorder.record_run_end(
-        agent_name="code-puppy",
+        agent_name="fast-puppy",
         model_name="m",
         session_id="s1",
         success=True,
@@ -149,13 +149,13 @@ def test_passive_recall_block_renders_when_drawers_exist(kennel_root: Path) -> N
     block = retriever.build_recall_block()
     assert block is not None
     assert "Puppy Kennel" in block
-    assert "code-puppy" in block
+    assert "fast-puppy" in block
 
 
 def test_wing_naming_conventions() -> None:
     from code_puppy.plugins.puppy_kennel import wings
 
-    assert wings.agent_wing("code-puppy") == "agent:code-puppy"
+    assert wings.agent_wing("fast-puppy") == "agent:fast-puppy"
     assert wings.agent_wing("") == "agent:unknown"
     assert wings.agent_wing(None) == "agent:unknown"  # type: ignore[arg-type]
     assert wings.repo_wing("/tmp").startswith("repo:")
@@ -165,10 +165,10 @@ def test_wing_naming_conventions() -> None:
 def test_default_recall_scope_combines_three_wings() -> None:
     from code_puppy.plugins.puppy_kennel import wings
 
-    scope = wings.default_recall_scope("code-puppy")
+    scope = wings.default_recall_scope("fast-puppy")
     assert len(scope) == 3
     assert any(w.startswith("repo:") for w in scope)
-    assert "agent:code-puppy" in scope
+    assert "agent:fast-puppy" in scope
     assert "user:default" in scope
 
 

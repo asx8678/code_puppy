@@ -20,6 +20,9 @@ from code_puppy.tools.common import atomic_write_text
 
 # Registry of available agents (Python classes and JSON file paths)
 _AGENT_REGISTRY: Dict[str, Union[Type[BaseAgent], str]] = {}
+# Pre-rename agent ids -> current ids, so saved sessions/configs that reference
+# the legacy "code-puppy" agent still resolve after the fast-puppy rename.
+_LEGACY_AGENT_ALIASES: Dict[str, str] = {"code-puppy": "fast-puppy"}
 _AGENT_HISTORIES: Dict[str, List[ModelMessage]] = {}
 _CURRENT_AGENT: Optional[BaseAgent] = None
 
@@ -466,7 +469,7 @@ def get_current_agent_name() -> str:
 
     Returns:
         The name of the current agent for this session.
-        Priority: session agent > config default > 'code-puppy'.
+        Priority: session agent > config default > 'fast-puppy'.
     """
     _ensure_session_cache_loaded()
     session_id = get_terminal_session_id()
@@ -553,9 +556,15 @@ def load_agent(agent_name: str) -> BaseAgent:
     _ensure_discovered(message_group_id=message_group_id)
 
     if agent_name not in _AGENT_REGISTRY:
-        # Fallback to code-puppy if agent not found
-        if "code-puppy" in _AGENT_REGISTRY:
-            agent_name = "code-puppy"
+        # Back-compat: sessions/configs from before the rename ask for the
+        # legacy "code-puppy" id; transparently resolve it to "fast-puppy".
+        if agent_name in _LEGACY_AGENT_ALIASES and _LEGACY_AGENT_ALIASES[
+            agent_name
+        ] in _AGENT_REGISTRY:
+            agent_name = _LEGACY_AGENT_ALIASES[agent_name]
+        # Fallback to fast-puppy if agent not found
+        elif "fast-puppy" in _AGENT_REGISTRY:
+            agent_name = "fast-puppy"
         else:
             raise ValueError(
                 f"Agent '{agent_name}' not found and no fallback available"

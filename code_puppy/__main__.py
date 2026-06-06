@@ -1,5 +1,5 @@
 """
-Entry point for running code-puppy as a module.
+Entry point for running fast-puppy as a module.
 
 This allows the package to be run with: python -m code_puppy
 """

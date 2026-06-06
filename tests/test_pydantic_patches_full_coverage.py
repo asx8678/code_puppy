@@ -26,18 +26,18 @@ class TestPatchUserAgent:
         from code_puppy.pydantic_patches import patch_user_agent
 
         patch_user_agent()
-        # After patching, calling the function should return Code-Puppy/...
+        # After patching, calling the function should return Fast-Puppy/...
         import pydantic_ai.models as pydantic_models
 
         ua = pydantic_models.get_user_agent()
-        assert "Code-Puppy" in ua or "KimiCLI" in ua
+        assert "Fast-Puppy" in ua or "KimiCLI" in ua
 
     @pytest.mark.parametrize(
         ("model_kwargs", "expected"),
         [
             ({"return_value": "kimi-test"}, "KimiCLI/0.63"),
-            ({"return_value": "gpt-4"}, "Code-Puppy"),
-            ({"side_effect": Exception}, "Code-Puppy"),
+            ({"return_value": "gpt-4"}, "Fast-Puppy"),
+            ({"side_effect": Exception}, "Fast-Puppy"),
         ],
         ids=["kimi", "non_kimi", "lookup_exception"],
     )

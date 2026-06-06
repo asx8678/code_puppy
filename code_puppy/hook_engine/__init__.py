@@ -1,4 +1,4 @@
-"""Hook engine package for Code Puppy."""
+"""Hook engine package for Fast Puppy."""
 
 from . import aliases
 from .engine import HookEngine

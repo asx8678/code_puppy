@@ -1,4 +1,4 @@
-"""Puppy Kennel — local-first memory for Code Puppy.
+"""Puppy Kennel — local-first memory for Fast Puppy.
 
 Inspired by MemKennel's wings → rooms → drawers model, but backed by
 SQLite + FTS5 instead of ChromaDB. No daemon, no API key, no cloud,

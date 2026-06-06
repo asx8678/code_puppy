@@ -452,7 +452,7 @@ class TestStatusDisplay:
         assert panel.padding == (1, 2)
 
         # Check title styling exists
-        assert panel.title == "[bold blue]Code Puppy Status[/bold blue]"
+        assert panel.title == "[bold blue]Fast Puppy Status[/bold blue]"
 
     def test_memory_efficiency(self, status_display):
         """Test that status display doesn't accumulate memory unnecessarily."""

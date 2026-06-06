@@ -1,4 +1,4 @@
-"""Keymap configuration for code-puppy.
+"""Keymap configuration for fast-puppy.
 
 This module handles configurable keyboard shortcuts, starting with the
 cancel_agent_key feature that allows users to override Ctrl+C with a

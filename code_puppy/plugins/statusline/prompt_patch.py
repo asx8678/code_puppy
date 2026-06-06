@@ -6,7 +6,7 @@ stdout may contain ANSI color codes, so we convert it to prompt_toolkit
 
 Two modes (config ``statusline_mode``):
 
-* ``replace`` (default): the custom status line **replaces** Code Puppy's
+* ``replace`` (default): the custom status line **replaces** Fast Puppy's
   default prompt content (puppy/agent/model/cwd), keeping only the trailing
   arrow. No duplicated info, no extra stacked line.
 * ``above``: the custom status line is shown on its own line *above* the

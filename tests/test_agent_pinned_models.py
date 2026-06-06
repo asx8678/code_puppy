@@ -20,7 +20,7 @@ from code_puppy.config import (
 def mock_config_paths(monkeypatch):
     """Fixture to monkeypatch config paths to temporary locations for all tests in this class."""
     with tempfile.TemporaryDirectory() as tmp_dir:
-        tmp_config_dir = os.path.join(tmp_dir, ".code_puppy")
+        tmp_config_dir = os.path.join(tmp_dir, ".fast_puppy")
         tmp_config_file = os.path.join(tmp_config_dir, "puppy.cfg")
         monkeypatch.setattr("code_puppy.config.CONFIG_DIR", tmp_config_dir)
         monkeypatch.setattr("code_puppy.config.CONFIG_FILE", tmp_config_file)
@@ -66,7 +66,7 @@ class TestAgentPinnedModels:
     def test_base_agent_get_model_name(self):
         """Test BaseAgent.get_model_name() returns pinned model."""
         agent = CodePuppyAgent()
-        agent_name = agent.name  # "code-puppy"
+        agent_name = agent.name  # "fast-puppy"
         model_name = "gpt-4o-mini"
 
         # Initially no pinned model - should return global model

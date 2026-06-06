@@ -116,7 +116,7 @@ def oauth_failure_html(service_name: str, reason: str) -> str:
         f"<h1>💔🐶 {clean_service} OAuth Whoopsie 💔</h1>"
         "<p class='howl'>😭 Puppy artillery jammed! Someone cut the firing wire.</p>"
         f"<p>{clean_reason}</p>"
-        "<p>💧 A thousand doggy eyes are welling up. Try again from Code Puppy! 💧</p>"
+        "<p>💧 A thousand doggy eyes are welling up. Try again from Fast Puppy! 💧</p>"
         f"<p>Re-calibrate the {projectile} barrage and slam it into the {rival_alt} wall.</p>"
         "<div class='buttons'>"
         "<a href='https://codepuppy.dev' target='_blank'>Adopt more puppies</a>"

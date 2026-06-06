@@ -15,7 +15,7 @@ _commands_signature: Optional[frozenset] = None
 
 # Directories to scan for commands (in priority order - later directories override earlier)
 _COMMAND_DIRECTORIES = [
-    "~/.code-puppy/commands",  # Global commands (all projects)
+    "~/.fast-puppy/commands",  # Global commands (all projects)
     ".claude/commands",
     ".github/prompts",
     ".agents/commands",

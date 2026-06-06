@@ -911,7 +911,9 @@ class ModelFactory:
                     f"API key is not set for Cerebras endpoint; skipping model '{model_config.get('name')}'."
                 )
                 return None
-            # Add Cerebras 3rd party integration header
+            # Add Cerebras 3rd party integration header. This identifier is
+            # registered with Cerebras under the upstream "code-puppy" name, so
+            # we keep it as-is even after the fast-puppy rename.
             headers["X-Cerebras-3rd-Party-Integration"] = "code-puppy"
             # Pass "cerebras" so RetryingAsyncClient knows to ignore Cerebras's
             # absurdly aggressive Retry-After headers (they send 60s!)

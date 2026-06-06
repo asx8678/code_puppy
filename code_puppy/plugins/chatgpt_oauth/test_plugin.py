@@ -14,12 +14,12 @@ def test_config_paths():
     """Test configuration path helpers."""
     token_path = config.get_token_storage_path()
     assert token_path.name == "chatgpt_oauth.json"
-    # XDG paths use "code_puppy" (without dot) in ~/.local/share or ~/.config
-    assert "code_puppy" in str(token_path)
+    # XDG paths use "fast_puppy" (without dot) in ~/.local/share or ~/.config
+    assert "fast_puppy" in str(token_path)
 
     config_dir = config.get_config_dir()
-    # Default is ~/.code_puppy; XDG paths only used when XDG env vars are set
-    assert config_dir.name in ("code_puppy", ".code_puppy")
+    # Default is ~/.fast_puppy; XDG paths only used when XDG env vars are set
+    assert config_dir.name in ("fast_puppy", ".fast_puppy")
 
     chatgpt_models = config.get_chatgpt_models_path()
     assert chatgpt_models.name == "chatgpt_models.json"

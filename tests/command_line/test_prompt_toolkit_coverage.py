@@ -503,7 +503,7 @@ class TestGetPromptWithActiveModel:
         ):
             result = get_prompt_with_active_model()
             text = "".join(t[1] for t in result)
-            assert "code-puppy" in text
+            assert "fast-puppy" in text
             assert "(default)" in text
 
     def test_cwd_outside_home(self):

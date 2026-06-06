@@ -25,7 +25,7 @@ from code_puppy.plugins.agent_skills.installer import InstallResult
 
 logger = logging.getLogger(__name__)
 
-_DEFAULT_SKILLS_DIR = Path.home() / ".code_puppy" / "skills"
+_DEFAULT_SKILLS_DIR = Path.home() / ".fast_puppy" / "skills"
 _MAX_UNCOMPRESSED_BYTES = 50 * 1024 * 1024  # 50MB
 
 
@@ -58,7 +58,7 @@ def _download_to_file(url: str, dest: Path) -> bool:
 
     headers = {
         "Accept": "application/zip, application/octet-stream, */*",
-        "User-Agent": "code-puppy/skill-downloader",
+        "User-Agent": "fast-puppy/skill-downloader",
     }
 
     try:
@@ -240,7 +240,7 @@ def download_and_install_skill(
     Args:
         skill_name: Skill name (directory name under target_dir).
         download_url: Absolute URL to the skill .zip.
-        target_dir: Base skills directory. Defaults to ~/.code_puppy/skills.
+        target_dir: Base skills directory. Defaults to ~/.fast_puppy/skills.
         force: If True, delete any existing install first.
 
     Returns:

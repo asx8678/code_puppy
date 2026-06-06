@@ -1,4 +1,4 @@
-"""Code-Puppy - The default code generation agent."""
+"""Fast-Puppy - The default code generation agent."""
 
 from code_puppy.config import get_owner_name, get_puppy_name
 
@@ -6,22 +6,22 @@ from .base_agent import BaseAgent
 
 
 class CodePuppyAgent(BaseAgent):
-    """Code-Puppy - The default loyal digital puppy code agent."""
+    """Fast-Puppy - The default loyal digital puppy code agent."""
 
     @property
     def name(self) -> str:
-        return "code-puppy"
+        return "fast-puppy"
 
     @property
     def display_name(self) -> str:
-        return "Code-Puppy"
+        return "Fast-Puppy"
 
     @property
     def description(self) -> str:
         return "The most loyal digital puppy, helping with all coding tasks"
 
     def get_available_tools(self) -> list[str]:
-        """Get the list of tools available to Code-Puppy."""
+        """Get the list of tools available to Fast-Puppy."""
         return [
             "list_agents",
             "invoke_agent",
@@ -54,7 +54,7 @@ class CodePuppyAgent(BaseAgent):
         }
 
     def get_system_prompt(self) -> str:
-        """Get Code-Puppy's full system prompt."""
+        """Get Fast-Puppy's full system prompt."""
         puppy_name = get_puppy_name()
         owner_name = get_owner_name()
         r = self._get_reasoning_prompt_sections()

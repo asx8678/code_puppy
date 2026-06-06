@@ -13,10 +13,10 @@ from code_puppy.session_storage import save_session
 
 def _get_xdg_dir(env_var: str, fallback: str) -> str:
     """
-    Get directory for code_puppy files, defaulting to ~/.code_puppy.
+    Get directory for fast_puppy files, defaulting to ~/.fast_puppy.
 
     XDG paths are only used when the corresponding environment variable
-    is explicitly set by the user. Otherwise, we use the legacy ~/.code_puppy
+    is explicitly set by the user. Otherwise, we use the ~/.fast_puppy
     directory for all file types (config, data, cache, state).
 
     Args:
@@ -24,15 +24,61 @@ def _get_xdg_dir(env_var: str, fallback: str) -> str:
         fallback: Fallback path relative to home (e.g., ".config") - unused unless XDG var is set
 
     Returns:
-        Path to the directory for code_puppy files
+        Path to the directory for fast_puppy files
     """
     # Use XDG directory ONLY if environment variable is explicitly set
     xdg_base = os.getenv(env_var)
     if xdg_base:
-        return os.path.join(xdg_base, "code_puppy")
+        return os.path.join(xdg_base, "fast_puppy")
 
-    # Default to legacy ~/.code_puppy for all file types
-    return os.path.join(os.path.expanduser("~"), ".code_puppy")
+    # Default to ~/.fast_puppy for all file types
+    return os.path.join(os.path.expanduser("~"), ".fast_puppy")
+
+
+def _legacy_dir_for(new_dir: str) -> str:
+    """Pre-rename ``code_puppy`` location for a ``fast_puppy`` directory.
+
+    Returns ``""`` when the layout isn't recognised (e.g. a test temp dir), so
+    migration only ever fires on a real fast_puppy directory.
+    """
+    head, tail = os.path.split(os.path.normpath(new_dir))
+    if tail == ".fast_puppy":
+        return os.path.join(head, ".code_puppy")
+    if tail == "fast_puppy":
+        return os.path.join(head, "code_puppy")
+    return ""
+
+
+def migrate_legacy_config_dirs() -> None:
+    """One-time, non-destructive copy of pre-rename ``code_puppy`` directories to
+    the new ``fast_puppy`` locations.
+
+    Existing users keep their config, API keys, models, agents, skills and
+    sessions after the code-puppy -> fast-puppy rename. Reads the *current*
+    module-level dir globals (so test isolation that redirects them is honoured)
+    and derives each legacy path from them. Only copies when the new dir is
+    absent and the legacy one exists; the legacy dir is left in place so a
+    downgrade still works.
+    """
+    import shutil
+
+    seen = set()
+    for new_dir in (CONFIG_DIR, DATA_DIR, CACHE_DIR, STATE_DIR):
+        if new_dir in seen:
+            continue
+        seen.add(new_dir)
+        legacy_dir = _legacy_dir_for(new_dir)
+        if not legacy_dir or os.path.exists(new_dir) or not os.path.isdir(legacy_dir):
+            continue
+        try:
+            shutil.copytree(legacy_dir, new_dir)
+            try:
+                os.chmod(new_dir, 0o700)
+            except OSError:
+                pass
+        except Exception:
+            # Best-effort: if the copy fails, a fresh dir is created below.
+            pass
 
 
 # XDG Base Directory paths
@@ -290,12 +336,15 @@ def ensure_config_exists():
     Ensure that XDG directories and puppy.cfg exist, prompting if needed.
     Returns configparser.ConfigParser for reading.
     """
+    # Carry over an existing pre-rename ~/.code_puppy setup before creating
+    # fresh dirs, so the rename doesn't orphan the user's config/keys/sessions.
+    migrate_legacy_config_dirs()
     # Create all XDG directories with 0700 permissions per XDG spec
     for directory in [CONFIG_DIR, DATA_DIR, CACHE_DIR, STATE_DIR, SKILLS_DIR]:
         if not os.path.exists(directory):
             os.makedirs(directory, mode=0o700, exist_ok=True)
     # Lock down the config dir even if it predates this (e.g. a legacy
-    # ~/.code_puppy created under a permissive umask) since puppy.cfg lives here.
+    # ~/.fast_puppy created under a permissive umask) since puppy.cfg lives here.
     try:
         os.chmod(CONFIG_DIR, 0o700)
     except OSError:
@@ -321,7 +370,7 @@ def ensure_config_exists():
                 val = input("What should we name the puppy? ").strip()
             elif key == "owner_name":
                 val = input(
-                    "What's your name (so Code Puppy knows its owner)? "
+                    "What's your name (so Fast Puppy knows its owner)? "
                 ).strip()
             else:
                 val = input(f"Enter {key}: ").strip()
@@ -670,7 +719,7 @@ def model_supports_setting(model_name: str, setting: str) -> bool:
 
 
 def get_global_model_name():
-    """Return a valid model name for Code Puppy to use.
+    """Return a valid model name for Fast Puppy to use.
 
     Uses session-local caching so that model changes in other terminals
     don't affect this running instance. The file is only read once at startup.
@@ -1167,7 +1216,7 @@ def get_user_agents_directory() -> str:
     """Get the user's agents directory path.
 
     Returns:
-        Path to the user's Code Puppy agents directory.
+        Path to the user's Fast Puppy agents directory.
     """
     # Ensure the agents directory exists
     os.makedirs(AGENTS_DIR, exist_ok=True)
@@ -1177,14 +1226,14 @@ def get_user_agents_directory() -> str:
 def get_project_agents_directory() -> Optional[str]:
     """Get the project-local agents directory path.
 
-    Looks for a .code_puppy/agents/ directory in the current working directory.
+    Looks for a .fast_puppy/agents/ directory in the current working directory.
     Unlike get_user_agents_directory(), this does NOT create the directory
     if it doesn't exist -- the team must create it intentionally.
 
     Returns:
         Path to the project's agents directory if it exists, or None.
     """
-    project_agents_dir = os.path.join(os.getcwd(), ".code_puppy", "agents")
+    project_agents_dir = os.path.join(os.getcwd(), ".fast_puppy", "agents")
     if os.path.isdir(project_agents_dir):
         return project_agents_dir
     return None
@@ -1209,7 +1258,7 @@ def initialize_command_history_file():
 
             # For backwards compatibility, copy the old history file, then remove it
             old_history_file = os.path.join(
-                os.path.expanduser("~"), ".code_puppy_history.txt"
+                os.path.expanduser("~"), ".fast_puppy_history.txt"
             )
             old_history_exists = os.path.isfile(old_history_file)
             if old_history_exists:
@@ -1264,7 +1313,7 @@ def get_mcp_disabled():
     Checks puppy.cfg for 'disable_mcp' (case-insensitive in value only).
     Defaults to False if not set.
     Allowed values for ON: 1, '1', 'true', 'yes', 'on' (all case-insensitive for value).
-    When enabled, Code Puppy will skip loading MCP servers entirely.
+    When enabled, Fast Puppy will skip loading MCP servers entirely.
     """
     true_vals = {"1", "true", "yes", "on"}
     cfg_val = get_value("disable_mcp")
@@ -1878,7 +1927,7 @@ def record_terminal_session(session_name: str, *, overwrite: bool = True) -> Non
 
     Uses a dedicated file per TTY so concurrent terminals never clobber each
     other. Terminal emulators usually assign a fresh TTY per window/tab, and TTY
-    reassignment while Code Puppy is running is rare, but possible after a
+    reassignment while Fast Puppy is running is rare, but possible after a
     terminal closes and the OS later reuses the device name. This mapping is
     therefore best-effort and silently no-ops when no TTY is available or when
     filesystem writes fail. Set ``overwrite=False`` for startup markers so a
@@ -2110,9 +2159,9 @@ def get_default_agent() -> str:
     Get the default agent name from puppy.cfg.
 
     Returns:
-        str: The default agent name, or "code-puppy" if not set.
+        str: The default agent name, or "fast-puppy" if not set.
     """
-    return get_value("default_agent") or "code-puppy"
+    return get_value("default_agent") or "fast-puppy"
 
 
 def set_default_agent(agent_name: str) -> None:

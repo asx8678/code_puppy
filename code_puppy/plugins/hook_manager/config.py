@@ -2,7 +2,7 @@
 Helpers for reading and writing hook configurations from both global and project sources.
 
 Supports:
-- Global hooks: ~/.code_puppy/hooks.json
+- Global hooks: ~/.fast_puppy/hooks.json
 - Project hooks: .claude/settings.json
 
 Hooks from both sources are loaded and can be managed independently in the TUI.
@@ -18,7 +18,7 @@ from typing import Any, Dict, List, Literal, Optional
 logger = logging.getLogger(__name__)
 
 _SETTINGS_FILENAME = ".claude/settings.json"
-_GLOBAL_HOOKS_FILE = os.path.expanduser("~/.code_puppy/hooks.json")
+_GLOBAL_HOOKS_FILE = os.path.expanduser("~/.fast_puppy/hooks.json")
 
 HookSource = Literal["project", "global"]
 
@@ -34,7 +34,7 @@ def _find_settings_path() -> Path:
 
 
 def _load_global_hooks_config() -> Dict[str, Any]:
-    """Load hooks from ~/.code_puppy/hooks.json."""
+    """Load hooks from ~/.fast_puppy/hooks.json."""
     path = Path(_GLOBAL_HOOKS_FILE)
     if not path.exists():
         return {}
@@ -127,7 +127,7 @@ def save_hooks_config(hooks: Dict[str, Any]) -> Path:
 
 
 def save_global_hooks_config(hooks: Dict[str, Any]) -> Path:
-    """Persist hooks config to ~/.code_puppy/hooks.json.
+    """Persist hooks config to ~/.fast_puppy/hooks.json.
 
     Returns the path written.
     """

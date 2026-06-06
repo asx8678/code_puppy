@@ -153,8 +153,8 @@ class TestSkillDiscovery:
         """Test default skill directories are correctly returned."""
         directories = get_default_skill_directories()
         assert len(directories) == 3
-        assert directories[0] == Path.home() / ".code_puppy" / "skills"
-        assert directories[1] == Path.cwd() / ".code_puppy" / "skills"
+        assert directories[0] == Path.home() / ".fast_puppy" / "skills"
+        assert directories[1] == Path.cwd() / ".fast_puppy" / "skills"
         assert directories[2] == Path.cwd() / "skills"
 
     def test_is_valid_skill_directory_valid(self, valid_skill_dir):
@@ -676,8 +676,8 @@ class TestSkillsConfig:
         directories = get_skill_directories()
         assert len(directories) == 3
         # The tilde will be expanded to the actual home directory
-        assert ".code_puppy/skills" in directories[0]
-        assert ".code_puppy/skills" in directories[1]
+        assert ".fast_puppy/skills" in directories[0]
+        assert ".fast_puppy/skills" in directories[1]
         # The current directory path will contain the full path, ending with "skills"
         assert "skills" in directories[2]
 

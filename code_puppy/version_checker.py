@@ -1,4 +1,4 @@
-"""Version checking utilities for Code Puppy."""
+"""Version checking utilities for Fast Puppy."""
 
 import httpx
 
