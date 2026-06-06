@@ -4,6 +4,8 @@ import subprocess
 import sys
 from unittest.mock import MagicMock
 
+import pytest
+
 from code_puppy import terminal_utils
 
 # ── reset_windows_terminal_ansi ──
@@ -53,8 +55,19 @@ class TestResetWindowsConsoleMode:
         mock_ctypes.c_ulong.return_value = mock_mode
         monkeypatch.setitem(sys.modules, "ctypes", mock_ctypes)
         terminal_utils.reset_windows_console_mode()
+        # GetStdHandle for both stdout (-11) and stdin (-10)
         assert mock_ctypes.windll.kernel32.GetStdHandle.call_count == 2
+        handle_args = [
+            c[0][0] for c in mock_ctypes.windll.kernel32.GetStdHandle.call_args_list
+        ]
+        assert handle_args == [-11, -10]
+        # SetConsoleMode for both with the expected ORed flag bits.
         assert mock_ctypes.windll.kernel32.SetConsoleMode.call_count == 2
+        set_calls = mock_ctypes.windll.kernel32.SetConsoleMode.call_args_list
+        stdout_mode = set_calls[0][0][1]
+        assert stdout_mode & 0x0001 and stdout_mode & 0x0002 and stdout_mode & 0x0004
+        stdin_mode = set_calls[1][0][1]
+        assert stdin_mode & 0x0002 and stdin_mode & 0x0004 and stdin_mode & 0x0001
 
     def test_exception_silenced(self, monkeypatch):
         monkeypatch.setattr(terminal_utils.platform, "system", lambda: "Windows")
@@ -76,6 +89,7 @@ class TestFlushWindowsKeyboardBuffer:
         mock_msvcrt.kbhit.side_effect = [True, True, False]
         monkeypatch.setitem(sys.modules, "msvcrt", mock_msvcrt)
         terminal_utils.flush_windows_keyboard_buffer()
+        assert mock_msvcrt.kbhit.call_count == 3
         assert mock_msvcrt.getch.call_count == 2
 
     def test_exception_silenced(self, monkeypatch):
@@ -127,21 +141,16 @@ class TestResetUnixTerminal:
         terminal_utils.reset_unix_terminal()
         run.assert_called_once_with(["reset"], check=True, capture_output=True)
 
-    def test_handles_called_process_error(self, monkeypatch):
+    @pytest.mark.parametrize(
+        "exc",
+        [subprocess.CalledProcessError(1, "reset"), FileNotFoundError()],
+    )
+    def test_handles_run_errors(self, monkeypatch, exc):
         monkeypatch.setattr(terminal_utils.platform, "system", lambda: "Linux")
         monkeypatch.setattr(
-            terminal_utils.subprocess,
-            "run",
-            MagicMock(side_effect=subprocess.CalledProcessError(1, "reset")),
+            terminal_utils.subprocess, "run", MagicMock(side_effect=exc)
         )
-        terminal_utils.reset_unix_terminal()
-
-    def test_handles_file_not_found(self, monkeypatch):
-        monkeypatch.setattr(terminal_utils.platform, "system", lambda: "Linux")
-        monkeypatch.setattr(
-            terminal_utils.subprocess, "run", MagicMock(side_effect=FileNotFoundError)
-        )
-        terminal_utils.reset_unix_terminal()
+        terminal_utils.reset_unix_terminal()  # should not raise
 
 
 # ── reset_terminal ──
@@ -155,8 +164,9 @@ class TestResetTerminal:
         terminal_utils.reset_terminal()
         full.assert_called_once()
 
-    def test_routes_to_unix(self, monkeypatch):
-        monkeypatch.setattr(terminal_utils.platform, "system", lambda: "Linux")
+    @pytest.mark.parametrize("system", ["Linux", "Darwin"])
+    def test_routes_to_unix(self, monkeypatch, system):
+        monkeypatch.setattr(terminal_utils.platform, "system", lambda: system)
         unix = MagicMock()
         monkeypatch.setattr(terminal_utils, "reset_unix_terminal", unix)
         terminal_utils.reset_terminal()
@@ -183,25 +193,19 @@ class TestDisableWindowsCtrlC:
         terminal_utils._original_ctrl_handler = None
         assert terminal_utils.disable_windows_ctrl_c() is True
         assert terminal_utils._original_ctrl_handler == 0x0007
+        # ENABLE_PROCESSED_INPUT (0x0001) must be cleared in the new mode.
+        new_mode = mock_ctypes.windll.kernel32.SetConsoleMode.call_args[0][1]
+        assert not (new_mode & 0x0001)
 
-    def test_get_console_mode_fails(self, monkeypatch):
+    @pytest.mark.parametrize("get_ok, set_ok", [(False, True), (True, False)])
+    def test_console_mode_call_fails(self, monkeypatch, get_ok, set_ok):
         monkeypatch.setattr(terminal_utils.platform, "system", lambda: "Windows")
         mock_ctypes = MagicMock()
         mock_mode = MagicMock()
         mock_mode.value = 0x0007
         mock_ctypes.c_ulong.return_value = mock_mode
-        mock_ctypes.windll.kernel32.GetConsoleMode.return_value = False
-        monkeypatch.setitem(sys.modules, "ctypes", mock_ctypes)
-        assert terminal_utils.disable_windows_ctrl_c() is False
-
-    def test_set_console_mode_fails(self, monkeypatch):
-        monkeypatch.setattr(terminal_utils.platform, "system", lambda: "Windows")
-        mock_ctypes = MagicMock()
-        mock_mode = MagicMock()
-        mock_mode.value = 0x0007
-        mock_ctypes.c_ulong.return_value = mock_mode
-        mock_ctypes.windll.kernel32.GetConsoleMode.return_value = True
-        mock_ctypes.windll.kernel32.SetConsoleMode.return_value = False
+        mock_ctypes.windll.kernel32.GetConsoleMode.return_value = get_ok
+        mock_ctypes.windll.kernel32.SetConsoleMode.return_value = set_ok
         monkeypatch.setitem(sys.modules, "ctypes", mock_ctypes)
         assert terminal_utils.disable_windows_ctrl_c() is False
 
@@ -228,10 +232,16 @@ class TestEnableWindowsCtrlC:
         monkeypatch.setattr(terminal_utils.platform, "system", lambda: "Windows")
         terminal_utils._original_ctrl_handler = 0x0007
         mock_ctypes = MagicMock()
+        stdin_handle = MagicMock()
+        mock_ctypes.windll.kernel32.GetStdHandle.return_value = stdin_handle
         mock_ctypes.windll.kernel32.SetConsoleMode.return_value = True
         monkeypatch.setitem(sys.modules, "ctypes", mock_ctypes)
         assert terminal_utils.enable_windows_ctrl_c() is True
         assert terminal_utils._original_ctrl_handler is None
+        # Restores the exact saved mode.
+        mock_ctypes.windll.kernel32.SetConsoleMode.assert_called_once_with(
+            stdin_handle, 0x0007
+        )
 
     def test_set_console_mode_fails(self, monkeypatch):
         monkeypatch.setattr(terminal_utils.platform, "system", lambda: "Windows")
@@ -252,11 +262,10 @@ class TestEnableWindowsCtrlC:
 
 
 class TestKeepCtrlCDisabled:
-    def test_set_keep_ctrl_c_disabled(self):
-        terminal_utils.set_keep_ctrl_c_disabled(True)
-        assert terminal_utils._keep_ctrl_c_disabled is True
-        terminal_utils.set_keep_ctrl_c_disabled(False)
-        assert terminal_utils._keep_ctrl_c_disabled is False
+    @pytest.mark.parametrize("value", [True, False])
+    def test_set_keep_ctrl_c_disabled(self, value):
+        terminal_utils.set_keep_ctrl_c_disabled(value)
+        assert terminal_utils._keep_ctrl_c_disabled is value
 
 
 class TestEnsureCtrlCDisabled:
@@ -279,6 +288,7 @@ class TestEnsureCtrlCDisabled:
         mock_ctypes.windll.kernel32.GetConsoleMode.return_value = True
         monkeypatch.setitem(sys.modules, "ctypes", mock_ctypes)
         assert terminal_utils.ensure_ctrl_c_disabled() is True
+        mock_ctypes.windll.kernel32.SetConsoleMode.assert_not_called()
 
     def test_disables_when_enabled(self, monkeypatch):
         monkeypatch.setattr(terminal_utils, "_keep_ctrl_c_disabled", True)
@@ -291,6 +301,9 @@ class TestEnsureCtrlCDisabled:
         mock_ctypes.windll.kernel32.SetConsoleMode.return_value = True
         monkeypatch.setitem(sys.modules, "ctypes", mock_ctypes)
         assert terminal_utils.ensure_ctrl_c_disabled() is True
+        # ENABLE_PROCESSED_INPUT (0x0001) cleared in new mode.
+        new_mode = mock_ctypes.windll.kernel32.SetConsoleMode.call_args[0][1]
+        assert not (new_mode & 0x0001)
 
     def test_get_console_mode_fails(self, monkeypatch):
         monkeypatch.setattr(terminal_utils, "_keep_ctrl_c_disabled", True)
@@ -313,92 +326,71 @@ class TestEnsureCtrlCDisabled:
 
 
 class TestDetectTruecolorSupport:
-    def test_colorterm_truecolor(self, monkeypatch):
-        monkeypatch.setenv("COLORTERM", "truecolor")
+    # Env vars that, on their own, signal truecolor support. Each case sets a
+    # clean environment with only the given var(s).
+    @pytest.mark.parametrize(
+        "env",
+        [
+            {"COLORTERM": "truecolor"},
+            {"COLORTERM": "24bit"},
+            {"COLORTERM": "TRUECOLOR"},  # case-insensitive
+            {"COLORTERM": "TrueColor"},
+            {"TERM": "xterm-direct"},
+            {"TERM": "xterm-truecolor"},
+            {"TERM": "iterm2"},
+            {"TERM": "vte-256color"},
+            {"TERM": "xterm-direct-256color"},  # substring match
+            {"ITERM_SESSION_ID": "abc"},
+            {"KITTY_WINDOW_ID": "1"},
+            {"ALACRITTY_SOCKET": "/tmp/sock"},
+            {"WT_SESSION": "abc"},
+        ],
+    )
+    def test_env_signals_truecolor(self, monkeypatch, env):
+        for var in (
+            "COLORTERM",
+            "TERM",
+            "ITERM_SESSION_ID",
+            "KITTY_WINDOW_ID",
+            "ALACRITTY_SOCKET",
+            "WT_SESSION",
+        ):
+            monkeypatch.delenv(var, raising=False)
+        for k, v in env.items():
+            monkeypatch.setenv(k, v)
         assert terminal_utils.detect_truecolor_support() is True
 
-    def test_colorterm_24bit(self, monkeypatch):
-        monkeypatch.setenv("COLORTERM", "24bit")
-        assert terminal_utils.detect_truecolor_support() is True
-
-    def test_term_xterm_direct(self, monkeypatch):
-        monkeypatch.delenv("COLORTERM", raising=False)
-        monkeypatch.setenv("TERM", "xterm-direct")
-        monkeypatch.delenv("ITERM_SESSION_ID", raising=False)
-        monkeypatch.delenv("KITTY_WINDOW_ID", raising=False)
-        monkeypatch.delenv("ALACRITTY_SOCKET", raising=False)
-        monkeypatch.delenv("WT_SESSION", raising=False)
-        assert terminal_utils.detect_truecolor_support() is True
-
-    def test_iterm_session(self, monkeypatch):
-        monkeypatch.delenv("COLORTERM", raising=False)
-        monkeypatch.setenv("TERM", "xterm-256color")
-        monkeypatch.setenv("ITERM_SESSION_ID", "abc")
-        assert terminal_utils.detect_truecolor_support() is True
-
-    def test_kitty_window(self, monkeypatch):
-        monkeypatch.delenv("COLORTERM", raising=False)
-        monkeypatch.setenv("TERM", "xterm-256color")
-        monkeypatch.delenv("ITERM_SESSION_ID", raising=False)
-        monkeypatch.setenv("KITTY_WINDOW_ID", "1")
-        assert terminal_utils.detect_truecolor_support() is True
-
-    def test_alacritty(self, monkeypatch):
-        monkeypatch.delenv("COLORTERM", raising=False)
-        monkeypatch.setenv("TERM", "xterm-256color")
-        monkeypatch.delenv("ITERM_SESSION_ID", raising=False)
-        monkeypatch.delenv("KITTY_WINDOW_ID", raising=False)
-        monkeypatch.setenv("ALACRITTY_SOCKET", "/tmp/sock")
-        assert terminal_utils.detect_truecolor_support() is True
-
-    def test_windows_terminal(self, monkeypatch):
-        monkeypatch.delenv("COLORTERM", raising=False)
-        monkeypatch.setenv("TERM", "xterm-256color")
-        monkeypatch.delenv("ITERM_SESSION_ID", raising=False)
-        monkeypatch.delenv("KITTY_WINDOW_ID", raising=False)
-        monkeypatch.delenv("ALACRITTY_SOCKET", raising=False)
-        monkeypatch.setenv("WT_SESSION", "abc")
-        assert terminal_utils.detect_truecolor_support() is True
-
-    def test_rich_fallback_truecolor(self, monkeypatch):
-        monkeypatch.delenv("COLORTERM", raising=False)
-        monkeypatch.setenv("TERM", "dumb")
-        monkeypatch.delenv("ITERM_SESSION_ID", raising=False)
-        monkeypatch.delenv("KITTY_WINDOW_ID", raising=False)
-        monkeypatch.delenv("ALACRITTY_SOCKET", raising=False)
-        monkeypatch.delenv("WT_SESSION", raising=False)
-        mock_console_cls = MagicMock()
-        mock_console_cls.return_value.color_system = "truecolor"
-        monkeypatch.setattr(
-            "code_puppy.terminal_utils.Console", mock_console_cls, raising=False
-        )
-        # We need to mock the import inside the function
-        import rich.console
-
-        monkeypatch.setattr(rich.console, "Console", mock_console_cls)
-        assert terminal_utils.detect_truecolor_support() is True
-
-    def test_rich_fallback_not_truecolor(self, monkeypatch):
-        monkeypatch.delenv("COLORTERM", raising=False)
-        monkeypatch.setenv("TERM", "dumb")
-        monkeypatch.delenv("ITERM_SESSION_ID", raising=False)
-        monkeypatch.delenv("KITTY_WINDOW_ID", raising=False)
-        monkeypatch.delenv("ALACRITTY_SOCKET", raising=False)
-        monkeypatch.delenv("WT_SESSION", raising=False)
+    @pytest.mark.parametrize(
+        "color_system, expected",
+        [("truecolor", True), ("256", False), ("standard", False)],
+    )
+    def test_rich_fallback(self, monkeypatch, color_system, expected):
+        for var in (
+            "COLORTERM",
+            "TERM",
+            "ITERM_SESSION_ID",
+            "KITTY_WINDOW_ID",
+            "ALACRITTY_SOCKET",
+            "WT_SESSION",
+        ):
+            monkeypatch.delenv(var, raising=False)
         import rich.console
 
         mock_console_cls = MagicMock()
-        mock_console_cls.return_value.color_system = "256"
+        mock_console_cls.return_value.color_system = color_system
         monkeypatch.setattr(rich.console, "Console", mock_console_cls)
-        assert terminal_utils.detect_truecolor_support() is False
+        assert terminal_utils.detect_truecolor_support() is expected
 
     def test_rich_import_error(self, monkeypatch):
-        monkeypatch.delenv("COLORTERM", raising=False)
-        monkeypatch.setenv("TERM", "dumb")
-        monkeypatch.delenv("ITERM_SESSION_ID", raising=False)
-        monkeypatch.delenv("KITTY_WINDOW_ID", raising=False)
-        monkeypatch.delenv("ALACRITTY_SOCKET", raising=False)
-        monkeypatch.delenv("WT_SESSION", raising=False)
+        for var in (
+            "COLORTERM",
+            "TERM",
+            "ITERM_SESSION_ID",
+            "KITTY_WINDOW_ID",
+            "ALACRITTY_SOCKET",
+            "WT_SESSION",
+        ):
+            monkeypatch.delenv(var, raising=False)
         import rich.console
 
         monkeypatch.setattr(
@@ -451,6 +443,8 @@ class TestPrintTruecolorWarning:
         monkeypatch.setattr(builtins, "print", lambda *a, **kw: printed.append(a))
         terminal_utils.print_truecolor_warning(console=None)
         assert len(printed) > 5
+        all_text = " ".join(str(p) for p in printed).lower()
+        assert "warning" in all_text and "truecolor" in all_text
 
     def test_console_color_system_none(self, monkeypatch):
         monkeypatch.setattr(terminal_utils, "detect_truecolor_support", lambda: False)

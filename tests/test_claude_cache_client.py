@@ -1,9 +1,15 @@
-"""Tests for Claude cache client with token refresh on Cloudflare errors."""
+"""Tests for the Claude cache client.
+
+Covers JWT age detection, proactive/auth-error token refresh, Cloudflare error
+detection, tool-name prefixing, header/URL transformations, cache_control
+injection (both the bytes-based and in-place payload variants), retry logic,
+and the full send() flow.
+"""
 
 import base64
 import json
 import time
-from unittest.mock import AsyncMock, Mock, patch
+from unittest.mock import AsyncMock, MagicMock, Mock, patch
 
 import httpx
 import pytest
@@ -13,178 +19,923 @@ from code_puppy.claude_cache_client import (
     TOKEN_MAX_AGE_SECONDS,
     TOOL_PREFIX,
     ClaudeCacheAsyncClient,
+    _inject_cache_control_in_payload,
+    patch_anthropic_client_messages,
 )
 
 
-def _create_jwt(iat: float | None = None, exp: float | None = None) -> str:
-    """Create a test JWT with specified claims."""
+def _create_jwt(iat=None, exp=None):
+    """Create a test JWT with the given iat/exp claims."""
     header = {"alg": "HS256", "typ": "JWT"}
     payload = {}
     if iat is not None:
         payload["iat"] = iat
     if exp is not None:
         payload["exp"] = exp
-
     header_b64 = (
         base64.urlsafe_b64encode(json.dumps(header).encode()).rstrip(b"=").decode()
     )
     payload_b64 = (
         base64.urlsafe_b64encode(json.dumps(payload).encode()).rstrip(b"=").decode()
     )
-    signature = "fake_signature"
-
-    return f"{header_b64}.{payload_b64}.{signature}"
+    return f"{header_b64}.{payload_b64}.fake_signature"
 
 
-class TestJWTAgeDetection:
-    """Test JWT age detection for proactive token refresh."""
+def _request(url="https://api.anthropic.com/v1/messages", token=None, **kwargs):
+    headers = kwargs.pop("headers", {})
+    if token is not None:
+        headers = {**headers, "Authorization": f"Bearer {token}"}
+    return httpx.Request("POST", url, headers=headers, **kwargs)
 
-    def test_get_jwt_age_with_iat(self):
-        """Test that JWT age is calculated from iat claim."""
-        # Token issued 30 minutes ago
-        iat = time.time() - 1800
-        token = _create_jwt(iat=iat)
 
-        client = ClaudeCacheAsyncClient()
-        age = client._get_jwt_age_seconds(token)
+def _mock_response(status_code=200, content_type="application/json", content=None):
+    resp = Mock(spec=httpx.Response)
+    resp.status_code = status_code
+    resp.headers = {"content-type": content_type} if content_type else {}
+    if content is not None:
+        resp._content = content
+    resp.aclose = AsyncMock()
+    return resp
 
-        assert age is not None
-        assert 1790 <= age <= 1810  # Allow for timing variance
 
-    def test_get_jwt_age_with_exp_only(self):
-        """Test that JWT age is calculated from exp claim when iat is missing."""
-        # Token expires in 30 minutes (so it's about 30 mins old if 1hr lifetime)
-        exp = time.time() + 1800
-        token = _create_jwt(exp=exp)
+# --------------------------------------------------------------------------- #
+# JWT age detection
+# --------------------------------------------------------------------------- #
 
-        client = ClaudeCacheAsyncClient()
-        age = client._get_jwt_age_seconds(token)
 
-        assert age is not None
-        # Age should be TOKEN_MAX_AGE_SECONDS - time_until_exp = 3600 - 1800 = 1800
-        assert 1790 <= age <= 1810
+class TestJWTAge:
+    @pytest.mark.parametrize(
+        "token",
+        [
+            None,
+            "",
+            "not.a.valid.jwt",  # bad base64 payload
+            "invalid",  # wrong number of parts
+            "only.two",
+            "a.b.c.d",
+            "a.!!!.c",  # 3 parts, bad base64
+            _create_jwt(),  # no iat/exp claims
+        ],
+    )
+    def test_returns_none(self, token):
+        assert ClaudeCacheAsyncClient()._get_jwt_age_seconds(token) is None
 
-    def test_get_jwt_age_prefers_iat(self):
-        """Test that iat claim is preferred over exp for age calculation."""
-        iat = time.time() - 600  # 10 minutes ago
-        exp = time.time() + 3000  # expires in 50 minutes
-        token = _create_jwt(iat=iat, exp=exp)
+    @pytest.mark.parametrize(
+        "offsets, lo, hi",
+        [
+            ({"iat": -1800}, 1790, 1810),  # age from iat
+            ({"exp": +1800}, 1790, 1810),  # age from exp (3600-1800)
+            # iat preferred over exp: 10 min old vs 50 min until exp
+            ({"iat": -600, "exp": +3000}, 590, 610),
+        ],
+    )
+    def test_age_window(self, offsets, lo, hi):
+        # Compute timestamps at execution time, not at collection time, so the
+        # gap between collection and running the test (large in the full suite)
+        # does not skew the JWT age.
+        now = time.time()
+        kwargs = {claim: now + delta for claim, delta in offsets.items()}
+        age = ClaudeCacheAsyncClient()._get_jwt_age_seconds(_create_jwt(**kwargs))
+        assert age is not None and lo <= age <= hi
 
-        client = ClaudeCacheAsyncClient()
-        age = client._get_jwt_age_seconds(token)
+    def test_exp_far_future_clamped_to_zero(self):
+        token = _create_jwt(exp=time.time() + TOKEN_MAX_AGE_SECONDS + 1000)
+        assert ClaudeCacheAsyncClient()._get_jwt_age_seconds(token) == 0
 
-        # Should use iat (10 mins = 600 secs) not exp
-        assert age is not None
-        assert 590 <= age <= 610
 
-    def test_get_jwt_age_invalid_token(self):
-        """Test that invalid tokens return None."""
-        client = ClaudeCacheAsyncClient()
+# --------------------------------------------------------------------------- #
+# Bearer token extraction
+# --------------------------------------------------------------------------- #
 
-        assert client._get_jwt_age_seconds(None) is None
-        assert client._get_jwt_age_seconds("") is None
-        assert client._get_jwt_age_seconds("not.a.valid.jwt") is None
-        assert client._get_jwt_age_seconds("invalid") is None
 
-    def test_get_jwt_age_no_timestamp_claims(self):
-        """Test that JWT without timestamp claims returns None."""
-        token = _create_jwt()  # No iat or exp
+class TestExtractBearer:
+    def test_with_auth(self):
+        req = _request(token="my_token_123")
+        assert ClaudeCacheAsyncClient()._extract_bearer_token(req) == "my_token_123"
 
-        client = ClaudeCacheAsyncClient()
-        age = client._get_jwt_age_seconds(token)
+    def test_lowercase_header(self):
+        req = httpx.Request(
+            "POST", "https://x.com", headers={"authorization": "bearer tok"}
+        )
+        assert ClaudeCacheAsyncClient()._extract_bearer_token(req) is not None
 
-        assert age is None
+    @pytest.mark.parametrize(
+        "headers",
+        [{}, {"Authorization": "Basic abc"}],
+    )
+    def test_missing_or_non_bearer(self, headers):
+        req = httpx.Request("POST", "https://x.com", headers=headers)
+        assert ClaudeCacheAsyncClient()._extract_bearer_token(req) is None
 
-    def test_should_refresh_token_old(self):
-        """Test that old tokens (>1 hour) trigger refresh."""
-        # Token issued 2 hours ago
-        iat = time.time() - 7200
-        token = _create_jwt(iat=iat)
 
-        request = httpx.Request(
-            "POST",
-            "https://api.anthropic.com/v1/messages",
-            headers={"Authorization": f"Bearer {token}"},
+# --------------------------------------------------------------------------- #
+# Should-refresh decision
+# --------------------------------------------------------------------------- #
+
+
+class TestShouldRefresh:
+    @pytest.mark.parametrize(
+        "iat_offset, expected",
+        [
+            (-7200, True),  # 2h old
+            (-TOKEN_MAX_AGE_SECONDS, True),  # exactly 1h
+            (-1800, False),  # 30 min old
+        ],
+    )
+    def test_by_jwt_age(self, iat_offset, expected):
+        # Build the token at execution time (see test_age_window) to avoid
+        # collection-time clock skew in the full suite.
+        token = _create_jwt(iat=time.time() + iat_offset)
+        assert (
+            ClaudeCacheAsyncClient()._should_refresh_token(_request(token=token))
+            is expected
         )
 
-        client = ClaudeCacheAsyncClient()
-        assert client._should_refresh_token(request) is True
+    def test_no_token(self):
+        req = httpx.Request("POST", "https://x.com")
+        assert ClaudeCacheAsyncClient()._should_refresh_token(req) is False
 
-    def test_should_refresh_token_fresh(self):
-        """Test that fresh tokens (<1 hour) don't trigger refresh."""
-        # Token issued 30 minutes ago
-        iat = time.time() - 1800
-        token = _create_jwt(iat=iat)
+    def test_falls_back_to_stored_expiry(self):
+        """When the JWT has no timestamp claims, fall back to stored expiry."""
+        req = _request(token=_create_jwt())
+        with patch.object(
+            ClaudeCacheAsyncClient, "_check_stored_token_expiry", return_value=True
+        ):
+            assert ClaudeCacheAsyncClient()._should_refresh_token(req) is True
 
-        request = httpx.Request(
-            "POST",
+
+# --------------------------------------------------------------------------- #
+# Stored token expiry check
+# --------------------------------------------------------------------------- #
+
+
+def _patch_oauth_utils(**attrs):
+    mock_module = MagicMock()
+    for name, value in attrs.items():
+        setattr(mock_module, name, MagicMock(**value))
+    return patch.dict(
+        "sys.modules",
+        {
+            "code_puppy.plugins.claude_code_oauth": MagicMock(),
+            "code_puppy.plugins.claude_code_oauth.utils": mock_module,
+        },
+    )
+
+
+class TestCheckStoredExpiry:
+    @pytest.mark.parametrize(
+        "load_kwargs, expired_kwargs, expected",
+        [
+            ({"return_value": {"access_token": "x"}}, {"return_value": True}, True),
+            ({"return_value": None}, {"return_value": False}, False),
+            ({"side_effect": Exception("fail")}, {"return_value": False}, False),
+        ],
+    )
+    def test_check(self, load_kwargs, expired_kwargs, expected):
+        with _patch_oauth_utils(
+            load_stored_tokens=load_kwargs, is_token_expired=expired_kwargs
+        ):
+            assert ClaudeCacheAsyncClient._check_stored_token_expiry() is expected
+
+
+# --------------------------------------------------------------------------- #
+# Tool name prefixing
+# --------------------------------------------------------------------------- #
+
+
+class TestPrefixToolNames:
+    def test_basic(self):
+        body = json.dumps(
+            {"tools": [{"name": "read_file"}, {"name": "edit_file"}]}
+        ).encode()
+        result = ClaudeCacheAsyncClient._prefix_tool_names(body)
+        assert result is not None
+        data = json.loads(result)
+        assert data["tools"][0]["name"] == f"{TOOL_PREFIX}read_file"
+        assert data["tools"][1]["name"] == f"{TOOL_PREFIX}edit_file"
+
+    @pytest.mark.parametrize(
+        "body",
+        [
+            json.dumps(
+                {"tools": [{"name": f"{TOOL_PREFIX}read_file"}]}
+            ).encode(),  # already prefixed
+            json.dumps({"messages": []}).encode(),  # no tools
+            json.dumps({"tools": []}).encode(),  # empty tools
+            json.dumps({"tools": [{"description": "no name"}]}).encode(),  # no name key
+            json.dumps({"tools": [{"name": ""}]}).encode(),  # empty name
+            b"not valid json",  # invalid json
+            b'"string"',  # non-dict
+        ],
+    )
+    def test_returns_none(self, body):
+        assert ClaudeCacheAsyncClient._prefix_tool_names(body) is None
+
+
+class TestApplyClaudeCodePrefixFlag:
+    @pytest.mark.parametrize(
+        "kwargs, expected",
+        [
+            ({}, False),  # default: custom_anthropic must NOT prefix
+            ({"apply_claude_code_prefix": True}, True),  # opt-in by oauth plugin
+        ],
+    )
+    def test_flag(self, kwargs, expected):
+        assert ClaudeCacheAsyncClient(**kwargs)._apply_claude_code_prefix is expected
+
+
+# --------------------------------------------------------------------------- #
+# Header transformation
+# --------------------------------------------------------------------------- #
+
+
+class TestHeaderTransform:
+    def test_sets_user_agent(self):
+        h = {}
+        ClaudeCacheAsyncClient._transform_headers_for_claude_code(h)
+        assert h["user-agent"] == CLAUDE_CLI_USER_AGENT
+
+    def test_adds_required_betas(self):
+        h = {}
+        ClaudeCacheAsyncClient._transform_headers_for_claude_code(h)
+        assert "oauth-2025-04-20" in h["anthropic-beta"]
+        assert "interleaved-thinking-2025-05-14" in h["anthropic-beta"]
+
+    def test_keeps_claude_code_beta_if_present(self):
+        h = {"anthropic-beta": "claude-code-20250219,interleaved-thinking-2025-05-14"}
+        ClaudeCacheAsyncClient._transform_headers_for_claude_code(h)
+        assert "claude-code-20250219" in h["anthropic-beta"]
+
+    def test_excludes_claude_code_beta_if_not_present(self):
+        h = {"anthropic-beta": "interleaved-thinking-2025-05-14"}
+        ClaudeCacheAsyncClient._transform_headers_for_claude_code(h)
+        assert "claude-code-20250219" not in h["anthropic-beta"]
+
+    def test_removes_x_api_key_variants(self):
+        h = {
+            "x-api-key": "s",
+            "X-API-Key": "s",
+            "X-Api-Key": "s",
+            "anthropic-beta": "interleaved-thinking-2025-05-14",
+        }
+        ClaudeCacheAsyncClient._transform_headers_for_claude_code(h)
+        assert "x-api-key" not in h
+        assert "X-API-Key" not in h
+        assert "X-Api-Key" not in h
+
+    def test_preserves_extra_betas(self):
+        h = {
+            "anthropic-beta": "oauth-2025-04-20,interleaved-thinking-2025-05-14,context-1m-2025-08-07"
+        }
+        ClaudeCacheAsyncClient._transform_headers_for_claude_code(h)
+        assert "context-1m-2025-08-07" in h["anthropic-beta"]
+        assert "oauth-2025-04-20" in h["anthropic-beta"]
+        assert "interleaved-thinking-2025-05-14" in h["anthropic-beta"]
+
+    def test_no_duplicate_required_betas(self):
+        h = {"anthropic-beta": "oauth-2025-04-20,interleaved-thinking-2025-05-14"}
+        ClaudeCacheAsyncClient._transform_headers_for_claude_code(h)
+        beta_str = h["anthropic-beta"]
+        assert beta_str.count("oauth-2025-04-20") == 1
+        assert beta_str.count("interleaved-thinking-2025-05-14") == 1
+
+
+# --------------------------------------------------------------------------- #
+# URL beta query param
+# --------------------------------------------------------------------------- #
+
+
+class TestAddBetaParam:
+    @pytest.mark.parametrize(
+        "url",
+        [
             "https://api.anthropic.com/v1/messages",
-            headers={"Authorization": f"Bearer {token}"},
+            "https://api.anthropic.com/v1/messages?foo=bar",
+        ],
+    )
+    def test_adds_beta(self, url):
+        new_url = ClaudeCacheAsyncClient._add_beta_query_param(httpx.URL(url))
+        assert "beta=true" in str(new_url)
+        if "foo=bar" in url:
+            assert "foo=bar" in str(new_url)
+
+    def test_not_duplicated(self):
+        url = httpx.URL("https://api.anthropic.com/v1/messages?beta=true")
+        new_url = ClaudeCacheAsyncClient._add_beta_query_param(url)
+        assert str(new_url).count("beta") == 1
+
+
+# --------------------------------------------------------------------------- #
+# cache_control injection: both the bytes-based static method and the in-place
+# payload helper share the same logic, so we exercise them through one adapter.
+# --------------------------------------------------------------------------- #
+
+
+def _inject_bytes(payload):
+    """Run the bytes-based injector; return (result_or_None, parsed_data)."""
+    result = ClaudeCacheAsyncClient._inject_cache_control(json.dumps(payload).encode())
+    return result, (json.loads(result) if result is not None else None)
+
+
+def _inject_inplace(payload):
+    """Run the in-place injector; return (sentinel, mutated payload)."""
+    data = json.loads(json.dumps(payload))  # deep copy
+    _inject_cache_control_in_payload(data)
+    return "ran", data
+
+
+EPHEMERAL = {"type": "ephemeral"}
+INJECTORS = [_inject_bytes, _inject_inplace]
+
+
+@pytest.mark.parametrize("inject", INJECTORS)
+class TestInjectCacheControl:
+    def test_messages_only(self, inject):
+        _, data = inject(
+            {
+                "messages": [
+                    {"role": "user", "content": [{"type": "text", "text": "hi"}]}
+                ]
+            }
+        )
+        assert data["messages"][0]["content"][0]["cache_control"] == EPHEMERAL
+
+    def test_system_string_converted(self, inject):
+        _, data = inject(
+            {
+                "system": "Be helpful.",
+                "messages": [
+                    {"role": "user", "content": [{"type": "text", "text": "hi"}]}
+                ],
+            }
+        )
+        assert isinstance(data["system"], list)
+        assert data["system"][0]["type"] == "text"
+        assert data["system"][0]["text"] == "Be helpful."
+        assert data["system"][0]["cache_control"] == EPHEMERAL
+
+    def test_system_list_cached(self, inject):
+        _, data = inject(
+            {
+                "system": [{"type": "text", "text": "Be helpful."}],
+                "messages": [
+                    {"role": "user", "content": [{"type": "text", "text": "hi"}]}
+                ],
+            }
+        )
+        assert data["system"][-1]["cache_control"] == EPHEMERAL
+
+    def test_tools_only_last_cached(self, inject):
+        _, data = inject(
+            {
+                "tools": [{"name": "a"}, {"name": "b"}],
+                "messages": [
+                    {"role": "user", "content": [{"type": "text", "text": "hi"}]}
+                ],
+            }
+        )
+        assert "cache_control" not in data["tools"][0]
+        assert data["tools"][1]["cache_control"] == EPHEMERAL
+
+    def test_full_payload_all_three_breakpoints(self, inject):
+        _, data = inject(
+            {
+                "system": [{"type": "text", "text": "sys"}],
+                "tools": [{"name": "t1"}, {"name": "t2"}],
+                "messages": [
+                    {"role": "user", "content": [{"type": "text", "text": "hi"}]}
+                ],
+            }
+        )
+        assert data["system"][0]["cache_control"] == EPHEMERAL
+        assert "cache_control" not in data["tools"][0]
+        assert data["tools"][1]["cache_control"] == EPHEMERAL
+        assert data["messages"][0]["content"][0]["cache_control"] == EPHEMERAL
+
+    @pytest.mark.parametrize(
+        "key, value",
+        [
+            # Empty / non-list / non-dict prefixes are left untouched by both injectors.
+            ("system", ""),
+            ("system", []),
+            ("system", ["just a string"]),
+            ("tools", []),
+            ("tools", ["not a dict"]),
+        ],
+    )
+    def test_uncacheable_prefix_preserved(self, inject, key, value):
+        payload = {
+            key: value,
+            "messages": [{"role": "user", "content": [{"type": "text", "text": "hi"}]}],
+        }
+        _, data = inject(payload)
+        assert data[key] == value
+
+    @pytest.mark.parametrize(
+        "messages",
+        [
+            [],
+            [{"role": "user", "content": "just text"}],
+            [{"role": "user", "content": []}],
+            [{"role": "user", "content": ["just a string"]}],
+            ["not a dict"],
+        ],
+    )
+    def test_uncacheable_message_shapes_do_not_raise(self, inject, messages):
+        # No exception, and no spurious cache_control on uncacheable message shapes.
+        inject({"messages": messages})
+
+
+class TestInjectBytesOnlyReturnValue:
+    """The bytes-based injector's None-vs-bytes return contract."""
+
+    @pytest.mark.parametrize(
+        "payload",
+        [
+            {
+                "messages": [
+                    {
+                        "role": "user",
+                        "content": [
+                            {"type": "text", "cache_control": {"type": "ephemeral"}}
+                        ],
+                    }
+                ]
+            },
+            {"model": "claude"},
+            {"messages": []},
+            {"messages": [{"role": "user", "content": "just text"}]},
+            {"messages": [{"role": "user", "content": []}]},
+            {"messages": [{"role": "user", "content": ["just a string"]}]},
+            {"messages": ["not a dict"]},
+        ],
+    )
+    def test_returns_none_when_nothing_changes(self, payload):
+        assert (
+            ClaudeCacheAsyncClient._inject_cache_control(json.dumps(payload).encode())
+            is None
         )
 
-        client = ClaudeCacheAsyncClient()
-        assert client._should_refresh_token(request) is False
+    @pytest.mark.parametrize("body", [b"not json", b'"string"'])
+    def test_invalid_input_returns_none(self, body):
+        assert ClaudeCacheAsyncClient._inject_cache_control(body) is None
 
-    def test_should_refresh_token_exactly_1_hour(self):
-        """Test that token exactly 1 hour old triggers refresh."""
-        # Token issued exactly 1 hour ago
-        iat = time.time() - TOKEN_MAX_AGE_SECONDS
-        token = _create_jwt(iat=iat)
+    def test_empty_string_system_preserved(self):
+        body = json.dumps(
+            {
+                "system": "",
+                "messages": [
+                    {"role": "user", "content": [{"type": "text", "text": "hi"}]}
+                ],
+            }
+        ).encode()
+        result = ClaudeCacheAsyncClient._inject_cache_control(body)
+        assert json.loads(result)["system"] == ""
 
-        request = httpx.Request(
-            "POST",
-            "https://api.anthropic.com/v1/messages",
-            headers={"Authorization": f"Bearer {token}"},
-        )
+    def test_system_last_block_not_dict_preserved(self):
+        body = json.dumps(
+            {
+                "system": ["just a string"],
+                "messages": [
+                    {"role": "user", "content": [{"type": "text", "text": "hi"}]}
+                ],
+            }
+        ).encode()
+        result = ClaudeCacheAsyncClient._inject_cache_control(body)
+        data = json.loads(result)
+        assert data["system"] == ["just a string"]
+        assert data["messages"][0]["content"][0]["cache_control"] == EPHEMERAL
 
-        client = ClaudeCacheAsyncClient()
-        assert client._should_refresh_token(request) is True
-
-    def test_extract_bearer_token(self):
-        """Test bearer token extraction from headers."""
-        client = ClaudeCacheAsyncClient()
-
-        request = httpx.Request(
-            "POST",
-            "https://api.anthropic.com/v1/messages",
-            headers={"Authorization": "Bearer my_token_123"},
-        )
-
-        token = client._extract_bearer_token(request)
-        assert token == "my_token_123"
-
-    def test_extract_bearer_token_missing(self):
-        """Test bearer token extraction when header is missing."""
-        client = ClaudeCacheAsyncClient()
-
-        request = httpx.Request(
-            "POST",
-            "https://api.anthropic.com/v1/messages",
-        )
-
-        token = client._extract_bearer_token(request)
-        assert token is None
+    def test_tools_last_not_dict_preserved(self):
+        body = json.dumps(
+            {
+                "tools": ["not a dict"],
+                "messages": [
+                    {"role": "user", "content": [{"type": "text", "text": "hi"}]}
+                ],
+            }
+        ).encode()
+        result = ClaudeCacheAsyncClient._inject_cache_control(body)
+        assert json.loads(result)["tools"] == ["not a dict"]
 
 
-class TestProactiveTokenRefresh:
-    """Test proactive token refresh before requests."""
+class TestInjectInPlaceOnly:
+    """In-place helper retains already-present cache_control values."""
+
+    def test_already_present_value_preserved(self):
+        payload = {
+            "messages": [
+                {
+                    "role": "user",
+                    "content": [{"type": "text", "cache_control": {"type": "x"}}],
+                }
+            ]
+        }
+        _inject_cache_control_in_payload(payload)
+        assert payload["messages"][0]["content"][0]["cache_control"] == {"type": "x"}
+
+    @pytest.mark.parametrize(
+        "payload",
+        [
+            {},  # no messages, must not raise
+            {"system": ["just a string"]},
+            {"system": []},
+            {"tools": ["not a dict"]},
+            {"tools": []},
+        ],
+    )
+    def test_no_op_inputs(self, payload):
+        original = json.loads(json.dumps(payload))
+        _inject_cache_control_in_payload(payload)
+        assert payload == original
+
+    def test_system_already_cached(self):
+        payload = {
+            "system": [
+                {"type": "text", "text": "x", "cache_control": {"type": "ephemeral"}}
+            ]
+        }
+        _inject_cache_control_in_payload(payload)
+        assert payload["system"][0]["cache_control"] == EPHEMERAL
+
+    def test_tools_already_cached(self):
+        payload = {"tools": [{"name": "a", "cache_control": {"type": "ephemeral"}}]}
+        _inject_cache_control_in_payload(payload)
+        assert payload["tools"][0]["cache_control"] == EPHEMERAL
+
+
+# --------------------------------------------------------------------------- #
+# patch_anthropic_client_messages
+# --------------------------------------------------------------------------- #
+
+
+class TestPatchAnthropic:
+    @pytest.mark.parametrize("client", [None, "not a client"])
+    def test_noop_for_non_anthropic(self, client):
+        patch_anthropic_client_messages(client)  # should not raise
+
+    def test_no_messages_attr(self):
+        mock_client = MagicMock(spec=[])
+        with patch("code_puppy.claude_cache_client.AsyncAnthropic", type(mock_client)):
+            patch_anthropic_client_messages(mock_client)  # should not raise
 
     @pytest.mark.asyncio
-    async def test_proactive_refresh_on_old_token(self):
-        """Test that old tokens are refreshed proactively before the request."""
-        # Token issued 2 hours ago
-        iat = time.time() - 7200
-        old_token = _create_jwt(iat=iat)
+    @pytest.mark.parametrize(
+        "call",
+        [
+            lambda create: create(
+                model="claude-3",
+                messages=[
+                    {"role": "user", "content": [{"type": "text", "text": "hi"}]}
+                ],
+            ),
+            lambda create: create(
+                {
+                    "messages": [
+                        {"role": "user", "content": [{"type": "text", "text": "hi"}]}
+                    ]
+                }
+            ),
+            lambda create: create("not a dict"),
+        ],
+    )
+    async def test_wraps_and_forwards(self, call):
+        mock_messages = MagicMock()
+        original_create = AsyncMock(return_value="result")
+        mock_messages.create = original_create
+        mock_client = MagicMock()
+        mock_client.messages = mock_messages
 
-        success_response = Mock(spec=httpx.Response)
-        success_response.status_code = 200
-        success_response.headers = {"content-type": "application/json"}
+        with patch("code_puppy.claude_cache_client.AsyncAnthropic", type(mock_client)):
+            patch_anthropic_client_messages(mock_client)
 
+        assert mock_messages.create is not original_create
+        assert await call(mock_messages.create) == "result"
+
+
+# --------------------------------------------------------------------------- #
+# Body byte extraction
+# --------------------------------------------------------------------------- #
+
+
+class TestExtractBodyBytes:
+    def test_from_content(self):
+        req = httpx.Request("POST", "https://x.com", content=b"hello")
+        assert ClaudeCacheAsyncClient._extract_body_bytes(req) == b"hello"
+
+    def test_no_content(self):
+        req = httpx.Request("GET", "https://x.com")
+        result = ClaudeCacheAsyncClient._extract_body_bytes(req)
+        assert result is None or result == b""
+
+    def test_content_property_raises_falls_back_to_private(self):
+        req = MagicMock()
+        type(req).content = property(lambda s: (_ for _ in ()).throw(Exception("no")))
+        req._content = b"fallback"
+        assert ClaudeCacheAsyncClient._extract_body_bytes(req) == b"fallback"
+
+    def test_empty_content_falls_back_to_private(self):
+        req = MagicMock()
+        req.content = b""
+        req._content = b"private content"
+        assert ClaudeCacheAsyncClient._extract_body_bytes(req) == b"private content"
+
+    def test_both_raise_returns_none(self):
+        req = MagicMock()
+        type(req).content = property(lambda s: (_ for _ in ()).throw(Exception("no")))
+        type(req)._content = property(lambda s: (_ for _ in ()).throw(Exception("no2")))
+        assert ClaudeCacheAsyncClient._extract_body_bytes(req) is None
+
+    def test_content_raises_and_no_private(self):
+        req = MagicMock()
+        type(req).content = property(lambda s: (_ for _ in ()).throw(Exception("no")))
+        del req._content
+        assert ClaudeCacheAsyncClient._extract_body_bytes(req) is None
+
+
+# --------------------------------------------------------------------------- #
+# Auth header updates
+# --------------------------------------------------------------------------- #
+
+
+class TestUpdateAuthHeaders:
+    @pytest.mark.parametrize(
+        "headers, key, expected",
+        [
+            ({"Authorization": "Bearer old"}, "Authorization", "Bearer new_tok"),
+            ({"x-api-key": "old"}, "x-api-key", "new_tok"),
+            ({}, "Authorization", "Bearer new_tok"),
+        ],
+    )
+    def test_update(self, headers, key, expected):
+        ClaudeCacheAsyncClient._update_auth_headers(headers, "new_tok")
+        assert headers[key] == expected
+
+
+# --------------------------------------------------------------------------- #
+# Cloudflare HTML error detection
+# --------------------------------------------------------------------------- #
+
+CLOUDFLARE_HTML = (
+    "<html>\r\n"
+    "<head><title>400 Bad Request</title></head>\r\n"
+    "<body>\r\n"
+    "<center><h1>400 Bad Request</h1></center>\r\n"
+    "<hr><center>cloudflare</center>\r\n"
+    "</body>\r\n"
+    "</html>"
+)
+
+
+class TestCloudflareDetection:
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        "content_type, content, expected",
+        [
+            ("text/html; charset=utf-8", CLOUDFLARE_HTML.encode(), True),
+            ("application/json", b'{"error": "some error"}', False),
+            ("text/html", b"<html><body>Some other error</body></html>", False),
+            # has 'cloudflare' but not '400 bad request' marker
+            ("text/html", b"<html><body>cloudflare</body></html>", False),
+        ],
+    )
+    async def test_content_based(self, content_type, content, expected):
+        resp = Mock(spec=httpx.Response)
+        resp.headers = {"content-type": content_type}
+        resp._content = content
+        resp.text = content.decode("utf-8")
+        assert (
+            await ClaudeCacheAsyncClient()._is_cloudflare_html_error(resp) is expected
+        )
+
+    @pytest.mark.asyncio
+    async def test_json_content_type_short_circuits(self):
+        resp = Mock(spec=httpx.Response)
+        resp.headers = {"content-type": "application/json"}
+        assert await ClaudeCacheAsyncClient()._is_cloudflare_html_error(resp) is False
+
+    @pytest.mark.asyncio
+    async def test_no_content_falls_back_to_text(self):
+        resp = Mock(spec=httpx.Response)
+        resp.headers = {"content-type": "text/html"}
+        resp._content = None
+        resp.text = "cloudflare 400 bad request"
+        resp.aread = AsyncMock(return_value=resp.text.encode("utf-8"))
+        assert await ClaudeCacheAsyncClient()._is_cloudflare_html_error(resp) is True
+
+    @pytest.mark.asyncio
+    async def test_decode_exception_returns_false(self):
+        resp = Mock(spec=httpx.Response)
+        resp.headers = {"content-type": "text/html"}
+        resp._content = MagicMock()
+        resp._content.__bool__ = lambda s: True
+        resp._content.decode = MagicMock(side_effect=Exception("decode boom"))
+        assert await ClaudeCacheAsyncClient()._is_cloudflare_html_error(resp) is False
+
+    @pytest.mark.asyncio
+    async def test_text_property_raises_returns_false(self):
+        resp = Mock(spec=httpx.Response)
+        resp.headers = {"content-type": "text/html"}
+        resp._content = None
+        resp.aread = AsyncMock(return_value=b"")
+        type(resp).text = property(
+            lambda s: (_ for _ in ()).throw(Exception("consumed"))
+        )
+        assert await ClaudeCacheAsyncClient()._is_cloudflare_html_error(resp) is False
+
+
+# --------------------------------------------------------------------------- #
+# Token refresh
+# --------------------------------------------------------------------------- #
+
+
+class TestRefreshToken:
+    @pytest.mark.parametrize(
+        "refresh_kwargs, expected",
+        [
+            ({"return_value": "new_token"}, "new_token"),
+            ({"return_value": None}, None),
+            ({"side_effect": Exception("fail")}, None),
+        ],
+    )
+    def test_refresh(self, refresh_kwargs, expected):
+        c = ClaudeCacheAsyncClient(headers={"Authorization": "Bearer old"})
+        with _patch_oauth_utils(refresh_access_token=refresh_kwargs):
+            assert c._refresh_claude_oauth_token() == expected
+
+
+# --------------------------------------------------------------------------- #
+# _send_with_retries
+# --------------------------------------------------------------------------- #
+
+
+class TestSendWithRetries:
+    @pytest.mark.asyncio
+    async def test_success_first_try(self):
         with patch.object(
             httpx.AsyncClient,
             "send",
             new_callable=AsyncMock,
-            return_value=success_response,
+            return_value=_mock_response(200),
+        ):
+            result = await ClaudeCacheAsyncClient()._send_with_retries(
+                httpx.Request("POST", "https://x.com")
+            )
+            assert result.status_code == 200
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        "first_status, headers",
+        [
+            (429, {"Retry-After": "0.1"}),
+            (429, {"Retry-After": "Mon, 01 Jan 2024 00:00:00 GMT"}),
+            (429, {"Retry-After": "not-a-number-or-date!!!"}),
+            (500, {}),
+        ],
+    )
+    async def test_retries_then_succeeds(self, first_status, headers):
+        first = _mock_response(first_status)
+        first.headers = headers
+        with patch.object(
+            httpx.AsyncClient,
+            "send",
+            new_callable=AsyncMock,
+            side_effect=[first, _mock_response(200)],
+        ):
+            with patch("asyncio.sleep", new_callable=AsyncMock):
+                result = await ClaudeCacheAsyncClient()._send_with_retries(
+                    httpx.Request("POST", "https://x.com")
+                )
+                assert result.status_code == 200
+
+    @pytest.mark.asyncio
+    async def test_max_retries_exhausted_returns_last(self):
+        resp_500 = _mock_response(500)
+        resp_500.headers = {}
+        with patch.object(
+            httpx.AsyncClient, "send", new_callable=AsyncMock, return_value=resp_500
+        ):
+            with patch("asyncio.sleep", new_callable=AsyncMock):
+                result = await ClaudeCacheAsyncClient()._send_with_retries(
+                    httpx.Request("POST", "https://x.com")
+                )
+                assert result.status_code == 500
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        "exc",
+        [
+            httpx.ConnectError("fail"),
+            httpx.ReadTimeout("timeout"),
+            httpx.PoolTimeout("pool"),
+        ],
+    )
+    async def test_retries_on_transient_connection_error(self, exc):
+        with patch.object(
+            httpx.AsyncClient,
+            "send",
+            new_callable=AsyncMock,
+            side_effect=[exc, _mock_response(200)],
+        ):
+            with patch("asyncio.sleep", new_callable=AsyncMock):
+                result = await ClaudeCacheAsyncClient()._send_with_retries(
+                    httpx.Request("POST", "https://x.com")
+                )
+                assert result.status_code == 200
+
+    @pytest.mark.asyncio
+    async def test_connect_error_exhausted_reraises(self):
+        with patch.object(
+            httpx.AsyncClient,
+            "send",
+            new_callable=AsyncMock,
+            side_effect=httpx.ConnectError("fail"),
+        ):
+            with patch("asyncio.sleep", new_callable=AsyncMock):
+                with pytest.raises(httpx.ConnectError):
+                    await ClaudeCacheAsyncClient()._send_with_retries(
+                        httpx.Request("POST", "https://x.com")
+                    )
+
+    @pytest.mark.asyncio
+    async def test_non_retryable_exception_propagates(self):
+        with patch.object(
+            httpx.AsyncClient,
+            "send",
+            new_callable=AsyncMock,
+            side_effect=ValueError("bad"),
+        ):
+            with pytest.raises(ValueError):
+                await ClaudeCacheAsyncClient()._send_with_retries(
+                    httpx.Request("POST", "https://x.com")
+                )
+
+
+# --------------------------------------------------------------------------- #
+# Full send() flow
+# --------------------------------------------------------------------------- #
+
+MESSAGES_BODY = json.dumps(
+    {
+        "model": "claude-3-opus",
+        "tools": [
+            {"name": "read_file", "description": "read"},
+            {"name": "edit_file", "description": "edit"},
+        ],
+        "messages": [{"role": "user", "content": "hi"}],
+    }
+).encode()
+
+
+class TestSendFlow:
+    @pytest.mark.asyncio
+    async def test_non_messages_endpoint_passthrough(self):
+        with patch.object(
+            httpx.AsyncClient,
+            "send",
+            new_callable=AsyncMock,
+            return_value=_mock_response(200, None),
+        ):
+            result = await ClaudeCacheAsyncClient().send(
+                httpx.Request("GET", "https://api.com/v1/models")
+            )
+            assert result.status_code == 200
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        "request_kwargs",
+        [
+            {"content": MESSAGES_BODY},
+            {
+                "content": MESSAGES_BODY,
+                "headers": {
+                    "anthropic-beta": "interleaved-thinking-2025-05-14",
+                    "x-api-key": "secret",
+                },
+            },
+            {},  # no body
+        ],
+    )
+    async def test_messages_endpoint_transforms(self, request_kwargs):
+        with patch.object(
+            httpx.AsyncClient,
+            "send",
+            new_callable=AsyncMock,
+            return_value=_mock_response(200),
+        ):
+            req = httpx.Request("POST", "https://api.com/v1/messages", **request_kwargs)
+            result = await ClaudeCacheAsyncClient().send(req)
+            assert result.status_code == 200
+
+    @pytest.mark.asyncio
+    async def test_proactive_refresh_on_old_token(self):
+        """Old tokens are refreshed proactively, before the request, no retry."""
+        old_token = _create_jwt(iat=time.time() - 7200)
+        with patch.object(
+            httpx.AsyncClient,
+            "send",
+            new_callable=AsyncMock,
+            return_value=_mock_response(200),
         ) as mock_send:
             with patch.object(
                 ClaudeCacheAsyncClient,
@@ -194,174 +945,58 @@ class TestProactiveTokenRefresh:
                 client = ClaudeCacheAsyncClient(
                     headers={"Authorization": f"Bearer {old_token}"}
                 )
-
-                request = httpx.Request(
-                    "POST",
-                    "https://api.anthropic.com/v1/messages",
-                    headers={"Authorization": f"Bearer {old_token}"},
-                    content=b'{"model": "claude-3-opus"}',
+                response = await client.send(
+                    _request(token=old_token, content=b'{"model": "claude-3-opus"}')
                 )
-
-                response = await client.send(request)
-
-                # Refresh should have been called proactively
                 mock_refresh.assert_called_once()
-
-                # Request should succeed
                 assert response.status_code == 200
-
-                # Only one request should be made (no retry needed)
                 assert mock_send.call_count == 1
 
     @pytest.mark.asyncio
     async def test_no_proactive_refresh_on_fresh_token(self):
-        """Test that fresh tokens don't trigger proactive refresh."""
-        # Token issued 30 minutes ago
-        iat = time.time() - 1800
-        fresh_token = _create_jwt(iat=iat)
-
-        success_response = Mock(spec=httpx.Response)
-        success_response.status_code = 200
-        success_response.headers = {"content-type": "application/json"}
-
+        fresh_token = _create_jwt(iat=time.time() - 1800)
         with patch.object(
             httpx.AsyncClient,
             "send",
             new_callable=AsyncMock,
-            return_value=success_response,
+            return_value=_mock_response(200),
         ):
             with patch.object(
-                ClaudeCacheAsyncClient,
-                "_refresh_claude_oauth_token",
+                ClaudeCacheAsyncClient, "_refresh_claude_oauth_token"
             ) as mock_refresh:
                 client = ClaudeCacheAsyncClient(
                     headers={"Authorization": f"Bearer {fresh_token}"}
                 )
-
-                request = httpx.Request(
-                    "POST",
-                    "https://api.anthropic.com/v1/messages",
-                    headers={"Authorization": f"Bearer {fresh_token}"},
-                    content=b'{"model": "claude-3-opus"}',
+                await client.send(
+                    _request(token=fresh_token, content=b'{"model": "claude-3-opus"}')
                 )
-
-                await client.send(request)
-
-                # Refresh should NOT be called
                 mock_refresh.assert_not_called()
 
-
-class TestCloudflareErrorDetection:
-    """Test detection of Cloudflare HTML error responses."""
-
     @pytest.mark.asyncio
-    async def test_is_cloudflare_html_error_true(self):
-        """Test that Cloudflare HTML errors are detected."""
-        # Create a mock response with Cloudflare HTML error
-        cloudflare_html = (
-            "<html>\r\n"
-            "<head><title>400 Bad Request</title></head>\r\n"
-            "<body>\r\n"
-            "<center><h1>400 Bad Request</h1></center>\r\n"
-            "<hr><center>cloudflare</center>\r\n"
-            "</body>\r\n"
-            "</html>"
-        )
-
-        response = Mock(spec=httpx.Response)
-        response.headers = {"content-type": "text/html; charset=utf-8"}
-        response._content = cloudflare_html.encode("utf-8")
-        response.text = cloudflare_html
-
-        client = ClaudeCacheAsyncClient()
-        result = await client._is_cloudflare_html_error(response)
-
-        assert result is True
-
-    @pytest.mark.asyncio
-    async def test_is_cloudflare_html_error_false_json(self):
-        """Test that JSON responses are not detected as Cloudflare errors."""
-        response = Mock(spec=httpx.Response)
-        response.headers = {"content-type": "application/json"}
-        response._content = b'{"error": "some error"}'
-
-        client = ClaudeCacheAsyncClient()
-        result = await client._is_cloudflare_html_error(response)
-
-        assert result is False
-
-    @pytest.mark.asyncio
-    async def test_is_cloudflare_html_error_false_different_html(self):
-        """Test that non-Cloudflare HTML is not detected as Cloudflare error."""
-        response = Mock(spec=httpx.Response)
-        response.headers = {"content-type": "text/html"}
-        response._content = b"<html><body>Some other error</body></html>"
-        response.text = "<html><body>Some other error</body></html>"
-
-        client = ClaudeCacheAsyncClient()
-        result = await client._is_cloudflare_html_error(response)
-
-        assert result is False
-
-    @pytest.mark.asyncio
-    async def test_is_cloudflare_html_error_false_missing_markers(self):
-        """Test that HTML without both markers is not detected."""
-        # Has cloudflare but not "400 bad request"
-        response = Mock(spec=httpx.Response)
-        response.headers = {"content-type": "text/html"}
-        response._content = b"<html><body>cloudflare</body></html>"
-        response.text = "<html><body>cloudflare</body></html>"
-
-        client = ClaudeCacheAsyncClient()
-        result = await client._is_cloudflare_html_error(response)
-
-        assert result is False
-
-
-class TestTokenRefreshOnCloudflareError:
-    """Test that token refresh is triggered on Cloudflare errors."""
-
-    @pytest.mark.asyncio
-    async def test_refresh_on_cloudflare_400(self):
-        """Test that a Cloudflare 400 error triggers token refresh."""
-        cloudflare_html = (
-            "<html>\r\n"
-            "<head><title>400 Bad Request</title></head>\r\n"
-            "<body>\r\n"
-            "<center><h1>400 Bad Request</h1></center>\r\n"
-            "<hr><center>cloudflare</center>\r\n"
-            "</body>\r\n"
-            "</html>"
-        )
-
-        # Create a mock response for the initial failed request
-        failed_response = Mock(spec=httpx.Response)
-        failed_response.status_code = 400
-        failed_response.headers = {"content-type": "text/html; charset=utf-8"}
-        failed_response._content = cloudflare_html.encode("utf-8")
-        failed_response.text = cloudflare_html
-        failed_response.aclose = AsyncMock()
-
-        # Create a mock response for the successful retry
-        success_response = Mock(spec=httpx.Response)
-        success_response.status_code = 200
-        success_response.headers = {"content-type": "application/json"}
-        success_response._content = b'{"result": "success"}'
-
-        # Mock the parent send method to return failed then success
+    @pytest.mark.parametrize(
+        "failed_status, failed_ct, failed_content",
+        [
+            (401, "application/json", b'{"error": {"type": "authentication_error"}}'),
+            (400, "text/html; charset=utf-8", CLOUDFLARE_HTML.encode()),
+        ],
+    )
+    async def test_auth_error_triggers_refresh_and_retry(
+        self, failed_status, failed_ct, failed_content
+    ):
+        failed = _mock_response(failed_status, failed_ct, failed_content)
+        failed.text = failed_content.decode("utf-8")
         with patch.object(
             httpx.AsyncClient, "send", new_callable=AsyncMock
         ) as mock_send:
-            mock_send.side_effect = [failed_response, success_response]
-
-            # Mock the refresh function
+            mock_send.side_effect = [
+                failed,
+                _mock_response(200, content=b'{"result": "ok"}'),
+            ]
             with patch.object(
                 ClaudeCacheAsyncClient,
                 "_refresh_claude_oauth_token",
-                return_value="new_token_123",
+                return_value="new_token",
             ) as mock_refresh:
-                # Mock stored token expiry check to prevent proactive refresh
-                # (we want to test the Cloudflare error path, not proactive refresh)
                 with patch.object(
                     ClaudeCacheAsyncClient,
                     "_check_stored_token_expiry",
@@ -370,43 +1005,26 @@ class TestTokenRefreshOnCloudflareError:
                     client = ClaudeCacheAsyncClient(
                         headers={"Authorization": "Bearer old_token"}
                     )
-
-                    # Create a mock request
-                    request = httpx.Request(
-                        "POST",
-                        "https://api.anthropic.com/v1/messages",
-                        headers={"Authorization": "Bearer old_token"},
-                        content=b'{"model": "claude-3-opus"}',
+                    response = await client.send(
+                        _request(
+                            token="old_token", content=b'{"model": "claude-3-opus"}'
+                        )
                     )
-
-                    # Send the request
-                    response = await client.send(request)
-
-                    # Verify refresh was called (once, for the Cloudflare error)
                     mock_refresh.assert_called_once()
-
-                    # Verify we got the success response
                     assert response.status_code == 200
-
-                    # Verify send was called twice (initial + retry)
                     assert mock_send.call_count == 2
 
     @pytest.mark.asyncio
     async def test_no_refresh_on_json_400(self):
-        """Test that a JSON 400 error does not trigger token refresh."""
-        # Create a mock response for a non-Cloudflare 400 error
-        response = Mock(spec=httpx.Response)
-        response.status_code = 400
-        response.headers = {"content-type": "application/json"}
-        response._content = b'{"error": {"type": "invalid_request_error"}}'
-
+        resp = _mock_response(
+            400, content=b'{"error": {"type": "invalid_request_error"}}'
+        )
         with patch.object(
-            httpx.AsyncClient, "send", new_callable=AsyncMock, return_value=response
+            httpx.AsyncClient, "send", new_callable=AsyncMock, return_value=resp
         ):
             with patch.object(
                 ClaudeCacheAsyncClient, "_refresh_claude_oauth_token"
             ) as mock_refresh:
-                # Mock stored token expiry check to prevent proactive refresh
                 with patch.object(
                     ClaudeCacheAsyncClient,
                     "_check_stored_token_expiry",
@@ -415,90 +1033,20 @@ class TestTokenRefreshOnCloudflareError:
                     client = ClaudeCacheAsyncClient(
                         headers={"Authorization": "Bearer token"}
                     )
-
-                    request = httpx.Request(
-                        "POST",
-                        "https://api.anthropic.com/v1/messages",
-                        headers={"Authorization": "Bearer token"},
-                        content=b'{"model": "claude-3-opus"}',
+                    result = await client.send(
+                        _request(token="token", content=b'{"model": "claude-3-opus"}')
                     )
-
-                    result = await client.send(request)
-
-                    # Refresh should NOT be called for non-Cloudflare 400s
                     mock_refresh.assert_not_called()
                     assert result.status_code == 400
 
     @pytest.mark.asyncio
-    async def test_refresh_on_401(self):
-        """Test that a 401 error triggers token refresh."""
-        # Create a mock response for 401
-        failed_response = Mock(spec=httpx.Response)
-        failed_response.status_code = 401
-        failed_response.headers = {"content-type": "application/json"}
-        failed_response._content = b'{"error": {"type": "authentication_error"}}'
-        failed_response.aclose = AsyncMock()
-
-        # Create a mock response for the successful retry
-        success_response = Mock(spec=httpx.Response)
-        success_response.status_code = 200
-        success_response.headers = {"content-type": "application/json"}
-        success_response._content = b'{"result": "success"}'
-
-        with patch.object(
-            httpx.AsyncClient, "send", new_callable=AsyncMock
-        ) as mock_send:
-            mock_send.side_effect = [failed_response, success_response]
-
-            with patch.object(
-                ClaudeCacheAsyncClient,
-                "_refresh_claude_oauth_token",
-                return_value="new_token_456",
-            ) as mock_refresh:
-                # Mock stored token expiry check to prevent proactive refresh
-                # (we want to test the 401 error path, not proactive refresh)
-                with patch.object(
-                    ClaudeCacheAsyncClient,
-                    "_check_stored_token_expiry",
-                    return_value=False,
-                ):
-                    client = ClaudeCacheAsyncClient(
-                        headers={"Authorization": "Bearer old_token"}
-                    )
-
-                    request = httpx.Request(
-                        "POST",
-                        "https://api.anthropic.com/v1/messages",
-                        headers={"Authorization": "Bearer old_token"},
-                        content=b'{"model": "claude-3-opus"}',
-                    )
-
-                    response = await client.send(request)
-
-                    # Verify refresh was called (once, for the 401 error)
-                    mock_refresh.assert_called_once()
-
-                    # Verify we got the success response
-                    assert response.status_code == 200
-
-                    # Verify send was called twice
-                    assert mock_send.call_count == 2
-
-    @pytest.mark.asyncio
     async def test_no_infinite_retry_loop(self):
-        """Test that we don't retry infinitely on auth errors."""
-        # Create a mock response that always returns 401
-        failed_response = Mock(spec=httpx.Response)
-        failed_response.status_code = 401
-        failed_response.headers = {"content-type": "application/json"}
-        failed_response._content = b'{"error": {"type": "authentication_error"}}'
-        failed_response.aclose = AsyncMock()
-
+        """Auth errors retry at most once; the retry sets the guard flag."""
+        failed = _mock_response(
+            401, content=b'{"error": {"type": "authentication_error"}}'
+        )
         with patch.object(
-            httpx.AsyncClient,
-            "send",
-            new_callable=AsyncMock,
-            return_value=failed_response,
+            httpx.AsyncClient, "send", new_callable=AsyncMock, return_value=failed
         ) as mock_send:
             with patch.object(
                 ClaudeCacheAsyncClient,
@@ -508,237 +1056,151 @@ class TestTokenRefreshOnCloudflareError:
                 client = ClaudeCacheAsyncClient(
                     headers={"Authorization": "Bearer token"}
                 )
-
-                request = httpx.Request(
-                    "POST",
-                    "https://api.anthropic.com/v1/messages",
-                    headers={"Authorization": "Bearer token"},
-                    content=b'{"model": "claude-3-opus"}',
+                response = await client.send(
+                    _request(token="token", content=b'{"model": "claude-3-opus"}')
                 )
-
-                response = await client.send(request)
-
-                # Should only retry once (initial + 1 retry)
-                # The retry should have the extension flag set, preventing further retries
                 assert mock_send.call_count == 2
                 assert response.status_code == 401
 
+    @pytest.mark.asyncio
+    async def test_refresh_fails_returns_original_error(self):
+        failed = _mock_response(403)
+        with patch.object(
+            httpx.AsyncClient, "send", new_callable=AsyncMock, return_value=failed
+        ):
+            with patch.object(
+                ClaudeCacheAsyncClient, "_refresh_claude_oauth_token", return_value=None
+            ):
+                result = await ClaudeCacheAsyncClient().send(
+                    httpx.Request("POST", "https://api.com/v1/messages", content=b"{}")
+                )
+                assert result.status_code == 403
 
-class TestToolPrefixing:
-    """Test tool name prefixing/unprefixing for Claude Code OAuth compatibility."""
+    @pytest.mark.asyncio
+    async def test_already_attempted_refresh_skips(self):
+        failed = _mock_response(401, content_type=None)
+        with patch.object(
+            httpx.AsyncClient, "send", new_callable=AsyncMock, return_value=failed
+        ):
+            with patch.object(ClaudeCacheAsyncClient, "_refresh_claude_oauth_token"):
+                req = httpx.Request("POST", "https://api.com/v1/messages")
+                req.extensions["claude_oauth_refresh_attempted"] = True
+                result = await ClaudeCacheAsyncClient().send(req)
+                assert result.status_code == 401
 
-    def test_prefix_tool_names_basic(self):
-        """Test that tool names are prefixed correctly."""
-        body = json.dumps(
-            {
-                "model": "claude-3",
-                "tools": [
-                    {"name": "read_file", "description": "Read a file"},
-                    {"name": "edit_file", "description": "Edit a file"},
-                ],
-                "messages": [{"role": "user", "content": "Hello"}],
-            }
-        ).encode()
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        "method_name, url, status",
+        [
+            (
+                "_should_refresh_token",
+                "https://api.com/other",
+                200,
+            ),  # proactive refresh error
+            (
+                "_transform_headers_for_claude_code",
+                "https://api.com/v1/messages",
+                200,
+            ),  # transform error
+            (
+                "_refresh_claude_oauth_token",
+                "https://api.com/v1/messages",
+                401,
+            ),  # auth-handling error
+        ],
+    )
+    async def test_exceptions_in_pipeline_are_swallowed(self, method_name, url, status):
+        resp = _mock_response(status, content_type=None)
+        with patch.object(
+            httpx.AsyncClient, "send", new_callable=AsyncMock, return_value=resp
+        ):
+            with patch.object(
+                ClaudeCacheAsyncClient, method_name, side_effect=Exception("boom")
+            ):
+                req = (
+                    httpx.Request("POST", url, content=b"{}")
+                    if "v1/messages" in url
+                    else httpx.Request("GET", url)
+                )
+                result = await ClaudeCacheAsyncClient().send(req)
+                assert result.status_code == status
 
-        client = ClaudeCacheAsyncClient()
-        result = client._prefix_tool_names(body)
+    @pytest.mark.asyncio
+    async def test_proactive_refresh_non_messages_endpoint(self):
+        token = _create_jwt(iat=time.time() - 7200)
+        with patch.object(
+            httpx.AsyncClient,
+            "send",
+            new_callable=AsyncMock,
+            return_value=_mock_response(200, None),
+        ):
+            with patch.object(
+                ClaudeCacheAsyncClient,
+                "_refresh_claude_oauth_token",
+                return_value="new_tok",
+            ):
+                result = await ClaudeCacheAsyncClient().send(
+                    httpx.Request(
+                        "POST",
+                        "https://api.com/other",
+                        headers={"Authorization": f"Bearer {token}"},
+                    )
+                )
+                assert result.status_code == 200
 
-        assert result is not None
-        data = json.loads(result)
-        assert data["tools"][0]["name"] == f"{TOOL_PREFIX}read_file"
-        assert data["tools"][1]["name"] == f"{TOOL_PREFIX}edit_file"
-
-    def test_prefix_tool_names_already_prefixed(self):
-        """Test that already-prefixed tools are not double-prefixed."""
-        body = json.dumps(
-            {
-                "tools": [
-                    {"name": f"{TOOL_PREFIX}read_file", "description": "Read a file"},
-                ],
-            }
-        ).encode()
-
-        client = ClaudeCacheAsyncClient()
-        result = client._prefix_tool_names(body)
-
-        # Should return None since nothing was modified
-        assert result is None
-
-    def test_prefix_tool_names_no_tools(self):
-        """Test that bodies without tools return None."""
-        body = json.dumps(
-            {
-                "model": "claude-3",
-                "messages": [{"role": "user", "content": "Hello"}],
-            }
-        ).encode()
-
-        client = ClaudeCacheAsyncClient()
-        result = client._prefix_tool_names(body)
-
-        assert result is None
-
-    def test_prefix_tool_names_invalid_json(self):
-        """Test that invalid JSON returns None."""
-        body = b"not valid json"
-
-        client = ClaudeCacheAsyncClient()
-        result = client._prefix_tool_names(body)
-
-        assert result is None
-
-    def test_apply_claude_code_prefix_defaults_to_false(self):
-        """Default constructor must NOT opt into Claude Code OAuth prefixing.
-
-        This is the regression guard for the bug where custom_anthropic models
-        were having tool names mangled with ``cp_`` even though they're not
-        talking to the Claude Code OAuth endpoint.
-        """
-        client = ClaudeCacheAsyncClient()
-        assert client._apply_claude_code_prefix is False
-
-    def test_apply_claude_code_prefix_opt_in(self):
-        """Plugins (claude_code_oauth) opt in explicitly via constructor flag."""
-        client = ClaudeCacheAsyncClient(apply_claude_code_prefix=True)
-        assert client._apply_claude_code_prefix is True
-
-
-class TestHeaderTransformation:
-    """Test header transformation for Claude Code OAuth compatibility."""
-
-    def test_transform_headers_sets_user_agent(self):
-        """Test that user-agent is set correctly."""
-        headers = {"anthropic-beta": "interleaved-thinking-2025-05-14"}
-
-        ClaudeCacheAsyncClient._transform_headers_for_claude_code(headers)
-
-        assert headers["user-agent"] == CLAUDE_CLI_USER_AGENT
-
-    def test_transform_headers_adds_oauth_beta(self):
-        """Test that oauth beta is always added."""
-        headers = {}
-
-        ClaudeCacheAsyncClient._transform_headers_for_claude_code(headers)
-
-        assert "oauth-2025-04-20" in headers["anthropic-beta"]
-        assert "interleaved-thinking-2025-05-14" in headers["anthropic-beta"]
-
-    def test_transform_headers_keeps_claude_code_beta_if_present(self):
-        """Test that claude-code beta is kept if it was in the incoming headers."""
-        headers = {
-            "anthropic-beta": "claude-code-20250219,interleaved-thinking-2025-05-14"
-        }
-
-        ClaudeCacheAsyncClient._transform_headers_for_claude_code(headers)
-
-        assert "claude-code-20250219" in headers["anthropic-beta"]
-
-    def test_transform_headers_excludes_claude_code_beta_if_not_present(self):
-        """Test that claude-code beta is not added if it wasn't requested."""
-        headers = {"anthropic-beta": "interleaved-thinking-2025-05-14"}
-
-        ClaudeCacheAsyncClient._transform_headers_for_claude_code(headers)
-
-        assert "claude-code-20250219" not in headers["anthropic-beta"]
-
-    def test_transform_headers_removes_x_api_key(self):
-        """Test that x-api-key is removed."""
-        headers = {
-            "x-api-key": "secret",
-            "anthropic-beta": "interleaved-thinking-2025-05-14",
-        }
-
-        ClaudeCacheAsyncClient._transform_headers_for_claude_code(headers)
-
-        assert "x-api-key" not in headers
-        assert "X-API-Key" not in headers
-
-    def test_transform_headers_preserves_extra_betas(self):
-        """Extra betas (e.g. context-1m) should survive the transform."""
-        headers = {
-            "anthropic-beta": "oauth-2025-04-20,interleaved-thinking-2025-05-14,context-1m-2025-08-07"
-        }
-
-        ClaudeCacheAsyncClient._transform_headers_for_claude_code(headers)
-
-        assert "context-1m-2025-08-07" in headers["anthropic-beta"]
-        assert "oauth-2025-04-20" in headers["anthropic-beta"]
-        assert "interleaved-thinking-2025-05-14" in headers["anthropic-beta"]
-
-    def test_transform_headers_no_duplicate_required_betas(self):
-        """Required betas should not be duplicated in the output."""
-        headers = {"anthropic-beta": "oauth-2025-04-20,interleaved-thinking-2025-05-14"}
-
-        ClaudeCacheAsyncClient._transform_headers_for_claude_code(headers)
-
-        beta_str = headers["anthropic-beta"]
-        assert beta_str.count("oauth-2025-04-20") == 1
-        assert beta_str.count("interleaved-thinking-2025-05-14") == 1
-
-
-class TestUrlBetaParam:
-    """Test URL beta query parameter addition."""
-
-    def test_add_beta_query_param(self):
-        """Test that beta=true is added to URL."""
-        url = httpx.URL("https://api.anthropic.com/v1/messages")
-
-        new_url = ClaudeCacheAsyncClient._add_beta_query_param(url)
-
-        assert "beta=true" in str(new_url)
-
-    def test_add_beta_query_param_preserves_existing(self):
-        """Test that existing query params are preserved."""
-        url = httpx.URL("https://api.anthropic.com/v1/messages?foo=bar")
-
-        new_url = ClaudeCacheAsyncClient._add_beta_query_param(url)
-
-        assert "foo=bar" in str(new_url)
-        assert "beta=true" in str(new_url)
-
-    def test_add_beta_query_param_not_duplicated(self):
-        """Test that beta param is not duplicated if already present."""
-        url = httpx.URL("https://api.anthropic.com/v1/messages?beta=true")
-
-        new_url = ClaudeCacheAsyncClient._add_beta_query_param(url)
-
-        # Should be unchanged
-        assert str(new_url).count("beta") == 1
+    @pytest.mark.asyncio
+    async def test_rebuild_request_exception_handled(self):
+        with patch.object(
+            httpx.AsyncClient,
+            "send",
+            new_callable=AsyncMock,
+            return_value=_mock_response(200, None),
+        ):
+            client = ClaudeCacheAsyncClient()
+            req = httpx.Request(
+                "POST", "https://api.com/v1/messages", content=b'{"model": "x"}'
+            )
+            with patch.object(
+                client, "build_request", side_effect=Exception("rebuild fail")
+            ):
+                result = await client.send(req)
+                assert result.status_code == 200
 
 
 class TestSendAppliesPrefixConditionally:
-    """End-to-end: ``send()`` only prefixes tool names when the flag is on.
+    """End-to-end guard: send() only prefixes tool names when the flag is on.
 
-    These tests are the actual regression guard for the bug: custom_anthropic
-    routes through ``ClaudeCacheAsyncClient`` without ``apply_claude_code_prefix``
-    set, so tool names sent over the wire must remain verbatim.
+    custom_anthropic routes through ClaudeCacheAsyncClient without
+    apply_claude_code_prefix, so tool names must go out verbatim.
     """
 
     @pytest.mark.asyncio
-    async def test_send_does_not_prefix_when_flag_off(self):
-        """custom_anthropic path: tool names go out clean (no ``cp_`` prefix)."""
-        captured: dict = {}
+    @pytest.mark.parametrize(
+        "flag, expected_names",
+        [
+            (False, ["read_file", "edit_file"]),  # custom_anthropic: clean
+            (
+                True,
+                [f"{TOOL_PREFIX}read_file", f"{TOOL_PREFIX}edit_file"],
+            ),  # oauth: prefixed
+        ],
+    )
+    async def test_prefix_behavior(self, flag, expected_names):
+        captured = {}
 
         async def fake_send(self, request, *args, **kwargs):
             captured["body"] = bytes(request.content)
-            captured["url"] = str(request.url)
-            response = Mock(spec=httpx.Response)
-            response.status_code = 200
-            response.headers = {"content-type": "application/json"}
-            response._content = b"{}"
-            return response
+            return _mock_response(200, content=b"{}")
 
         with (
             patch.object(httpx.AsyncClient, "send", new=fake_send),
             patch.object(
-                ClaudeCacheAsyncClient,
-                "_check_stored_token_expiry",
-                return_value=False,
+                ClaudeCacheAsyncClient, "_check_stored_token_expiry", return_value=False
             ),
         ):
-            # Default: apply_claude_code_prefix=False (custom_anthropic case)
             client = ClaudeCacheAsyncClient(
-                headers={"Authorization": "Bearer some_token"}
+                headers={"Authorization": "Bearer some_token"},
+                apply_claude_code_prefix=flag,
             )
             request = httpx.Request(
                 "POST",
@@ -755,59 +1217,10 @@ class TestSendAppliesPrefixConditionally:
                     }
                 ).encode(),
             )
-
             await client.send(request)
 
         assert "body" in captured, "send did not run our fake transport"
         sent = json.loads(captured["body"])
-        tool_names = [t["name"] for t in sent["tools"]]
-        assert tool_names == ["read_file", "edit_file"], (
-            f"custom_anthropic path must not prefix tool names, got {tool_names}"
-        )
-        assert TOOL_PREFIX not in captured["body"].decode("utf-8")
-
-    @pytest.mark.asyncio
-    async def test_send_does_prefix_when_flag_on(self):
-        """claude_code OAuth path: tool names get the ``cp_`` prefix."""
-        captured: dict = {}
-
-        async def fake_send(self, request, *args, **kwargs):
-            captured["body"] = bytes(request.content)
-            response = Mock(spec=httpx.Response)
-            response.status_code = 200
-            response.headers = {"content-type": "application/json"}
-            response._content = b"{}"
-            return response
-
-        with (
-            patch.object(httpx.AsyncClient, "send", new=fake_send),
-            patch.object(
-                ClaudeCacheAsyncClient,
-                "_check_stored_token_expiry",
-                return_value=False,
-            ),
-        ):
-            client = ClaudeCacheAsyncClient(
-                headers={"Authorization": "Bearer some_token"},
-                apply_claude_code_prefix=True,
-            )
-            request = httpx.Request(
-                "POST",
-                "https://api.anthropic.com/v1/messages",
-                headers={"Authorization": "Bearer some_token"},
-                content=json.dumps(
-                    {
-                        "model": "claude-3-opus",
-                        "tools": [
-                            {"name": "read_file", "description": "read"},
-                        ],
-                        "messages": [{"role": "user", "content": "hi"}],
-                    }
-                ).encode(),
-            )
-
-            await client.send(request)
-
-        sent = json.loads(captured["body"])
-        tool_names = [t["name"] for t in sent["tools"]]
-        assert tool_names == [f"{TOOL_PREFIX}read_file"]
+        assert [t["name"] for t in sent["tools"]] == expected_names
+        if not flag:
+            assert TOOL_PREFIX not in captured["body"].decode("utf-8")

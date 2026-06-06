@@ -2,6 +2,8 @@ import threading
 import time
 from datetime import datetime, timezone
 
+import pytest
+
 from code_puppy.messaging.message_queue import (
     MessageQueue,
     MessageType,
@@ -23,53 +25,49 @@ class TestMessagingExtended:
         if self.queue:
             self.queue.stop()
 
-    def test_emit_info(self):
-        """Test info message emission."""
-        # Mark renderer as active so messages don't get buffered
+    @pytest.mark.parametrize(
+        "msg_type,content,kwargs,expected_meta",
+        [
+            (MessageType.INFO, "Test message", {"group": "test"}, {"group": "test"}),
+            (
+                MessageType.DIVIDER,
+                "[dim]" + "─" * 100 + "\n" + "[/dim]",
+                {},
+                {},
+            ),
+            (
+                MessageType.TOOL_OUTPUT,
+                "Tool output",
+                {"tool_name": "test_tool"},
+                {"tool_name": "test_tool"},
+            ),
+            (
+                MessageType.COMMAND_OUTPUT,
+                "Command output",
+                {"command": "ls -la"},
+                {"command": "ls -la"},
+            ),
+            (MessageType.AGENT_REASONING, "Agent reasoning", {}, {}),
+            (MessageType.SYSTEM, "System message", {}, {}),
+        ],
+    )
+    def test_emit_simple_type_content_metadata(
+        self, msg_type, content, kwargs, expected_meta
+    ):
+        """Emitting a single message preserves its type, content, and metadata."""
         self.queue.mark_renderer_active()
 
-        # Use the queue instance directly, not global functions
-        self.queue.emit_simple(MessageType.INFO, "Test message", group="test")
+        self.queue.emit_simple(msg_type, content, **kwargs)
 
-        # Retrieve the message
         message = self.queue.get_nowait()
         assert message is not None
-        assert message.type == MessageType.INFO
-        assert message.content == "Test message"
-        assert message.metadata.get("group") == "test"
-
-    def test_emit_with_group(self):
-        """Test message groups."""
-        self.queue.mark_renderer_active()
-
-        # Emit messages with different groups using queue directly
-        self.queue.emit_simple(MessageType.INFO, "Group A message", group="group_a")
-        self.queue.emit_simple(MessageType.ERROR, "Group B message", group="group_b")
-        self.queue.emit_simple(MessageType.SUCCESS, "No group message")
-
-        # Collect all messages
-        messages = []
-        for _ in range(3):
-            msg = self.queue.get_nowait()
-            if msg is None:
-                break
-            messages.append(msg)
-
-        # Verify groups
-        group_a_msgs = [m for m in messages if m.metadata.get("group") == "group_a"]
-        group_b_msgs = [m for m in messages if m.metadata.get("group") == "group_b"]
-        no_group_msgs = [m for m in messages if "group" not in m.metadata]
-
-        assert len(group_a_msgs) == 1
-        assert len(group_b_msgs) == 1
-        assert len(no_group_msgs) == 1
-
-        assert group_a_msgs[0].content == "Group A message"
-        assert group_b_msgs[0].content == "Group B message"
-        assert no_group_msgs[0].content == "No group message"
+        assert message.type == msg_type
+        assert message.content == content
+        for key, value in expected_meta.items():
+            assert message.metadata.get(key) == value
 
     def test_message_filtering_by_group(self):
-        """Test filtering messages by group."""
+        """Test filtering messages by group, including multiple messages per group."""
         self.queue.mark_renderer_active()
 
         # Add messages to queue directly
@@ -98,6 +96,8 @@ class TestMessagingExtended:
         alpha_contents = [m.content for m in alpha_messages]
         assert "Message 1" in alpha_contents
         assert "Message 3" in alpha_contents
+        assert beta_messages[0].content == "Message 2"
+        assert ungrouped[0].content == "Message 4"
 
     def test_queue_clearing(self):
         """Test clearing the message queue."""
@@ -130,7 +130,7 @@ class TestMessagingExtended:
         assert self.queue.get_nowait() is None
 
     def test_message_rendering_helpers(self):
-        """Test various message rendering helper functions."""
+        """Test that many distinct message types coexist in the queue."""
         self.queue.mark_renderer_active()
 
         # Test different message types directly on queue
@@ -260,19 +260,6 @@ class TestMessagingExtended:
 
         # Test that it's started automatically
         assert queue1._running
-
-    def test_emit_divider(self):
-        """Test divider emission."""
-        self.queue.mark_renderer_active()
-
-        # Create a divider message directly
-        divider_content = "[dim]" + "─" * 100 + "\n" + "[/dim]"
-        self.queue.emit_simple(MessageType.DIVIDER, divider_content)
-
-        message = self.queue.get_nowait()
-        assert message is not None
-        assert message.type == MessageType.DIVIDER
-        assert message.content == divider_content
 
     def test_queue_full_behavior(self):
         """Test queue behavior when full."""

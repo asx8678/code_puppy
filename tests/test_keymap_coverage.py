@@ -27,18 +27,18 @@ from code_puppy.keymap import (
 class TestKeymapConstants:
     """Test keymap constants are properly defined."""
 
-    def test_key_codes_contains_ctrl_keys(self):
+    @pytest.mark.parametrize("key", ["ctrl+c", "ctrl+k", "ctrl+q", "escape"])
+    def test_key_codes_contains_ctrl_keys(self, key):
         """KEY_CODES should contain all ctrl+letter combinations."""
-        assert "ctrl+c" in KEY_CODES
-        assert "ctrl+k" in KEY_CODES
-        assert "ctrl+q" in KEY_CODES
-        assert "escape" in KEY_CODES
+        assert key in KEY_CODES
 
-    def test_key_codes_values_are_control_chars(self):
+    @pytest.mark.parametrize(
+        "key,code",
+        [("ctrl+c", "\x03"), ("ctrl+k", "\x0b"), ("escape", "\x1b")],
+    )
+    def test_key_codes_values_are_control_chars(self, key, code):
         """KEY_CODES values should be control characters."""
-        assert KEY_CODES["ctrl+c"] == "\x03"
-        assert KEY_CODES["ctrl+k"] == "\x0b"
-        assert KEY_CODES["escape"] == "\x1b"
+        assert KEY_CODES[key] == code
 
     def test_valid_cancel_keys_is_subset_of_key_codes(self):
         """All valid cancel keys should exist in KEY_CODES."""
@@ -57,13 +57,10 @@ class TestKeymapError:
         """KeymapError should be an Exception subclass."""
         assert issubclass(KeymapError, Exception)
 
-    def test_keymap_error_with_message(self):
-        """KeymapError should preserve error message."""
+    def test_keymap_error_with_message_and_raisable(self):
+        """KeymapError should preserve its message and be raisable."""
         error = KeymapError("Invalid key configuration")
         assert str(error) == "Invalid key configuration"
-
-    def test_keymap_error_can_be_raised(self):
-        """KeymapError should be raisable."""
         with pytest.raises(KeymapError, match="test error"):
             raise KeymapError("test error")
 
@@ -84,44 +81,26 @@ class TestGetCancelAgentKey:
         # get_value should NOT be called when uvx detection triggers
         mock_get_value.assert_not_called()
 
+    @pytest.mark.parametrize(
+        "config_value,expected",
+        [
+            (None, DEFAULT_CANCEL_AGENT_KEY),
+            ("   ", DEFAULT_CANCEL_AGENT_KEY),  # Whitespace only
+            ("  CTRL+K  ", "ctrl+k"),  # Stripped and lowercased
+        ],
+    )
     @patch("code_puppy.uvx_detection.should_use_alternate_cancel_key")
     @patch("code_puppy.config.get_value")
-    def test_returns_default_when_config_is_none(
-        self, mock_get_value, mock_should_use_alt
+    def test_returns_normalized_config_or_default(
+        self, mock_get_value, mock_should_use_alt, config_value, expected
     ):
-        """Should return default when config value is None."""
+        """Should normalize the configured key, falling back to default."""
         mock_should_use_alt.return_value = False
-        mock_get_value.return_value = None
+        mock_get_value.return_value = config_value
 
         result = get_cancel_agent_key()
 
-        assert result == DEFAULT_CANCEL_AGENT_KEY
-
-    @patch("code_puppy.uvx_detection.should_use_alternate_cancel_key")
-    @patch("code_puppy.config.get_value")
-    def test_returns_default_when_config_is_empty(
-        self, mock_get_value, mock_should_use_alt
-    ):
-        """Should return default when config value is empty string."""
-        mock_should_use_alt.return_value = False
-        mock_get_value.return_value = "   "  # Whitespace only
-
-        result = get_cancel_agent_key()
-
-        assert result == DEFAULT_CANCEL_AGENT_KEY
-
-    @patch("code_puppy.uvx_detection.should_use_alternate_cancel_key")
-    @patch("code_puppy.config.get_value")
-    def test_returns_configured_key_normalized(
-        self, mock_get_value, mock_should_use_alt
-    ):
-        """Should return configured key, stripped and lowercased."""
-        mock_should_use_alt.return_value = False
-        mock_get_value.return_value = "  CTRL+K  "  # With whitespace and uppercase
-
-        result = get_cancel_agent_key()
-
-        assert result == "ctrl+k"
+        assert result == expected
 
 
 class TestValidateCancelAgentKey:
@@ -137,79 +116,47 @@ class TestValidateCancelAgentKey:
 
     @patch("code_puppy.keymap.get_cancel_agent_key")
     def test_invalid_key_raises_keymap_error(self, mock_get_key):
-        """Should raise KeymapError for invalid keys."""
+        """Should raise KeymapError naming the bad key and valid options."""
         mock_get_key.return_value = "ctrl+z"  # Not in VALID_CANCEL_KEYS
 
         with pytest.raises(KeymapError) as exc_info:
             validate_cancel_agent_key()
 
-        assert "ctrl+z" in str(exc_info.value)
-        assert "Invalid cancel_agent_key" in str(exc_info.value)
-
-    @patch("code_puppy.keymap.get_cancel_agent_key")
-    def test_error_message_lists_valid_options(self, mock_get_key):
-        """Error message should list valid key options."""
-        mock_get_key.return_value = "invalid"
-
-        with pytest.raises(KeymapError) as exc_info:
-            validate_cancel_agent_key()
-
         error_msg = str(exc_info.value)
-        # Check that at least some valid keys are mentioned
+        assert "ctrl+z" in error_msg
+        assert "Invalid cancel_agent_key" in error_msg
+        # Error message should list valid key options
         assert "ctrl+c" in error_msg or "ctrl+k" in error_msg
 
 
 class TestCancelAgentUsesSignal:
     """Test cancel_agent_uses_signal function."""
 
+    @pytest.mark.parametrize(
+        "key,expected",
+        [("ctrl+c", True), ("ctrl+k", False), ("ctrl+q", False)],
+    )
     @patch("code_puppy.keymap.get_cancel_agent_key")
-    def test_returns_true_for_ctrl_c(self, mock_get_key):
-        """Should return True when cancel key is ctrl+c."""
-        mock_get_key.return_value = "ctrl+c"
+    def test_returns_true_only_for_ctrl_c(self, mock_get_key, key, expected):
+        """Should return True only when cancel key is ctrl+c."""
+        mock_get_key.return_value = key
 
-        result = cancel_agent_uses_signal()
-
-        assert result is True
-
-    @patch("code_puppy.keymap.get_cancel_agent_key")
-    def test_returns_false_for_ctrl_k(self, mock_get_key):
-        """Should return False when cancel key is ctrl+k."""
-        mock_get_key.return_value = "ctrl+k"
-
-        result = cancel_agent_uses_signal()
-
-        assert result is False
-
-    @patch("code_puppy.keymap.get_cancel_agent_key")
-    def test_returns_false_for_ctrl_q(self, mock_get_key):
-        """Should return False when cancel key is ctrl+q."""
-        mock_get_key.return_value = "ctrl+q"
-
-        result = cancel_agent_uses_signal()
-
-        assert result is False
+        assert cancel_agent_uses_signal() is expected
 
 
 class TestGetCancelAgentCharCode:
     """Test get_cancel_agent_char_code function."""
 
+    @pytest.mark.parametrize(
+        "key,code",
+        [("ctrl+c", "\x03"), ("ctrl+k", "\x0b")],
+    )
     @patch("code_puppy.keymap.get_cancel_agent_key")
-    def test_returns_correct_char_code_for_ctrl_c(self, mock_get_key):
-        """Should return correct character code for ctrl+c."""
-        mock_get_key.return_value = "ctrl+c"
+    def test_returns_correct_char_code(self, mock_get_key, key, code):
+        """Should return correct character code for known keys."""
+        mock_get_key.return_value = key
 
-        result = get_cancel_agent_char_code()
-
-        assert result == "\x03"
-
-    @patch("code_puppy.keymap.get_cancel_agent_key")
-    def test_returns_correct_char_code_for_ctrl_k(self, mock_get_key):
-        """Should return correct character code for ctrl+k."""
-        mock_get_key.return_value = "ctrl+k"
-
-        result = get_cancel_agent_char_code()
-
-        assert result == "\x0b"
+        assert get_cancel_agent_char_code() == code
 
     @patch("code_puppy.keymap.get_cancel_agent_key")
     def test_raises_for_unknown_key(self, mock_get_key):
@@ -226,38 +173,18 @@ class TestGetCancelAgentCharCode:
 class TestGetCancelAgentDisplayName:
     """Test get_cancel_agent_display_name function."""
 
+    @pytest.mark.parametrize(
+        "key,expected",
+        [
+            ("ctrl+c", "Ctrl+C"),
+            ("ctrl+k", "Ctrl+K"),
+            ("escape", "ESCAPE"),
+            ("somekey", "SOMEKEY"),  # Non-ctrl keys uppercased
+        ],
+    )
     @patch("code_puppy.keymap.get_cancel_agent_key")
-    def test_formats_ctrl_c_correctly(self, mock_get_key):
-        """Should format ctrl+c as Ctrl+C."""
-        mock_get_key.return_value = "ctrl+c"
+    def test_formats_display_name(self, mock_get_key, key, expected):
+        """Should format ctrl keys as Ctrl+X and others uppercased."""
+        mock_get_key.return_value = key
 
-        result = get_cancel_agent_display_name()
-
-        assert result == "Ctrl+C"
-
-    @patch("code_puppy.keymap.get_cancel_agent_key")
-    def test_formats_ctrl_k_correctly(self, mock_get_key):
-        """Should format ctrl+k as Ctrl+K."""
-        mock_get_key.return_value = "ctrl+k"
-
-        result = get_cancel_agent_display_name()
-
-        assert result == "Ctrl+K"
-
-    @patch("code_puppy.keymap.get_cancel_agent_key")
-    def test_formats_escape_correctly(self, mock_get_key):
-        """Should format escape as ESCAPE."""
-        mock_get_key.return_value = "escape"
-
-        result = get_cancel_agent_display_name()
-
-        assert result == "ESCAPE"
-
-    @patch("code_puppy.keymap.get_cancel_agent_key")
-    def test_formats_other_keys_uppercase(self, mock_get_key):
-        """Should uppercase non-ctrl keys."""
-        mock_get_key.return_value = "somekey"
-
-        result = get_cancel_agent_display_name()
-
-        assert result == "SOMEKEY"
+        assert get_cancel_agent_display_name() == expected

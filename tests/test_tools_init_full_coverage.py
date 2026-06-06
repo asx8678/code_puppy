@@ -2,6 +2,8 @@
 
 from unittest.mock import MagicMock, patch
 
+import pytest
+
 
 class TestToolRegistry:
     def test_tool_registry_populated(self):
@@ -20,11 +22,6 @@ class TestToolRegistry:
 
 
 class TestLoadPluginTools:
-    def test_load_plugin_tools_success(self):
-        from code_puppy.tools import _load_plugin_tools
-
-        _load_plugin_tools()  # Should not crash
-
     def test_load_plugin_tools_with_result(self):
         from code_puppy.tools import TOOL_REGISTRY, _load_plugin_tools
 
@@ -37,25 +34,20 @@ class TestLoadPluginTools:
             assert "test_plugin_tool" in TOOL_REGISTRY
             del TOOL_REGISTRY["test_plugin_tool"]
 
-    def test_load_plugin_tools_none_result(self):
+    @pytest.mark.parametrize(
+        "on_register_kwargs",
+        [
+            {"return_value": [None]},
+            {"return_value": [[{"invalid": True}]]},
+            {"side_effect": Exception("boom")},
+        ],
+        ids=["none_result", "invalid_tool_def", "exception"],
+    )
+    def test_load_plugin_tools_resilient(self, on_register_kwargs):
         from code_puppy.tools import _load_plugin_tools
 
-        with patch("code_puppy.tools.on_register_tools", return_value=[None]):
-            _load_plugin_tools()
-
-    def test_load_plugin_tools_exception(self):
-        from code_puppy.tools import _load_plugin_tools
-
-        with patch("code_puppy.tools.on_register_tools", side_effect=Exception("boom")):
-            _load_plugin_tools()  # Should not raise
-
-    def test_load_plugin_tools_invalid_tool_def(self):
-        from code_puppy.tools import _load_plugin_tools
-
-        with patch(
-            "code_puppy.tools.on_register_tools", return_value=[[{"invalid": True}]]
-        ):
-            _load_plugin_tools()  # Should not crash
+        with patch("code_puppy.tools.on_register_tools", **on_register_kwargs):
+            _load_plugin_tools()  # Should not raise/crash
 
 
 class TestHasExtendedThinkingActive:
@@ -70,80 +62,31 @@ class TestHasExtendedThinkingActive:
 
         assert has_extended_thinking_active("gpt-4") is False
 
-    def test_anthropic_model_enabled(self):
+    @pytest.mark.parametrize(
+        ("model", "setting", "expected"),
+        [
+            ("claude-3", "enabled", True),
+            ("claude-3", "adaptive", True),
+            ("claude-3", True, True),
+            ("claude-3", False, False),
+            ("anthropic-model", "enabled", True),
+        ],
+        ids=["enabled", "adaptive", "legacy_true", "disabled", "anthropic_prefix"],
+    )
+    def test_anthropic_model(self, model, setting, expected):
         from code_puppy.tools import has_extended_thinking_active
 
         with (
             patch(
                 "code_puppy.config.get_effective_model_settings",
-                return_value={"extended_thinking": "enabled"},
+                return_value={"extended_thinking": setting},
             ),
             patch(
                 "code_puppy.model_utils.get_default_extended_thinking",
                 return_value=False,
             ),
         ):
-            assert has_extended_thinking_active("claude-3") is True
-
-    def test_anthropic_model_adaptive(self):
-        from code_puppy.tools import has_extended_thinking_active
-
-        with (
-            patch(
-                "code_puppy.config.get_effective_model_settings",
-                return_value={"extended_thinking": "adaptive"},
-            ),
-            patch(
-                "code_puppy.model_utils.get_default_extended_thinking",
-                return_value=False,
-            ),
-        ):
-            assert has_extended_thinking_active("claude-3") is True
-
-    def test_anthropic_model_disabled(self):
-        from code_puppy.tools import has_extended_thinking_active
-
-        with (
-            patch(
-                "code_puppy.config.get_effective_model_settings",
-                return_value={"extended_thinking": False},
-            ),
-            patch(
-                "code_puppy.model_utils.get_default_extended_thinking",
-                return_value=False,
-            ),
-        ):
-            assert has_extended_thinking_active("claude-3") is False
-
-    def test_anthropic_model_legacy_true(self):
-        from code_puppy.tools import has_extended_thinking_active
-
-        with (
-            patch(
-                "code_puppy.config.get_effective_model_settings",
-                return_value={"extended_thinking": True},
-            ),
-            patch(
-                "code_puppy.model_utils.get_default_extended_thinking",
-                return_value=False,
-            ),
-        ):
-            assert has_extended_thinking_active("claude-3") is True
-
-    def test_anthropic_prefix(self):
-        from code_puppy.tools import has_extended_thinking_active
-
-        with (
-            patch(
-                "code_puppy.config.get_effective_model_settings",
-                return_value={"extended_thinking": "enabled"},
-            ),
-            patch(
-                "code_puppy.model_utils.get_default_extended_thinking",
-                return_value=False,
-            ),
-        ):
-            assert has_extended_thinking_active("anthropic-model") is True
+            assert has_extended_thinking_active(model) is expected
 
 
 class TestRegisterToolsForAgent:

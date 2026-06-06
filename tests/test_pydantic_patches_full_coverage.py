@@ -1,5 +1,6 @@
 """Full coverage tests for pydantic_patches.py."""
 
+import json
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -31,35 +32,27 @@ class TestPatchUserAgent:
         ua = pydantic_models.get_user_agent()
         assert "Code-Puppy" in ua or "KimiCLI" in ua
 
-    def test_kimi_model_returns_kimi_ua(self):
+    @pytest.mark.parametrize(
+        ("model_kwargs", "expected"),
+        [
+            ({"return_value": "kimi-test"}, "KimiCLI/0.63"),
+            ({"return_value": "gpt-4"}, "Code-Puppy"),
+            ({"side_effect": Exception}, "Code-Puppy"),
+        ],
+        ids=["kimi", "non_kimi", "lookup_exception"],
+    )
+    def test_user_agent_for_model(self, model_kwargs, expected):
         from code_puppy.pydantic_patches import patch_user_agent
 
         patch_user_agent()
         import pydantic_ai.models as pydantic_models
 
-        with patch("code_puppy.config.get_global_model_name", return_value="kimi-test"):
+        with patch("code_puppy.config.get_global_model_name", **model_kwargs):
             ua = pydantic_models.get_user_agent()
-            assert ua == "KimiCLI/0.63"
-
-    def test_non_kimi_returns_code_puppy_ua(self):
-        from code_puppy.pydantic_patches import patch_user_agent
-
-        patch_user_agent()
-        import pydantic_ai.models as pydantic_models
-
-        with patch("code_puppy.config.get_global_model_name", return_value="gpt-4"):
-            ua = pydantic_models.get_user_agent()
-            assert "Code-Puppy" in ua
-
-    def test_get_model_name_exception(self):
-        from code_puppy.pydantic_patches import patch_user_agent
-
-        patch_user_agent()
-        import pydantic_ai.models as pydantic_models
-
-        with patch("code_puppy.config.get_global_model_name", side_effect=Exception):
-            ua = pydantic_models.get_user_agent()
-            assert "Code-Puppy" in ua
+            if expected == "KimiCLI/0.63":
+                assert ua == expected
+            else:
+                assert expected in ua
 
     def test_patch_user_agent_import_failure(self):
         """Should not crash if pydantic_ai.models is not importable."""
@@ -162,8 +155,6 @@ class TestWritebackToolArgs:
         tool_args = {"content": "mutated"}
         _writeback_tool_args(call, tool_args, "str")
         assert isinstance(call.args, str)
-        import json
-
         assert json.loads(call.args) == {"content": "mutated"}
 
     def test_dict_mode_assigns_dict_directly(self):
@@ -176,29 +167,6 @@ class TestWritebackToolArgs:
         assert call.args == {"x": 2}
         assert call.args is tool_args
 
-    def test_none_mode_is_noop(self):
-        from code_puppy.pydantic_patches import _writeback_tool_args
-
-        call = self._make_call("\u00f1ot json at all")
-        _writeback_tool_args(call, {"would": "corrupt"}, None)
-        assert call.args == "\u00f1ot json at all"
-
-    def test_swallows_serialization_errors(self):
-        from code_puppy.pydantic_patches import _writeback_tool_args
-
-        call = self._make_call('{"a": 1}')
-        # A set is not JSON-serializable. Should not raise.
-        _writeback_tool_args(call, {"bad": {1, 2, 3}}, "str")
-        # Best effort: original args remain untouched on failure.
-        assert call.args == '{"a": 1}'
-
-    def test_unknown_mode_is_noop(self):
-        from code_puppy.pydantic_patches import _writeback_tool_args
-
-        call = self._make_call('{"a": 1}')
-        _writeback_tool_args(call, {"a": 2}, "something-else")
-        assert call.args == '{"a": 1}'
-
     def test_str_mode_preserves_unicode(self):
         """Emoji content (our motivating use case) must round-trip safely."""
         from code_puppy.pydantic_patches import _writeback_tool_args
@@ -206,9 +174,27 @@ class TestWritebackToolArgs:
         call = self._make_call('{"content": "old \\ud83d\\udc36"}')
         tool_args = {"content": "clean ascii"}
         _writeback_tool_args(call, tool_args, "str")
-        import json
-
         assert json.loads(call.args) == {"content": "clean ascii"}
+
+    @pytest.mark.parametrize(
+        ("original_args", "tool_args", "mode"),
+        [
+            # None mode: no writeback at all, even for non-JSON args.
+            ("ñot json at all", {"would": "corrupt"}, None),
+            # Unknown mode: unrecognized mode is a no-op.
+            ('{"a": 1}', {"a": 2}, "something-else"),
+            # str mode but unserializable payload: best-effort, swallow error.
+            ('{"a": 1}', {"bad": {1, 2, 3}}, "str"),
+        ],
+        ids=["none_mode_noop", "unknown_mode_noop", "swallows_serialization_errors"],
+    )
+    def test_args_unchanged(self, original_args, tool_args, mode):
+        from code_puppy.pydantic_patches import _writeback_tool_args
+
+        call = self._make_call(original_args)
+        # Must not raise; original args must remain untouched.
+        _writeback_tool_args(call, tool_args, mode)
+        assert call.args == original_args
 
 
 class TestApplyAllPatches:
@@ -227,17 +213,26 @@ class TestClaudeCodeToolPrefixGating:
     a non-claude-code model (e.g. ``custom_anthropic``) was active.
     """
 
-    def _install_patch(self):
-        """Install the tool-call patch and return the patched ToolManager class."""
+    @pytest.mark.parametrize(
+        ("model_kwargs", "expected"),
+        [
+            # claude-code active: prefix should be stripped.
+            ({"return_value": "claude-code-claude-opus-4-7"}, ["read_file"]),
+            # non-claude-code: prefix must be preserved verbatim.
+            ({"return_value": "some-custom-anthropic-model"}, ["cp_read_file"]),
+            # model lookup fails: defensive default is NOT to strip.
+            (
+                {"side_effect": RuntimeError("config not initialised")},
+                ["cp_read_file"],
+            ),
+        ],
+        ids=["claude_code_active", "custom_anthropic_active", "model_lookup_fails"],
+    )
+    def test_prefix_gating(self, model_kwargs, expected):
         from code_puppy.pydantic_patches import patch_tool_call_callbacks
 
         patch_tool_call_callbacks()
         from pydantic_ai._tool_manager import ToolManager
-
-        return ToolManager
-
-    def test_unprefix_when_claude_code_active(self):
-        ToolManager = self._install_patch()
 
         seen_names: list = []
 
@@ -250,80 +245,13 @@ class TestClaudeCodeToolPrefixGating:
                 "pydantic_ai._tool_manager.ToolManager.get_tool_def",
                 fake_lookup,
             ),
-            patch(
-                "code_puppy.config.get_global_model_name",
-                return_value="claude-code-claude-opus-4-7",
-            ),
+            patch("code_puppy.config.get_global_model_name", **model_kwargs),
         ):
             # Re-apply patch so it captures our fake _original_get_tool_def
-            from code_puppy.pydantic_patches import patch_tool_call_callbacks
-
             patch_tool_call_callbacks()
             mgr = ToolManager.__new__(ToolManager)
             ToolManager.get_tool_def(mgr, "cp_read_file")
 
-        assert seen_names == ["read_file"], (
-            f"claude-code active: prefix should be stripped, got {seen_names}"
+        assert seen_names == expected, (
+            f"model_kwargs={model_kwargs}: expected {expected}, got {seen_names}"
         )
-
-    def test_no_unprefix_when_custom_anthropic_active(self):
-        ToolManager = self._install_patch()
-
-        seen_names: list = []
-
-        def fake_lookup(self, name):
-            seen_names.append(name)
-            return None
-
-        with (
-            patch(
-                "pydantic_ai._tool_manager.ToolManager.get_tool_def",
-                fake_lookup,
-            ),
-            patch(
-                "code_puppy.config.get_global_model_name",
-                return_value="some-custom-anthropic-model",
-            ),
-        ):
-            from code_puppy.pydantic_patches import patch_tool_call_callbacks
-
-            patch_tool_call_callbacks()
-            mgr = ToolManager.__new__(ToolManager)
-            # A tool whose real name legitimately begins with ``cp_``
-            ToolManager.get_tool_def(mgr, "cp_read_file")
-
-        assert seen_names == ["cp_read_file"], (
-            f"non-claude-code: prefix must be preserved verbatim, got {seen_names}"
-        )
-
-    def test_no_unprefix_when_model_lookup_fails(self):
-        """If the model name can't be determined, default to NOT stripping.
-
-        Defensive default: it's better to fail a claude-code tool lookup than to
-        silently mangle a legitimately-prefixed tool name for another model.
-        """
-        ToolManager = self._install_patch()
-
-        seen_names: list = []
-
-        def fake_lookup(self, name):
-            seen_names.append(name)
-            return None
-
-        def boom():
-            raise RuntimeError("config not initialised")
-
-        with (
-            patch(
-                "pydantic_ai._tool_manager.ToolManager.get_tool_def",
-                fake_lookup,
-            ),
-            patch("code_puppy.config.get_global_model_name", side_effect=boom),
-        ):
-            from code_puppy.pydantic_patches import patch_tool_call_callbacks
-
-            patch_tool_call_callbacks()
-            mgr = ToolManager.__new__(ToolManager)
-            ToolManager.get_tool_def(mgr, "cp_read_file")
-
-        assert seen_names == ["cp_read_file"]

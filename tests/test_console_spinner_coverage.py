@@ -23,17 +23,35 @@ def mock_spinner_registration():
         yield
 
 
+def _started_spinner(mock_console):
+    """Start a spinner with Live and panel patched; return (spinner, mock_live_cls)."""
+    from code_puppy.messaging.spinner.console_spinner import ConsoleSpinner
+
+    spinner = ConsoleSpinner(console=mock_console)
+    patches = (
+        patch("code_puppy.messaging.spinner.console_spinner.Live"),
+        patch.object(spinner, "_generate_spinner_panel", return_value=Text("test")),
+    )
+    with patches[0] as mock_live_cls, patches[1]:
+        mock_live_cls.return_value = MagicMock()
+        spinner.start()
+    return spinner, mock_live_cls
+
+
 class TestConsoleSpinnerInit:
     """Tests for ConsoleSpinner initialization."""
 
-    def test_init_creates_console_if_not_provided(self):
-        """Test that a Console is created when none is provided."""
+    def test_init_console_and_default_state(self):
+        """Default-constructed spinner creates a Console and sets default state."""
         from code_puppy.messaging.spinner.console_spinner import ConsoleSpinner
 
         spinner = ConsoleSpinner()
 
-        assert spinner.console is not None
         assert isinstance(spinner.console, Console)
+        assert spinner._thread is None
+        assert spinner._paused is False
+        assert spinner._live is None
+        assert spinner._is_spinning is False
 
     def test_init_uses_provided_console(self):
         """Test that provided console is used."""
@@ -43,17 +61,6 @@ class TestConsoleSpinnerInit:
         spinner = ConsoleSpinner(console=mock_console)
 
         assert spinner.console is mock_console
-
-    def test_init_sets_default_state(self):
-        """Test initialization sets correct default state."""
-        from code_puppy.messaging.spinner.console_spinner import ConsoleSpinner
-
-        spinner = ConsoleSpinner()
-
-        assert spinner._thread is None
-        assert spinner._paused is False
-        assert spinner._live is None
-        assert spinner._is_spinning is False
 
     def test_init_registers_spinner(self):
         """Test that spinner is registered on init."""
@@ -68,105 +75,22 @@ class TestConsoleSpinnerInit:
 class TestConsoleSpinnerStart:
     """Tests for ConsoleSpinner.start() method."""
 
-    def test_start_sets_spinning_state(self):
-        """Test that start() sets is_spinning to True."""
-        from code_puppy.messaging.spinner.console_spinner import ConsoleSpinner
-
+    def test_start_sets_up_live_thread_and_state(self):
+        """start() sets spinning state, clears stop event, creates Live + daemon thread."""
         mock_console = MagicMock(spec=Console)
-        spinner = ConsoleSpinner(console=mock_console)
+        spinner, mock_live_cls = _started_spinner(mock_console)
+        time.sleep(0.1)  # let thread start
 
-        with (
-            patch("code_puppy.messaging.spinner.console_spinner.Live") as mock_live_cls,
-            patch.object(spinner, "_generate_spinner_panel", return_value=Text("test")),
-        ):
-            mock_live = MagicMock()
-            mock_live_cls.return_value = mock_live
-            spinner.start()
-
-        assert spinner._is_spinning is True
-        spinner._stop_event.set()  # Stop the thread
-        time.sleep(0.1)
-
-    def test_start_clears_stop_event(self):
-        """Test that start() clears the stop event."""
-        from code_puppy.messaging.spinner.console_spinner import ConsoleSpinner
-
-        mock_console = MagicMock(spec=Console)
-        spinner = ConsoleSpinner(console=mock_console)
-        spinner._stop_event.set()  # Set it first
-
-        with (
-            patch("code_puppy.messaging.spinner.console_spinner.Live") as mock_live_cls,
-            patch.object(spinner, "_generate_spinner_panel", return_value=Text("test")),
-        ):
-            mock_live = MagicMock()
-            mock_live_cls.return_value = mock_live
-            spinner.start()
-
-        # Will be cleared by start()
-        # Note: The thread will run so we need to stop it
-        spinner._stop_event.set()
-        time.sleep(0.1)
-
-    def test_start_creates_live_display(self):
-        """Test that start() creates a Live display."""
-        from code_puppy.messaging.spinner.console_spinner import ConsoleSpinner
-
-        mock_console = MagicMock(spec=Console)
-        spinner = ConsoleSpinner(console=mock_console)
-
-        with (
-            patch("code_puppy.messaging.spinner.console_spinner.Live") as mock_live_cls,
-            patch.object(spinner, "_generate_spinner_panel", return_value=Text("test")),
-        ):
-            mock_live = MagicMock()
-            mock_live_cls.return_value = mock_live
-            spinner.start()
-
-        mock_live_cls.assert_called_once()
-        mock_live.start.assert_called_once()
-        spinner._stop_event.set()
-        time.sleep(0.1)
-
-    def test_start_prints_blank_line(self):
-        """Test that start() prints blank line for visual separation."""
-        from code_puppy.messaging.spinner.console_spinner import ConsoleSpinner
-
-        mock_console = MagicMock(spec=Console)
-        spinner = ConsoleSpinner(console=mock_console)
-
-        with (
-            patch("code_puppy.messaging.spinner.console_spinner.Live") as mock_live_cls,
-            patch.object(spinner, "_generate_spinner_panel", return_value=Text("test")),
-        ):
-            mock_live = MagicMock()
-            mock_live_cls.return_value = mock_live
-            spinner.start()
-
-        mock_console.print.assert_called()
-        spinner._stop_event.set()
-        time.sleep(0.1)
-
-    def test_start_creates_daemon_thread(self):
-        """Test that start() creates a daemon thread."""
-        from code_puppy.messaging.spinner.console_spinner import ConsoleSpinner
-
-        mock_console = MagicMock(spec=Console)
-        spinner = ConsoleSpinner(console=mock_console)
-
-        with (
-            patch("code_puppy.messaging.spinner.console_spinner.Live") as mock_live_cls,
-            patch.object(spinner, "_generate_spinner_panel", return_value=Text("test")),
-        ):
-            mock_live = MagicMock()
-            mock_live_cls.return_value = mock_live
-            spinner.start()
-            time.sleep(0.1)  # Let thread start
-
-        assert spinner._thread is not None
-        assert spinner._thread.daemon is True
-        spinner._stop_event.set()
-        spinner._thread.join(timeout=0.5)
+        try:
+            assert spinner._is_spinning is True
+            mock_live_cls.assert_called_once()
+            mock_live_cls.return_value.start.assert_called_once()
+            mock_console.print.assert_called()  # blank line for separation
+            assert spinner._thread is not None
+            assert spinner._thread.daemon is True
+        finally:
+            spinner._stop_event.set()
+            spinner._thread.join(timeout=0.5)
 
     def test_start_does_not_create_thread_if_already_running(self):
         """Test that start() doesn't create new thread if one exists."""
@@ -204,32 +128,8 @@ class TestConsoleSpinnerStop:
         # Should not try to unregister if not spinning
         mock_unreg.assert_not_called()
 
-    def test_stop_sets_stop_event(self):
-        """Test that stop() sets the stop event."""
-        from code_puppy.messaging.spinner.console_spinner import ConsoleSpinner
-
-        mock_console = MagicMock(spec=Console)
-        spinner = ConsoleSpinner(console=mock_console)
-        spinner._is_spinning = True
-
-        spinner.stop()
-
-        assert spinner._stop_event.is_set()
-
-    def test_stop_sets_is_spinning_false(self):
-        """Test that stop() sets is_spinning to False."""
-        from code_puppy.messaging.spinner.console_spinner import ConsoleSpinner
-
-        mock_console = MagicMock(spec=Console)
-        spinner = ConsoleSpinner(console=mock_console)
-        spinner._is_spinning = True
-
-        spinner.stop()
-
-        assert spinner._is_spinning is False
-
-    def test_stop_stops_live_display(self):
-        """Test that stop() stops the Live display."""
+    def test_stop_sets_state_stops_live_joins_thread_and_unregisters(self):
+        """stop() sets stop event, flips spinning flag, stops Live, joins thread, unregisters."""
         from code_puppy.messaging.spinner.console_spinner import ConsoleSpinner
 
         mock_console = MagicMock(spec=Console)
@@ -237,39 +137,19 @@ class TestConsoleSpinnerStop:
         spinner._is_spinning = True
         mock_live = MagicMock()
         spinner._live = mock_live
-
-        spinner.stop()
-
-        mock_live.stop.assert_called_once()
-        assert spinner._live is None
-
-    def test_stop_joins_thread(self):
-        """Test that stop() joins the thread."""
-        from code_puppy.messaging.spinner.console_spinner import ConsoleSpinner
-
-        mock_console = MagicMock(spec=Console)
-        spinner = ConsoleSpinner(console=mock_console)
-        spinner._is_spinning = True
         mock_thread = MagicMock()
         mock_thread.is_alive.return_value = True
         spinner._thread = mock_thread
 
-        spinner.stop()
-
-        mock_thread.join.assert_called_once_with(timeout=0.5)
-        assert spinner._thread is None
-
-    def test_stop_unregisters_spinner(self):
-        """Test that stop() unregisters the spinner."""
-        from code_puppy.messaging.spinner.console_spinner import ConsoleSpinner
-
-        mock_console = MagicMock(spec=Console)
-        spinner = ConsoleSpinner(console=mock_console)
-        spinner._is_spinning = True
-
         with patch("code_puppy.messaging.spinner.unregister_spinner") as mock_unreg:
             spinner.stop()
 
+        assert spinner._stop_event.is_set()
+        assert spinner._is_spinning is False
+        mock_live.stop.assert_called_once()
+        assert spinner._live is None
+        mock_thread.join.assert_called_once_with(timeout=0.5)
+        assert spinner._thread is None
         mock_unreg.assert_called_once_with(spinner)
 
     def test_stop_windows_cleanup(self):
@@ -317,68 +197,50 @@ class TestConsoleSpinnerStop:
 class TestConsoleSpinnerUpdateFrame:
     """Tests for update_frame method."""
 
-    def test_update_frame_advances_index(self):
-        """Test that update_frame advances the frame index."""
-        from code_puppy.messaging.spinner.console_spinner import ConsoleSpinner
-
-        spinner = ConsoleSpinner(console=MagicMock())
-        spinner._is_spinning = True
-        spinner._frame_index = 0
-
-        spinner.update_frame()
-
-        assert spinner._frame_index == 1
-
-    def test_update_frame_wraps_around(self):
-        """Test that update_frame wraps around at end of frames."""
+    @pytest.mark.parametrize("start_offset", [0, -1])
+    def test_update_frame_advances_and_wraps(self, start_offset):
+        """update_frame advances the index and wraps around at the end of frames."""
         from code_puppy.messaging.spinner.console_spinner import ConsoleSpinner
         from code_puppy.messaging.spinner.spinner_base import SpinnerBase
 
+        num_frames = len(SpinnerBase.FRAMES)
+        start_index = start_offset % num_frames
         spinner = ConsoleSpinner(console=MagicMock())
         spinner._is_spinning = True
-        spinner._frame_index = len(SpinnerBase.FRAMES) - 1
+        spinner._frame_index = start_index
 
         spinner.update_frame()
 
-        assert spinner._frame_index == 0
+        assert spinner._frame_index == (start_index + 1) % num_frames
 
 
 class TestConsoleSpinnerGeneratePanel:
     """Tests for _generate_spinner_panel method."""
 
-    def test_generate_panel_when_paused_returns_empty(self):
-        """Test that paused spinner returns empty Text."""
+    @pytest.mark.parametrize(
+        "paused, awaiting",
+        [(True, False), (False, True)],
+    )
+    def test_generate_panel_returns_empty_when_inactive(self, paused, awaiting):
+        """Paused or awaiting-input spinner returns empty Text."""
         from code_puppy.messaging.spinner.console_spinner import ConsoleSpinner
 
         spinner = ConsoleSpinner(console=MagicMock())
-        spinner._paused = True
+        spinner._paused = paused
 
         with patch(
-            "code_puppy.tools.command_runner.is_awaiting_user_input", return_value=False
+            "code_puppy.tools.command_runner.is_awaiting_user_input",
+            return_value=awaiting,
         ):
             result = spinner._generate_spinner_panel()
 
         assert isinstance(result, Text)
         assert str(result) == ""
 
-    def test_generate_panel_when_awaiting_input_returns_empty(self):
-        """Test that spinner returns empty when awaiting user input."""
+    def test_generate_panel_includes_thinking_and_current_frame(self):
+        """Panel includes the thinking message and the current spinner frame."""
         from code_puppy.messaging.spinner.console_spinner import ConsoleSpinner
-
-        spinner = ConsoleSpinner(console=MagicMock())
-        spinner._paused = False
-
-        with patch(
-            "code_puppy.tools.command_runner.is_awaiting_user_input", return_value=True
-        ):
-            result = spinner._generate_spinner_panel()
-
-        assert isinstance(result, Text)
-        assert str(result) == ""
-
-    def test_generate_panel_includes_thinking_message(self):
-        """Test that panel includes thinking message."""
-        from code_puppy.messaging.spinner.console_spinner import ConsoleSpinner
+        from code_puppy.messaging.spinner.spinner_base import SpinnerBase
 
         spinner = ConsoleSpinner(console=MagicMock())
         spinner._paused = False
@@ -391,26 +253,17 @@ class TestConsoleSpinnerGeneratePanel:
 
         result_str = str(result)
         assert "thinking" in result_str.lower()
-
-    def test_generate_panel_includes_current_frame(self):
-        """Test that panel includes current spinner frame."""
-        from code_puppy.messaging.spinner.console_spinner import ConsoleSpinner
-        from code_puppy.messaging.spinner.spinner_base import SpinnerBase
-
-        spinner = ConsoleSpinner(console=MagicMock())
-        spinner._paused = False
-        spinner._frame_index = 0
-
-        with patch(
-            "code_puppy.tools.command_runner.is_awaiting_user_input", return_value=False
-        ):
-            result = spinner._generate_spinner_panel()
-
-        result_str = str(result)
         assert SpinnerBase.FRAMES[0] in result_str
 
-    def test_generate_panel_includes_context_info(self):
-        """Test that panel includes context info when set."""
+    @pytest.mark.parametrize(
+        "context_info, expected_substr",
+        [
+            ("Tokens: 1,000/10,000 (10.0% used)", "Tokens"),
+            ("", None),
+        ],
+    )
+    def test_generate_panel_context_info(self, context_info, expected_substr):
+        """Panel includes context info when present and stays valid Text when empty."""
         from code_puppy.messaging.spinner.console_spinner import ConsoleSpinner
         from code_puppy.messaging.spinner.spinner_base import SpinnerBase
 
@@ -423,37 +276,13 @@ class TestConsoleSpinnerGeneratePanel:
                 "code_puppy.tools.command_runner.is_awaiting_user_input",
                 return_value=False,
             ),
-            patch.object(
-                SpinnerBase,
-                "get_context_info",
-                return_value="Tokens: 1,000/10,000 (10.0% used)",
-            ),
+            patch.object(SpinnerBase, "get_context_info", return_value=context_info),
         ):
             result = spinner._generate_spinner_panel()
 
-        result_str = str(result)
-        assert "Tokens" in result_str
-
-    def test_generate_panel_no_context_info(self):
-        """Test panel without context info."""
-        from code_puppy.messaging.spinner.console_spinner import ConsoleSpinner
-        from code_puppy.messaging.spinner.spinner_base import SpinnerBase
-
-        spinner = ConsoleSpinner(console=MagicMock())
-        spinner._paused = False
-        spinner._frame_index = 0
-
-        with (
-            patch(
-                "code_puppy.tools.command_runner.is_awaiting_user_input",
-                return_value=False,
-            ),
-            patch.object(SpinnerBase, "get_context_info", return_value=""),
-        ):
-            result = spinner._generate_spinner_panel()
-
-        # Should still generate valid Text
         assert isinstance(result, Text)
+        if expected_substr is not None:
+            assert expected_substr in str(result)
 
 
 class TestConsoleSpinnerUpdateSpinner:
@@ -498,12 +327,16 @@ class TestConsoleSpinnerUpdateSpinner:
 
         assert call_count >= 2
 
-    def test_update_spinner_skips_update_when_paused(self):
-        """Test that _update_spinner skips display update when paused."""
+    @pytest.mark.parametrize(
+        "paused, awaiting",
+        [(True, False), (False, True)],
+    )
+    def test_update_spinner_skips_update_when_inactive(self, paused, awaiting):
+        """_update_spinner skips the display update when paused or awaiting input."""
         from code_puppy.messaging.spinner.console_spinner import ConsoleSpinner
 
         spinner = ConsoleSpinner(console=MagicMock())
-        spinner._paused = True
+        spinner._paused = paused
         spinner._live = MagicMock()
         call_count = 0
 
@@ -517,39 +350,12 @@ class TestConsoleSpinnerUpdateSpinner:
             patch.object(spinner, "update_frame", side_effect=stop_after_calls),
             patch(
                 "code_puppy.tools.command_runner.is_awaiting_user_input",
-                return_value=False,
+                return_value=awaiting,
             ),
         ):
             spinner._update_spinner()
 
-        # Should not update live display when paused
-        spinner._live.update.assert_not_called()
-
-    def test_update_spinner_skips_when_awaiting_input(self):
-        """Test that _update_spinner skips display update when awaiting input."""
-        from code_puppy.messaging.spinner.console_spinner import ConsoleSpinner
-
-        spinner = ConsoleSpinner(console=MagicMock())
-        spinner._paused = False
-        spinner._live = MagicMock()
-        call_count = 0
-
-        def stop_after_calls():
-            nonlocal call_count
-            call_count += 1
-            if call_count >= 1:
-                spinner._stop_event.set()
-
-        with (
-            patch.object(spinner, "update_frame", side_effect=stop_after_calls),
-            patch(
-                "code_puppy.tools.command_runner.is_awaiting_user_input",
-                return_value=True,
-            ),
-        ):
-            spinner._update_spinner()
-
-        # Should not update live display when awaiting input
+        # Should not update live display when inactive
         spinner._live.update.assert_not_called()
 
     def test_update_spinner_handles_exception(self):
@@ -577,48 +383,23 @@ class TestConsoleSpinnerUpdateSpinner:
 class TestConsoleSpinnerPause:
     """Tests for pause method."""
 
-    def test_pause_sets_paused_flag(self):
-        """Test that pause sets the paused flag."""
-        from code_puppy.messaging.spinner.console_spinner import ConsoleSpinner
-
-        spinner = ConsoleSpinner(console=MagicMock())
-        spinner._is_spinning = True
-
-        spinner.pause()
-
-        assert spinner._paused is True
-
-    def test_pause_stops_live_display(self):
-        """Test that pause stops the live display."""
+    def test_pause_sets_flag_stops_live_and_clears_line(self):
+        """pause() sets the paused flag, stops the live display, and clears the line."""
         from code_puppy.messaging.spinner.console_spinner import ConsoleSpinner
 
         spinner = ConsoleSpinner(console=MagicMock())
         spinner._is_spinning = True
         mock_live = MagicMock()
         spinner._live = mock_live
-
-        with patch.object(sys, "stdout"):
-            spinner.pause()
-
-        mock_live.stop.assert_called_once()
-        assert spinner._live is None
-
-    def test_pause_clears_line(self):
-        """Test that pause clears the terminal line."""
-        from code_puppy.messaging.spinner.console_spinner import ConsoleSpinner
-
-        spinner = ConsoleSpinner(console=MagicMock())
-        spinner._is_spinning = True
-        mock_live = MagicMock()
-        spinner._live = mock_live
-
         mock_stdout = MagicMock()
 
         with patch.object(sys, "stdout", mock_stdout):
             spinner.pause()
 
-        # Should write cursor/line clear codes
-        mock_stdout.write.assert_called()
+        assert spinner._paused is True
+        mock_live.stop.assert_called_once()
+        assert spinner._live is None
+        mock_stdout.write.assert_called()  # cursor/line clear codes
 
     def test_pause_does_nothing_when_not_spinning(self):
         """Test that pause does nothing when not spinning."""

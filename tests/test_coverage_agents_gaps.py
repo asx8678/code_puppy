@@ -156,20 +156,16 @@ class TestDisplaySubagentSkip:
 
 
 class TestInitVersionFallback:
-    def test_version_fallback_on_exception(self):
-        """Cover lines 8-10: exception branch."""
-        with patch("importlib.metadata.version", side_effect=Exception("nope")):
-            # Re-exec the module code
-            import importlib
-
-            import code_puppy
-
-            importlib.reload(code_puppy)
-            assert code_puppy.__version__ == "0.0.0-dev"
-
-    def test_version_fallback_on_empty(self):
-        """Cover the empty-string branch."""
-        with patch("importlib.metadata.version", return_value=""):
+    @pytest.mark.parametrize(
+        "patch_kwargs",
+        [
+            {"side_effect": Exception("nope")},  # exception branch (lines 8-10)
+            {"return_value": ""},  # empty-string branch
+        ],
+    )
+    def test_version_fallback(self, patch_kwargs):
+        """Cover both the exception and empty-string fallback branches."""
+        with patch("importlib.metadata.version", **patch_kwargs):
             import importlib
 
             import code_puppy

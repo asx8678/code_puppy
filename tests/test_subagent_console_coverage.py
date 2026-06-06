@@ -28,6 +28,17 @@ from code_puppy.messaging.subagent_console import (
     get_subagent_console_manager,
 )
 
+ALL_STATUSES = [
+    "starting",
+    "running",
+    "thinking",
+    "tool_calling",
+    "completed",
+    "error",
+]
+REQUIRED_STYLE_KEYS = {"color", "spinner", "emoji"}
+
+
 # =============================================================================
 # AgentState Tests
 # =============================================================================
@@ -118,34 +129,25 @@ class TestAgentStateElapsedTime:
         seconds = float(formatted.rstrip("s"))
         assert 29.5 <= seconds <= 32.0
 
-    def test_elapsed_formatted_with_minutes(self):
-        """Test elapsed_formatted for durations over 60 seconds."""
-        # Set start_time to 90 seconds ago (1m 30s)
-        start = time.time() - 90.0
+    @pytest.mark.parametrize(
+        "ago, prefix",
+        [
+            (90.0, "1m"),  # 1m 30s
+            (185.0, "3m"),  # 3m 5s
+        ],
+    )
+    def test_elapsed_formatted_with_minutes(self, ago, prefix):
+        """Test elapsed_formatted includes minutes for durations over 60s."""
         state = AgentState(
             session_id="test",
             agent_name="agent",
             model_name="model",
-            start_time=start,
+            start_time=time.time() - ago,
         )
         formatted = state.elapsed_formatted()
-        # Should be like "1m 30.0s"
         assert "m" in formatted
         assert "s" in formatted
-        assert formatted.startswith("1m")
-
-    def test_elapsed_formatted_multiple_minutes(self):
-        """Test elapsed_formatted for longer durations."""
-        # Set start_time to 185 seconds ago (3m 5s)
-        start = time.time() - 185.0
-        state = AgentState(
-            session_id="test",
-            agent_name="agent",
-            model_name="model",
-            start_time=start,
-        )
-        formatted = state.elapsed_formatted()
-        assert "3m" in formatted
+        assert formatted.startswith(prefix)
 
 
 class TestAgentStateToStatusMessage:
@@ -564,97 +566,47 @@ class TestRendering:
         result = self.manager._render_display()
         assert isinstance(result, Group)
 
-    def test_render_agent_panel_basic(self):
-        """Test _render_agent_panel with basic agent."""
+    @pytest.mark.parametrize(
+        "kwargs",
+        [
+            # basic running agent
+            {"status": "running"},
+            # with current tool + call count
+            {
+                "status": "tool_calling",
+                "current_tool": "read_file",
+                "tool_call_count": 3,
+            },
+            # with error message
+            {"status": "error", "error_message": "Something went wrong!"},
+            # long session id (truncation path)
+            {"session_id": "this-is-a-very-long-session-id-that-exceeds-24-chars"},
+            # with token count
+            {"token_count": 15000},
+            # unknown status uses default style
+            {"status": "unknown_status"},
+        ],
+    )
+    def test_render_agent_panel_variants(self, kwargs):
+        """Test _render_agent_panel returns a Panel across field variations."""
         state = AgentState(
-            session_id="sess-123",
+            session_id=kwargs.pop("session_id", "sess-123"),
             agent_name="test-agent",
             model_name="gpt-4o",
-            status="running",
+            **kwargs,
         )
-
         panel = self.manager._render_agent_panel(state)
         assert isinstance(panel, Panel)
 
-    def test_render_agent_panel_with_tool(self):
-        """Test _render_agent_panel with current_tool."""
-        state = AgentState(
-            session_id="sess-123",
-            agent_name="test-agent",
-            model_name="gpt-4o",
-            status="tool_calling",
-            current_tool="read_file",
-            tool_call_count=3,
-        )
-
-        panel = self.manager._render_agent_panel(state)
-        assert isinstance(panel, Panel)
-
-    def test_render_agent_panel_with_error(self):
-        """Test _render_agent_panel with error message."""
-        state = AgentState(
-            session_id="sess-123",
-            agent_name="test-agent",
-            model_name="gpt-4o",
-            status="error",
-            error_message="Something went wrong!",
-        )
-
-        panel = self.manager._render_agent_panel(state)
-        assert isinstance(panel, Panel)
-
-    def test_render_agent_panel_long_session_id(self):
-        """Test _render_agent_panel truncates long session IDs."""
-        state = AgentState(
-            session_id="this-is-a-very-long-session-id-that-exceeds-24-chars",
-            agent_name="test-agent",
-            model_name="gpt-4o",
-        )
-
-        panel = self.manager._render_agent_panel(state)
-        assert isinstance(panel, Panel)
-
-    def test_render_agent_panel_with_tokens(self):
-        """Test _render_agent_panel with token count."""
-        state = AgentState(
-            session_id="sess-123",
-            agent_name="test-agent",
-            model_name="gpt-4o",
-            token_count=15000,
-        )
-
-        panel = self.manager._render_agent_panel(state)
-        assert isinstance(panel, Panel)
-
-    def test_render_agent_panel_all_statuses(self):
+    @pytest.mark.parametrize("status", ALL_STATUSES)
+    def test_render_agent_panel_all_statuses(self, status):
         """Test rendering panels for all status types."""
-        for status in [
-            "starting",
-            "running",
-            "thinking",
-            "tool_calling",
-            "completed",
-            "error",
-        ]:
-            state = AgentState(
-                session_id=f"sess-{status}",
-                agent_name="test-agent",
-                model_name="gpt-4o",
-                status=status,
-            )
-            panel = self.manager._render_agent_panel(state)
-            assert isinstance(panel, Panel)
-
-    def test_render_agent_panel_unknown_status(self):
-        """Test rendering with unknown status uses default style."""
         state = AgentState(
-            session_id="sess-123",
+            session_id=f"sess-{status}",
             agent_name="test-agent",
             model_name="gpt-4o",
+            status=status,
         )
-        # Force an unknown status by directly setting it
-        state.status = "unknown_status"
-
         panel = self.manager._render_agent_panel(state)
         assert isinstance(panel, Panel)
 
@@ -718,21 +670,17 @@ class TestConvenienceFunction:
         SubAgentConsoleManager.reset_instance()
 
     def test_get_subagent_console_manager_returns_singleton(self):
-        """Test that get_subagent_console_manager returns singleton."""
+        """Test that get_subagent_console_manager returns a typed singleton."""
         manager1 = get_subagent_console_manager()
         manager2 = get_subagent_console_manager()
         assert manager1 is manager2
+        assert isinstance(manager1, SubAgentConsoleManager)
 
     def test_get_subagent_console_manager_with_console(self):
         """Test get_subagent_console_manager with custom console."""
         mock_console = Mock(spec=Console)
         manager = get_subagent_console_manager(console=mock_console)
         assert manager.console is mock_console
-
-    def test_get_subagent_console_manager_returns_correct_type(self):
-        """Test return type is SubAgentConsoleManager."""
-        manager = get_subagent_console_manager()
-        assert isinstance(manager, SubAgentConsoleManager)
 
 
 # =============================================================================
@@ -745,26 +693,17 @@ class TestStatusStyles:
 
     def test_status_styles_contains_all_statuses(self):
         """Test STATUS_STYLES has all expected statuses."""
-        expected_statuses = {
-            "starting",
-            "running",
-            "thinking",
-            "tool_calling",
-            "completed",
-            "error",
-        }
-        assert set(STATUS_STYLES.keys()) == expected_statuses
+        assert set(STATUS_STYLES.keys()) == set(ALL_STATUSES)
 
-    def test_status_styles_have_required_keys(self):
-        """Test each status style has required keys."""
-        required_keys = {"color", "spinner", "emoji"}
-        for status, style in STATUS_STYLES.items():
-            assert set(style.keys()) == required_keys, f"Status {status} missing keys"
-
-    def test_default_style_has_required_keys(self):
-        """Test DEFAULT_STYLE has required keys."""
-        required_keys = {"color", "spinner", "emoji"}
-        assert set(DEFAULT_STYLE.keys()) == required_keys
+    @pytest.mark.parametrize("style_name", [*ALL_STATUSES, "__default__"])
+    def test_style_has_required_keys(self, style_name):
+        """Test each status style (and DEFAULT_STYLE) has required keys."""
+        style = (
+            DEFAULT_STYLE if style_name == "__default__" else STATUS_STYLES[style_name]
+        )
+        assert set(style.keys()) == REQUIRED_STYLE_KEYS, (
+            f"Style {style_name} missing keys"
+        )
 
     def test_completed_and_error_have_no_spinner(self):
         """Test completed and error statuses have no spinner."""

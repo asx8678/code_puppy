@@ -56,13 +56,51 @@ def default_params():
     )
 
 
+def _install_post(model, json_value, status_code=200, text="Error"):
+    """Attach a mock http client whose .post returns a canned response."""
+    mock_resp = MagicMock()
+    mock_resp.status_code = status_code
+    mock_resp.json.return_value = json_value
+    mock_resp.text = text
+    mock_client = AsyncMock(spec=httpx.AsyncClient)
+    mock_client.post = AsyncMock(return_value=mock_resp)
+    model._http_client = mock_client
+    return mock_client
+
+
+def _install_stream(model, chunks=None, status_code=200, aread=b"Error"):
+    """Attach a mock http client whose .stream yields the given SSE lines."""
+    mock_response = AsyncMock()
+    mock_response.status_code = status_code
+    mock_response.aread = AsyncMock(return_value=aread)
+
+    async def aiter_lines():
+        for line in chunks or []:
+            yield line
+
+    mock_response.aiter_lines = aiter_lines
+
+    mock_client = AsyncMock(spec=httpx.AsyncClient)
+    mock_stream_ctx = AsyncMock()
+    mock_stream_ctx.__aenter__ = AsyncMock(return_value=mock_response)
+    mock_stream_ctx.__aexit__ = AsyncMock(return_value=False)
+    mock_client.stream = MagicMock(return_value=mock_stream_ctx)
+    model._http_client = mock_client
+    return mock_client
+
+
+async def _drain_stream(model, msgs, settings, params):
+    async with model.request_stream(msgs, settings, params) as streamed:
+        async for _ in streamed:
+            pass
+
+
 # --- Utility functions ---
 
 
 class TestUtilities:
     def test_generate_tool_call_id(self):
-        result = generate_tool_call_id()
-        uuid.UUID(result)  # should not raise
+        uuid.UUID(generate_tool_call_id())  # should not raise
 
     def test_bypass_thought_signature(self):
         assert isinstance(BYPASS_THOUGHT_SIGNATURE, str)
@@ -72,9 +110,9 @@ class TestUtilities:
 
 
 class TestSanitizeSchema:
-    def test_non_dict_passthrough(self):
-        assert _sanitize_schema_for_gemini("hello") == "hello"
-        assert _sanitize_schema_for_gemini(42) == 42
+    @pytest.mark.parametrize("value", ["hello", 42])
+    def test_non_dict_passthrough(self, value):
+        assert _sanitize_schema_for_gemini(value) == value
 
     def test_removes_defs_and_additional_properties(self):
         schema = {
@@ -88,31 +126,34 @@ class TestSanitizeSchema:
         assert "additionalProperties" not in result
         assert result["properties"]["x"]["type"] == "string"
 
-    def test_resolves_ref(self):
-        schema = {
-            "$defs": {"Foo": {"type": "string", "description": "a foo"}},
-            "$ref": "#/$defs/Foo",
-        }
-        result = _sanitize_schema_for_gemini(schema)
-        assert result["type"] == "string"
+    @pytest.mark.parametrize(
+        "schema, expected_type",
+        [
+            (
+                {
+                    "$defs": {"Foo": {"type": "string", "description": "a foo"}},
+                    "$ref": "#/$defs/Foo",
+                },
+                "string",
+            ),
+            (
+                {
+                    "definitions": {"Bar": {"type": "integer"}},
+                    "$ref": "#/definitions/Bar",
+                },
+                "integer",
+            ),
+        ],
+    )
+    def test_resolves_ref(self, schema, expected_type):
+        assert _sanitize_schema_for_gemini(schema)["type"] == expected_type
 
-    def test_resolves_ref_definitions(self):
-        schema = {
-            "definitions": {"Bar": {"type": "integer"}},
-            "$ref": "#/definitions/Bar",
-        }
-        result = _sanitize_schema_for_gemini(schema)
-        assert result["type"] == "integer"
-
-    def test_unresolvable_ref(self):
-        schema = {"$ref": "#/$defs/Missing"}
-        result = _sanitize_schema_for_gemini(schema)
-        assert result == {"type": "object"}
-
-    def test_unknown_ref_format(self):
-        schema = {"$ref": "http://example.com/schema"}
-        result = _sanitize_schema_for_gemini(schema)
-        assert result == {"type": "object"}
+    @pytest.mark.parametrize(
+        "ref",
+        ["#/$defs/Missing", "http://example.com/schema"],
+    )
+    def test_unresolvable_or_unknown_ref(self, ref):
+        assert _sanitize_schema_for_gemini({"$ref": ref}) == {"type": "object"}
 
     def test_anyof_simple_nullable(self):
         schema = {
@@ -196,11 +237,8 @@ class TestSanitizeSchema:
             "$id": "test",
         }
         result = _sanitize_schema_for_gemini(schema)
-        assert "default" not in result
-        assert "examples" not in result
-        assert "const" not in result
-        assert "$schema" not in result
-        assert "$id" not in result
+        for key in ("default", "examples", "const", "$schema", "$id"):
+            assert key not in result
 
     def test_scalar_value_passthrough(self):
         """Test that scalar values in schema are returned as-is."""
@@ -237,29 +275,17 @@ class TestSanitizeSchema:
 
 
 class TestFlattenUnion:
-    def test_all_null_types(self):
-        result = _flatten_union_to_object_gemini(
-            [{"type": "null"}, {"type": "null"}], {}, lambda x: x
-        )
-        assert result == {"type": "object"}
-
-    def test_string_only(self):
-        result = _flatten_union_to_object_gemini(
-            [{"type": "string"}, {"type": "null"}], {}, lambda x: x
-        )
-        assert result == {"type": "string"}
-
-    def test_non_dict_items_ignored(self):
-        result = _flatten_union_to_object_gemini(
-            ["not a dict", {"type": "string"}], {}, lambda x: x
-        )
-        assert result == {"type": "string"}
-
-    def test_unresolvable_ref_in_union(self):
-        result = _flatten_union_to_object_gemini(
-            [{"$ref": "#/$defs/Missing"}], {}, lambda x: x
-        )
-        assert result == {"type": "object"}
+    @pytest.mark.parametrize(
+        "items, expected",
+        [
+            ([{"type": "null"}, {"type": "null"}], {"type": "object"}),
+            ([{"type": "string"}, {"type": "null"}], {"type": "string"}),
+            (["not a dict", {"type": "string"}], {"type": "string"}),
+            ([{"$ref": "#/$defs/Missing"}], {"type": "object"}),
+        ],
+    )
+    def test_flatten(self, items, expected):
+        assert _flatten_union_to_object_gemini(items, {}, lambda x: x) == expected
 
     def test_ref_with_definitions_prefix(self):
         defs = {"Foo": {"type": "object", "properties": {"x": {"type": "string"}}}}
@@ -304,15 +330,10 @@ class TestGeminiModelProperties:
 
 class TestClientManagement:
     @pytest.mark.anyio
-    async def test_get_client_creates_new(self, model):
-        client = await model._get_client()
-        assert isinstance(client, httpx.AsyncClient)
-        await model._close_client()
-
-    @pytest.mark.anyio
-    async def test_get_client_reuses(self, model):
+    async def test_get_client_creates_and_reuses(self, model):
         c1 = await model._get_client()
         c2 = await model._get_client()
+        assert isinstance(c1, httpx.AsyncClient)
         assert c1 is c2
         await model._close_client()
 
@@ -335,16 +356,18 @@ class TestClientManagement:
 
 class TestMapUserPrompt:
     @pytest.mark.anyio
-    async def test_string_content(self, model):
-        part = UserPromptPart(content="hello")
-        result = await model._map_user_prompt(part)
-        assert result == [{"text": "hello"}]
-
-    @pytest.mark.anyio
-    async def test_list_content_strings(self, model):
-        part = UserPromptPart(content=["a", "b"])
-        result = await model._map_user_prompt(part)
-        assert result == [{"text": "a"}, {"text": "b"}]
+    @pytest.mark.parametrize(
+        "content, expected",
+        [
+            ("hello", [{"text": "hello"}]),
+            (["a", "b"], [{"text": "a"}, {"text": "b"}]),
+            ([42], [{"text": "42"}]),
+            (123, [{"text": "123"}]),
+        ],
+    )
+    async def test_text_content(self, model, content, expected):
+        part = UserPromptPart(content=content)
+        assert await model._map_user_prompt(part) == expected
 
     @pytest.mark.anyio
     async def test_list_content_media(self, model):
@@ -364,18 +387,6 @@ class TestMapUserPrompt:
         part = UserPromptPart(content=[media])
         result = await model._map_user_prompt(part)
         assert result[0]["inline_data"]["data"] == "already-base64"
-
-    @pytest.mark.anyio
-    async def test_list_content_other(self, model):
-        part = UserPromptPart(content=[42])
-        result = await model._map_user_prompt(part)
-        assert result == [{"text": "42"}]
-
-    @pytest.mark.anyio
-    async def test_non_string_non_list(self, model):
-        part = UserPromptPart(content=123)
-        result = await model._map_user_prompt(part)
-        assert result == [{"text": "123"}]
 
 
 class TestMapMessages:
@@ -462,6 +473,10 @@ class TestMapModelResponse:
         resp = ModelResponse(parts=[], model_name="m")
         assert model._map_model_response(resp) is None
 
+    def test_thinking_empty_content_ignored(self, model):
+        resp = ModelResponse(parts=[ThinkingPart(content="")], model_name="m")
+        assert model._map_model_response(resp) is None
+
     def test_tool_call_with_bypass_signature(self, model):
         resp = ModelResponse(
             parts=[ToolCallPart(tool_name="fn", args={"a": 1}, tool_call_id="tc1")],
@@ -507,20 +522,9 @@ class TestMapModelResponse:
         assert result["parts"][1]["thoughtSignature"] == BYPASS_THOUGHT_SIGNATURE
 
     def test_text_without_pending_signature(self, model):
-        resp = ModelResponse(
-            parts=[TextPart(content="hello")],
-            model_name="m",
-        )
+        resp = ModelResponse(parts=[TextPart(content="hello")], model_name="m")
         result = model._map_model_response(resp)
         assert "thoughtSignature" not in result["parts"][0]
-
-    def test_thinking_empty_content_ignored(self, model):
-        resp = ModelResponse(
-            parts=[ThinkingPart(content="")],
-            model_name="m",
-        )
-        result = model._map_model_response(resp)
-        assert result is None
 
 
 # --- Build tools ---
@@ -549,18 +553,16 @@ class TestBuildGenerationConfig:
     def test_none_settings(self, model):
         assert model._build_generation_config(None) == {}
 
-    def test_with_temperature(self, model):
-        s = {"temperature": 0.5}
-        result = model._build_generation_config(s)
-        assert result["temperature"] == 0.5
-
-    def test_with_top_p(self, model):
-        result = model._build_generation_config({"top_p": 0.9})
-        assert result["topP"] == 0.9
-
-    def test_with_max_tokens(self, model):
-        result = model._build_generation_config({"max_tokens": 100})
-        assert result["maxOutputTokens"] == 100
+    @pytest.mark.parametrize(
+        "settings, key, value",
+        [
+            ({"temperature": 0.5}, "temperature", 0.5),
+            ({"top_p": 0.9}, "topP", 0.9),
+            ({"max_tokens": 100}, "maxOutputTokens", 100),
+        ],
+    )
+    def test_simple_settings(self, model, settings, key, value):
+        assert model._build_generation_config(settings)[key] == value
 
     def test_thinking_disabled(self, model):
         result = model._build_generation_config({"thinking_enabled": False})
@@ -578,17 +580,13 @@ class TestBuildGenerationConfig:
 class TestRequest:
     @pytest.mark.anyio
     async def test_request_success(self, model, default_params):
-        mock_resp = MagicMock()
-        mock_resp.status_code = 200
-        mock_resp.json.return_value = {
-            "candidates": [{"content": {"parts": [{"text": "ok"}]}}],
-            "usageMetadata": {"promptTokenCount": 10, "candidatesTokenCount": 5},
-        }
-
-        mock_client = AsyncMock(spec=httpx.AsyncClient)
-        mock_client.post = AsyncMock(return_value=mock_resp)
-        model._http_client = mock_client
-
+        _install_post(
+            model,
+            {
+                "candidates": [{"content": {"parts": [{"text": "ok"}]}}],
+                "usageMetadata": {"promptTokenCount": 10, "candidatesTokenCount": 5},
+            },
+        )
         msgs = [ModelRequest(parts=[UserPromptPart(content="hi")])]
         result = await model.request(msgs, None, default_params)
         assert result.parts[0].content == "ok"
@@ -602,24 +600,19 @@ class TestRequest:
             )
         ]
         params = ModelRequestParameters(function_tools=tools, allow_text_output=True)
-        settings = {"temperature": 0.5}
-
-        mock_resp = MagicMock()
-        mock_resp.status_code = 200
-        mock_resp.json.return_value = {
-            "candidates": [{"content": {"parts": [{"text": "ok"}]}}],
-            "usageMetadata": {},
-        }
-        mock_client = AsyncMock(spec=httpx.AsyncClient)
-        mock_client.post = AsyncMock(return_value=mock_resp)
-        model._http_client = mock_client
-
+        mock_client = _install_post(
+            model,
+            {
+                "candidates": [{"content": {"parts": [{"text": "ok"}]}}],
+                "usageMetadata": {},
+            },
+        )
         msgs = [
             ModelRequest(
                 parts=[SystemPromptPart(content="sys"), UserPromptPart(content="hi")]
             )
         ]
-        await model.request(msgs, settings, params)
+        await model.request(msgs, {"temperature": 0.5}, params)
         call_body = mock_client.post.call_args[1]["json"]
         assert "tools" in call_body
         assert "generationConfig" in call_body
@@ -627,14 +620,7 @@ class TestRequest:
 
     @pytest.mark.anyio
     async def test_request_error(self, model, default_params):
-        mock_resp = MagicMock()
-        mock_resp.status_code = 500
-        mock_resp.text = "Internal Error"
-
-        mock_client = AsyncMock(spec=httpx.AsyncClient)
-        mock_client.post = AsyncMock(return_value=mock_resp)
-        model._http_client = mock_client
-
+        _install_post(model, {}, status_code=500, text="Internal Error")
         msgs = [ModelRequest(parts=[UserPromptPart(content="hi")])]
         with pytest.raises(RuntimeError, match="500"):
             await model.request(msgs, None, default_params)
@@ -644,12 +630,9 @@ class TestRequest:
 
 
 class TestParseResponse:
-    def test_no_candidates(self, model):
-        result = model._parse_response({"candidates": []})
-        assert result.parts[0].content == ""
-
-    def test_no_candidates_key(self, model):
-        result = model._parse_response({})
+    @pytest.mark.parametrize("data", [{"candidates": []}, {}])
+    def test_no_candidates(self, model, data):
+        result = model._parse_response(data)
         assert result.parts[0].content == ""
 
     def test_text_part(self, model):
@@ -720,83 +703,44 @@ class TestParseResponse:
 
 class TestRequestStream:
     @pytest.mark.anyio
-    async def test_stream_success(self, model, default_params):
-        chunks = [
-            "",
-            'data: {"candidates": [{"content": {"parts": [{"text": "hi"}]}}], "usageMetadata": {"promptTokenCount": 1, "candidatesTokenCount": 1}, "responseId": "r1"}',
-            "not a data line",
-            'data: {"candidates": [{"content": {"parts": [{"text": ""}]}}]}',  # empty text
-        ]
-
-        mock_response = AsyncMock()
-        mock_response.status_code = 200
-
-        async def aiter_lines():
-            for line in chunks:
-                yield line
-
-        mock_response.aiter_lines = aiter_lines
-
-        mock_client = AsyncMock(spec=httpx.AsyncClient)
-        mock_stream_ctx = AsyncMock()
-        mock_stream_ctx.__aenter__ = AsyncMock(return_value=mock_response)
-        mock_stream_ctx.__aexit__ = AsyncMock(return_value=False)
-        mock_client.stream = MagicMock(return_value=mock_stream_ctx)
-        model._http_client = mock_client
-
+    @pytest.mark.parametrize(
+        "chunks",
+        [
+            # success: text, non-data line, empty text
+            [
+                "",
+                'data: {"candidates": [{"content": {"parts": [{"text": "hi"}]}}], "usageMetadata": {"promptTokenCount": 1, "candidatesTokenCount": 1}, "responseId": "r1"}',
+                "not a data line",
+                'data: {"candidates": [{"content": {"parts": [{"text": ""}]}}]}',
+            ],
+            # bad json then valid
+            [
+                "data: not-valid-json",
+                'data: {"candidates": [{"content": {"parts": [{"text": "ok"}]}}]}',
+            ],
+            # thinking part
+            [
+                'data: {"candidates": [{"content": {"parts": [{"text": "thinking...", "thought": true}]}}]}',
+            ],
+            # no candidates
+            [
+                'data: {"usageMetadata": {"promptTokenCount": 5}}',
+            ],
+        ],
+    )
+    async def test_stream_variants(self, model, default_params, chunks):
+        _install_stream(model, chunks)
         msgs = [ModelRequest(parts=[UserPromptPart(content="hi")])]
-        async with model.request_stream(msgs, None, default_params) as streamed:
-            events = []
-            async for event in streamed:
-                events.append(event)
+        await _drain_stream(model, msgs, None, default_params)
 
     @pytest.mark.anyio
     async def test_stream_error(self, model, default_params):
-        mock_response = AsyncMock()
-        mock_response.status_code = 400
-        mock_response.aread = AsyncMock(return_value=b"Bad Request")
-
-        mock_client = AsyncMock(spec=httpx.AsyncClient)
-        mock_stream_ctx = AsyncMock()
-        mock_stream_ctx.__aenter__ = AsyncMock(return_value=mock_response)
-        mock_stream_ctx.__aexit__ = AsyncMock(return_value=False)
-        mock_client.stream = MagicMock(return_value=mock_stream_ctx)
-        model._http_client = mock_client
-
+        _install_stream(model, status_code=400, aread=b"Bad Request")
         msgs = [ModelRequest(parts=[UserPromptPart(content="hi")])]
         async with model.request_stream(msgs, None, default_params) as streamed:
             with pytest.raises(RuntimeError, match="400"):
                 async for _ in streamed:
                     pass
-
-    @pytest.mark.anyio
-    async def test_stream_bad_json(self, model, default_params):
-        chunks = [
-            "data: not-valid-json",
-            'data: {"candidates": [{"content": {"parts": [{"text": "ok"}]}}]}',
-        ]
-
-        mock_response = AsyncMock()
-        mock_response.status_code = 200
-
-        async def aiter_lines():
-            for line in chunks:
-                yield line
-
-        mock_response.aiter_lines = aiter_lines
-
-        mock_client = AsyncMock(spec=httpx.AsyncClient)
-        mock_stream_ctx = AsyncMock()
-        mock_stream_ctx.__aenter__ = AsyncMock(return_value=mock_response)
-        mock_stream_ctx.__aexit__ = AsyncMock(return_value=False)
-        mock_client.stream = MagicMock(return_value=mock_stream_ctx)
-        model._http_client = mock_client
-
-        msgs = [ModelRequest(parts=[UserPromptPart(content="hi")])]
-        async with model.request_stream(msgs, None, default_params) as streamed:
-            events = []
-            async for event in streamed:
-                events.append(event)
 
     @pytest.mark.anyio
     async def test_stream_with_tools_and_settings(self, model):
@@ -806,89 +750,18 @@ class TestRequestStream:
             )
         ]
         params = ModelRequestParameters(function_tools=tools, allow_text_output=True)
-
-        chunks = [
-            'data: {"candidates": [{"content": {"parts": [{"functionCall": {"name": "fn", "args": {"x": 1}}}]}}]}',
-        ]
-
-        mock_response = AsyncMock()
-        mock_response.status_code = 200
-
-        async def aiter_lines():
-            for line in chunks:
-                yield line
-
-        mock_response.aiter_lines = aiter_lines
-
-        mock_client = AsyncMock(spec=httpx.AsyncClient)
-        mock_stream_ctx = AsyncMock()
-        mock_stream_ctx.__aenter__ = AsyncMock(return_value=mock_response)
-        mock_stream_ctx.__aexit__ = AsyncMock(return_value=False)
-        mock_client.stream = MagicMock(return_value=mock_stream_ctx)
-        model._http_client = mock_client
-
+        _install_stream(
+            model,
+            [
+                'data: {"candidates": [{"content": {"parts": [{"functionCall": {"name": "fn", "args": {"x": 1}}}]}}]}',
+            ],
+        )
         msgs = [
             ModelRequest(
                 parts=[SystemPromptPart(content="sys"), UserPromptPart(content="hi")]
             )
         ]
-        async with model.request_stream(msgs, {"temperature": 0.5}, params) as streamed:
-            async for _ in streamed:
-                pass
-
-    @pytest.mark.anyio
-    async def test_stream_thinking_part(self, model, default_params):
-        chunks = [
-            'data: {"candidates": [{"content": {"parts": [{"text": "thinking...", "thought": true}]}}]}',
-        ]
-
-        mock_response = AsyncMock()
-        mock_response.status_code = 200
-
-        async def aiter_lines():
-            for line in chunks:
-                yield line
-
-        mock_response.aiter_lines = aiter_lines
-
-        mock_client = AsyncMock(spec=httpx.AsyncClient)
-        mock_stream_ctx = AsyncMock()
-        mock_stream_ctx.__aenter__ = AsyncMock(return_value=mock_response)
-        mock_stream_ctx.__aexit__ = AsyncMock(return_value=False)
-        mock_client.stream = MagicMock(return_value=mock_stream_ctx)
-        model._http_client = mock_client
-
-        msgs = [ModelRequest(parts=[UserPromptPart(content="hi")])]
-        async with model.request_stream(msgs, None, default_params) as streamed:
-            async for _ in streamed:
-                pass
-
-    @pytest.mark.anyio
-    async def test_stream_no_candidates(self, model, default_params):
-        chunks = [
-            'data: {"usageMetadata": {"promptTokenCount": 5}}',
-        ]
-
-        mock_response = AsyncMock()
-        mock_response.status_code = 200
-
-        async def aiter_lines():
-            for line in chunks:
-                yield line
-
-        mock_response.aiter_lines = aiter_lines
-
-        mock_client = AsyncMock(spec=httpx.AsyncClient)
-        mock_stream_ctx = AsyncMock()
-        mock_stream_ctx.__aenter__ = AsyncMock(return_value=mock_response)
-        mock_stream_ctx.__aexit__ = AsyncMock(return_value=False)
-        mock_client.stream = MagicMock(return_value=mock_stream_ctx)
-        model._http_client = mock_client
-
-        msgs = [ModelRequest(parts=[UserPromptPart(content="hi")])]
-        async with model.request_stream(msgs, None, default_params) as streamed:
-            async for _ in streamed:
-                pass
+        await _drain_stream(model, msgs, {"temperature": 0.5}, params)
 
 
 class TestGeminiStreamingResponseProperties:
