@@ -139,6 +139,22 @@ _AWAITING_USER_INPUT = threading.Event()
 # destructive-command guard, force-push guard, ...) benefits without
 # bolting on their own lock.
 
+# Commands the user chose to "approve & remember for this session". Identical
+# (command, cwd) invocations skip the confirmation prompt for the rest of the
+# process lifetime. In-memory only — never persisted, so it resets on restart.
+_SESSION_APPROVED_COMMANDS: set[str] = set()
+
+
+def _session_approval_key(command: str, cwd: str | None) -> str:
+    """Build the lookup key for the session approval allowlist."""
+    return f"{cwd or ''}\x00{(command or '').strip()}"
+
+
+def clear_session_approved_commands() -> None:
+    """Forget all session-remembered command approvals (used by tests/`/reset`)."""
+    _SESSION_APPROVED_COMMANDS.clear()
+
+
 # Track running shell processes so we can kill them on Ctrl-C from the UI
 _RUNNING_PROCESSES: set[subprocess.Popen] = set()
 _RUNNING_PROCESSES_LOCK = threading.Lock()
@@ -1241,9 +1257,19 @@ async def run_shell_command(
     # Check if we're running as a sub-agent (skip confirmation and run silently)
     running_as_subagent = is_subagent()
 
+    # Commands the user already approved-and-remembered this session skip the
+    # prompt entirely (but still went through the safety callbacks above).
+    session_key = _session_approval_key(command, cwd)
+    already_remembered = session_key in _SESSION_APPROVED_COMMANDS
+
     # Only ask for confirmation if we're in an interactive TTY, not in yolo mode,
     # and NOT running as a sub-agent (sub-agents run without user interaction)
-    if not yolo_mode and not running_as_subagent and sys.stdin.isatty():
+    if (
+        not yolo_mode
+        and not running_as_subagent
+        and not already_remembered
+        and sys.stdin.isatty()
+    ):
         # No local lock needed -- get_user_approval_async serializes
         # parallel prompts internally so the 2nd, 3rd, 4th... destructive
         # commands queue up cleanly instead of vanishing.
@@ -1272,7 +1298,15 @@ async def run_shell_command(
             preview=None,
             border_style="dim white",
             puppy_name=puppy_name,
+            remember_label="✓ Approve & don't ask again this session",
         )
+
+        # If the user picked the "remember" choice, allowlist this exact command
+        # for the rest of the session so we won't prompt for it again.
+        from code_puppy.tools.common import consume_remember_choice
+
+        if confirmed and consume_remember_choice():
+            _SESSION_APPROVED_COMMANDS.add(session_key)
 
         if not confirmed:
             if user_feedback:

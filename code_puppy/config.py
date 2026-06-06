@@ -1329,6 +1329,51 @@ def get_safety_permission_level():
     return "medium"  # Default to medium risk threshold
 
 
+# Default glob patterns for paths that are sensitive enough to always warrant
+# an explicit confirmation, even in yolo_mode. Matched (case-insensitively)
+# against both the absolute path and the bare filename. Users can override the
+# whole list via the 'protected_path_patterns' config key (comma-separated).
+DEFAULT_PROTECTED_PATH_PATTERNS = (
+    ".env",
+    ".env.*",
+    "*.env",
+    "*/.git/*",
+    "*/.ssh/*",
+    "id_rsa*",
+    "id_ed25519*",
+    "*.pem",
+    "*.key",
+    "*.keystore",
+    "*/.aws/credentials",
+    "*/.aws/config",
+    "*/.npmrc",
+    "*/.pypirc",
+    "*/.netrc",
+    ".netrc",
+    "*secret*",
+    "*credential*",
+)
+
+
+def get_protected_path_patterns():
+    """Return glob patterns for sensitive file paths that always require approval.
+
+    File operations targeting a path matching any of these patterns are never
+    silently auto-approved: they prompt even under ``yolo_mode`` and are denied
+    outright in non-interactive contexts. This only *adds* friction — it can
+    never reduce the protection the normal permission gate already provides.
+
+    Reads the comma-separated ``protected_path_patterns`` config key if set,
+    otherwise falls back to :data:`DEFAULT_PROTECTED_PATH_PATTERNS`. Setting the
+    key to an empty value disables the extra protection.
+    """
+    cfg_val = get_value("protected_path_patterns")
+    if cfg_val is not None:
+        patterns = [p.strip() for p in str(cfg_val).split(",") if p.strip()]
+        return patterns
+    return list(DEFAULT_PROTECTED_PATH_PATTERNS)
+
+
 def get_mcp_disabled():
     """
     Checks puppy.cfg for 'disable_mcp' (case-insensitive in value only).

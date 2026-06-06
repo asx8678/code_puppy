@@ -71,10 +71,51 @@ def _stdin_supports_interactive_approval() -> bool:
         return False
 
 
+def can_prompt_user() -> bool:
+    """Whether we can ask the user for an interactive decision right now.
+
+    Two conditions must hold: stdin is an interactive TTY, **and** we are not
+    running inside a sub-agent. Sub-agents execute autonomously and must never
+    grab stdin (it would race the main agent for keystrokes), so they can't
+    prompt even when a TTY is attached. This is the single source of truth for
+    "can we prompt?" shared by the shell confirmation gate and the safety
+    plugins (shell_safety, destructive_command_guard, force_push_guard) so the
+    rule can't drift between them.
+    """
+    if not _stdin_supports_interactive_approval():
+        return False
+    try:
+        from code_puppy.tools.subagent_context import is_subagent
+
+        return not is_subagent()
+    except Exception:
+        # If we can't determine sub-agent state, be conservative and assume we
+        # can prompt only when there's a real TTY (already checked above).
+        return True
+
+
 def _deny_noninteractive_approval(title: str) -> tuple[bool, None]:
     """Fail closed when approval is requested without an interactive stdin."""
     emit_warning(f"Approval for '{title}' rejected: stdin is not interactive.")
     return False, None
+
+
+# Side-channel for the optional "approve & remember for this session" choice.
+# Kept out of the (confirmed, feedback) return tuple so callers that don't opt
+# in (every file operation) are unaffected. The shell command gate reads this
+# immediately after awaiting the approval, on the same thread, then it resets.
+_remember_choice_local = threading.local()
+
+
+def consume_remember_choice() -> bool:
+    """Return whether the last approval picked 'remember for session', then reset.
+
+    Only meaningful directly after a ``get_user_approval_async`` call that was
+    given a ``remember_label``. Always returns False otherwise.
+    """
+    value = getattr(_remember_choice_local, "value", False)
+    _remember_choice_local.value = False
+    return value
 
 
 # Syntax highlighting imports for "syntax" diff mode
@@ -1304,6 +1345,7 @@ async def get_user_approval_async(
     preview: str | None = None,
     border_style: str = "dim white",
     puppy_name: str | None = None,
+    remember_label: str | None = None,
 ) -> tuple[bool, str | None]:
     """Async version of get_user_approval - show a beautiful approval panel with arrow-key selector.
 
@@ -1318,6 +1360,10 @@ async def get_user_approval_async(
         preview: Optional preview content (like a diff)
         border_style: Border color/style for the panel
         puppy_name: Name of the assistant (defaults to config value)
+        remember_label: If provided, adds an extra "approve & remember" choice
+            with this label. When the user picks it, the call returns
+            ``(True, ...)`` and :func:`consume_remember_choice` returns True
+            once. Callers use this to skip re-prompting for the same action.
 
     Returns:
         Tuple of (confirmed: bool, user_feedback: str | None)
@@ -1331,6 +1377,7 @@ async def get_user_approval_async(
             preview=preview,
             border_style=border_style,
             puppy_name=puppy_name,
+            remember_label=remember_label,
         )
 
 
@@ -1340,9 +1387,14 @@ async def _get_user_approval_async_impl(
     preview: str | None = None,
     border_style: str = "dim white",
     puppy_name: str | None = None,
+    remember_label: str | None = None,
 ) -> tuple[bool, str | None]:
     """Inner implementation of get_user_approval_async (lock-free)."""
     from code_puppy.tools.command_runner import set_awaiting_user_input
+
+    # Reset the remember side-channel up front so a stale value can never leak
+    # into this prompt's result.
+    _remember_choice_local.value = False
 
     if not _stdin_supports_interactive_approval():
         return _deny_noninteractive_approval(title)
@@ -1422,17 +1474,25 @@ async def _get_user_approval_async_impl(
         sys.stdout.flush()
 
         # Show arrow-key selector (ASYNC VERSION)
-        choice = await arrow_select_async(
-            "💭 What would you like to do?",
+        choices = ["✓ Approve"]
+        if remember_label:
+            choices.append(remember_label)
+        choices.extend(
             [
-                "✓ Approve",
                 "✗ Reject",
                 f"💬 Reject with feedback (tell {puppy_name} what to change)",
-            ],
+            ]
+        )
+        choice = await arrow_select_async(
+            "💭 What would you like to do?",
+            choices,
         )
 
         if choice == "✓ Approve":
             confirmed = True
+        elif remember_label and choice == remember_label:
+            confirmed = True
+            _remember_choice_local.value = True
         elif choice == "✗ Reject":
             confirmed = False
         else:

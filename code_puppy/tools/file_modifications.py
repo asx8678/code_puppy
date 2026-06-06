@@ -413,10 +413,12 @@ def delete_snippet_from_file(
         context, file_path, "delete snippet from", None, message_group, operation_data
     )
 
-    # If any permission handler denies the operation, return cancelled result
-    if permission_results and any(
-        not result for result in permission_results if result is not None
-    ):
+    # Fail closed: proceed only if every registered permission handler returned
+    # an explicit truthy approval. A handler that returned False (denied) OR
+    # None (crashed inside the callback dispatcher) blocks the operation. An
+    # empty list means no permission plugin is installed at all, which keeps the
+    # opt-in "no gate => allow" behaviour.
+    if permission_results and not all(permission_results):
         return _create_rejection_response(file_path)
 
     res = _delete_snippet_from_file(
@@ -443,10 +445,12 @@ def write_to_file(
         context, path, "write", None, message_group, operation_data
     )
 
-    # If any permission handler denies the operation, return cancelled result
-    if permission_results and any(
-        not result for result in permission_results if result is not None
-    ):
+    # Fail closed: proceed only if every registered permission handler returned
+    # an explicit truthy approval. A handler that returned False (denied) OR
+    # None (crashed inside the callback dispatcher) blocks the operation. An
+    # empty list means no permission plugin is installed at all, which keeps the
+    # opt-in "no gate => allow" behaviour.
+    if permission_results and not all(permission_results):
         return _create_rejection_response(path)
 
     res = _write_to_file(
@@ -474,10 +478,12 @@ def replace_in_file(
         context, path, "replace text in", None, message_group, operation_data
     )
 
-    # If any permission handler denies the operation, return cancelled result
-    if permission_results and any(
-        not result for result in permission_results if result is not None
-    ):
+    # Fail closed: proceed only if every registered permission handler returned
+    # an explicit truthy approval. A handler that returned False (denied) OR
+    # None (crashed inside the callback dispatcher) blocks the operation. An
+    # empty list means no permission plugin is installed at all, which keeps the
+    # opt-in "no gate => allow" behaviour.
+    if permission_results and not all(permission_results):
         return _create_rejection_response(path)
 
     res = _replace_in_file(context, path, replacements, message_group=message_group)
@@ -591,10 +597,12 @@ def _delete_file(
         context, file_path, "delete", None, message_group, operation_data
     )
 
-    # If any permission handler denies the operation, return cancelled result
-    if permission_results and any(
-        not result for result in permission_results if result is not None
-    ):
+    # Fail closed: proceed only if every registered permission handler returned
+    # an explicit truthy approval. A handler that returned False (denied) OR
+    # None (crashed inside the callback dispatcher) blocks the operation. An
+    # empty list means no permission plugin is installed at all, which keeps the
+    # opt-in "no gate => allow" behaviour.
+    if permission_results and not all(permission_results):
         return _create_rejection_response(file_path)
 
     try:

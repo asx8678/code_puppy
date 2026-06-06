@@ -59,6 +59,22 @@ RISK_LEVELS: dict[str, int] = {
     "critical": 4,
 }
 
+# A *single* unavailable assessment is treated leniently (assume HIGH risk and
+# honour the permission level) so a transient model hiccup doesn't make the
+# shell unusable. But an assessor that is *persistently* down would otherwise
+# let every command through unchecked whenever the permission level is
+# high/critical. Once non-interactive assessment failures pile up past this
+# threshold we stop trusting the threshold override and hard-block until a real
+# verdict succeeds again. Reset to 0 on the next successful assessment.
+_MAX_CONSECUTIVE_UNAVAILABLE = 3
+_consecutive_unavailable = 0
+
+
+def _reset_unavailable_streak() -> None:
+    """Record that the assessor produced a real verdict (clears the failure streak)."""
+    global _consecutive_unavailable
+    _consecutive_unavailable = 0
+
 
 def compare_risk_levels(assessed_risk: str | None, threshold: str) -> bool:
     """Compare assessed risk against threshold.
@@ -82,6 +98,136 @@ def compare_risk_levels(assessed_risk: str | None, threshold: str) -> bool:
     # Block if assessed risk is GREATER than threshold
     # Note: Commands AT the threshold level are allowed (>, not >=)
     return assessed_level > threshold_level
+
+
+def _block_command(
+    risk: str | None, reasoning: str | None, threshold: str
+) -> dict[str, Any]:
+    """Build the rejection payload for a command that exceeds the threshold.
+
+    Shared by the cached, freshly-assessed, and assessment-failure paths so the
+    block message and override hint stay consistent. The override hint points at
+    the real escape hatches: raising ``safety_permission_level`` (now honoured
+    even when the assessment fails) or turning ``yolo_mode`` off to approve
+    commands manually. (The old hint, ``/set yolo_mode true``, was a no-op — yolo
+    is what activates this check in the first place.)
+    """
+    risk_display = risk or "unknown"
+    concise_reason = reasoning or "No reasoning provided"
+    # Map an unknown/None risk onto a valid level for the /set suggestion.
+    suggested_level = risk_display if risk_display in RISK_LEVELS else "high"
+    error_msg = (
+        f"🛑 Command blocked (risk {risk_display.upper()} > permission {threshold.upper()}).\n"
+        f"Reason: {concise_reason}\n"
+        f"Override: /set safety_permission_level {suggested_level} (or higher), "
+        f"or /set yolo_mode false to approve commands manually."
+    )
+    emit_info(error_msg)
+    return {
+        "blocked": True,
+        "risk": risk,
+        "reasoning": reasoning,
+        "error_message": error_msg,
+    }
+
+
+def _can_prompt() -> bool:
+    """Whether we can ask the user to approve a command interactively.
+
+    Delegates to the shared :func:`code_puppy.tools.common.can_prompt_user`
+    helper (interactive TTY **and** not a sub-agent) so the rule stays in sync
+    with the confirmation gate in command_runner and the other safety plugins.
+    """
+    from code_puppy.tools.common import can_prompt_user
+
+    return can_prompt_user()
+
+
+async def _handle_unavailable_assessment(
+    command: str, reason: str, threshold: str
+) -> dict[str, Any] | None:
+    """Decide what to do when the assessor could not produce a verdict.
+
+    A *failed* assessment is not the same as a genuine high-risk verdict, so we
+    don't hard-block every command — that's what made the shell unusable
+    whenever the assessor model was unavailable (e.g. a model that rejects the
+    forced ``tool_choice`` used for structured output). Instead:
+
+    * Interactive TTY  -> ask the user to approve/reject this one command.
+    * Non-interactive  -> assume HIGH risk but honour the permission level, so
+      raising ``safety_permission_level`` remains a real override.
+    """
+    if _can_prompt():
+        try:
+            from rich.text import Text
+
+            from code_puppy.tools.common import get_user_approval_async
+
+            content = Text()
+            content.append(
+                "⚠️  Couldn't assess this command's safety automatically.\n",
+                style="bold yellow",
+            )
+            content.append(f"Reason: {reason}\n\n", style="dim")
+            content.append("$ ", style="bold green")
+            content.append(command, style="bold white")
+            content.append(
+                "\n\nApprove to run it anyway, or reject to skip.",
+                style="yellow",
+            )
+            confirmed, feedback = await get_user_approval_async(
+                title="Shell Safety — assessment unavailable 🛡️",
+                content=content,
+                border_style="yellow",
+            )
+            if confirmed:
+                emit_info("⚠️  Command approved manually (safety check unavailable).")
+                return None
+            return {
+                "blocked": True,
+                "risk": "high",
+                "reasoning": f"{reason} (rejected by user)",
+                "error_message": (
+                    "🛑 Command skipped — safety assessment was unavailable and "
+                    f"you rejected it.\nReason: {reason}\n"
+                    + (f"Feedback: {feedback}" if feedback else "")
+                ),
+            }
+        except Exception:
+            # If prompting itself fails, fall through to the threshold policy.
+            pass
+
+    # Non-interactive (or prompt failed): assume HIGH risk, honour threshold.
+    global _consecutive_unavailable
+    _consecutive_unavailable += 1
+
+    # An assessor that keeps failing can't be trusted to gate anything. Once the
+    # streak crosses the limit, stop honouring the permission-level override and
+    # hard-block regardless of threshold until a real verdict comes back.
+    if _consecutive_unavailable >= _MAX_CONSECUTIVE_UNAVAILABLE:
+        error_msg = (
+            f"🛑 Command blocked. The shell safety assessor has been unavailable "
+            f"{_consecutive_unavailable} times in a row, so the "
+            f"{threshold.upper()} permission override is no longer trusted.\n"
+            f"Reason: {reason}\n"
+            f"Fix the assessor model (or run the command directly in your terminal) "
+            f"to proceed."
+        )
+        emit_info(error_msg)
+        return {
+            "blocked": True,
+            "risk": "high",
+            "reasoning": f"{reason} (assessor persistently unavailable)",
+            "error_message": error_msg,
+        }
+
+    if compare_risk_levels("high", threshold):
+        return _block_command("high", reason, threshold)
+    emit_info(
+        f"⚠️ Shell safety assessment unavailable ({reason}); allowing because the "
+        f"permission level is {threshold.upper()}."
+    )
+    return None
 
 
 async def shell_safety_callback(
@@ -117,6 +263,9 @@ async def shell_safety_callback(
     # Get configured risk threshold
     threshold = get_safety_permission_level()
 
+    # Obtain a risk verdict. Only the cache lookup + LLM call can fail in ways
+    # that mean "we have no verdict" — those route to the unavailable handler
+    # (interactive approval, or threshold policy) rather than a blind block.
     try:
         # Check cache first (fast path - no LLM call)
         cached = get_cached_assessment(command, cwd)
@@ -124,21 +273,7 @@ async def shell_safety_callback(
         if cached:
             # Got a cached result - check against threshold
             if compare_risk_levels(cached.risk, threshold):
-                # Cached result says it's too risky
-                risk_display = cached.risk or "unknown"
-                concise_reason = cached.reasoning or "No reasoning provided"
-                error_msg = (
-                    f"🛑 Command blocked (risk {risk_display.upper()} > permission {threshold.upper()}).\n"
-                    f"Reason: {concise_reason}\n"
-                    f"Override: /set yolo_mode true or /set safety_permission_level {risk_display}"
-                )
-                emit_info(error_msg)
-                return {
-                    "blocked": True,
-                    "risk": cached.risk,
-                    "reasoning": cached.reasoning,
-                    "error_message": error_msg,
-                }
+                return _block_command(cached.risk, cached.reasoning, threshold)
             # Cached result is within threshold - allow silently
             return None
 
@@ -156,47 +291,43 @@ async def shell_safety_callback(
 
         # Run async assessment with structured output type
         result = await agent.run_with_mcp(prompt, output_type=ShellSafetyAssessment)
-        assessment = result.output
-
-        # Cache the result for future use, but only if it's not a fallback assessment
-        if not getattr(assessment, "is_fallback", False):
-            cache_assessment(command, cwd, assessment.risk, assessment.reasoning)
-
-        # Check if risk exceeds threshold (commands at threshold are allowed)
-        if compare_risk_levels(assessment.risk, threshold):
-            risk_display = assessment.risk or "unknown"
-            concise_reason = assessment.reasoning or "No reasoning provided"
-            error_msg = (
-                f"🛑 Command blocked (risk {risk_display.upper()} > permission {threshold.upper()}).\n"
-                f"Reason: {concise_reason}\n"
-                f"Override: /set yolo_mode true or /set safety_permission_level {risk_display}"
-            )
-            emit_info(error_msg)
-
-            # Return rejection info for the command runner
-            return {
-                "blocked": True,
-                "risk": assessment.risk,
-                "reasoning": assessment.reasoning,
-                "error_message": error_msg,
-            }
-
-        # Command is within acceptable risk threshold - remain silent
-        return None  # Allow command to proceed
-
     except Exception as e:
-        # On any error, fail safe by blocking the command
-        error_msg = (
-            f"🛑 Command blocked (risk HIGH > permission {threshold.upper()}).\n"
-            f"Reason: Safety assessment error: {str(e)}\n"
-            f"Override: /set yolo_mode true or /set safety_permission_level high"
+        # The assessor itself failed (model or cache error).
+        return await _handle_unavailable_assessment(
+            command, f"Safety assessment error: {str(e)}", threshold
         )
-        return {
-            "blocked": True,
-            "risk": "high",
-            "reasoning": f"Safety assessment error: {str(e)}",
-            "error_message": error_msg,
-        }
+
+    # ``run_with_mcp`` swallows model-call failures and returns None (see
+    # agents/_runtime.run_with_mcp), so ``result`` — and therefore
+    # ``result.output`` — can be missing. A missing verdict is *unavailable*,
+    # not a genuine high-risk verdict, so don't crash and don't hard-block.
+    assessment = getattr(result, "output", None)
+    if assessment is None:
+        return await _handle_unavailable_assessment(
+            command,
+            "Safety assessment unavailable (the assessor returned no result — "
+            "usually a failed or unsupported model call).",
+            threshold,
+        )
+
+    # A real verdict came back — the assessor is healthy again, so clear any
+    # accumulated unavailable-streak that may have built up.
+    _reset_unavailable_streak()
+
+    # Cache the result for future use, but only if it's a real assessment.
+    # Caching is best-effort: a cache-write failure must never block a command.
+    if not getattr(assessment, "is_fallback", False):
+        try:
+            cache_assessment(command, cwd, assessment.risk, assessment.reasoning)
+        except Exception:
+            pass
+
+    # Check if risk exceeds threshold (commands at threshold are allowed)
+    if compare_risk_levels(assessment.risk, threshold):
+        return _block_command(assessment.risk, assessment.reasoning, threshold)
+
+    # Command is within acceptable risk threshold - remain silent
+    return None  # Allow command to proceed
 
 
 def register():

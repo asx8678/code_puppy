@@ -7,6 +7,7 @@ providing a consistent and extensible permission system.
 from __future__ import annotations
 
 import difflib
+import fnmatch
 import os
 import threading
 from typing import Any
@@ -14,7 +15,11 @@ from typing import Any
 from rich.text import Text as RichText
 
 from code_puppy.callbacks import register_callback
-from code_puppy.config import get_diff_context_lines, get_yolo_mode
+from code_puppy.config import (
+    get_diff_context_lines,
+    get_protected_path_patterns,
+    get_yolo_mode,
+)
 from code_puppy.tools.common import (
     _find_best_window,
     get_user_approval,
@@ -205,6 +210,30 @@ def _preview_delete_file(file_path: str) -> str | None:
     return None
 
 
+def is_protected_path(file_path: str) -> bool:
+    """Return True if the path matches a configured protected/sensitive pattern.
+
+    Matches each glob (case-insensitively) against both the absolute path and
+    the bare filename so patterns like ``*.env`` or ``*/.ssh/*`` both work.
+    Protected paths always require explicit approval — they bypass the yolo_mode
+    auto-approval fast path.
+    """
+    try:
+        patterns = get_protected_path_patterns()
+    except Exception:
+        return False
+    if not patterns:
+        return False
+
+    abspath = os.path.abspath(file_path)
+    candidates = (abspath.lower(), os.path.basename(abspath).lower())
+    for pattern in patterns:
+        pat = pattern.lower()
+        if any(fnmatch.fnmatch(candidate, pat) for candidate in candidates):
+            return True
+    return False
+
+
 def prompt_for_file_permission(
     file_path: str,
     operation: str,
@@ -227,13 +256,22 @@ def prompt_for_file_permission(
         - user_feedback: Optional feedback message from user to send back to the model
     """
     yolo_mode = get_yolo_mode()
+    protected = is_protected_path(file_path)
 
-    # Skip confirmation only if in yolo mode (removed TTY check for better compatibility)
-    if yolo_mode:
+    # Skip confirmation only if in yolo mode AND the target isn't a protected
+    # path. Protected/sensitive files (.env, .ssh keys, credentials, ...) always
+    # require explicit approval; under yolo that means an interactive prompt,
+    # and in a non-interactive context get_user_approval below fails closed.
+    if yolo_mode and not protected:
         return True, None
 
     # Build panel content
     panel_content = RichText()
+    if protected:
+        panel_content.append(
+            "🔐 Protected path — explicit approval required even in yolo mode\n",
+            style="bold red",
+        )
     panel_content.append("🔒 Requesting permission to ", style="bold yellow")
     panel_content.append(operation, style="bold cyan")
     panel_content.append(":\n", style="bold yellow")
@@ -270,6 +308,10 @@ def handle_edit_file_permission(
     Returns:
         True if permission granted, False if denied
     """
+    # Clear any stale feedback up front so that, if the prompt below raises
+    # before we store a fresh value, the tool can't read a previous op's
+    # feedback out of thread-local storage.
+    clear_user_feedback()
     preview = None
 
     if operation_type == "write":
@@ -311,6 +353,7 @@ def handle_delete_file_permission(
     Returns:
         True if permission granted, False if denied
     """
+    clear_user_feedback()
     preview = _preview_delete_file(file_path)
     confirmed, user_feedback = prompt_for_file_permission(
         file_path, "delete", preview, message_group
@@ -344,6 +387,7 @@ def handle_file_permission(
     Returns:
         True if permission granted, False if denied
     """
+    clear_user_feedback()
     # Generate preview from operation_data if provided
     if operation_data is not None:
         preview = _generate_preview_from_operation_data(

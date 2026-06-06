@@ -7,22 +7,14 @@ Returns {"blocked": True} to deny, None to allow.
 
 from __future__ import annotations
 
-import sys
 from typing import Any
 
 from rich.text import Text
 
 from code_puppy.callbacks import register_callback
+from code_puppy.config import get_yolo_mode
 from code_puppy.messaging import emit_info, emit_warning
 from code_puppy.plugins.force_push_guard.detector import detect_force_push
-
-
-def _is_interactive() -> bool:
-    """Check if we're in an interactive terminal that can show prompts."""
-    try:
-        return sys.stdin.isatty()
-    except AttributeError, OSError:
-        return False
 
 
 async def force_push_guard_callback(
@@ -30,13 +22,21 @@ async def force_push_guard_callback(
 ) -> dict[str, Any] | None:
     """Intercept shell commands containing git force push operations.
 
-    When a force push is detected:
-    - Interactive TTY: prompt the user with approve/reject options.
-    - Non-interactive (CI, sub-agent, piped): hard-block with an error.
+    When a force push is detected the response depends on context:
 
-    This runs on *every* shell command, but the heavy lifting (regex
-    matching) is gated behind a cheap "push" substring check inside
-    detect_force_push().
+    - **Interactive + yolo_mode**: prompt the user with a red danger panel,
+      because yolo bypasses the normal per-command confirmation gate in
+      ``run_shell_command``.
+    - **Interactive + not yolo**: ``run_shell_command`` already prompts for
+      every command, so warn about the force push and defer approval to that
+      single gate instead of double-prompting.
+    - **Non-interactive (CI, sub-agent, piped)**: hard-block with an error.
+
+    Sub-agents never reach the interactive branches because ``can_prompt_user``
+    returns False for them — they go straight to the hard-block.
+
+    This runs on *every* shell command, but the heavy lifting (regex matching)
+    is gated behind a cheap "push" substring check inside ``detect_force_push()``.
 
     Args:
         context: Execution context (unused).
@@ -52,11 +52,19 @@ async def force_push_guard_callback(
     if match is None:
         return None
 
-    # --- Interactive TTY: ask the user ---
-    if _is_interactive():
-        return await _prompt_user_approval(command, match)
+    from code_puppy.tools.common import can_prompt_user
 
-    # --- Non-interactive: hard-block ---
+    if can_prompt_user():
+        if get_yolo_mode():
+            return await _prompt_user_approval(command, match)
+        # Non-yolo: run_shell_command will prompt for this command anyway. Warn
+        # loudly but let that single gate collect the decision (no double prompt).
+        emit_warning(
+            f"⚠️  Force push detected ({match.pattern_name}): {match.description}"
+        )
+        return None
+
+    # --- Non-interactive (or sub-agent): hard-block ---
     return _block_command(command, match)
 
 

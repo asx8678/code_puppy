@@ -9,24 +9,16 @@ Returns {"blocked": True} to deny, None to allow.
 
 from __future__ import annotations
 
-import sys
 from typing import Any
 
 from rich.text import Text
 
 from code_puppy.callbacks import register_callback
+from code_puppy.config import get_yolo_mode
 from code_puppy.messaging import emit_info, emit_warning
 from code_puppy.plugins.destructive_command_guard.detector import (
     detect_destructive_command,
 )
-
-
-def _is_interactive() -> bool:
-    """Check if we're in an interactive terminal that can show prompts."""
-    try:
-        return sys.stdin.isatty()
-    except AttributeError, OSError:
-        return False
 
 
 async def destructive_command_guard_callback(
@@ -34,13 +26,23 @@ async def destructive_command_guard_callback(
 ) -> dict[str, Any] | None:
     """Intercept shell commands containing destructive operations.
 
-    When a destructive command is detected:
-    - Interactive TTY: prompt the user with approve/reject options.
-    - Non-interactive (CI, sub-agent, piped): hard-block with an error.
+    When a destructive command is detected the response depends on context:
 
-    This runs on *every* shell command, but the heavy lifting (regex
-    matching) is gated behind a cheap substring pre-filter inside
-    detect_destructive_command().
+    - **Interactive + yolo_mode**: prompt the user with a red danger panel,
+      because yolo bypasses the normal per-command confirmation gate in
+      ``run_shell_command`` — this guard is the only thing that would stop it.
+    - **Interactive + not yolo**: ``run_shell_command`` already prompts for
+      *every* command, so prompting here too would double-prompt. Surface the
+      danger as a warning and defer the actual approval to that single gate.
+    - **Non-interactive (CI, sub-agent, piped)**: nobody can approve, so
+      hard-block with an error.
+
+    Sub-agents never reach the interactive branches because ``can_prompt_user``
+    returns False for them — they go straight to the hard-block.
+
+    This runs on *every* shell command, but the heavy lifting (regex matching)
+    is gated behind a cheap substring pre-filter inside
+    ``detect_destructive_command()``.
 
     Args:
         context: Execution context (unused).
@@ -56,11 +58,22 @@ async def destructive_command_guard_callback(
     if match is None:
         return None
 
-    # --- Interactive TTY: ask the user ---
-    if _is_interactive():
-        return await _prompt_user_approval(command, match)
+    from code_puppy.tools.common import can_prompt_user
 
-    # --- Non-interactive: hard-block ---
+    if can_prompt_user():
+        if get_yolo_mode():
+            # Yolo bypasses run_shell_command's confirmation gate, so this guard
+            # must do the prompting itself.
+            return await _prompt_user_approval(command, match)
+        # Non-yolo: run_shell_command will prompt for this command anyway. Warn
+        # loudly but let that single gate collect the decision (no double prompt).
+        emit_warning(
+            f"⚠️  Destructive command detected ({match.pattern_name}): "
+            f"{match.description}"
+        )
+        return None
+
+    # --- Non-interactive (or sub-agent): hard-block ---
     return _block_command(command, match)
 
 
