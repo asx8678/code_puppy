@@ -35,8 +35,10 @@ def _reset_models_dev_api_cache():
     a payload cached by one test must not leak into the next (e.g. a cached
     success bypassing a test that expects the bundled fallback)."""
     models_dev_parser._CACHED_API_DATA = None
+    models_dev_parser._PREFETCH_STARTED = False
     yield
     models_dev_parser._CACHED_API_DATA = None
+    models_dev_parser._PREFETCH_STARTED = False
 
 
 class TestProviderInfo:
@@ -420,6 +422,57 @@ class TestModelsDevRegistryAPIFetching:
             with patch("pathlib.Path.exists", return_value=True):
                 registry = ModelsDevRegistry()
                 assert "bundled:" in registry.data_source
+
+
+class TestPrefetchModelsDev:
+    """Tests for the background prefetch warm-up."""
+
+    def test_prefetch_populates_cache(self):
+        """Prefetch should fetch the payload off the interactive path."""
+        api_data = {"openai": {"name": "OpenAI", "env": [], "api": "", "models": {}}}
+        captured = {}
+
+        def fake_thread(target, name=None, daemon=None):
+            captured["target"] = target
+
+            class _T:
+                def start(self_inner):
+                    target()  # run synchronously for the test
+
+            return _T()
+
+        with patch("code_puppy.models_dev_parser.httpx.Client") as mock_client_class:
+            mock_client = MagicMock()
+            mock_client_class.return_value.__enter__.return_value = mock_client
+            response = MagicMock()
+            response.json.return_value = api_data
+            mock_client.get.return_value = response
+
+            with patch(
+                "code_puppy.models_dev_parser.threading.Thread", side_effect=fake_thread
+            ):
+                models_dev_parser.prefetch_models_dev()
+
+        assert models_dev_parser._CACHED_API_DATA == api_data
+
+    def test_prefetch_is_idempotent(self):
+        """A second prefetch must not spawn another thread."""
+        with patch(
+            "code_puppy.models_dev_parser.threading.Thread"
+        ) as mock_thread:
+            mock_thread.return_value = MagicMock()
+            models_dev_parser.prefetch_models_dev()
+            models_dev_parser.prefetch_models_dev()
+            assert mock_thread.call_count == 1
+
+    def test_prefetch_skips_when_cache_warm(self):
+        """No thread is spawned when a payload is already cached."""
+        models_dev_parser._CACHED_API_DATA = {"x": {}}
+        with patch(
+            "code_puppy.models_dev_parser.threading.Thread"
+        ) as mock_thread:
+            models_dev_parser.prefetch_models_dev()
+            mock_thread.assert_not_called()
 
 
 class TestModelsDevRegistryDataLoading:

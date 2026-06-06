@@ -15,6 +15,7 @@ comprehensive type safety throughout the implementation.
 from __future__ import annotations
 
 import json
+import threading
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Dict, List, Optional
@@ -36,6 +37,63 @@ BUNDLED_JSON_FILENAME = "models_dev_api.json"
 # real successful fetches are cached (failures leave it None so the bundled
 # fallback still kicks in). Tests reset this between cases for isolation.
 _CACHED_API_DATA: Optional[Dict[str, Any]] = None
+
+# Guards the background prefetch so we only ever launch one warm-up thread.
+_PREFETCH_LOCK = threading.Lock()
+_PREFETCH_STARTED = False
+
+
+def _load_api_payload() -> Optional[Dict[str, Any]]:
+    """Fetch the models.dev payload, memoizing the first successful result.
+
+    Shared by ``ModelsDevRegistry._fetch_from_api`` (blocking, on demand) and
+    ``prefetch_models_dev`` (background warm-up) so both populate the same
+    process-wide cache. Returns ``None`` on any failure so callers fall back to
+    the bundled JSON.
+    """
+    global _CACHED_API_DATA
+    if _CACHED_API_DATA is not None:
+        return _CACHED_API_DATA
+    try:
+        with httpx.Client(timeout=10.0) as client:
+            response = client.get(MODELS_DEV_API_URL)
+            response.raise_for_status()
+            data = response.json()
+            if isinstance(data, dict) and len(data) > 0:
+                _CACHED_API_DATA = data
+                return data
+            return None
+    except httpx.TimeoutException:
+        emit_warning("models.dev API timed out, using bundled fallback")
+        return None
+    except httpx.HTTPStatusError as e:
+        emit_warning(
+            f"models.dev API returned {e.response.status_code}, using bundled fallback"
+        )
+        return None
+    except Exception as e:
+        emit_warning(f"Failed to fetch from models.dev API: {e}, using bundled fallback")
+        return None
+
+
+def prefetch_models_dev() -> None:
+    """Warm the models.dev cache in a background daemon thread.
+
+    Constructing ``ModelsDevRegistry`` issues a blocking HTTP fetch (up to a
+    10s timeout) the first time it runs, which would otherwise freeze the UI
+    the moment a user opens the add-model menu. Calling this once at startup
+    moves that latency off the interactive path; by the time the menu opens the
+    process-wide cache is typically already populated. Idempotent and silent on
+    failure (the registry's bundled fallback still applies).
+    """
+    global _PREFETCH_STARTED
+    with _PREFETCH_LOCK:
+        if _PREFETCH_STARTED or _CACHED_API_DATA is not None:
+            return
+        _PREFETCH_STARTED = True
+    threading.Thread(
+        target=_load_api_payload, name="models-dev-prefetch", daemon=True
+    ).start()
 
 
 @dataclass(slots=True)
@@ -158,33 +216,9 @@ class ModelsDevRegistry:
         Returns:
             Parsed JSON data if successful, None otherwise.
         """
-        global _CACHED_API_DATA
-        # Reuse a previously fetched payload; never re-hit the network for it.
-        if _CACHED_API_DATA is not None:
-            return _CACHED_API_DATA
-        try:
-            with httpx.Client(timeout=10.0) as client:
-                response = client.get(MODELS_DEV_API_URL)
-                response.raise_for_status()
-                data = response.json()
-                if isinstance(data, dict) and len(data) > 0:
-                    # Cache only real successful fetches.
-                    _CACHED_API_DATA = data
-                    return data
-                return None
-        except httpx.TimeoutException:
-            emit_warning("models.dev API timed out, using bundled fallback")
-            return None
-        except httpx.HTTPStatusError as e:
-            emit_warning(
-                f"models.dev API returned {e.response.status_code}, using bundled fallback"
-            )
-            return None
-        except Exception as e:
-            emit_warning(
-                f"Failed to fetch from models.dev API: {e}, using bundled fallback"
-            )
-            return None
+        # Delegates to the shared module-level loader so the blocking on-demand
+        # path and the background prefetch share one process-wide cache.
+        return _load_api_payload()
 
     def _get_bundled_json_path(self) -> Path:
         """Get the path to the bundled JSON file."""

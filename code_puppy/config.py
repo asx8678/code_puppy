@@ -508,8 +508,7 @@ def get_config_keys():
     # /set autocompletes it). See plugins/wiggum/register_callbacks.py.
     default_keys.append("goal_max_iterations")
 
-    config = configparser.ConfigParser()
-    config.read(CONFIG_FILE)
+    config = _read_config_cached()
     keys = set(config[DEFAULT_SECTION].keys()) if DEFAULT_SECTION in config else set()
     keys.update(default_keys)
     return sorted(keys)
@@ -1547,8 +1546,7 @@ def get_all_agent_pinned_models() -> dict:
         Dict mapping agent names to their pinned model names.
         Only includes agents that have a pinned model (non-empty value).
     """
-    config = configparser.ConfigParser()
-    config.read(CONFIG_FILE)
+    config = _read_config_cached()
 
     pinnings = {}
     if DEFAULT_SECTION in config:

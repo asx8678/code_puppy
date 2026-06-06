@@ -166,6 +166,11 @@ async def event_stream_handler(
     banner_printed: set[int] = set()  # Track if banner was already printed
     token_count: dict[int, int] = {}  # Track token count per text/tool part
     tool_names: dict[int, str] = {}  # Track tool name per tool part index
+    # Debounce the "Calling tool..." status line: tool args stream as many
+    # small deltas, and reprinting (with a render-lock acquisition) on every
+    # one is pure overhead since the line is immediately overwritten. Track the
+    # (tool_name, count) last actually printed per part index.
+    tool_last_printed: dict[int, tuple[str, int]] = {}
     did_stream_anything = False  # Track if we streamed any content
 
     # Termflow streaming state for text parts
@@ -390,17 +395,29 @@ async def event_stream_handler(
                     # Use stored tool name for display
                     tool_name = tool_names.get(event.index, "")
                     count = token_count[event.index]
-                    # Display with tool wrench icon and tool name
-                    if tool_name:
-                        console.print(
-                            f"  \U0001f527 Calling {tool_name}... {count} token(s)   ",
-                            end="\r",
-                        )
-                    else:
-                        console.print(
-                            f"  \U0001f527 Calling tool... {count} token(s)   ",
-                            end="\r",
-                        )
+                    # Debounce: only reprint when the tool name changes or the
+                    # token count has advanced enough to be worth a redraw. This
+                    # collapses ~50-200 redundant prints per tool call (each of
+                    # which grabs the render lock) down to a handful.
+                    last_printed = tool_last_printed.get(event.index)
+                    should_print = (
+                        last_printed is None
+                        or last_printed[0] != tool_name
+                        or count - last_printed[1] >= 25
+                    )
+                    if should_print:
+                        # Display with tool wrench icon and tool name
+                        if tool_name:
+                            console.print(
+                                f"  \U0001f527 Calling {tool_name}... {count} token(s)   ",
+                                end="\r",
+                            )
+                        else:
+                            console.print(
+                                f"  \U0001f527 Calling tool... {count} token(s)   ",
+                                end="\r",
+                            )
+                        tool_last_printed[event.index] = (tool_name, count)
 
         # PartEndEvent - finish the streaming with a newline
         elif isinstance(event, PartEndEvent):
@@ -457,6 +474,7 @@ async def event_stream_handler(
                 # Clean up token count and tool names
                 token_count.pop(event.index, None)
                 tool_names.pop(event.index, None)
+                tool_last_printed.pop(event.index, None)
                 # Clean up all tracking sets
                 streaming_parts.discard(event.index)
                 thinking_parts.discard(event.index)

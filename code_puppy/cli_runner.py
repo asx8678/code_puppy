@@ -404,6 +404,15 @@ async def interactive_mode(message_renderer, initial_command: str = None) -> Non
     """Run the agent in interactive mode."""
     from code_puppy.command_line.command_handler import handle_command
 
+    # Warm the models.dev cache in the background so opening the add-model menu
+    # later doesn't block the UI on a synchronous network fetch.
+    try:
+        from code_puppy.models_dev_parser import prefetch_models_dev
+
+        prefetch_models_dev()
+    except Exception:
+        pass
+
     display_console = message_renderer.console
     from code_puppy.messaging import emit_info, emit_system_message
 

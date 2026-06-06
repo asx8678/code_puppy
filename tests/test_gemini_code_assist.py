@@ -264,10 +264,11 @@ class TestGeminiCodeAssistModel:
             }
         }
         with patch("httpx.AsyncClient") as MockClient:
-            client_instance = AsyncMock()
+            # The model now reuses a single long-lived client (no ``async with``
+            # per request), so the post() lives on the client instance directly.
+            client_instance = MockClient.return_value
+            client_instance.is_closed = False
             client_instance.post = AsyncMock(return_value=mock_resp)
-            MockClient.return_value.__aenter__ = AsyncMock(return_value=client_instance)
-            MockClient.return_value.__aexit__ = AsyncMock(return_value=False)
 
             msgs = [ModelRequest(parts=[UserPromptPart(content="hi")])]
             result = await model.request(msgs, None, default_params)
@@ -279,10 +280,9 @@ class TestGeminiCodeAssistModel:
         mock_resp.status_code = 500
         mock_resp.text = "Internal Server Error"
         with patch("httpx.AsyncClient") as MockClient:
-            client_instance = AsyncMock()
+            client_instance = MockClient.return_value
+            client_instance.is_closed = False
             client_instance.post = AsyncMock(return_value=mock_resp)
-            MockClient.return_value.__aenter__ = AsyncMock(return_value=client_instance)
-            MockClient.return_value.__aexit__ = AsyncMock(return_value=False)
 
             msgs = [ModelRequest(parts=[UserPromptPart(content="hi")])]
             with pytest.raises(RuntimeError, match="500"):
@@ -294,13 +294,12 @@ class TestGeminiCodeAssistModel:
         mock_response.status_code = 200
 
         with patch("httpx.AsyncClient") as MockClient:
-            client_instance = AsyncMock()
+            client_instance = MockClient.return_value
+            client_instance.is_closed = False
             stream_cm = AsyncMock()
             stream_cm.__aenter__ = AsyncMock(return_value=mock_response)
             stream_cm.__aexit__ = AsyncMock(return_value=False)
             client_instance.stream = MagicMock(return_value=stream_cm)
-            MockClient.return_value.__aenter__ = AsyncMock(return_value=client_instance)
-            MockClient.return_value.__aexit__ = AsyncMock(return_value=False)
 
             msgs = [ModelRequest(parts=[UserPromptPart(content="hi")])]
             async with model.request_stream(msgs, None, default_params) as streamed:
@@ -313,18 +312,73 @@ class TestGeminiCodeAssistModel:
         mock_response.aread = AsyncMock(return_value=b"Bad Request")
 
         with patch("httpx.AsyncClient") as MockClient:
-            client_instance = AsyncMock()
+            client_instance = MockClient.return_value
+            client_instance.is_closed = False
             stream_cm = AsyncMock()
             stream_cm.__aenter__ = AsyncMock(return_value=mock_response)
             stream_cm.__aexit__ = AsyncMock(return_value=False)
             client_instance.stream = MagicMock(return_value=stream_cm)
-            MockClient.return_value.__aenter__ = AsyncMock(return_value=client_instance)
-            MockClient.return_value.__aexit__ = AsyncMock(return_value=False)
 
             msgs = [ModelRequest(parts=[UserPromptPart(content="hi")])]
             with pytest.raises(RuntimeError, match="400"):
                 async with model.request_stream(msgs, None, default_params):
                     pass
+
+    @pytest.mark.anyio
+    async def test_client_is_reused_across_requests(self, model, default_params):
+        """The model must reuse one client instead of constructing per request."""
+        mock_resp = MagicMock()
+        mock_resp.status_code = 200
+        mock_resp.json.return_value = {
+            "response": {
+                "candidates": [{"content": {"parts": [{"text": "ok"}]}}],
+                "usageMetadata": {},
+            }
+        }
+        with patch("httpx.AsyncClient") as MockClient:
+            client_instance = MockClient.return_value
+            client_instance.is_closed = False
+            client_instance.post = AsyncMock(return_value=mock_resp)
+
+            msgs = [ModelRequest(parts=[UserPromptPart(content="hi")])]
+            await model.request(msgs, None, default_params)
+            await model.request(msgs, None, default_params)
+
+            # Two requests, but the client must only be constructed once.
+            assert MockClient.call_count == 1
+            assert client_instance.post.await_count == 2
+
+    @pytest.mark.anyio
+    async def test_get_client_recreates_after_close(self, model):
+        """A closed client is transparently replaced on next use."""
+        with patch("httpx.AsyncClient") as MockClient:
+            first = MagicMock()
+            first.is_closed = True  # Simulate a previously-closed client
+            second = MagicMock()
+            second.is_closed = False
+            MockClient.side_effect = [first, second]
+
+            c1 = model._get_client()
+            assert c1 is first
+            # First client reports closed -> a fresh one is built.
+            c2 = model._get_client()
+            assert c2 is second
+            assert MockClient.call_count == 2
+
+    @pytest.mark.anyio
+    async def test_aclose_closes_client(self, model):
+        with patch("httpx.AsyncClient") as MockClient:
+            client_instance = MockClient.return_value
+            client_instance.is_closed = False
+            client_instance.aclose = AsyncMock()
+
+            model._get_client()
+            await model.aclose()
+
+            client_instance.aclose.assert_awaited_once()
+            assert model._client is None
+            # Safe to call again with no client.
+            await model.aclose()
 
 
 class TestStreamedResponse:
