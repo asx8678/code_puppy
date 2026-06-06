@@ -295,11 +295,15 @@ class BaseAgent(ABC):
         if not servers:
             return None
 
+        # Only warm the cache when already inside a running loop. Using
+        # get_running_loop() (instead of the deprecated get_event_loop())
+        # raises RuntimeError when no loop is running, which is exactly the
+        # "nothing to warm" case.
         try:
-            loop = asyncio.get_event_loop()
+            loop = asyncio.get_running_loop()
         except RuntimeError:
             return None
-        if loop is None or not loop.is_running():
+        if not loop.is_running():
             return None
 
         async def _warm(server: Any) -> None:
