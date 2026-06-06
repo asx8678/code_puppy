@@ -3,6 +3,7 @@ MCP Dashboard Implementation
 
 Provides visual status dashboard for MCP servers using Rich tables.
 """
+
 from __future__ import annotations
 
 from datetime import datetime
@@ -279,7 +280,7 @@ class MCPDashboard:
                 seconds = latency_ms / 1000
                 return f"[red]{seconds:.1f}s[/red]"
 
-        except (ValueError, TypeError):
+        except ValueError, TypeError:
             return "error"
 
     def print_dashboard(self) -> None:

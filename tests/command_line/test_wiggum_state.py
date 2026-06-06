@@ -1,4 +1,5 @@
 """Tests for wiggum_state.py - 100% coverage."""
+
 from __future__ import annotations
 
 from code_puppy.command_line.wiggum_state import (

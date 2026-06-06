@@ -1,6 +1,7 @@
 """
 Tests for ManagedMCPServer.
 """
+
 from __future__ import annotations
 
 import os

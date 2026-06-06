@@ -209,7 +209,7 @@ def _preserve_structured(value: Any) -> Any:
     """
     try:
         serialised = json.dumps(value, default=str, ensure_ascii=False)
-    except (TypeError, ValueError):
+    except TypeError, ValueError:
         # Not JSON-serialisable at all -- fall back to a short repr.
         try:
             return _truncate_string(repr(value), max_length=_MAX_ARGS_TRUNCATED_STR)

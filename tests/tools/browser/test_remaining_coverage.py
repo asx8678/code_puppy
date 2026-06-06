@@ -1,4 +1,5 @@
 """Tests for remaining uncovered lines across browser tool files."""
+
 from __future__ import annotations
 
 from unittest.mock import AsyncMock, MagicMock, patch

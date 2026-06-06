@@ -8,6 +8,7 @@ Provides:
   /hooks disable   – Disable all hooks (both global and project)
   /hooks status    – Show summary counts per event type
 """
+
 from __future__ import annotations
 
 import logging

@@ -16,6 +16,7 @@ Adding a new provider
 2. Register it in PROVIDER_ALIASES at the bottom of this file.
 3. That's it — the matcher picks it up automatically.
 """
+
 from __future__ import annotations
 
 # ---------------------------------------------------------------------------

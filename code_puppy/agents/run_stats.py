@@ -188,9 +188,7 @@ class AgentRunStats:
             return avg_ttft, avg_gen
 
     @staticmethod
-    def format_conversation_stats(
-        avg_ttft: float | None, avg_gen: float | None
-    ) -> str:
+    def format_conversation_stats(avg_ttft: float | None, avg_gen: float | None) -> str:
         """Format conversation-wide averages as a compact suffix string.
 
         Note: a space is intentionally inserted between the TTFT value and

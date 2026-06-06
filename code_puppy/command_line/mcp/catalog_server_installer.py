@@ -3,6 +3,7 @@
 Handles prompting users for configuration and installing
 MCP servers from the catalog.
 """
+
 from __future__ import annotations
 
 import os
@@ -55,7 +56,7 @@ def prompt_for_server_config(manager, server) -> dict | None:
     try:
         name_input = safe_input(f"  Server name [{default_name}]: ")
         server_name = name_input if name_input else default_name
-    except (KeyboardInterrupt, EOFError):
+    except KeyboardInterrupt, EOFError:
         emit_info("")
         emit_warning("Installation cancelled")
         return None
@@ -68,7 +69,7 @@ def prompt_for_server_config(manager, server) -> dict | None:
             if not override.lower().startswith("y"):
                 emit_warning("Installation cancelled")
                 return None
-        except (KeyboardInterrupt, EOFError):
+        except KeyboardInterrupt, EOFError:
             emit_info("")
             emit_warning("Installation cancelled")
             return None
@@ -96,7 +97,7 @@ def prompt_for_server_config(manager, server) -> dict | None:
                         # Save to config for future use
                         set_config_value(var, value)
                         os.environ[var] = value
-                except (KeyboardInterrupt, EOFError):
+                except KeyboardInterrupt, EOFError:
                     emit_info("")
                     emit_warning("Installation cancelled")
                     return None
@@ -126,7 +127,7 @@ def prompt_for_server_config(manager, server) -> dict | None:
                 elif required:
                     emit_warning(f"Required value '{name}' not provided")
                     return None
-            except (KeyboardInterrupt, EOFError):
+            except KeyboardInterrupt, EOFError:
                 emit_info("")
                 emit_warning("Installation cancelled")
                 return None

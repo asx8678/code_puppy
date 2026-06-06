@@ -1,6 +1,7 @@
 """
 MCP Restart Command - Restarts a specific MCP server.
 """
+
 from __future__ import annotations
 
 import logging

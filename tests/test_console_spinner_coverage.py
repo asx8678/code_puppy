@@ -2,6 +2,7 @@
 
 Tests spinner animation, state management, threading, and visual output.
 """
+
 from __future__ import annotations
 
 import sys

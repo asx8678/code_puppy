@@ -4,6 +4,7 @@ Tests for MCP List and Search Commands.
 Covers server listing, registry searching, table formatting,
 error handling, and various edge cases.
 """
+
 from __future__ import annotations
 
 from unittest.mock import Mock, patch

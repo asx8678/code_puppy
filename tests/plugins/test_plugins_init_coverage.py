@@ -6,6 +6,7 @@ Tests cover plugin loading functions including:
 - Error handling paths
 - Idempotent loading behavior
 """
+
 from __future__ import annotations
 
 import sys

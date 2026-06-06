@@ -1,4 +1,5 @@
 """Skill discovery - scans directories for valid skills."""
+
 from __future__ import annotations
 
 import logging

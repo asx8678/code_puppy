@@ -319,7 +319,7 @@ def _mcp_tool_tokens(mcp_tool: Any, prefix: str) -> int:
     if schema:
         try:
             tokens += estimate_tokens(json.dumps(schema, sort_keys=True))
-        except (TypeError, ValueError):
+        except TypeError, ValueError:
             # Schema isn't JSON-serializable for some reason — fall
             # back to repr so we at least account for *something*.
             tokens += estimate_tokens(repr(schema))
@@ -634,7 +634,7 @@ def sanitize_tool_call_ids(
                     try:
                         part.tool_call_id = bad_ids[tcid]  # type: ignore[misc]
                         new_parts.append(part)
-                    except (AttributeError, TypeError):
+                    except AttributeError, TypeError:
                         # Truly immutable — skip this part's ID fix.
                         new_parts.append(part)
             else:
@@ -650,7 +650,7 @@ def sanitize_tool_call_ids(
                     # hash_message/token counts reflect the sanitized parts.
                     _invalidate_message_stats(msg)
                     sanitized.append(msg)
-                except (AttributeError, TypeError):
+                except AttributeError, TypeError:
                     sanitized.append(msg)
         else:
             sanitized.append(msg)

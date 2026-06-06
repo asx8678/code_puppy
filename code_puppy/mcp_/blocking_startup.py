@@ -6,6 +6,7 @@ This module provides MCP servers that:
 2. Block until fully initialized before allowing operations
 3. Optionally emit stderr to users (disabled by default to reduce console noise)
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -86,9 +87,7 @@ class StderrFileCapture:
 
             while not self.stop_monitoring.is_set():
                 try:
-                    with open(
-                        self.log_path, encoding="utf-8", errors="replace"
-                    ) as f:
+                    with open(self.log_path, encoding="utf-8", errors="replace") as f:
                         f.seek(self._last_read_pos)
                         new_content = f.read()
                         if new_content:

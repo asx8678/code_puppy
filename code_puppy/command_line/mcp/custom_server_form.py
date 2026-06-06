@@ -3,6 +3,7 @@
 Provides a form-based interface for configuring custom MCP servers
 with inline JSON editing and live validation.
 """
+
 from __future__ import annotations
 
 import json

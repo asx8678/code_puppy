@@ -1,4 +1,5 @@
 """Tests for provider_credentials helper module."""
+
 from __future__ import annotations
 
 import os

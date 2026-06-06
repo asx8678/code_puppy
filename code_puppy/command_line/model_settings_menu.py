@@ -3,6 +3,7 @@
 Provides a beautiful interface for viewing and modifying model-specific
 settings like temperature and seed on a per-model basis.
 """
+
 from __future__ import annotations
 
 import sys
@@ -165,9 +166,7 @@ def _get_model_display_settings(model_name: str) -> dict:
     return settings
 
 
-def _get_setting_choices(
-    setting_key: str, model_name: str | None = None
-) -> list[str]:
+def _get_setting_choices(setting_key: str, model_name: str | None = None) -> list[str]:
     """Get the available choices for a setting, filtered by model capabilities.
 
     For reasoning_effort, only codex models support 'xhigh' - regular GPT-5.2

@@ -7,6 +7,7 @@ Covers four hook phases used for plugin agent-wrapping and run lifecycle:
 * ``agent_run_cancel``          — async dispatch
 * ``should_skip_fallback_render`` — sync, any-True wins
 """
+
 from __future__ import annotations
 
 import asyncio

@@ -19,6 +19,7 @@ The agent processes them and may emit messages in response.
 
 NO Rich markup or formatting should be embedded in any string fields.
 """
+
 from __future__ import annotations
 
 from datetime import UTC, datetime

@@ -10,6 +10,7 @@ Usage:
     >>> manager.update_agent("session-123", status="running", tool_call_count=5)
     >>> manager.unregister_agent("session-123")
 """
+
 from __future__ import annotations
 
 import logging
@@ -135,9 +136,7 @@ class SubAgentConsoleManager:
         self._stop_event = threading.Event()
 
     @classmethod
-    def get_instance(
-        cls, console: Console | None = None
-    ) -> "SubAgentConsoleManager":
+    def get_instance(cls, console: Console | None = None) -> "SubAgentConsoleManager":
         """Get or create the singleton instance.
 
         Thread-safe singleton pattern using double-checked locking.

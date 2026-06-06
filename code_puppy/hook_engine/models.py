@@ -4,6 +4,7 @@ Data models for the hook engine.
 Defines all data structures used throughout the hook engine with full type
 safety and validation.
 """
+
 from __future__ import annotations
 
 from dataclasses import dataclass, field

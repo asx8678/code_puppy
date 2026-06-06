@@ -3,6 +3,7 @@ HTTP utilities module for fast-puppy.
 
 This module provides functions for creating properly configured HTTP clients.
 """
+
 from __future__ import annotations
 
 import asyncio

@@ -1,4 +1,5 @@
 """Tests for clipboard.py - cover remaining lines 27-30, 37-39 (PIL/BinaryContent import fallbacks)."""
+
 from __future__ import annotations
 
 import sys

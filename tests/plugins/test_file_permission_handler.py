@@ -4,6 +4,7 @@ Comprehensive tests for the file permission handler plugin.
 Tests cover permission prompts, preview generation, thread-safety,
 user feedback handling, and YOLO mode support.
 """
+
 from __future__ import annotations
 
 import os

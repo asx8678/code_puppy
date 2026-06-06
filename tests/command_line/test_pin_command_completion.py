@@ -1,4 +1,5 @@
 """Tests for pin_command_completion.py to achieve 100% coverage."""
+
 from __future__ import annotations
 
 from unittest.mock import mock_open, patch

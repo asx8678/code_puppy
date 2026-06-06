@@ -4,6 +4,7 @@ Comprehensive tests for the chatgpt_codex_client module which handles
 request interception and stream-to-response conversion for the ChatGPT
 Codex API.
 """
+
 from __future__ import annotations
 
 import json

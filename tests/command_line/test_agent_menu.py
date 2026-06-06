@@ -3,6 +3,7 @@
 Covers menu initialization, agent entry retrieval, rendering,
 pagination, current agent marking, and preview panel display.
 """
+
 from __future__ import annotations
 
 from unittest.mock import patch

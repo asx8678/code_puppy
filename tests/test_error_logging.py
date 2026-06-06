@@ -1,4 +1,5 @@
 """Tests for the error_logging module."""
+
 from __future__ import annotations
 
 import os

@@ -375,7 +375,7 @@ def prompt_bind_after_install_sync(server_name: str) -> None:
 
     try:
         answer = safe_input("Configure bindings for this server now? [Y/n]: ")
-    except (KeyboardInterrupt, EOFError):
+    except KeyboardInterrupt, EOFError:
         emit_info("Skipped binding. Use /agents → B to bind later.")
         return
 

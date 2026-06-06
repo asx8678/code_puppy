@@ -7,6 +7,7 @@ Supports:
 
 Hooks from both sources are loaded and can be managed independently in the TUI.
 """
+
 from __future__ import annotations
 
 import copy

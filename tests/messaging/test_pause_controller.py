@@ -1,4 +1,5 @@
 """Tests for code_puppy.messaging.pause_controller - PauseController + singleton."""
+
 from __future__ import annotations
 
 import asyncio

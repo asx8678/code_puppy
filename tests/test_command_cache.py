@@ -1,4 +1,5 @@
 """Tests for shell command safety caching layer."""
+
 from __future__ import annotations
 
 from code_puppy.plugins.shell_safety.command_cache import (

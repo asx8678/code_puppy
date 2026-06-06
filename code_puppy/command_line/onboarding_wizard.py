@@ -11,6 +11,7 @@ Usage:
     result = await run_onboarding_wizard()
     # result: "chatgpt", "claude", "completed", "skipped", or None
 """
+
 from __future__ import annotations
 
 import asyncio

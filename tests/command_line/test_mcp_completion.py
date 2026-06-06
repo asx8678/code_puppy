@@ -1,4 +1,5 @@
 """Tests for mcp_completion.py - 100% coverage."""
+
 from __future__ import annotations
 
 from unittest.mock import MagicMock, patch

@@ -2,6 +2,7 @@
 
 Provides a TUI for editing custom MCP server configurations.
 """
+
 from __future__ import annotations
 
 import json

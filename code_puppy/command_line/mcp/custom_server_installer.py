@@ -3,6 +3,7 @@
 Handles prompting users for custom server configuration and installing
 custom MCP servers with JSON configuration.
 """
+
 from __future__ import annotations
 
 import json
@@ -64,7 +65,7 @@ def prompt_and_install_custom_server(manager) -> bool:
         if not server_name:
             emit_warning("Server name is required")
             return False
-    except (KeyboardInterrupt, EOFError):
+    except KeyboardInterrupt, EOFError:
         emit_info("")
         emit_warning("Cancelled")
         return False
@@ -77,7 +78,7 @@ def prompt_and_install_custom_server(manager) -> bool:
             if not override.lower().startswith("y"):
                 emit_warning("Cancelled")
                 return False
-        except (KeyboardInterrupt, EOFError):
+        except KeyboardInterrupt, EOFError:
             emit_info("")
             emit_warning("Cancelled")
             return False
@@ -90,7 +91,7 @@ def prompt_and_install_custom_server(manager) -> bool:
 
     try:
         type_choice = safe_input("  Enter choice [1-3]: ")
-    except (KeyboardInterrupt, EOFError):
+    except KeyboardInterrupt, EOFError:
         emit_info("")
         emit_warning("Cancelled")
         return False
@@ -124,7 +125,7 @@ def prompt_and_install_custom_server(manager) -> bool:
             else:
                 empty_count = 0
                 json_lines.append(line)
-    except (KeyboardInterrupt, EOFError):
+    except KeyboardInterrupt, EOFError:
         emit_info("")
         emit_warning("Cancelled")
         return False

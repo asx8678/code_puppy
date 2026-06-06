@@ -7,6 +7,7 @@ failures when MCP servers become unhealthy. The circuit breaker has three states
 - OPEN: Calls are blocked and fail fast
 - HALF_OPEN: Limited calls allowed to test recovery
 """
+
 from __future__ import annotations
 
 import asyncio

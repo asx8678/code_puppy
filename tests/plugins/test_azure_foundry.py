@@ -3,6 +3,7 @@
 Tests cover token provider, configuration utilities, model creation,
 and slash command handlers with comprehensive mocking.
 """
+
 from __future__ import annotations
 
 import json

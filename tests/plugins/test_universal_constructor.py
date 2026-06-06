@@ -6,6 +6,7 @@ Comprehensive tests covering:
 - Sandbox code validation
 - Dangerous pattern detection
 """
+
 from __future__ import annotations
 
 import tempfile

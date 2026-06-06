@@ -3,6 +3,7 @@
 This module provides functionality for switching between different agent
 configurations, each with their own system prompts and tool sets.
 """
+
 from __future__ import annotations
 
 # Import for its side effect: auto-registers the TTFT/TG run-stats hooks.

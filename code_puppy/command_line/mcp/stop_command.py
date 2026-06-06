@@ -1,6 +1,7 @@
 """
 MCP Stop Command - Stops a specific MCP server.
 """
+
 from __future__ import annotations
 
 import logging

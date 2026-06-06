@@ -348,9 +348,7 @@ def _load_persisted_session(host: str, oauth_token: str = "") -> SessionToken | 
     return None
 
 
-def get_valid_session_token(
-    oauth_token: str, host: str = "github.com"
-) -> str | None:
+def get_valid_session_token(oauth_token: str, host: str = "github.com") -> str | None:
     """Return a valid Copilot session token, refreshing if needed.
 
     Checks in-memory cache → on-disk cache → exchanges for a new one.

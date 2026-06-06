@@ -217,7 +217,7 @@ def get_max_hook_retries() -> int:
     try:
         n = int(val)
         return max(1, n)  # At least 1 to avoid nonsensical values
-    except (ValueError, TypeError):
+    except ValueError, TypeError:
         return 3
 
 
@@ -233,7 +233,7 @@ def get_max_continuation_iterations() -> int:
     try:
         n = int(val)
         return min(1000, max(1, n))
-    except (ValueError, TypeError):
+    except ValueError, TypeError:
         return 25
 
 
@@ -317,7 +317,7 @@ def _read_config_cached() -> configparser.ConfigParser:
         config = configparser.ConfigParser()
         try:
             config.read(CONFIG_FILE)
-        except (configparser.Error, OSError):
+        except configparser.Error, OSError:
             config = configparser.ConfigParser()
             sig = None
         if sig is not None:
@@ -923,7 +923,7 @@ def get_temperature() -> float | None:
         temp = float(val)
         # Clamp to valid range (most APIs accept 0-2)
         return max(0.0, min(2.0, temp))
-    except (ValueError, TypeError):
+    except ValueError, TypeError:
         return None
 
 
@@ -979,7 +979,7 @@ def get_model_setting(
 
     try:
         return float(val)
-    except (ValueError, TypeError):
+    except ValueError, TypeError:
         return default
 
 
@@ -1036,7 +1036,7 @@ def get_all_model_settings(model_name: str) -> dict:
                             settings[setting_name] = int(val_stripped)
                         else:
                             settings[setting_name] = float(val_stripped)
-                    except (ValueError, TypeError):
+                    except ValueError, TypeError:
                         # Keep as string if not a number
                         settings[setting_name] = val_stripped
 
@@ -1186,7 +1186,7 @@ def normalize_command_history():
             content = content.encode("utf-8", errors="surrogatepass").decode(
                 "utf-8", errors="replace"
             )
-        except (UnicodeEncodeError, UnicodeDecodeError):
+        except UnicodeEncodeError, UnicodeDecodeError:
             pass  # Keep original if sanitization fails
 
         # Skip empty files
@@ -1383,7 +1383,7 @@ def get_protected_token_count():
 
         # Apply constraints: minimum 1000, maximum 75% of context length
         return max(1000, min(configured_value, max_protected_tokens))
-    except (ValueError, TypeError):
+    except ValueError, TypeError:
         # If parsing fails, return a reasonable default that respects the 75% limit
         model_context_length = get_model_context_length()
         max_protected_tokens = int(model_context_length * 0.75)
@@ -1403,7 +1403,7 @@ def get_resume_message_count() -> int:
         configured_value = int(val) if val else 50
         # Enforce reasonable bounds: minimum 0 (disabled), maximum 100
         return max(0, min(configured_value, 100))
-    except (ValueError, TypeError):
+    except ValueError, TypeError:
         return 50
 
 
@@ -1419,7 +1419,7 @@ def get_compaction_threshold():
         threshold = float(val) if val else 0.85
         # Clamp between reasonable bounds
         return max(0.5, min(0.95, threshold))
-    except (ValueError, TypeError):
+    except ValueError, TypeError:
         return 0.85
 
 
@@ -1468,7 +1468,7 @@ def get_message_limit(default: int = 1000) -> int:
     val = get_value("message_limit")
     try:
         return int(val) if val else default
-    except (ValueError, TypeError):
+    except ValueError, TypeError:
         return default
 
 
@@ -1489,7 +1489,7 @@ def save_command_to_history(command: str):
             command = command.encode("utf-8", errors="surrogatepass").decode(
                 "utf-8", errors="replace"
             )
-        except (UnicodeEncodeError, UnicodeDecodeError):
+        except UnicodeEncodeError, UnicodeDecodeError:
             # If that fails, do a more aggressive cleanup
             command = "".join(
                 char if ord(char) < 0xD800 or ord(char) > 0xDFFF else "\ufffd"
@@ -1607,7 +1607,7 @@ def get_max_saved_sessions() -> int:
         try:
             val = int(cfg_val)
             return max(0, val)  # Ensure non-negative
-        except (ValueError, TypeError):
+        except ValueError, TypeError:
             pass
     return 20
 
@@ -1913,7 +1913,7 @@ def get_diff_context_lines() -> int:
         context_lines = int(val) if val else 6
         # Apply reasonable bounds: minimum 0, maximum 50
         return max(0, min(context_lines, 50))
-    except (ValueError, TypeError):
+    except ValueError, TypeError:
         return 6
 
 
@@ -1927,7 +1927,7 @@ def get_terminal_tty() -> str | None:
         import sys
 
         return os.ttyname(sys.stdin.fileno())
-    except (OSError, AttributeError, ValueError):
+    except OSError, AttributeError, ValueError:
         return None
 
 

@@ -4,6 +4,7 @@ Shared fixtures and utilities for MCP command tests.
 Provides common mocks and test infrastructure to avoid duplication
 across MCP command test files.
 """
+
 from __future__ import annotations
 
 import json

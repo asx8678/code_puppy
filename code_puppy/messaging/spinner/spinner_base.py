@@ -1,6 +1,7 @@
 """
 Base spinner implementation to be extended for different UI modes.
 """
+
 from __future__ import annotations
 
 from abc import ABC, abstractmethod

@@ -10,6 +10,7 @@ Covers:
 - Fast Puppy configuration conversion
 - Edge cases and error handling
 """
+
 from __future__ import annotations
 
 import json

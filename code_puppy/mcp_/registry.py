@@ -4,6 +4,7 @@ ServerRegistry implementation for managing MCP server configurations.
 This module provides a registry that tracks all MCP server configurations
 and provides thread-safe CRUD operations with JSON persistence.
 """
+
 from __future__ import annotations
 
 import json
@@ -276,7 +277,7 @@ class ServerRegistry:
                     timeout = float(server_config["timeout"])
                     if timeout <= 0:
                         errors.append("Timeout must be positive")
-                except (ValueError, TypeError):
+                except ValueError, TypeError:
                     errors.append("Timeout must be a number")
 
             if "read_timeout" in server_config:
@@ -284,7 +285,7 @@ class ServerRegistry:
                     read_timeout = float(server_config["read_timeout"])
                     if read_timeout <= 0:
                         errors.append("Read timeout must be positive")
-                except (ValueError, TypeError):
+                except ValueError, TypeError:
                     errors.append("Read timeout must be a number")
 
             if "headers" in server_config:

@@ -8,6 +8,7 @@ Targets uncovered lines in:
 - start_servers_with_blocking() function
 - ExceptionGroup handling in __aenter__
 """
+
 from __future__ import annotations
 
 import os

@@ -3,6 +3,7 @@
 Tests the Playwright browser manager, initialization, page management,
 profile handling, and cleanup functionality.
 """
+
 from __future__ import annotations
 
 import sys

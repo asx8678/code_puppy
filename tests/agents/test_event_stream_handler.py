@@ -8,6 +8,7 @@ Covers:
 - Banner printing
 - Cleanup and state management
 """
+
 from __future__ import annotations
 
 from io import StringIO

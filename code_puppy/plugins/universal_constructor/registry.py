@@ -4,6 +4,7 @@ This module provides the core registry that scans the user's UC directory,
 loads tool metadata, extracts function signatures, and provides access
 to enabled tools for the LLM.
 """
+
 from __future__ import annotations
 
 import importlib.util
@@ -134,7 +135,7 @@ class UCRegistry:
         try:
             sig = inspect.signature(func)
             signature_str = f"{func_name}{sig}"
-        except (ValueError, TypeError):
+        except ValueError, TypeError:
             signature_str = f"{func_name}(...)"
 
         # Extract docstring

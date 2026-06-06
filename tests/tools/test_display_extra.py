@@ -1,4 +1,5 @@
 """Extra tests for display.py line 39 (subagent skip)."""
+
 from __future__ import annotations
 
 from unittest.mock import patch

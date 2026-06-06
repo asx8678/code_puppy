@@ -3,6 +3,7 @@
 Covers ClipboardAttachmentManager, singleton pattern, image capture,
 size limiting, error handling, and cross-platform detection.
 """
+
 from __future__ import annotations
 
 import io

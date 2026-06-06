@@ -6,6 +6,7 @@ prompt the user for approval before allowing them through.
 
 Returns {"blocked": True} to deny, None to allow.
 """
+
 from __future__ import annotations
 
 import sys
@@ -24,7 +25,7 @@ def _is_interactive() -> bool:
     """Check if we're in an interactive terminal that can show prompts."""
     try:
         return sys.stdin.isatty()
-    except (AttributeError, OSError):
+    except AttributeError, OSError:
         return False
 
 

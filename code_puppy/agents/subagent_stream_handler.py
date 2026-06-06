@@ -10,6 +10,7 @@ Usage:
     >>> # In agent run:
     >>> await subagent_stream_handler(ctx, events, session_id="my-session-123")
 """
+
 from __future__ import annotations
 
 import asyncio

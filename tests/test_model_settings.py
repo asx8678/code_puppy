@@ -1,4 +1,5 @@
 """Tests for per-model settings functionality."""
+
 from __future__ import annotations
 
 from unittest.mock import MagicMock, patch

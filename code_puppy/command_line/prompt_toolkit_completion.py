@@ -79,7 +79,7 @@ def _sanitize_for_encoding(text: str) -> str:
             "utf-8", errors="replace"
         )
         return cleaned
-    except (UnicodeEncodeError, UnicodeDecodeError):
+    except UnicodeEncodeError, UnicodeDecodeError:
         # Last resort: filter out all non-BMP and surrogate characters
         return "".join(
             char
@@ -340,7 +340,7 @@ class CDCompleter(Completer):
                     display=d + os.sep,
                     display_meta="Directory",
                 )
-        except (OSError, PermissionError, RuntimeError):
+        except OSError, PermissionError, RuntimeError:
             # Non-fatal: ignore filesystem errors (permission issues,
             # non-existent dir). ``list_directory`` wraps the underlying OSError
             # in a RuntimeError, so we catch that here too. Narrowed from a bare

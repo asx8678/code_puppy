@@ -1,4 +1,5 @@
 """Tests for the tool registration system."""
+
 from __future__ import annotations
 
 from unittest.mock import MagicMock, patch

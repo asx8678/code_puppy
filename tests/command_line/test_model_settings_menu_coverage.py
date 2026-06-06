@@ -1,4 +1,5 @@
 """Coverage tests for model_settings_menu.py - exercises all uncovered code paths."""
+
 from __future__ import annotations
 
 from unittest.mock import MagicMock, patch

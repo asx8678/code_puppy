@@ -23,6 +23,7 @@ On startup we monkeypatch four things:
 We do **not** touch ``event_stream_handler`` inlining — that code is for
 progress display only, not for compaction decisions.
 """
+
 from __future__ import annotations
 
 import logging

@@ -3,6 +3,7 @@
 Now using the fixed arrow_select_async with proper HTML escaping.
 Supports cycling through all supported languages with left/right arrows!
 """
+
 from __future__ import annotations
 
 import asyncio

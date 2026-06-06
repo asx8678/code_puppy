@@ -189,7 +189,7 @@ def register_kennel_recall(agent: Any) -> None:
             )
         try:
             top_k = max(1, min(int(top_k), 20))
-        except (TypeError, ValueError):
+        except TypeError, ValueError:
             top_k = 5
 
         if not query or not query.strip():
@@ -335,7 +335,7 @@ def register_kennel_recent(agent: Any) -> None:
             )
         try:
             top_k = max(1, min(int(top_k), 50))
-        except (TypeError, ValueError):
+        except TypeError, ValueError:
             top_k = 5
         try:
             agent_name = _agent_name_from_context(context)

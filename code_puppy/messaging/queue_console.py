@@ -4,6 +4,7 @@ Queue-based console that mimics Rich Console but sends messages to a queue.
 This allows tools to use the same Rich console interface while having
 their output captured and routed through our message queue system.
 """
+
 from __future__ import annotations
 
 import threading
@@ -255,7 +256,7 @@ class QueueConsole:
                 )
 
             return user_response
-        except (KeyboardInterrupt, EOFError):
+        except KeyboardInterrupt, EOFError:
             # Handle interruption gracefully
             input_console.print("\n[yellow]Input cancelled[/yellow]")
             self.queue.emit_simple(MessageType.WARNING, "User input cancelled")

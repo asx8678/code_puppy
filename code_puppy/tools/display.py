@@ -3,6 +3,7 @@
 This module provides non-streaming display functions for rendering
 agent results and other structured content using termflow for markdown.
 """
+
 from __future__ import annotations
 
 from rich.console import Console

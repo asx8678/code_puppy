@@ -3,6 +3,7 @@
 Focuses on _reset_windows_console and safe_input functions
 that require platform-specific mocking.
 """
+
 from __future__ import annotations
 
 import sys

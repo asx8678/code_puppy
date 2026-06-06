@@ -5,6 +5,7 @@ This module provides error isolation for MCP server calls to prevent
 server errors from crashing the application. It implements quarantine
 logic with exponential backoff for failed servers.
 """
+
 from __future__ import annotations
 
 import asyncio

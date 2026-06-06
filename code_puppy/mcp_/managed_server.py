@@ -4,6 +4,7 @@ ManagedMCPServer wrapper class implementation.
 This module provides a managed wrapper around pydantic-ai MCP server classes
 that adds management capabilities while maintaining 100% compatibility.
 """
+
 from __future__ import annotations
 
 import os
@@ -127,7 +128,9 @@ class ManagedMCPServer:
             server_config: Server configuration containing type, connection details, etc.
         """
         self.config = server_config
-        self._pydantic_server: MCPServerSSE | MCPServerStdio | MCPServerStreamableHTTP | None = None
+        self._pydantic_server: (
+            MCPServerSSE | MCPServerStdio | MCPServerStreamableHTTP | None
+        ) = None
         self._state = ServerState.STOPPED
         self._enabled = server_config.enabled
         self._quarantine_until: datetime | None = None

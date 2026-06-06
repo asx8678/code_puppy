@@ -7,6 +7,7 @@ Provides cross-platform clipboard image capture:
 Also provides a thread-safe ClipboardAttachmentManager for managing
 pending clipboard image attachments in the CLI.
 """
+
 from __future__ import annotations
 
 import io
@@ -102,7 +103,7 @@ def _check_linux_clipboard_tool() -> str | None:
             timeout=5,
         )
         return "wl-paste"
-    except (FileNotFoundError, subprocess.TimeoutExpired):
+    except FileNotFoundError, subprocess.TimeoutExpired:
         pass
 
     # Check for xclip (X11)
@@ -113,7 +114,7 @@ def _check_linux_clipboard_tool() -> str | None:
             timeout=5,
         )
         return "xclip"
-    except (FileNotFoundError, subprocess.TimeoutExpired):
+    except FileNotFoundError, subprocess.TimeoutExpired:
         pass
 
     return None
@@ -246,7 +247,7 @@ def has_image_in_clipboard() -> bool:
                     text=True,
                 )
                 return "image/png" in result.stdout or "image/" in result.stdout
-        except (subprocess.TimeoutExpired, Exception):
+        except subprocess.TimeoutExpired, Exception:
             return False
 
         return False

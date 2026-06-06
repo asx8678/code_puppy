@@ -10,6 +10,7 @@ flag *after* an ``await asyncio.sleep(...)``.  We then assert that by the
 time the underlying pydantic-ai ``run()`` is invoked, the flag is already
 ``True`` — proving the hook finished before the agent task got going.
 """
+
 from __future__ import annotations
 
 import asyncio

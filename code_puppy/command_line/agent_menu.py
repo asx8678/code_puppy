@@ -3,6 +3,7 @@
 Provides a split-panel interface for browsing and selecting agents
 with live preview of agent details.
 """
+
 from __future__ import annotations
 
 import asyncio

@@ -2,6 +2,7 @@
 
 Targets all uncovered lines to reach 100% coverage.
 """
+
 from __future__ import annotations
 
 import io

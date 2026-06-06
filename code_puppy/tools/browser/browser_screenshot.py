@@ -3,6 +3,7 @@
 Captures screenshots and returns them via ToolReturn with BinaryContent
 so multimodal models can directly see and analyze - no separate VQA agent needed.
 """
+
 from __future__ import annotations
 
 import time

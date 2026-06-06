@@ -8,6 +8,7 @@ but not bound to agent" warning emitted by
 State is persisted in ``puppy.cfg`` under ``mcp_unbound_warning_silenced`` so
 the silence survives restarts.
 """
+
 from __future__ import annotations
 
 import logging

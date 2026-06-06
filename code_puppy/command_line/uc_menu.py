@@ -3,6 +3,7 @@
 Provides a split-panel interface for browsing and managing UC tools
 with live preview of tool details and inline source code viewing.
 """
+
 from __future__ import annotations
 
 import asyncio

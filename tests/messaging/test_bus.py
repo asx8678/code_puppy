@@ -1,4 +1,5 @@
 """Tests for code_puppy.messaging.bus - MessageBus and global functions."""
+
 from __future__ import annotations
 
 import asyncio

@@ -1,4 +1,5 @@
 """JSON-based agent configuration system."""
+
 from __future__ import annotations
 
 import json

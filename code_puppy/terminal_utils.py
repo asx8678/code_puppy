@@ -2,6 +2,7 @@
 
 Handles Windows console mode resets and Unix terminal sanity restoration.
 """
+
 from __future__ import annotations
 
 import os
@@ -139,7 +140,7 @@ def reset_unix_terminal() -> None:
 
     try:
         subprocess.run(["reset"], check=True, capture_output=True)
-    except (subprocess.CalledProcessError, FileNotFoundError):
+    except subprocess.CalledProcessError, FileNotFoundError:
         pass  # Silently fail if reset command isn't available
 
 

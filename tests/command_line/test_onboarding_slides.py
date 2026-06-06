@@ -1,4 +1,5 @@
 """Tests for code_puppy/command_line/onboarding_slides.py"""
+
 from __future__ import annotations
 
 MODULE = "code_puppy.command_line.onboarding_slides"

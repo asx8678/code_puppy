@@ -4,6 +4,7 @@ Keep the verbosity floor-low. Each skill becomes a single line of the form
 ``- <name>: <description>``. That is essentially the frontmatter `name` and
 `description` fields, flattened. No XML, no ceremony, no escaping circus.
 """
+
 from __future__ import annotations
 
 from typing import TYPE_CHECKING

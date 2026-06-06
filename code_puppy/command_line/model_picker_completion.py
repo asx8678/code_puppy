@@ -431,7 +431,7 @@ class ModelSelectionMenu:
                 save_credential(env_var, value)
                 print(f"✅ Saved {env_var}")
                 logger.info("Saved credential %s for model %s", env_var, model_name)
-        except (KeyboardInterrupt, EOFError):
+        except KeyboardInterrupt, EOFError:
             logger.info("Credential editing cancelled by user")
             print("\n⚠️ Credential editing cancelled")
 

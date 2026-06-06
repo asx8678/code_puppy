@@ -4,6 +4,7 @@ Pattern matching engine for hook filters.
 Provides flexible pattern matching to determine if a hook should execute
 based on tool name, arguments, and other event data.
 """
+
 from __future__ import annotations
 
 import re

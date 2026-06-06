@@ -4,6 +4,7 @@ Health monitoring system for MCP servers.
 This module provides continuous health monitoring for MCP servers with
 automatic recovery actions when consecutive failures are detected.
 """
+
 from __future__ import annotations
 
 import asyncio

@@ -3,6 +3,7 @@ MCP Interactive Wizard Utilities - Shared interactive installation wizard functi
 
 Provides interactive functionality for installing and configuring MCP servers.
 """
+
 from __future__ import annotations
 
 import logging
@@ -147,9 +148,7 @@ def interactive_server_selection(group_id: str):
             )
             emit_info(f"    {server.description[:80]}...", message_group=group_id)
 
-        choice = emit_prompt(
-            f"Enter number (1-{len(servers)}) or 'q' to quit: "
-        )
+        choice = emit_prompt(f"Enter number (1-{len(servers)}) or 'q' to quit: ")
 
         if choice.lower() == "q":
             return None

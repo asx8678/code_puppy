@@ -1,6 +1,7 @@
 """
 MCP Stop All Command - Stops all running MCP servers.
 """
+
 from __future__ import annotations
 
 import logging

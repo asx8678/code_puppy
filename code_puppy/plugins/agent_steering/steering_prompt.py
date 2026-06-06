@@ -54,7 +54,7 @@ def _collect_via_input_fallback() -> SteerResult:
     """
     try:
         text = input("steer> ")
-    except (EOFError, KeyboardInterrupt):
+    except EOFError, KeyboardInterrupt:
         return None
     text = (text or "").strip()
     return (text, "now") if text else None

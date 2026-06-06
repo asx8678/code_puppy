@@ -2,6 +2,7 @@
 
 🐶 Lean, mean, ADHD-friendly slides. 5 slides max!
 """
+
 from __future__ import annotations
 
 # ============================================================================

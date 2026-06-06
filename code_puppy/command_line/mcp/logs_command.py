@@ -1,6 +1,7 @@
 """
 MCP Logs Command - Shows server logs from persistent log files.
 """
+
 from __future__ import annotations
 
 import logging

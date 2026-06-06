@@ -1,6 +1,7 @@
 """
 MCP Install Command - Installs pre-configured MCP servers from the registry.
 """
+
 from __future__ import annotations
 
 import logging

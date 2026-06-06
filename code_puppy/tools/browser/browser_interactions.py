@@ -1,4 +1,5 @@
 """Browser element interaction tools for clicking, typing, and form manipulation."""
+
 from __future__ import annotations
 
 from typing import Any

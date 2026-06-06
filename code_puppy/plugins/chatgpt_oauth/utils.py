@@ -313,9 +313,7 @@ def exchange_code_for_tokens(
             token_data = response.json()
             # Add timestamp
             token_data["last_refresh"] = (
-                datetime.datetime.now(datetime.UTC)
-                .isoformat()
-                .replace("+00:00", "Z")
+                datetime.datetime.now(datetime.UTC).isoformat().replace("+00:00", "Z")
             )
             return token_data
         else:

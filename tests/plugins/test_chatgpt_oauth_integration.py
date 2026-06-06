@@ -6,6 +6,7 @@ Covers:
 - Custom commands (auth, status, logout)
 - Plugin configuration
 """
+
 from __future__ import annotations
 
 import json

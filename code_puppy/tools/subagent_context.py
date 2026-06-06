@@ -46,6 +46,7 @@ print(is_subagent())  # False
 3. **Clean Restoration**: Token-based reset ensures state is restored even on errors
 4. **Zero Overhead**: When not in a sub-agent context, minimal performance impact
 """
+
 from __future__ import annotations
 
 from collections.abc import Generator

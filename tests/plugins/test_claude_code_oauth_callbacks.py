@@ -2,6 +2,7 @@
 
 Covers custom command routing, authentication flow, status checks, and logout.
 """
+
 from __future__ import annotations
 
 import threading

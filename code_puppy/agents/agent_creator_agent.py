@@ -1,4 +1,5 @@
 """Agent Creator - helps users create new JSON agents."""
+
 from __future__ import annotations
 
 import json

@@ -508,7 +508,7 @@ class TestSymlinkHandling:
 
             assert result.error is None
             assert result.content is not None
-        except (OSError, NotImplementedError):
+        except OSError, NotImplementedError:
             pytest.skip("Symlinks not supported on this platform")
 
     def test_read_file_via_symlink(self, tmp_path):
@@ -524,7 +524,7 @@ class TestSymlinkHandling:
 
             assert result.error is None
             assert "symlink content" in result.content
-        except (OSError, NotImplementedError):
+        except OSError, NotImplementedError:
             pytest.skip("Symlinks not supported on this platform")
 
 

@@ -20,6 +20,7 @@ Hook stdout on exit code 0 is propagated to the agent context for the events
 where Claude Code's spec says it should become "additional context"
 (SessionStart, UserPromptSubmit, PreToolUse). See issue #298.
 """
+
 from __future__ import annotations
 
 import logging

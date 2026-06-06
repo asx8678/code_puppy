@@ -3,6 +3,7 @@
 Tests cover markdown command loading, global/project command resolution,
 custom help callbacks, and command execution.
 """
+
 from __future__ import annotations
 
 import tempfile

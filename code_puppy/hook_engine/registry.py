@@ -3,6 +3,7 @@ Registry management for hooks.
 
 Builds and manages the HookRegistry from configuration dictionaries.
 """
+
 from __future__ import annotations
 
 import logging

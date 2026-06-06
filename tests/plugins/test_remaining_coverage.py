@@ -11,6 +11,7 @@ Covers:
 - universal_constructor/registry.py (multiple missing lines)
 - universal_constructor/sandbox.py (multiple missing lines)
 """
+
 from __future__ import annotations
 
 import ast

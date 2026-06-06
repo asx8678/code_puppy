@@ -1,4 +1,5 @@
 """Comprehensive test coverage for ChatGPT OAuth utilities."""
+
 from __future__ import annotations
 
 import base64

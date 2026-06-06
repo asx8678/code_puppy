@@ -8,6 +8,7 @@ Covers:
 
 These tests are immutable per project policy.  Do NOT modify or delete them.
 """
+
 from __future__ import annotations
 
 import copy

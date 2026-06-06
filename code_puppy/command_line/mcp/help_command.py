@@ -1,6 +1,7 @@
 """
 MCP Help Command - Shows help for all MCP commands.
 """
+
 from __future__ import annotations
 
 import logging

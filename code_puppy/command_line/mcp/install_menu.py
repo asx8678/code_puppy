@@ -3,6 +3,7 @@
 Provides a beautiful split-panel interface for browsing categories and servers
 with live preview of server details and one-click installation.
 """
+
 from __future__ import annotations
 
 import logging

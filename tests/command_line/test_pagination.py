@@ -1,4 +1,5 @@
 """Tests for shared command-line pagination helpers."""
+
 from __future__ import annotations
 
 import pytest

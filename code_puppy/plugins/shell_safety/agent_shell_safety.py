@@ -4,6 +4,7 @@ This agent provides rapid risk assessment of shell commands before execution.
 It's designed to be ultra-lightweight with a concise prompt (<200 tokens) and
 uses structured output for reliable parsing.
 """
+
 from __future__ import annotations
 
 from typing import TYPE_CHECKING

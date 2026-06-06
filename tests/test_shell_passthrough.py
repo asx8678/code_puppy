@@ -3,6 +3,7 @@
 The `!` prefix allows users to run shell commands directly from the
 Fast Puppy prompt without any agent processing.
 """
+
 from __future__ import annotations
 
 import asyncio

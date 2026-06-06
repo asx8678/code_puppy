@@ -1,4 +1,5 @@
 """Tests for hook configuration validator."""
+
 from __future__ import annotations
 
 from code_puppy.hook_engine.validator import (

@@ -2,6 +2,7 @@
 
 Tests for Pydantic message models and MessageBus functionality.
 """
+
 from __future__ import annotations
 
 from datetime import UTC, datetime

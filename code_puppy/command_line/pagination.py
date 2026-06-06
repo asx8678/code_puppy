@@ -3,6 +3,7 @@
 These helpers keep page math consistent across menus so selection and
 page navigation behave the same way everywhere.
 """
+
 from __future__ import annotations
 
 

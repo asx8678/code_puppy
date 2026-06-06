@@ -6,6 +6,7 @@ It consumes structured messages from the MessageBus and renders them using Rich.
 The renderer is responsible for ALL presentation decisions - the messages contain
 only structured data with no formatting hints.
 """
+
 from __future__ import annotations
 
 from typing import Protocol, runtime_checkable

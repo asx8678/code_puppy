@@ -4,6 +4,7 @@ This file intentionally keeps the test environment lean (no extra deps).
 To support `async def` tests without pytest-asyncio, we provide a minimal
 hook that runs coroutine test functions using the stdlib's asyncio.
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -60,7 +61,7 @@ try:
     from tests.integration.cli_expect.harness import (  # noqa: F401
         spawned_cli as spawned_cli,
     )
-except (ImportError, AttributeError):
+except ImportError, AttributeError:
     # On Windows or when pexpect.spawn is unavailable, skip integration fixtures
     pass
 

@@ -2,6 +2,7 @@
 MCP Server Registry Catalog - Pre-configured MCP servers.
 A curated collection of MCP servers that can be easily searched and installed.
 """
+
 from __future__ import annotations
 
 from dataclasses import dataclass, field

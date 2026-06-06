@@ -4,6 +4,7 @@ Tests for CircuitBreaker HALF_OPEN race condition fix (code_puppy-y10).
 Verifies that only one test call is allowed through at a time when the
 circuit breaker is in HALF_OPEN state.
 """
+
 from __future__ import annotations
 
 import asyncio

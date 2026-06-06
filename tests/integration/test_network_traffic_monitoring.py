@@ -222,7 +222,7 @@ class TrafficLoggingProxy:
                                     dest_sock if sock is client_sock else client_sock
                                 )
                                 other.sendall(data)
-                            except (ConnectionResetError, BrokenPipeError, OSError):
+                            except ConnectionResetError, BrokenPipeError, OSError:
                                 return
                 except Exception:
                     # Unexpected error during tunneling - close gracefully

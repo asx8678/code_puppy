@@ -4,6 +4,7 @@ Async server lifecycle management using pydantic-ai's context managers.
 This module properly manages MCP server lifecycles by maintaining async contexts
 within the same task, allowing servers to start and stay running.
 """
+
 from __future__ import annotations
 
 import asyncio

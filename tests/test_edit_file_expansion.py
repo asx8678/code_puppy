@@ -1,4 +1,5 @@
 """Tests for edit_file → create_file/replace_in_file/delete_snippet expansion."""
+
 from __future__ import annotations
 
 import json

@@ -1,4 +1,5 @@
 """Tests targeting remaining uncovered lines in code_puppy/tools/ask_user_question/."""
+
 from __future__ import annotations
 
 import os

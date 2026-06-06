@@ -124,7 +124,7 @@ def _run_ripgrep(root: str) -> list[str] | None:
             timeout=INDEX_BUILD_TIMEOUT_SECONDS,
             check=False,
         )
-    except (subprocess.TimeoutExpired, OSError):
+    except subprocess.TimeoutExpired, OSError:
         return None
     # rg exits 1 when there are no matches; that's fine, treat as empty.
     if proc.returncode not in (0, 1):

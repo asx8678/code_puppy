@@ -149,7 +149,7 @@ def _raw_tokens_for_pydantic_tools(tools: dict | None) -> int:
         if schema is not None:
             try:
                 total += _raw_estimate_tokens(json.dumps(schema))
-            except (TypeError, ValueError):
+            except TypeError, ValueError:
                 total += _raw_estimate_tokens(repr(schema))
         else:
             annotations = getattr(tool_obj, "__annotations__", None)
@@ -181,7 +181,7 @@ def _raw_tokens_for_mcp_servers(mcp_servers: list[Any] | None) -> int:
             if schema:
                 try:
                     total += _raw_estimate_tokens(json.dumps(schema, sort_keys=True))
-                except (TypeError, ValueError):
+                except TypeError, ValueError:
                     total += _raw_estimate_tokens(repr(schema))
     return total
 

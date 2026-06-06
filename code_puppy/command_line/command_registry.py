@@ -3,6 +3,7 @@
 This module provides a decorator-based registration system for commands,
 enabling automatic help generation and eliminating static command lists.
 """
+
 from __future__ import annotations
 
 from collections.abc import Callable

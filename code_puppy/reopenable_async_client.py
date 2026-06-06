@@ -5,6 +5,7 @@ This module provides a ReopenableAsyncClient class that extends httpx.AsyncClien
 to support reopening after being closed, which the standard httpx.AsyncClient
 doesn't support.
 """
+
 from __future__ import annotations
 
 import asyncio

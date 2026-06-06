@@ -1,4 +1,5 @@
 """Tests for the rich console renderer."""
+
 from __future__ import annotations
 
 import sys

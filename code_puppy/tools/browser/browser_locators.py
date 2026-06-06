@@ -1,4 +1,5 @@
 """Browser element discovery tools using semantic locators and XPath."""
+
 from __future__ import annotations
 
 from typing import Any

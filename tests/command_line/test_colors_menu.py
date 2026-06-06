@@ -8,6 +8,7 @@ Tests interactive TUI for banner color configuration including:
 - Theme management
 - Error handling and edge cases
 """
+
 from __future__ import annotations
 
 from unittest.mock import patch

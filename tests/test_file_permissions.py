@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Test script to verify file permission prompts work correctly."""
+
 from __future__ import annotations
 
 import os

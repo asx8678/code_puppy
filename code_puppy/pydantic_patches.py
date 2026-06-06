@@ -7,6 +7,7 @@ Usage:
     from code_puppy.pydantic_patches import apply_all_patches
     apply_all_patches()
 """
+
 from __future__ import annotations
 
 import importlib.metadata
@@ -270,7 +271,7 @@ def patch_tool_call_callbacks() -> None:
             if normalized_name != tool_name:
                 try:
                     call.tool_name = normalized_name
-                except (AttributeError, TypeError):
+                except AttributeError, TypeError:
                     pass
             return normalized_name, call
 

@@ -3,6 +3,7 @@
 Covers menu initialization, user input handling, navigation across languages,
 rendering, state management, error scenarios, and console I/O interactions.
 """
+
 from __future__ import annotations
 
 from unittest.mock import AsyncMock, MagicMock, patch

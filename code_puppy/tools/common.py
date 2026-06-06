@@ -1256,7 +1256,7 @@ def _get_user_approval_impl(
             if not user_feedback:
                 user_feedback = None
 
-    except (KeyboardInterrupt, EOFError):
+    except KeyboardInterrupt, EOFError:
         emit_error("Cancelled by user")
         confirmed = False
 
@@ -1448,7 +1448,7 @@ async def _get_user_approval_async_impl(
             if not user_feedback:
                 user_feedback = None
 
-    except (KeyboardInterrupt, EOFError):
+    except KeyboardInterrupt, EOFError:
         emit_error("Cancelled by user")
         confirmed = False
 
@@ -1554,7 +1554,7 @@ def atomic_write_text(
             os.fsync(dir_fd)
         finally:
             os.close(dir_fd)
-    except (OSError, AttributeError):
+    except OSError, AttributeError:
         pass  # directory fsync unsupported -- file content is still durable
 
 
@@ -1574,7 +1574,7 @@ def read_text_sanitized(path: str) -> str:
         text = text.encode("utf-8", errors="surrogatepass").decode(
             "utf-8", errors="replace"
         )
-    except (UnicodeEncodeError, UnicodeDecodeError):
+    except UnicodeEncodeError, UnicodeDecodeError:
         pass
     return text
 

@@ -4,6 +4,7 @@ Additional coverage tests for ServerRegistry.
 These tests target specific uncovered lines in registry.py
 to achieve higher coverage.
 """
+
 from __future__ import annotations
 
 import json

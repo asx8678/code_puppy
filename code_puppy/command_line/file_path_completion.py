@@ -157,7 +157,7 @@ def _glob_completions(
                 display=display,
                 display_meta=display_meta,
             )
-    except (PermissionError, FileNotFoundError, OSError):
+    except PermissionError, FileNotFoundError, OSError:
         return
 
 

@@ -10,6 +10,7 @@ This module provides extensive coverage for the command_runner module, testing:
 - Background execution
 - User confirmation flows
 """
+
 from __future__ import annotations
 
 import importlib.util

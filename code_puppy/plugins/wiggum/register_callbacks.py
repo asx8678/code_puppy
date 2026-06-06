@@ -32,7 +32,7 @@ def _get_goal_max_iterations() -> int:
     val = get_value("goal_max_iterations")
     try:
         n = int(val) if val else GOAL_MAX_ITERATIONS_DEFAULT
-    except (ValueError, TypeError):
+    except ValueError, TypeError:
         n = GOAL_MAX_ITERATIONS_DEFAULT
     return max(GOAL_MAX_ITERATIONS_FLOOR, min(n, GOAL_MAX_ITERATIONS_CEILING))
 
@@ -313,7 +313,7 @@ async def _run_single_judge(
             error=error,
             history=history,
         )
-    except (asyncio.CancelledError, KeyboardInterrupt):
+    except asyncio.CancelledError, KeyboardInterrupt:
         raise
     except Exception as exc:
         # judge_goal() already catches model exceptions and returns an
@@ -383,7 +383,7 @@ async def _run_goal_judges(
                 for judge in judges
             )
         )
-    except (asyncio.CancelledError, KeyboardInterrupt):
+    except asyncio.CancelledError, KeyboardInterrupt:
         # Display the banner so the user sees WHY the panel bailed, then
         # re-raise. The caller (_on_interactive_turn_end) catches at the
         # plugin boundary so the REPL stays alive. Letting cancellation
@@ -450,7 +450,7 @@ async def _on_interactive_turn_end(
                 result=result,
                 error=error,
             )
-        except (asyncio.CancelledError, KeyboardInterrupt):
+        except asyncio.CancelledError, KeyboardInterrupt:
             # Belt-and-suspenders: _run_goal_judges already swallows these
             # but we never want a stray Ctrl+C to escape the plugin and
             # take down the whole REPL.

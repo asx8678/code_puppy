@@ -1,4 +1,5 @@
 """Tests for the pi-style fuzzy @file completion in file_path_completion.py."""
+
 from __future__ import annotations
 
 import os

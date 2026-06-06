@@ -1,6 +1,7 @@
 """
 MCP Start All Command - Starts all registered MCP servers.
 """
+
 from __future__ import annotations
 
 import logging

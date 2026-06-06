@@ -4,6 +4,7 @@ Hook Creator MCP Prompt
 Simple MCP prompt that injects hook creation documentation/instructions
 before user prompts for creating Fast Puppy hooks.
 """
+
 from __future__ import annotations
 
 HOOK_CREATION_PROMPT = """

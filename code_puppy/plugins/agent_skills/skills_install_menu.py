@@ -12,6 +12,7 @@ remote ZIPs.
 This module is intentionally defensive: if the remote catalog isn't available,
 it shows an empty menu and returns False.
 """
+
 from __future__ import annotations
 
 import logging
@@ -652,7 +653,7 @@ def _prompt_and_install(entry: SkillCatalogEntry) -> bool:
                 return False
             force = False
 
-    except (KeyboardInterrupt, EOFError):
+    except KeyboardInterrupt, EOFError:
         emit_warning("Installation cancelled")
         return False
 

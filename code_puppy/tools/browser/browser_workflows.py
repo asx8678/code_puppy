@@ -1,4 +1,5 @@
 """Browser workflow management tools for saving and reusing automation patterns."""
+
 from __future__ import annotations
 
 from pathlib import Path

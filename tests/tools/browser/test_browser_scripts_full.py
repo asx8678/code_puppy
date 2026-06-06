@@ -1,4 +1,5 @@
 """Full coverage tests for browser_scripts.py - exception branches + register fns."""
+
 from __future__ import annotations
 
 from unittest.mock import AsyncMock, MagicMock, patch

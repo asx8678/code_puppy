@@ -1,6 +1,7 @@
 """
 MCP Search Command - Searches for pre-configured MCP servers in the registry.
 """
+
 from __future__ import annotations
 
 import logging

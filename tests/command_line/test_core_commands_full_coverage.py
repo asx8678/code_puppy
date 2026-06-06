@@ -1,4 +1,5 @@
 """Full coverage tests for code_puppy/command_line/core_commands.py."""
+
 from __future__ import annotations
 
 import os

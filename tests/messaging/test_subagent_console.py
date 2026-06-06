@@ -1,4 +1,5 @@
 """Tests for code_puppy.messaging.subagent_console."""
+
 from __future__ import annotations
 
 import time

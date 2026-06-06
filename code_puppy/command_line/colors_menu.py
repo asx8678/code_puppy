@@ -5,6 +5,7 @@ for different tool outputs (THINKING, SHELL COMMAND, READ FILE, etc.).
 
 Use /colors to launch the TUI and customize your banners!
 """
+
 from __future__ import annotations
 
 import asyncio

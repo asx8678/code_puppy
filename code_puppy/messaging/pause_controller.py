@@ -28,6 +28,7 @@ closed or unavailable — they fall back to direct `.set()/.clear()` on the
 Event and silently swallow `RuntimeError`. This is essential because the
 raw stdin key listener runs in a daemon thread with no asyncio loop.
 """
+
 from __future__ import annotations
 
 import asyncio

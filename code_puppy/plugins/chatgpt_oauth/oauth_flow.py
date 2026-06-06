@@ -131,9 +131,7 @@ class _OAuthServer(HTTPServer):
         api_key = token_data.access_token
 
         last_refresh = (
-            datetime.datetime.now(datetime.UTC)
-            .isoformat()
-            .replace("+00:00", "Z")
+            datetime.datetime.now(datetime.UTC).isoformat().replace("+00:00", "Z")
         )
         bundle = AuthBundle(
             api_key=api_key, token_data=token_data, last_refresh=last_refresh

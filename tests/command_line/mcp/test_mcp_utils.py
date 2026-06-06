@@ -3,6 +3,7 @@
 Covers format_state_indicator, format_uptime, find_server_id_by_name,
 and suggest_similar_servers functions.
 """
+
 from __future__ import annotations
 
 from unittest.mock import MagicMock, patch

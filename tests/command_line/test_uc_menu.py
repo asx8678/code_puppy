@@ -7,6 +7,7 @@ Tests cover:
 - Source code display
 - TUI interaction
 """
+
 from __future__ import annotations
 
 import tempfile

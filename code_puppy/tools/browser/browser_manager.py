@@ -2,6 +2,7 @@
 
 Supports multiple simultaneous instances with unique profile directories.
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -108,9 +109,7 @@ class BrowserManager:
     _context: BrowserContext | None = None
     _initialized: bool = False
 
-    def __init__(
-        self, session_id: str | None = None, browser_type: str | None = None
-    ):
+    def __init__(self, session_id: str | None = None, browser_type: str | None = None):
         """Initialize manager settings.
 
         Args:

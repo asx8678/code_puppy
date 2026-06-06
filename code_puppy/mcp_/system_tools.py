@@ -1,6 +1,7 @@
 """
 System tool detection and validation for MCP server requirements.
 """
+
 from __future__ import annotations
 
 import shutil

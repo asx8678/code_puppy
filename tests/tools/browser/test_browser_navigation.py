@@ -2,6 +2,7 @@
 
 Tests navigation operations (navigate, go_back, go_forward, reload) without actual browser.
 """
+
 from __future__ import annotations
 
 from unittest.mock import AsyncMock, patch

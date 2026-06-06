@@ -3,6 +3,7 @@
 This module registers callbacks to integrate UC with the rest of
 Fast Puppy. It ensures the plugin is properly loaded and initialized.
 """
+
 from __future__ import annotations
 
 import logging

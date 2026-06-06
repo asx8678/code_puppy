@@ -1,4 +1,5 @@
 """Tests for start_line and num_lines validation in _read_file."""
+
 from __future__ import annotations
 
 import os

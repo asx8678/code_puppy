@@ -1,4 +1,5 @@
 """Tests for the force push guard detector."""
+
 from __future__ import annotations
 
 from code_puppy.plugins.force_push_guard.detector import detect_force_push

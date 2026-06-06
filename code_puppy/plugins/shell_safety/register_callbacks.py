@@ -4,6 +4,7 @@ This module registers a callback that intercepts shell commands in yolo_mode,
 or in non-interactive sub-agent runs, and assesses their safety risk before
 execution.
 """
+
 from __future__ import annotations
 
 from typing import Any

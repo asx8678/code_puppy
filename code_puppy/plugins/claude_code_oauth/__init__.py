@@ -7,6 +7,7 @@ adds available models to the extra_models.json configuration.
 The plugin also includes a token refresh heartbeat for maintaining fresh
 tokens during long-running agentic operations.
 """
+
 from __future__ import annotations
 
 from .token_refresh_heartbeat import (

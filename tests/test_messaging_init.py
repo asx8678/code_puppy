@@ -2,6 +2,7 @@
 
 This module tests that the messaging package properly exports all its public API.
 """
+
 from __future__ import annotations
 
 import code_puppy.messaging as messaging_package

@@ -182,7 +182,7 @@ def is_project_directory(directory):
     try:
         contents = os.listdir(directory)
         return any(indicator in contents for indicator in project_indicators)
-    except (OSError, PermissionError):
+    except OSError, PermissionError:
         return False
 
 
@@ -369,7 +369,7 @@ def _list_files(
                             depth=depth,
                         )
                     )
-                except (FileNotFoundError, PermissionError, OSError):
+                except FileNotFoundError, PermissionError, OSError:
                     # Skip files we can't access
                     continue
 
@@ -421,7 +421,7 @@ def _list_files(
                                 depth=0,
                             )
                         )
-            except (FileNotFoundError, PermissionError, OSError):
+            except FileNotFoundError, PermissionError, OSError:
                 # Skip entries we can't access
                 pass
     except subprocess.TimeoutExpired:
@@ -598,7 +598,7 @@ def _read_file(
                 content = content.encode("utf-8", errors="surrogatepass").decode(
                     "utf-8", errors="replace"
                 )
-            except (UnicodeEncodeError, UnicodeDecodeError):
+            except UnicodeEncodeError, UnicodeDecodeError:
                 # If that fails, do a more aggressive cleanup
                 content = "".join(
                     char if ord(char) < 0xD800 or ord(char) > 0xDFFF else "\ufffd"
@@ -669,7 +669,7 @@ def _sanitize_string(text: str) -> str:
         return text.encode("utf-8", errors="surrogatepass").decode(
             "utf-8", errors="replace"
         )
-    except (UnicodeEncodeError, UnicodeDecodeError):
+    except UnicodeEncodeError, UnicodeDecodeError:
         # Last resort: filter out surrogate characters
         return "".join(
             char if ord(char) < 0xD800 or ord(char) > 0xDFFF else "\ufffd"

@@ -3,6 +3,7 @@ Comprehensive tests for MessageQueue functionality.
 
 Tests cover message queueing, buffering, rendering state, and async operations.
 """
+
 from __future__ import annotations
 
 import threading

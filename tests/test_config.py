@@ -15,6 +15,7 @@ The autouse ``isolate_global_state_between_tests`` fixture in conftest.py
 redirects CONFIG_DIR/CONFIG_FILE to an empty temp dir, so tests that call the
 real config setters/getters start from true product defaults.
 """
+
 from __future__ import annotations
 
 import configparser

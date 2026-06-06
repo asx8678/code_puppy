@@ -1,6 +1,7 @@
 """
 MCP List Command - Lists all registered MCP servers in a formatted table.
 """
+
 from __future__ import annotations
 
 import logging

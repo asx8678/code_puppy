@@ -4,6 +4,7 @@ Additional coverage tests for message_queue.py.
 Focuses on uncovered code paths: start/stop lifecycle, listeners,
 prompt request/response, async operations, and global helper functions.
 """
+
 from __future__ import annotations
 
 import asyncio

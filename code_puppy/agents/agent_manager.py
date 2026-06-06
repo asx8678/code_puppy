@@ -1,4 +1,5 @@
 """Agent manager for handling different agent configurations."""
+
 from __future__ import annotations
 
 import importlib
@@ -59,7 +60,7 @@ def get_terminal_session_id() -> str:
     try:
         ppid = os.getppid()
         return f"session_{ppid}"
-    except (OSError, AttributeError):
+    except OSError, AttributeError:
         # Fallback to current process ID if PPID unavailable
         return f"fallback_{os.getpid()}"
 
@@ -106,7 +107,7 @@ def _is_process_alive(pid: int) -> bool:
     except PermissionError:
         # No permission to signal -> process exists
         return True
-    except (OSError, ProcessLookupError):
+    except OSError, ProcessLookupError:
         # Process does not exist
         return False
     except ValueError:
@@ -135,7 +136,7 @@ def _cleanup_dead_sessions(sessions: dict[str, str]) -> dict[str, str]:
                 if _is_process_alive(pid):
                     cleaned[session_id] = agent_name
                 # else: skip dead session
-            except (ValueError, TypeError):
+            except ValueError, TypeError:
                 # Invalid session ID format, keep it anyway
                 cleaned[session_id] = agent_name
         else:
@@ -158,7 +159,7 @@ def _load_session_data() -> dict[str, str]:
                 # Clean up dead sessions while loading
                 return _cleanup_dead_sessions(data)
         return {}
-    except (json.JSONDecodeError, OSError):
+    except json.JSONDecodeError, OSError:
         # File corrupted or permission issues, start fresh
         return {}
 

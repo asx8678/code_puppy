@@ -3,6 +3,7 @@ Message queue system for decoupling Rich console output from renderers.
 
 This allows interactive mode to consume messages and render them appropriately.
 """
+
 from __future__ import annotations
 
 import asyncio

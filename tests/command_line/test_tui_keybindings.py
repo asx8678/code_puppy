@@ -3,6 +3,7 @@
 Captures the KeyBindings object from Application construction
 and invokes handlers directly to cover the closure bodies.
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -45,7 +46,7 @@ def _run_coro(coro):
     loop = asyncio.new_event_loop()
     try:
         loop.run_until_complete(coro)
-    except (Exception, KeyboardInterrupt):
+    except Exception, KeyboardInterrupt:
         pass
     finally:
         loop.close()

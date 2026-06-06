@@ -1,4 +1,5 @@
 """Comprehensive test coverage for ChatGPT OAuth flow."""
+
 from __future__ import annotations
 
 import time

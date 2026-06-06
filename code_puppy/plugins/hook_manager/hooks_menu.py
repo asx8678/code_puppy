@@ -7,6 +7,7 @@ from both global (~/.fast_puppy/hooks.json) and project (.claude/settings.json) 
 Built with prompt_toolkit to match the existing skills_menu aesthetic exactly
 (VSplit, FormattedTextControl, Frame).
 """
+
 from __future__ import annotations
 
 import sys

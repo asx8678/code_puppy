@@ -5,6 +5,7 @@ This plugin:
 2. Registers skill-related tools
 3. Provides /skills slash command (and alias /skill)
 """
+
 from __future__ import annotations
 
 import logging

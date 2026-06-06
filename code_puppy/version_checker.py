@@ -1,4 +1,5 @@
 """Version checking utilities for Fast Puppy."""
+
 from __future__ import annotations
 
 import httpx
@@ -18,7 +19,7 @@ def _version_tuple(version_str):
     """Convert version string to tuple of ints for proper comparison."""
     try:
         return tuple(int(x) for x in version_str.split("."))
-    except (ValueError, AttributeError):
+    except ValueError, AttributeError:
         return None
 
 

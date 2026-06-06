@@ -11,6 +11,7 @@ Claude Code Hook Compatibility:
   - Exit code 1  => block the operation (stderr used as reason)
   - Exit code 2  => error feedback to Claude (stderr fed back as tool error)
 """
+
 from __future__ import annotations
 
 import asyncio

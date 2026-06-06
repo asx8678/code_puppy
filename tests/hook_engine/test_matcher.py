@@ -1,4 +1,5 @@
 """Tests for hook engine pattern matcher."""
+
 from __future__ import annotations
 
 from code_puppy.hook_engine.matcher import _extract_file_path, matches

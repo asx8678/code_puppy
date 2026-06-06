@@ -3,6 +3,7 @@ Configuration validation for hooks.
 
 Validates hook configuration dictionaries and provides actionable error messages.
 """
+
 from __future__ import annotations
 
 import logging

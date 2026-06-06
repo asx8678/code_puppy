@@ -1,4 +1,5 @@
 """Event stream handler for processing streaming events from agent runs."""
+
 from __future__ import annotations
 
 import asyncio
@@ -270,7 +271,7 @@ async def event_stream_handler(
 
             try:
                 max_pause = float(get_value("max_pause_seconds") or 180.0)
-            except (TypeError, ValueError):
+            except TypeError, ValueError:
                 max_pause = 180.0
             resumed = await _pc.wait_if_paused(timeout=max_pause)
             if not resumed:

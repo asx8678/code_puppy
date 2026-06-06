@@ -1,6 +1,7 @@
 """
 Basic tests for ChatGPT OAuth plugin.
 """
+
 from __future__ import annotations
 
 import json

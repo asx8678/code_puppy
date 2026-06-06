@@ -4,6 +4,7 @@ Pydantic models that decouple message content from presentation.
 NO Rich markup or formatting should be embedded in any string fields.
 Renderers decide how to display these structured messages.
 """
+
 from __future__ import annotations
 
 from datetime import UTC, datetime
@@ -325,9 +326,7 @@ class UniversalConstructorMessage(BaseMessage):
     action: str = Field(
         description="The UC action performed (list/call/create/update/info)"
     )
-    tool_name: str | None = Field(
-        default=None, description="Tool name if applicable"
-    )
+    tool_name: str | None = Field(default=None, description="Tool name if applicable")
     success: bool = Field(description="Whether the operation succeeded")
     summary: str = Field(description="Brief summary of the result")
     details: str | None = Field(default=None, description="Additional details")

@@ -117,7 +117,7 @@ class _OpaqueCapturingStream(AsyncByteStream):
             try:
                 event = json.loads(data_str)
                 self._extract_from_event(event)
-            except (json.JSONDecodeError, TypeError):
+            except json.JSONDecodeError, TypeError:
                 pass
 
     def _extract_from_event(self, event: dict) -> None:
@@ -178,7 +178,7 @@ def _capture_from_content(
             opaque = msg.get("reasoning_opaque")
             if text and opaque:
                 opaque_cache[_text_key(text)] = opaque
-    except (json.JSONDecodeError, TypeError, AttributeError):
+    except json.JSONDecodeError, TypeError, AttributeError:
         pass
 
 

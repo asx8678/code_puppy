@@ -12,6 +12,7 @@ handles SIGINT correctly on Windows.
 
 On non-Windows platforms, this is not an issue - Ctrl+C works fine with uvx.
 """
+
 from __future__ import annotations
 
 import os

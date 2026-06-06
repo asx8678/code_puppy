@@ -8,6 +8,7 @@ Loads and merges hooks from multiple locations:
 Both configurations are loaded and merged so that hooks from both levels
 coexist and execute together.
 """
+
 from __future__ import annotations
 
 import json

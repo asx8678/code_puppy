@@ -1,4 +1,5 @@
 """Full coverage tests for browser_workflows.py."""
+
 from __future__ import annotations
 
 from unittest.mock import MagicMock, patch

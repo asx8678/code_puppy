@@ -4,6 +4,7 @@ Custom MCPServerStdio that captures stderr output properly.
 This module provides a version of MCPServerStdio that captures subprocess
 stderr output and makes it available through proper logging channels.
 """
+
 from __future__ import annotations
 
 import asyncio

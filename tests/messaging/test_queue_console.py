@@ -1,4 +1,5 @@
 """Tests for code_puppy.messaging.queue_console."""
+
 from __future__ import annotations
 
 from io import StringIO

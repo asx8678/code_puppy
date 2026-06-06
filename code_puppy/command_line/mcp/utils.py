@@ -3,6 +3,7 @@ MCP Command Utilities - Shared helper functions for MCP command handlers.
 
 Provides common utility functions used across multiple MCP command modules.
 """
+
 from __future__ import annotations
 
 from rich.text import Text

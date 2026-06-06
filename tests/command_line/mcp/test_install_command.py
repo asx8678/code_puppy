@@ -1,4 +1,5 @@
 """Tests for code_puppy/command_line/mcp/install_command.py"""
+
 from __future__ import annotations
 
 import os

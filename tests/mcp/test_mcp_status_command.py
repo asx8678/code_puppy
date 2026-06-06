@@ -4,6 +4,7 @@ Tests for MCP Status Command.
 Covers detailed server status display, error handling,
 server lookup, and edge cases.
 """
+
 from __future__ import annotations
 
 from unittest.mock import ANY, Mock, patch

@@ -3,6 +3,7 @@
 Provides a beautiful split-panel interface for browsing providers and models
 with live preview of model details and one-click addition to extra_models.json.
 """
+
 from __future__ import annotations
 
 import json
@@ -218,9 +219,7 @@ class AddModelMenu:
             return getattr(self, "provider_filter", "")
         return getattr(self, "model_filter", "")
 
-    def _sync_provider_selection(
-        self, preferred_provider: ProviderInfo | None
-    ) -> None:
+    def _sync_provider_selection(self, preferred_provider: ProviderInfo | None) -> None:
         filtered_providers = self._filtered_providers()
         if not filtered_providers:
             self.selected_provider_idx = 0
@@ -1022,7 +1021,7 @@ class AddModelMenu:
                 os.environ[env_var] = value
                 emit_info(f"✅ Saved {env_var} to config")
 
-            except (KeyboardInterrupt, EOFError):
+            except KeyboardInterrupt, EOFError:
                 emit_info("")  # Clean newline
                 emit_warning("Credential input cancelled")
                 return False
@@ -1053,7 +1052,7 @@ class AddModelMenu:
                 if value:
                     save_credential(env_var, value)
                     emit_info(f"✅ Saved {env_var}")
-            except (KeyboardInterrupt, EOFError):
+            except KeyboardInterrupt, EOFError:
                 emit_info("")  # Clean newline
                 emit_warning("Credential edit cancelled")
                 return False
@@ -1136,7 +1135,7 @@ class AddModelMenu:
 
             return (model_name, context_length)
 
-        except (KeyboardInterrupt, EOFError):
+        except KeyboardInterrupt, EOFError:
             emit_info("")  # Clean newline
             emit_warning("Custom model input cancelled")
             return None
@@ -1385,7 +1384,7 @@ class AddModelMenu:
                     if confirm not in ("y", "yes"):
                         emit_info("Model addition cancelled.")
                         return False
-                except (KeyboardInterrupt, EOFError):
+                except KeyboardInterrupt, EOFError:
                     emit_info("")
                     return False
 

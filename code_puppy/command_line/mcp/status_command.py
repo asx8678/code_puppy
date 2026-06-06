@@ -1,6 +1,7 @@
 """
 MCP Status Command - Shows detailed status for MCP servers.
 """
+
 from __future__ import annotations
 
 import logging

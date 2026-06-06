@@ -1,4 +1,5 @@
 """JavaScript execution and advanced page manipulation tools."""
+
 from __future__ import annotations
 
 from typing import Any

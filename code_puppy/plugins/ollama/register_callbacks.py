@@ -29,6 +29,7 @@ Full config (remote server, same custom_endpoint format as custom_openai):
 Note: Fast Puppy requires models with strong tool/function calling support.
 Models without tool calling will notwork properly.
 """
+
 from __future__ import annotations
 
 import logging

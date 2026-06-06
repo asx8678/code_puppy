@@ -5,6 +5,7 @@ This is NOT an automated test - it's for interactive visual testing.
 Run this script directly to demo the TUI:
     python -m code_puppy.tools.ask_user_question.demo_tui
 """
+
 from __future__ import annotations
 
 from .handler import ask_user_question

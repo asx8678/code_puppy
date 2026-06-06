@@ -1,4 +1,5 @@
 """Foundational tests for the CLI harness plumbing."""
+
 from __future__ import annotations
 
 import os

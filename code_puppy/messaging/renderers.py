@@ -19,6 +19,7 @@ Two flush paths cover both wake-up modes:
    ``_flush_paused_buffer`` even when no new messages arrive after the
    pause clears.
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -353,7 +354,7 @@ class SynchronousInteractiveRenderer:
             from .message_queue import provide_prompt_response
 
             provide_prompt_response(prompt_id, response)
-        except (EOFError, KeyboardInterrupt):
+        except EOFError, KeyboardInterrupt:
             from .message_queue import provide_prompt_response
 
             provide_prompt_response(prompt_id, "")

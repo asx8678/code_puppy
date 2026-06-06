@@ -1,4 +1,5 @@
 """Tests for code_puppy.messaging.markdown_patches."""
+
 from __future__ import annotations
 
 from io import StringIO

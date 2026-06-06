@@ -1,4 +1,5 @@
 """Tests for the built-in Obsidian Agent plugin."""
+
 from __future__ import annotations
 
 from code_puppy.plugins.obsidian_agent.agent_obsidian import ObsidianAgent

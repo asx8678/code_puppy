@@ -1,4 +1,5 @@
 """Tests for remaining coverage gaps in code_puppy/tools/common.py."""
+
 from __future__ import annotations
 
 from unittest.mock import patch

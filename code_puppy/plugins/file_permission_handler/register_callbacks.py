@@ -3,6 +3,7 @@
 This plugin handles user permission prompts for file operations,
 providing a consistent and extensible permission system.
 """
+
 from __future__ import annotations
 
 import difflib
@@ -86,7 +87,7 @@ def _preview_delete_snippet(file_path: str, snippet: str) -> str | None:
             original = original.encode("utf-8", errors="surrogatepass").decode(
                 "utf-8", errors="replace"
             )
-        except (UnicodeEncodeError, UnicodeDecodeError):
+        except UnicodeEncodeError, UnicodeDecodeError:
             pass
 
         if snippet not in original:
@@ -149,7 +150,7 @@ def _preview_replace_in_file(
             original = original.encode("utf-8", errors="surrogatepass").decode(
                 "utf-8", errors="replace"
             )
-        except (UnicodeEncodeError, UnicodeDecodeError):
+        except UnicodeEncodeError, UnicodeDecodeError:
             pass
 
         modified = original

@@ -3,6 +3,7 @@
 These tests cover end-to-end OAuth flows, security scenarios,
 and integration between different OAuth components.
 """
+
 from __future__ import annotations
 
 import json

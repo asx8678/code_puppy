@@ -2,6 +2,7 @@
 
 Targets all uncovered lines to achieve 100% coverage.
 """
+
 from __future__ import annotations
 
 import json
@@ -123,7 +124,7 @@ class TestIsProcessAlive:
                 # Just ensure it doesn't crash on non-Windows
                 try:
                     am._is_process_alive(1234)
-                except (AttributeError, ImportError):
+                except AttributeError, ImportError:
                     pass  # Expected on non-Windows
 
 

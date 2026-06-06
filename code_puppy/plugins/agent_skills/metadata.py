@@ -1,4 +1,5 @@
 """Skill metadata parsing - extracts info from SKILL.md frontmatter."""
+
 from __future__ import annotations
 
 import logging

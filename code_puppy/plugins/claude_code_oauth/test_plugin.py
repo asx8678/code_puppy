@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Manual sanity checks for the Claude Code OAuth plugin."""
+
 from __future__ import annotations
 
 import os

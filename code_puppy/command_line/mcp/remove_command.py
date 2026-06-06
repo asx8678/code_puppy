@@ -1,6 +1,7 @@
 """
 MCP Remove Command - Removes an MCP server.
 """
+
 from __future__ import annotations
 
 import json

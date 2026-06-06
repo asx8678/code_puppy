@@ -3,6 +3,7 @@
 Launch with /skills to browse, enable, disable, and configure skills.
 Built with prompt_toolkit for proper interactive split-panel interface.
 """
+
 from __future__ import annotations
 
 import os
@@ -513,7 +514,7 @@ def _prompt_for_directory() -> str | None:
             # Expand ~ to home directory
             expanded = os.path.expanduser(path)
             return expanded
-    except (KeyboardInterrupt, EOFError):
+    except KeyboardInterrupt, EOFError:
         print("\nCancelled.")
     return None
 
@@ -552,7 +553,7 @@ def _show_directories_menu() -> str | None:
                     remove_skill_directory(dir_to_remove)
                     print(f"Removed: {dir_to_remove}")
                     return "changed"
-    except (KeyboardInterrupt, EOFError):
+    except KeyboardInterrupt, EOFError:
         print("\nCancelled.")
     return None
 

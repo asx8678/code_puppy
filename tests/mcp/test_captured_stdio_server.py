@@ -10,6 +10,7 @@ Tests stdio server capture functionality including:
 - Proper cleanup and resource management
 - Error handling and edge cases
 """
+
 from __future__ import annotations
 
 import asyncio

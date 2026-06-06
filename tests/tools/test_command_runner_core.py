@@ -6,6 +6,7 @@ command_runner.py in isolation, focusing on:
 - set_awaiting_user_input: global flag toggling and spinner interaction
 - kill_all_running_shell_processes: process cleanup delegation
 """
+
 from __future__ import annotations
 
 import importlib.util

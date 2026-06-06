@@ -2,6 +2,7 @@
 
 This module tests plugin loading functionality including error handling.
 """
+
 from __future__ import annotations
 
 from unittest.mock import MagicMock, patch

@@ -5,6 +5,7 @@ detection, tool-name prefixing, header/URL transformations, cache_control
 injection (both the bytes-based and in-place payload variants), retry logic,
 and the full send() flow.
 """
+
 from __future__ import annotations
 
 import base64

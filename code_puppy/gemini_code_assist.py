@@ -162,7 +162,7 @@ class GeminiCodeAssistModel(Model):
                         if not isinstance(content, (str, int, float, bool, type(None))):
                             try:
                                 content = json.dumps(content, default=str)
-                            except (TypeError, ValueError):
+                            except TypeError, ValueError:
                                 content = str(content)
                         contents.append(
                             {

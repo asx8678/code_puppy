@@ -3,6 +3,7 @@
 These specifically target the registered agent tool (not the bare helper),
 because that's where malformed payloads from a model would arrive.
 """
+
 from __future__ import annotations
 
 from collections.abc import Callable

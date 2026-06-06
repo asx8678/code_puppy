@@ -3,6 +3,7 @@
 Tests workflow management including saving, listing, and reading browser automation
 workflows as markdown files. Achieves 70%+ coverage.
 """
+
 from __future__ import annotations
 
 import os
