@@ -1,7 +1,9 @@
 """Browser workflow management tools for saving and reusing automation patterns."""
 
+from __future__ import annotations
+
 from pathlib import Path
-from typing import Any, Dict
+from typing import Any
 
 from pydantic_ai import RunContext
 
@@ -18,7 +20,7 @@ def get_workflows_directory() -> Path:
     return workflows_dir
 
 
-async def save_workflow(name: str, content: str) -> Dict[str, Any]:
+async def save_workflow(name: str, content: str) -> dict[str, Any]:
     """Save a browser workflow as a markdown file."""
     group_id = generate_group_id("save_workflow", name)
     emit_info(
@@ -81,7 +83,7 @@ async def save_workflow(name: str, content: str) -> Dict[str, Any]:
         return {"success": False, "error": str(e), "name": name}
 
 
-async def list_workflows() -> Dict[str, Any]:
+async def list_workflows() -> dict[str, Any]:
     """List all available browser workflows."""
     group_id = generate_group_id("list_workflows")
     emit_info(
@@ -133,7 +135,7 @@ async def list_workflows() -> Dict[str, Any]:
         return {"success": False, "error": str(e)}
 
 
-async def read_workflow(name: str) -> Dict[str, Any]:
+async def read_workflow(name: str) -> dict[str, Any]:
     """Read a saved browser workflow."""
     group_id = generate_group_id("read_workflow", name)
     emit_info(
@@ -162,7 +164,7 @@ async def read_workflow(name: str) -> Dict[str, Any]:
             }
 
         # Read the workflow content
-        with open(workflow_path, "r", encoding="utf-8") as f:
+        with open(workflow_path, encoding="utf-8") as f:
             content = f.read()
 
         emit_success(
@@ -194,7 +196,7 @@ def register_save_workflow(agent):
         context: RunContext,
         name: str,
         content: str,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Save a browser automation workflow to disk for future reuse."""
         return await save_workflow(name, content)
 
@@ -203,7 +205,7 @@ def register_list_workflows(agent):
     """Register the list workflows tool."""
 
     @agent.tool
-    async def browser_list_workflows(context: RunContext) -> Dict[str, Any]:
+    async def browser_list_workflows(context: RunContext) -> dict[str, Any]:
         """List all saved browser automation workflows."""
         return await list_workflows()
 
@@ -215,6 +217,6 @@ def register_read_workflow(agent):
     async def browser_read_workflow(
         context: RunContext,
         name: str,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Read the contents of a saved browser automation workflow."""
         return await read_workflow(name)

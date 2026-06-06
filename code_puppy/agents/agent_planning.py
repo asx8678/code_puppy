@@ -1,5 +1,7 @@
 """Planning Agent - Breaks down complex tasks into actionable steps with strategic roadmapping."""
 
+from __future__ import annotations
+
 from code_puppy.config import get_puppy_name
 
 from .base_agent import BaseAgent

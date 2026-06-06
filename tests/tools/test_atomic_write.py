@@ -1,5 +1,7 @@
 """Tests for code_puppy.tools.common.atomic_write_text + the wired call sites."""
 
+from __future__ import annotations
+
 import os
 import stat
 

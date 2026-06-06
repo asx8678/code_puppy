@@ -1,5 +1,7 @@
 """Full coverage tests for browser_workflows.py."""
 
+from __future__ import annotations
+
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -60,7 +62,7 @@ class TestExceptionBranches:
         wf.write_text("x")
         with (
             patch(f"{MOD}.get_workflows_directory", return_value=tmp_path),
-            patch("builtins.open", side_effect=IOError("fail")),
+            patch("builtins.open", side_effect=OSError("fail")),
         ):
             r = await read_workflow("broken")
             assert r["success"] is False

@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import asyncio
 import fnmatch
 import logging
@@ -6,8 +8,8 @@ import sys
 import tempfile
 import threading
 import time
+from collections.abc import Callable
 from pathlib import Path
-from typing import Callable, Optional, Tuple
 
 from prompt_toolkit import Application
 from prompt_toolkit.formatted_text import HTML
@@ -35,7 +37,7 @@ from rich.text import Text
 # lazily so it binds to whatever event loop is actually running.
 
 _APPROVAL_SYNC_LOCK = threading.Lock()
-_APPROVAL_ASYNC_LOCK: Optional[asyncio.Lock] = None
+_APPROVAL_ASYNC_LOCK: asyncio.Lock | None = None
 _APPROVAL_ASYNC_LOCK_INIT_LOCK = threading.Lock()
 
 
@@ -875,7 +877,7 @@ def format_diff_with_colors(diff_text: str) -> Text:
 async def arrow_select_async(
     message: str,
     choices: list[str],
-    preview_callback: Optional[Callable[[int], str]] = None,
+    preview_callback: Callable[[int], str] | None = None,
 ) -> str:
     """Async version: Show an arrow-key navigable selector with optional preview.
 
@@ -1254,7 +1256,7 @@ def _get_user_approval_impl(
             if not user_feedback:
                 user_feedback = None
 
-    except (KeyboardInterrupt, EOFError):
+    except KeyboardInterrupt, EOFError:
         emit_error("Cancelled by user")
         confirmed = False
 
@@ -1446,7 +1448,7 @@ async def _get_user_approval_async_impl(
             if not user_feedback:
                 user_feedback = None
 
-    except (KeyboardInterrupt, EOFError):
+    except KeyboardInterrupt, EOFError:
         emit_error("Cancelled by user")
         confirmed = False
 
@@ -1552,7 +1554,7 @@ def atomic_write_text(
             os.fsync(dir_fd)
         finally:
             os.close(dir_fd)
-    except (OSError, AttributeError):
+    except OSError, AttributeError:
         pass  # directory fsync unsupported -- file content is still durable
 
 
@@ -1566,13 +1568,13 @@ def read_text_sanitized(path: str) -> str:
     read-then-sanitize logic previously duplicated across the file-modification
     helpers, byte-for-byte.
     """
-    with open(path, "r", encoding="utf-8", errors="surrogateescape") as f:
+    with open(path, encoding="utf-8", errors="surrogateescape") as f:
         text = f.read()
     try:
         text = text.encode("utf-8", errors="surrogatepass").decode(
             "utf-8", errors="replace"
         )
-    except (UnicodeEncodeError, UnicodeDecodeError):
+    except UnicodeEncodeError, UnicodeDecodeError:
         pass
     return text
 
@@ -1580,7 +1582,7 @@ def read_text_sanitized(path: str) -> str:
 def _find_best_window(
     haystack_lines: list[str],
     needle: str,
-) -> Tuple[Optional[Tuple[int, int]], float]:
+) -> tuple[tuple[int, int] | None, float]:
     """
     Return (start, end) indices of the window with the highest
     Jaro-Winkler similarity to `needle`, along with that score.
@@ -1591,7 +1593,7 @@ def _find_best_window(
     win_size = len(needle_lines)
     needle_len = len(needle)
     best_score = 0.0
-    best_span: Optional[Tuple[int, int]] = None
+    best_span: tuple[int, int] | None = None
     # Pre-join the needle once; join windows on the fly
     for i in range(len(haystack_lines) - win_size + 1):
         window = "\n".join(haystack_lines[i : i + win_size])

@@ -7,7 +7,9 @@ The renderer is responsible for ALL presentation decisions - the messages contai
 only structured data with no formatting hints.
 """
 
-from typing import Dict, Optional, Protocol, runtime_checkable
+from __future__ import annotations
+
+from typing import Protocol, runtime_checkable
 
 from rich.console import Console
 from rich.markdown import Markdown
@@ -85,7 +87,7 @@ class RendererProtocol(Protocol):
 # Default Styles
 # =============================================================================
 
-DEFAULT_STYLES: Dict[MessageLevel, str] = {
+DEFAULT_STYLES: dict[MessageLevel, str] = {
     MessageLevel.ERROR: "bold red",
     MessageLevel.WARNING: "yellow",
     MessageLevel.SUCCESS: "green",
@@ -129,8 +131,8 @@ class RichConsoleRenderer:
     def __init__(
         self,
         bus: MessageBus,
-        console: Optional[Console] = None,
-        styles: Optional[Dict[MessageLevel, str]] = None,
+        console: Console | None = None,
+        styles: dict[MessageLevel, str] | None = None,
     ) -> None:
         """Initialize the renderer.
 
@@ -145,8 +147,8 @@ class RichConsoleRenderer:
         self._console = console or Console()
         self._styles = styles or DEFAULT_STYLES.copy()
         self._running = False
-        self._thread: Optional[threading.Thread] = None
-        self._spinners: Dict[str, object] = {}  # spinner_id -> status context
+        self._thread: threading.Thread | None = None
+        self._spinners: dict[str, object] = {}  # spinner_id -> status context
 
     @property
     def console(self) -> Console:
@@ -604,7 +606,7 @@ class RichConsoleRenderer:
             return
 
         # Group by file
-        by_file: Dict[str, list] = {}
+        by_file: dict[str, list] = {}
         for match in msg.matches:
             by_file.setdefault(match.file_path, []).append(match)
 

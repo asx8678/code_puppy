@@ -13,7 +13,7 @@ from __future__ import annotations
 
 import uuid
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Set, Tuple
+from typing import Any
 
 from pydantic_ai import Agent as PydanticAgent
 from rich.text import Text
@@ -39,7 +39,7 @@ _AGENT_RULE_FILES = ("AGENTS.md", "AGENT.md", "agents.md", "agent.md")
 _CODE_PUPPY_DIR = ".fast_puppy"
 
 
-def load_puppy_rules() -> Optional[str]:
+def load_puppy_rules() -> str | None:
     """Load AGENT(S).md from global config dir and/or the current project dir.
 
     Global rules (``~/.fast_puppy/AGENTS.md``) come first; project-local rules
@@ -52,14 +52,14 @@ def load_puppy_rules() -> Optional[str]:
 
     Returns ``None`` if neither exists.
     """
-    global_rules: Optional[str] = None
+    global_rules: str | None = None
     for name in _AGENT_RULE_FILES:
         candidate = Path(CONFIG_DIR) / name
         if candidate.exists():
             global_rules = candidate.read_text(encoding="utf-8-sig")
             break
 
-    project_rules: Optional[str] = None
+    project_rules: str | None = None
 
     # Priority 1: Check .fast_puppy/ directory (preferred location)
     code_puppy_dir = Path(_CODE_PUPPY_DIR)
@@ -83,9 +83,9 @@ def load_puppy_rules() -> Optional[str]:
 
 
 def load_mcp_servers(
-    extra_headers: Optional[Dict[str, str]] = None,
-    agent_name: Optional[str] = None,
-) -> List[Any]:
+    extra_headers: dict[str, str] | None = None,
+    agent_name: str | None = None,
+) -> list[Any]:
     """Return pydantic-ai compatible MCP servers, or ``[]`` if disabled.
 
     When ``agent_name`` is provided, only servers bound to that agent (via
@@ -225,7 +225,7 @@ async def autostart_bound_servers_async(manager: Any, agent_name: str) -> None:
             emit_warning(f"Auto-start failed for MCP server '{server_name}': {exc}")
 
 
-def reload_mcp_servers(agent_name: Optional[str] = None) -> List[Any]:
+def reload_mcp_servers(agent_name: str | None = None) -> list[Any]:
     """Force re-sync from ``mcp_servers.json`` and return updated servers."""
     manager = get_mcp_manager()
     manager.sync_from_config()
@@ -234,9 +234,9 @@ def reload_mcp_servers(agent_name: Optional[str] = None) -> List[Any]:
 
 def load_model_with_fallback(
     requested_model_name: str,
-    models_config: Dict[str, Any],
+    models_config: dict[str, Any],
     message_group: str,
-) -> Tuple[Any, str]:
+) -> tuple[Any, str]:
     """Load the requested model, or fall back to a sensible alternative.
 
     Falls back in order: the globally configured model, then any other
@@ -256,7 +256,7 @@ def load_model_with_fallback(
             message_group=message_group,
         )
 
-        candidates: List[str] = []
+        candidates: list[str] = []
         global_candidate = get_global_model_name()
         if global_candidate:
             candidates.append(global_candidate)
@@ -285,9 +285,9 @@ def load_model_with_fallback(
 
 
 def filter_conflicting_mcp_tools(
-    mcp_servers: List[Any],
-    existing_tool_names: Set[str],
-) -> List[Any]:
+    mcp_servers: list[Any],
+    existing_tool_names: set[str],
+) -> list[Any]:
     """Strip any MCP tools whose names collide with already-registered tools.
 
     Returns a new list of MCP toolsets (possibly containing filtered ``ToolSet``
@@ -299,7 +299,7 @@ def filter_conflicting_mcp_tools(
 
     from pydantic_ai.tools import ToolSet
 
-    filtered: List[Any] = []
+    filtered: list[Any] = []
     for server in mcp_servers:
         server_tools = getattr(server, "tools", None)
         if server_tools is None:
@@ -347,7 +347,7 @@ def _assemble_instructions(agent: Any, resolved_model_name: str) -> str:
 def build_pydantic_agent(
     agent: Any,
     output_type: Any = str,
-    message_group: Optional[str] = None,
+    message_group: str | None = None,
 ) -> Any:
     """Build (and wire up) the pydantic-ai agent for ``agent``.
 
@@ -384,7 +384,7 @@ def build_pydantic_agent(
     history_processor = make_history_processor(agent)
     steer_processor = make_steer_history_processor(agent)
 
-    def _new_pydantic_agent(toolsets: List[Any]) -> PydanticAgent:
+    def _new_pydantic_agent(toolsets: list[Any]) -> PydanticAgent:
         return PydanticAgent(
             model=model,
             instructions=instructions,
@@ -410,7 +410,7 @@ def build_pydantic_agent(
         agent_name=logical_agent_name,
     )
 
-    existing_tool_names: Set[str] = set(getattr(probe_agent, "_tools", {}) or {})
+    existing_tool_names: set[str] = set(getattr(probe_agent, "_tools", {}) or {})
     filtered_mcp_servers = filter_conflicting_mcp_tools(
         mcp_servers, existing_tool_names
     )
@@ -448,7 +448,7 @@ def build_pydantic_agent(
     return wrapped
 
 
-def build_tool_probe_for_agent(agent: Any) -> Optional[Any]:
+def build_tool_probe_for_agent(agent: Any) -> Any | None:
     """Build a stripped-down pydantic agent JUST for tool introspection.
 
     Used by token-overhead estimators (e.g. the ``context_indicator`` plugin)

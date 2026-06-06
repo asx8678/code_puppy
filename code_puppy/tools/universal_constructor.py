@@ -4,18 +4,19 @@ This module provides the universal_constructor tool that enables users
 to create, manage, and call custom tools dynamically during a session.
 """
 
+from __future__ import annotations
+
 import subprocess
 import time
 from concurrent.futures import ThreadPoolExecutor
 from concurrent.futures import TimeoutError as FuturesTimeoutError
-from typing import Literal, Optional, Union
+from typing import Literal
 
 from pydantic import BaseModel, Field
 from pydantic_ai import RunContext
 
 from code_puppy.messaging import get_message_bus
 from code_puppy.messaging.messages import UniversalConstructorMessage
-from code_puppy.tools.common import atomic_write_text
 from code_puppy.plugins.universal_constructor.models import (
     UCCallOutput,
     UCCreateOutput,
@@ -23,6 +24,7 @@ from code_puppy.plugins.universal_constructor.models import (
     UCListOutput,
     UCUpdateOutput,
 )
+from code_puppy.tools.common import atomic_write_text
 
 
 class UniversalConstructorOutput(BaseModel):
@@ -33,22 +35,22 @@ class UniversalConstructorOutput(BaseModel):
 
     action: str = Field(..., description="The action that was performed")
     success: bool = Field(..., description="Whether the operation succeeded")
-    error: Optional[str] = Field(default=None, description="Error message if failed")
+    error: str | None = Field(default=None, description="Error message if failed")
 
     # Action-specific results (only one will be populated based on action)
-    list_result: Optional[UCListOutput] = Field(
+    list_result: UCListOutput | None = Field(
         default=None, description="Result of list action"
     )
-    call_result: Optional[UCCallOutput] = Field(
+    call_result: UCCallOutput | None = Field(
         default=None, description="Result of call action"
     )
-    create_result: Optional[UCCreateOutput] = Field(
+    create_result: UCCreateOutput | None = Field(
         default=None, description="Result of create action"
     )
-    update_result: Optional[UCUpdateOutput] = Field(
+    update_result: UCUpdateOutput | None = Field(
         default=None, description="Result of update action"
     )
-    info_result: Optional[UCInfoOutput] = Field(
+    info_result: UCInfoOutput | None = Field(
         default=None, description="Result of info action"
     )
 
@@ -64,7 +66,7 @@ def _stub_not_implemented(action: str) -> UniversalConstructorOutput:
     )
 
 
-def _run_ruff_format(file_path) -> Optional[str]:
+def _run_ruff_format(file_path) -> str | None:
     """Run ruff format on a file.
 
     Args:
@@ -112,8 +114,8 @@ def _emit_uc_message(
     action: str,
     success: bool,
     summary: str,
-    tool_name: Optional[str] = None,
-    details: Optional[str] = None,
+    tool_name: str | None = None,
+    details: str | None = None,
 ) -> None:
     """Emit a UniversalConstructorMessage to the message bus.
 
@@ -138,10 +140,10 @@ def _emit_uc_message(
 async def universal_constructor_impl(
     context: RunContext,
     action: Literal["list", "call", "create", "update", "info"],
-    tool_name: Optional[str] = None,
-    tool_args: Optional[Union[dict, str]] = None,
-    python_code: Optional[str] = None,
-    description: Optional[str] = None,
+    tool_name: str | None = None,
+    tool_args: dict | str | None = None,
+    python_code: str | None = None,
+    description: str | None = None,
 ) -> UniversalConstructorOutput:
     """Implementation of the universal_constructor tool.
 
@@ -267,8 +269,8 @@ def _handle_list_action(context: RunContext) -> UniversalConstructorOutput:
 
 def _handle_call_action(
     context: RunContext,
-    tool_name: Optional[str],
-    tool_args: Optional[Union[dict, str]],
+    tool_name: str | None,
+    tool_args: dict | str | None,
 ) -> UniversalConstructorOutput:
     """Handle the 'call' action - execute a UC tool.
 
@@ -392,9 +394,9 @@ def _handle_call_action(
 
 def _handle_create_action(
     context: RunContext,
-    tool_name: Optional[str],
-    python_code: Optional[str],
-    description: Optional[str],
+    tool_name: str | None,
+    python_code: str | None,
+    description: str | None,
 ) -> UniversalConstructorOutput:
     """Handle the 'create' action - create a new UC tool.
 
@@ -584,9 +586,9 @@ def _handle_create_action(
 
 def _handle_update_action(
     context: RunContext,
-    tool_name: Optional[str],
-    python_code: Optional[str],
-    description: Optional[str],
+    tool_name: str | None,
+    python_code: str | None,
+    description: str | None,
 ) -> UniversalConstructorOutput:
     """Handle the 'update' action - modify an existing UC tool.
 
@@ -717,7 +719,7 @@ def _handle_update_action(
 
 def _handle_info_action(
     context: RunContext,
-    tool_name: Optional[str],
+    tool_name: str | None,
 ) -> UniversalConstructorOutput:
     """Handle the 'info' action - get detailed tool information.
 
@@ -786,10 +788,10 @@ def register_universal_constructor(agent):
     async def universal_constructor(
         context: RunContext,
         action: Literal["list", "call", "create", "update", "info"],
-        tool_name: Optional[str] = None,
-        tool_args: Optional[Union[dict, str]] = None,
-        python_code: Optional[str] = None,
-        description: Optional[str] = None,
+        tool_name: str | None = None,
+        tool_args: dict | str | None = None,
+        python_code: str | None = None,
+        description: str | None = None,
     ) -> UniversalConstructorOutput:
         """Universal Constructor - Your gateway to unlimited capabilities.
 

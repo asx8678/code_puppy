@@ -11,6 +11,8 @@ Covers missed lines in:
 Note: mcp_completion.py is covered in tests/command_line/test_mcp_completion.py
 """
 
+from __future__ import annotations
+
 import os
 import tempfile
 from pathlib import Path

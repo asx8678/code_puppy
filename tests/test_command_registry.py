@@ -9,6 +9,8 @@ Tests the decorator-based command registration system including:
 - Category management
 """
 
+from __future__ import annotations
+
 import pytest
 
 from code_puppy.command_line.command_registry import (

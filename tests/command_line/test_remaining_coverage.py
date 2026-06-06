@@ -17,6 +17,8 @@ Covers remaining uncovered lines across:
 - uc_menu.py (keybinding handlers, highlight, delete)
 """
 
+from __future__ import annotations
+
 import importlib
 import sys
 from pathlib import Path
@@ -1070,7 +1072,7 @@ def test_diff_menu_enter_empty_choices():
             loop.run_until_complete(
                 _split_panel_selector("Test", [], on_change, get_preview=get_preview)
             )
-        except (Exception, KeyboardInterrupt):
+        except Exception, KeyboardInterrupt:
             pass
         finally:
             loop.close()

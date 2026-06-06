@@ -5,6 +5,8 @@ Covers all major code paths, edge cases, and error handling
 for the async server lifecycle management system.
 """
 
+from __future__ import annotations
+
 import asyncio
 from contextlib import AsyncExitStack
 from datetime import datetime, timedelta

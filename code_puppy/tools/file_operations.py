@@ -1,5 +1,7 @@
 # file_operations.py
 
+from __future__ import annotations
+
 import atexit
 import hashlib
 import os
@@ -9,7 +11,6 @@ import subprocess
 import tempfile
 import threading
 from collections import OrderedDict
-from typing import List
 
 from pydantic import BaseModel, conint
 from pydantic_ai import RunContext
@@ -125,7 +126,7 @@ class MatchInfo(BaseModel):
 
 
 class GrepOutput(BaseModel):
-    matches: List[MatchInfo]
+    matches: list[MatchInfo]
     error: str | None = None
 
 
@@ -181,7 +182,7 @@ def is_project_directory(directory):
     try:
         contents = os.listdir(directory)
         return any(indicator in contents for indicator in project_indicators)
-    except (OSError, PermissionError):
+    except OSError, PermissionError:
         return False
 
 
@@ -368,7 +369,7 @@ def _list_files(
                             depth=depth,
                         )
                     )
-                except (FileNotFoundError, PermissionError, OSError):
+                except FileNotFoundError, PermissionError, OSError:
                     # Skip files we can't access
                     continue
 
@@ -420,7 +421,7 @@ def _list_files(
                                 depth=0,
                             )
                         )
-            except (FileNotFoundError, PermissionError, OSError):
+            except FileNotFoundError, PermissionError, OSError:
                 # Skip entries we can't access
                 pass
     except subprocess.TimeoutExpired:
@@ -548,7 +549,7 @@ def _read_file(
         # Use errors="surrogateescape" to handle files with invalid UTF-8 sequences
         # This is common on Windows when files contain emojis or were created by
         # applications that don't properly encode Unicode
-        with open(file_path, "r", encoding="utf-8", errors="surrogateescape") as f:
+        with open(file_path, encoding="utf-8", errors="surrogateescape") as f:
             if start_line is not None and start_line < 1:
                 error_msg = "start_line must be >= 1 (1-based indexing)"
                 return ReadFileOutput(content=error_msg, num_tokens=0, error=error_msg)
@@ -597,7 +598,7 @@ def _read_file(
                 content = content.encode("utf-8", errors="surrogatepass").decode(
                     "utf-8", errors="replace"
                 )
-            except (UnicodeEncodeError, UnicodeDecodeError):
+            except UnicodeEncodeError, UnicodeDecodeError:
                 # If that fails, do a more aggressive cleanup
                 content = "".join(
                     char if ord(char) < 0xD800 or ord(char) > 0xDFFF else "\ufffd"
@@ -668,7 +669,7 @@ def _sanitize_string(text: str) -> str:
         return text.encode("utf-8", errors="surrogatepass").decode(
             "utf-8", errors="replace"
         )
-    except (UnicodeEncodeError, UnicodeDecodeError):
+    except UnicodeEncodeError, UnicodeDecodeError:
         # Last resort: filter out surrogate characters
         return "".join(
             char if ord(char) < 0xD800 or ord(char) > 0xDFFF else "\ufffd"
@@ -710,7 +711,7 @@ def _grep(context: RunContext, search_string: str, directory: str = ".") -> Grep
     search_string = _sanitize_string(search_string)
 
     directory = os.path.abspath(os.path.expanduser(directory))
-    matches: List[MatchInfo] = []
+    matches: list[MatchInfo] = []
     error_message: str | None = None
 
     # Create a temporary ignore file with our ignore patterns

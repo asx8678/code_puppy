@@ -1,5 +1,7 @@
 """Tests for code_puppy/tools/agent_tools.py - 100% coverage."""
 
+from __future__ import annotations
+
 import json
 import pickle
 from unittest.mock import MagicMock, patch

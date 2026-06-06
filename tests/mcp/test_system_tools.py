@@ -8,6 +8,8 @@ This module tests the SystemToolDetector class which provides:
 - Installation suggestions for missing tools
 """
 
+from __future__ import annotations
+
 import subprocess
 from unittest.mock import MagicMock, Mock, patch
 

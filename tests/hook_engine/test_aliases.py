@@ -8,6 +8,8 @@ Editing this file is cheating; all implementation work goes in
 code_puppy/hook_engine/aliases.py and code_puppy/hook_engine/matcher.py.
 """
 
+from __future__ import annotations
+
 import pytest
 
 from code_puppy.hook_engine.aliases import (

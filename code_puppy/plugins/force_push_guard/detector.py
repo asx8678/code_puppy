@@ -4,6 +4,8 @@ Detects force push patterns in shell commands, covering all the sneaky
 ways git lets you wreck a remote branch.
 """
 
+from __future__ import annotations
+
 import re
 from dataclasses import dataclass
 

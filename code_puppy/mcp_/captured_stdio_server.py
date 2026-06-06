@@ -5,11 +5,13 @@ This module provides a version of MCPServerStdio that captures subprocess
 stderr output and makes it available through proper logging channels.
 """
 
+from __future__ import annotations
+
 import asyncio
 import logging
 import os
+from collections.abc import AsyncIterator, Sequence
 from contextlib import asynccontextmanager
-from typing import AsyncIterator, Optional, Sequence
 
 from anyio.streams.memory import MemoryObjectReceiveStream, MemoryObjectSendStream
 from mcp.client.stdio import StdioServerParameters, stdio_client
@@ -24,7 +26,7 @@ class StderrCapture:
     Captures stderr output using a pipe and background reader.
     """
 
-    def __init__(self, name: str, handler: Optional[callable] = None):
+    def __init__(self, name: str, handler: callable | None = None):
         """
         Initialize stderr capture.
 
@@ -140,7 +142,7 @@ class CapturedMCPServerStdio(MCPServerStdio):
         args: Sequence[str] = (),
         env: dict[str, str] | None = None,
         cwd: str | None = None,
-        stderr_handler: Optional[callable] = None,
+        stderr_handler: callable | None = None,
         **kwargs,
     ):
         """
@@ -261,7 +263,7 @@ class StderrCollector:
         """Get all output from all servers with metadata."""
         return self.all_lines.copy()
 
-    def clear(self, server_name: Optional[str] = None):
+    def clear(self, server_name: str | None = None):
         """Clear captured output."""
         if server_name:
             if server_name in self.servers:

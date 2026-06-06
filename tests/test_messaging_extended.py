@@ -1,6 +1,8 @@
+from __future__ import annotations
+
 import threading
 import time
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import pytest
 
@@ -242,9 +244,9 @@ class TestMessagingExtended:
         """Test that UIMessage objects get proper timestamps."""
         self.queue.mark_renderer_active()
 
-        before = datetime.now(timezone.utc)
+        before = datetime.now(UTC)
         self.queue.emit_simple(MessageType.INFO, "Timestamp test")
-        after = datetime.now(timezone.utc)
+        after = datetime.now(UTC)
 
         message = self.queue.get_nowait()
         assert message is not None
@@ -340,7 +342,7 @@ class TestMessagingExtended:
         assert msg.metadata == {}
 
         # Test with all parameters
-        custom_time = datetime.now(timezone.utc)
+        custom_time = datetime.now(UTC)
         custom_metadata = {"key": "value"}
         msg2 = UIMessage(
             type=MessageType.ERROR,

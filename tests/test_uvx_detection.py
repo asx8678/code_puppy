@@ -5,6 +5,8 @@ Windows ctypes), chain traversal, launch-scenario detection, signal handling
 adaptation, caching, and fallback mechanisms.
 """
 
+from __future__ import annotations
+
 import os
 import sys
 from unittest.mock import MagicMock, patch

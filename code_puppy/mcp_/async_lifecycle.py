@@ -5,12 +5,14 @@ This module properly manages MCP server lifecycles by maintaining async contexts
 within the same task, allowing servers to start and stay running.
 """
 
+from __future__ import annotations
+
 import asyncio
 import logging
 from contextlib import AsyncExitStack
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Any, Dict, Optional, Union
+from typing import Any
 
 from pydantic_ai.mcp import MCPServerSSE, MCPServerStdio, MCPServerStreamableHTTP
 
@@ -28,7 +30,7 @@ class ManagedServerContext:
     """Represents a managed MCP server with its async context."""
 
     server_id: str
-    server: Union[MCPServerSSE, MCPServerStdio, MCPServerStreamableHTTP]
+    server: MCPServerSSE | MCPServerStdio | MCPServerStreamableHTTP
     exit_stack: AsyncExitStack
     start_time: datetime
     task: asyncio.Task  # The task that manages this server's lifecycle
@@ -44,7 +46,7 @@ class AsyncServerLifecycleManager:
 
     def __init__(self):
         """Initialize the async lifecycle manager."""
-        self._servers: Dict[str, ManagedServerContext] = {}
+        self._servers: dict[str, ManagedServerContext] = {}
         self._starting_servers: set = set()
         self._lock = asyncio.Lock()
         logger.info("AsyncServerLifecycleManager initialized")
@@ -52,7 +54,7 @@ class AsyncServerLifecycleManager:
     async def start_server(
         self,
         server_id: str,
-        server: Union[MCPServerSSE, MCPServerStdio, MCPServerStreamableHTTP],
+        server: MCPServerSSE | MCPServerStdio | MCPServerStreamableHTTP,
     ) -> bool:
         """
         Start an MCP server and maintain its context.
@@ -102,7 +104,7 @@ class AsyncServerLifecycleManager:
         try:
             try:
                 await asyncio.wait_for(ready_event.wait(), timeout=10.0)
-            except asyncio.TimeoutError:
+            except TimeoutError:
                 logger.error(f"Timed out waiting for server {server_id} to start")
                 # Cancel the orphaned lifecycle task so it doesn't leak.
                 task.cancel()
@@ -129,7 +131,7 @@ class AsyncServerLifecycleManager:
     async def _server_lifecycle_task(
         self,
         server_id: str,
-        server: Union[MCPServerSSE, MCPServerStdio, MCPServerStreamableHTTP],
+        server: MCPServerSSE | MCPServerStdio | MCPServerStreamableHTTP,
         ready_event: asyncio.Event,
     ) -> None:
         """
@@ -296,7 +298,7 @@ class AsyncServerLifecycleManager:
         context = self._servers.get(server_id)
         return context.server.is_running if context else False
 
-    def list_servers(self) -> Dict[str, Dict[str, Any]]:
+    def list_servers(self) -> dict[str, dict[str, Any]]:
         """
         List all running servers.
 
@@ -325,7 +327,7 @@ class AsyncServerLifecycleManager:
 
 
 # Global singleton instance
-_lifecycle_manager: Optional[AsyncServerLifecycleManager] = None
+_lifecycle_manager: AsyncServerLifecycleManager | None = None
 
 
 def get_lifecycle_manager() -> AsyncServerLifecycleManager:

@@ -6,6 +6,8 @@ so we import those bits from the plugin and also import its
 is registered for tests that exercise the dispatcher.
 """
 
+from __future__ import annotations
+
 import pytest
 
 # Importing register_callbacks triggers plugin registration at module scope.

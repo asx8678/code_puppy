@@ -1,5 +1,7 @@
 """Extremely basic pexpect smoke test – no harness, just raw subprocess."""
 
+from __future__ import annotations
+
 import time
 
 import pexpect

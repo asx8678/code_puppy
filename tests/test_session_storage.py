@@ -3,8 +3,9 @@ from __future__ import annotations
 import json
 import os
 import pickle
+from collections.abc import Callable
 from pathlib import Path
-from typing import Any, Callable, List
+from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -24,7 +25,7 @@ from code_puppy.session_storage import (
 
 
 @pytest.fixture()
-def history() -> List[Any]:
+def history() -> list[Any]:
     return [
         {"role": "user", "content": "Hello"},
         {"role": "assistant", "content": "Hi there!"},
@@ -47,7 +48,7 @@ def _signed(history: Any) -> bytes:
 def _save_signed_session(
     base_dir: Path,
     name: str,
-    history: List[Any],
+    history: list[Any],
     *,
     timestamp: str = "2024-01-01T00:00:00",
 ) -> None:

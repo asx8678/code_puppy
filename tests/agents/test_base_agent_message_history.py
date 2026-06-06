@@ -8,6 +8,8 @@ This module tests the following message history methods in BaseAgent:
 - clear_message_history()
 """
 
+from __future__ import annotations
+
 import pytest
 
 from code_puppy.agents.agent_code_puppy import CodePuppyAgent

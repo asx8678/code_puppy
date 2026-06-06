@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from unittest.mock import MagicMock, patch
 
 from code_puppy.callbacks import _callbacks, clear_callbacks, register_callback

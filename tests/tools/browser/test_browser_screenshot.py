@@ -4,6 +4,8 @@ Tests screenshot capture functionality that returns ToolReturn with BinaryConten
 for direct viewing by multimodal models.
 """
 
+from __future__ import annotations
+
 from pathlib import Path
 from unittest.mock import AsyncMock, patch
 

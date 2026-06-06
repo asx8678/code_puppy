@@ -1,9 +1,11 @@
+from __future__ import annotations
+
 import json
 import logging
 import os
 import pathlib
 import threading
-from typing import Any, Dict
+from typing import Any
 
 import httpx
 from anthropic import AsyncAnthropic
@@ -37,7 +39,7 @@ from .round_robin_model import RoundRobinModel
 logger = logging.getLogger(__name__)
 
 # Registry for custom model provider classes from plugins
-_CUSTOM_MODEL_PROVIDERS: Dict[str, type] = {}
+_CUSTOM_MODEL_PROVIDERS: dict[str, type] = {}
 
 
 def _load_plugin_model_providers():
@@ -63,7 +65,7 @@ CONTEXT_1M_BETA = "context-1m-2025-08-07"
 
 
 def _build_anthropic_beta_header(
-    model_config: Dict,
+    model_config: dict,
     *,
     interleaved_thinking: bool = False,
 ) -> str | None:
@@ -121,7 +123,7 @@ def _is_anthropic_model(model_name: str, model_config: dict[str, Any]) -> bool:
 def make_model_settings(
     model_name: str,
     max_tokens: int | None = None,
-    models_config: Dict[str, Any] | None = None,
+    models_config: dict[str, Any] | None = None,
 ) -> ModelSettings:
     """Create appropriate ModelSettings for a given model.
 
@@ -420,7 +422,7 @@ def get_custom_config(model_config):
 # after login) and callback (de)registration both invalidate automatically.
 # config.clear_model_cache() also clears this explicitly.
 # ---------------------------------------------------------------------------
-_LOAD_CONFIG_CACHE: Dict[str, Any] | None = None
+_LOAD_CONFIG_CACHE: dict[str, Any] | None = None
 _LOAD_CONFIG_SIG: tuple | None = None
 _LOAD_CONFIG_LOCK = threading.Lock()
 
@@ -479,7 +481,7 @@ class ModelFactory:
     """A factory for creating and managing different AI models."""
 
     @staticmethod
-    def load_config() -> Dict[str, Any]:
+    def load_config() -> dict[str, Any]:
         global _LOAD_CONFIG_CACHE, _LOAD_CONFIG_SIG
         # Fast path: reuse the assembled config when no source file or callback
         # changed. Callers treat the result as read-only (verified: no call site
@@ -497,14 +499,14 @@ class ModelFactory:
         return config
 
     @staticmethod
-    def _build_config() -> Dict[str, Any]:
+    def _build_config() -> dict[str, Any]:
         # Read + parse the bundled models.json exactly once. It is used both as
         # the base config (when no load_model_config callback overrides it) and
         # as the source of the description overlay below. We snapshot the
         # descriptions now, before any mutation, so the overlay reflects the
         # pristine bundled file regardless of how ``config`` evolves.
         bundled_models = pathlib.Path(__file__).parent / "models.json"
-        with open(bundled_models, "r") as f:
+        with open(bundled_models) as f:
             bundled_config = json.load(f)
         bundled_descriptions = {
             name: (cfg.get("description") or "")
@@ -559,10 +561,10 @@ class ModelFactory:
                         logging.getLogger(__name__).debug(
                             f"claude_code_oauth plugin not available, loading {label} as plain JSON"
                         )
-                        with open(source_path, "r") as f:
+                        with open(source_path) as f:
                             extra_config = json.load(f)
                 else:
-                    with open(source_path, "r") as f:
+                    with open(source_path) as f:
                         extra_config = json.load(f)
                 config.update(extra_config)
             except json.JSONDecodeError as exc:
@@ -618,7 +620,7 @@ class ModelFactory:
         return config
 
     @staticmethod
-    def get_model(model_name: str, config: Dict[str, Any]) -> Any:
+    def get_model(model_name: str, config: dict[str, Any]) -> Any:
         """Returns a configured model instance based on the provided name and config.
 
         API key validation happens naturally within each model type's initialization,

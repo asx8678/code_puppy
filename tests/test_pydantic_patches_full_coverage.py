@@ -1,5 +1,7 @@
 """Full coverage tests for pydantic_patches.py."""
 
+from __future__ import annotations
+
 import json
 from unittest.mock import MagicMock, patch
 

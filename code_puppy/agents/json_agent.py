@@ -1,9 +1,11 @@
 """JSON-based agent configuration system."""
 
+from __future__ import annotations
+
 import json
 import logging
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from .base_agent import BaseAgent
 
@@ -24,10 +26,10 @@ class JSONAgent(BaseAgent):
         self._config = self._load_config()
         self._validate_config()
 
-    def _load_config(self) -> Dict:
+    def _load_config(self) -> dict:
         """Load configuration from JSON file."""
         try:
-            with open(self.json_path, "r", encoding="utf-8") as f:
+            with open(self.json_path, encoding="utf-8") as f:
                 return json.load(f)
         except (json.JSONDecodeError, FileNotFoundError) as e:
             raise ValueError(
@@ -113,7 +115,7 @@ class JSONAgent(BaseAgent):
 
         return system_prompt
 
-    def get_available_tools(self) -> List[str]:
+    def get_available_tools(self) -> list[str]:
         """Get available tools from JSON config.
 
         Supports both built-in tools and Universal Constructor (UC) tools.
@@ -151,15 +153,15 @@ class JSONAgent(BaseAgent):
 
         return requested_tools
 
-    def get_user_prompt(self) -> Optional[str]:
+    def get_user_prompt(self) -> str | None:
         """Get custom user prompt from JSON config."""
         return self._config.get("user_prompt")
 
-    def get_tools_config(self) -> Optional[Dict]:
+    def get_tools_config(self) -> dict | None:
         """Get tool configuration from JSON config."""
         return self._config.get("tools_config")
 
-    def get_declared_mcp_bindings(self) -> Dict[str, Dict[str, Any]]:
+    def get_declared_mcp_bindings(self) -> dict[str, dict[str, Any]]:
         """Return MCP bindings declared in the JSON config, normalized.
 
         The ``mcp_servers`` field accepts two shapes for ergonomics:
@@ -178,7 +180,7 @@ class JSONAgent(BaseAgent):
         if raw is None:
             return {}
 
-        normalized: Dict[str, Dict[str, Any]] = {}
+        normalized: dict[str, dict[str, Any]] = {}
         if isinstance(raw, list):
             for name in raw:
                 normalized[name] = {"auto_start": True}
@@ -198,7 +200,7 @@ class JSONAgent(BaseAgent):
         self._config = self._load_config()
         self._validate_config()
 
-    def get_model_name(self) -> Optional[str]:
+    def get_model_name(self) -> str | None:
         """Get pinned model name from JSON config, if specified.
 
         Returns:
@@ -210,7 +212,7 @@ class JSONAgent(BaseAgent):
         return result
 
 
-def discover_json_agents() -> Dict[str, str]:
+def discover_json_agents() -> dict[str, str]:
     """Discover JSON agent files in the user's and project's agents directories.
 
     Searches two locations:
@@ -227,7 +229,7 @@ def discover_json_agents() -> Dict[str, str]:
         get_user_agents_directory,
     )
 
-    agents: Dict[str, str] = {}
+    agents: dict[str, str] = {}
 
     # 1. Discover user-level agents first
     user_agents_dir = Path(get_user_agents_directory())

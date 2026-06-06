@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import configparser
 import datetime
 import json
@@ -6,7 +8,6 @@ import os
 import pathlib
 import threading
 from collections import OrderedDict
-from typing import Optional
 
 from code_puppy.session_storage import save_session
 
@@ -216,7 +217,7 @@ def get_max_hook_retries() -> int:
     try:
         n = int(val)
         return max(1, n)  # At least 1 to avoid nonsensical values
-    except (ValueError, TypeError):
+    except ValueError, TypeError:
         return 3
 
 
@@ -232,7 +233,7 @@ def get_max_continuation_iterations() -> int:
     try:
         n = int(val)
         return min(1000, max(1, n))
-    except (ValueError, TypeError):
+    except ValueError, TypeError:
         return 25
 
 
@@ -253,10 +254,10 @@ DEFAULT_SECTION = "puppy"
 REQUIRED_KEYS = ["puppy_name", "owner_name"]
 
 # Runtime-only autosave session ID (per-process)
-_CURRENT_AUTOSAVE_ID: Optional[str] = None
+_CURRENT_AUTOSAVE_ID: str | None = None
 
 # Session-local model name (initialized from file on first access, then cached)
-_SESSION_MODEL: Optional[str] = None
+_SESSION_MODEL: str | None = None
 
 # Cache containers for model validation and defaults. The validation cache is a
 # bounded LRU keyed on model name so a long-lived session that probes many names
@@ -278,12 +279,12 @@ _default_vision_model_cache = None
 # free, while external edits (another terminal) and in-process writes still
 # invalidate correctly.
 # ---------------------------------------------------------------------------
-_CONFIG_CACHE: Optional[configparser.ConfigParser] = None
-_CONFIG_CACHE_SIG: Optional[tuple] = None
+_CONFIG_CACHE: configparser.ConfigParser | None = None
+_CONFIG_CACHE_SIG: tuple | None = None
 _CONFIG_CACHE_LOCK = threading.Lock()
 
 
-def _config_file_signature() -> Optional[tuple]:
+def _config_file_signature() -> tuple | None:
     try:
         st = os.stat(CONFIG_FILE)
         return (st.st_mtime_ns, st.st_size)
@@ -316,7 +317,7 @@ def _read_config_cached() -> configparser.ConfigParser:
         config = configparser.ConfigParser()
         try:
             config.read(CONFIG_FILE)
-        except (configparser.Error, OSError):
+        except configparser.Error, OSError:
             config = configparser.ConfigParser()
             sig = None
         if sig is not None:
@@ -553,7 +554,7 @@ def load_mcp_server_configs():
     try:
         if not pathlib.Path(MCP_SERVERS_FILE).exists():
             return {}
-        with open(MCP_SERVERS_FILE, "r", encoding="utf-8") as f:
+        with open(MCP_SERVERS_FILE, encoding="utf-8") as f:
             conf = json.loads(f.read())
             return conf["mcp_servers"]
     except Exception as e:
@@ -907,7 +908,7 @@ def set_openai_verbosity(value: str) -> None:
     set_config_value("openai_verbosity", normalized)
 
 
-def get_temperature() -> Optional[float]:
+def get_temperature() -> float | None:
     """Return the configured model temperature (0.0 to 2.0).
 
     Returns:
@@ -921,11 +922,11 @@ def get_temperature() -> Optional[float]:
         temp = float(val)
         # Clamp to valid range (most APIs accept 0-2)
         return max(0.0, min(2.0, temp))
-    except (ValueError, TypeError):
+    except ValueError, TypeError:
         return None
 
 
-def set_temperature(value: Optional[float]) -> None:
+def set_temperature(value: float | None) -> None:
     """Set the global model temperature in config.
 
     Args:
@@ -956,8 +957,8 @@ def _sanitize_model_name_for_key(model_name: str) -> str:
 
 
 def get_model_setting(
-    model_name: str, setting: str, default: Optional[float] = None
-) -> Optional[float]:
+    model_name: str, setting: str, default: float | None = None
+) -> float | None:
     """Get a specific setting for a model.
 
     Args:
@@ -977,11 +978,11 @@ def get_model_setting(
 
     try:
         return float(val)
-    except (ValueError, TypeError):
+    except ValueError, TypeError:
         return default
 
 
-def set_model_setting(model_name: str, setting: str, value: Optional[float]) -> None:
+def set_model_setting(model_name: str, setting: str, value: float | None) -> None:
     """Set a specific setting for a model.
 
     Args:
@@ -1034,7 +1035,7 @@ def get_all_model_settings(model_name: str) -> dict:
                             settings[setting_name] = int(val_stripped)
                         else:
                             settings[setting_name] = float(val_stripped)
-                    except (ValueError, TypeError):
+                    except ValueError, TypeError:
                         # Keep as string if not a number
                         settings[setting_name] = val_stripped
 
@@ -1065,7 +1066,7 @@ def clear_model_settings(model_name: str) -> None:
         _persist_config(config)
 
 
-def get_effective_model_settings(model_name: Optional[str] = None) -> dict:
+def get_effective_model_settings(model_name: str | None = None) -> dict:
     """Get all effective settings for a model, filtered by what the model supports.
 
     This is the generalized way to get model settings. It:
@@ -1107,7 +1108,7 @@ def get_effective_model_settings(model_name: Optional[str] = None) -> dict:
 
 
 # Legacy functions for backward compatibility
-def get_effective_temperature(model_name: Optional[str] = None) -> Optional[float]:
+def get_effective_temperature(model_name: str | None = None) -> float | None:
     """Get the effective temperature for a model.
 
     Checks per-model settings first, then falls back to global temperature.
@@ -1122,7 +1123,7 @@ def get_effective_temperature(model_name: Optional[str] = None) -> Optional[floa
     return settings.get("temperature")
 
 
-def get_effective_top_p(model_name: Optional[str] = None) -> Optional[float]:
+def get_effective_top_p(model_name: str | None = None) -> float | None:
     """Get the effective top_p for a model.
 
     Args:
@@ -1135,7 +1136,7 @@ def get_effective_top_p(model_name: Optional[str] = None) -> Optional[float]:
     return settings.get("top_p")
 
 
-def get_effective_seed(model_name: Optional[str] = None) -> Optional[int]:
+def get_effective_seed(model_name: str | None = None) -> int | None:
     """Get the effective seed for a model.
 
     Args:
@@ -1175,7 +1176,7 @@ def normalize_command_history():
     try:
         # Read the entire file with encoding error handling for Windows
         with open(
-            COMMAND_HISTORY_FILE, "r", encoding="utf-8", errors="surrogateescape"
+            COMMAND_HISTORY_FILE, encoding="utf-8", errors="surrogateescape"
         ) as f:
             content = f.read()
 
@@ -1184,7 +1185,7 @@ def normalize_command_history():
             content = content.encode("utf-8", errors="surrogatepass").decode(
                 "utf-8", errors="replace"
             )
-        except (UnicodeEncodeError, UnicodeDecodeError):
+        except UnicodeEncodeError, UnicodeDecodeError:
             pass  # Keep original if sanitization fails
 
         # Skip empty files
@@ -1243,7 +1244,7 @@ def get_user_agents_directory() -> str:
     return AGENTS_DIR
 
 
-def get_project_agents_directory() -> Optional[str]:
+def get_project_agents_directory() -> str | None:
     """Get the project-local agents directory path.
 
     Looks for a .fast_puppy/agents/ directory in the current working directory.
@@ -1381,7 +1382,7 @@ def get_protected_token_count():
 
         # Apply constraints: minimum 1000, maximum 75% of context length
         return max(1000, min(configured_value, max_protected_tokens))
-    except (ValueError, TypeError):
+    except ValueError, TypeError:
         # If parsing fails, return a reasonable default that respects the 75% limit
         model_context_length = get_model_context_length()
         max_protected_tokens = int(model_context_length * 0.75)
@@ -1401,7 +1402,7 @@ def get_resume_message_count() -> int:
         configured_value = int(val) if val else 50
         # Enforce reasonable bounds: minimum 0 (disabled), maximum 100
         return max(0, min(configured_value, 100))
-    except (ValueError, TypeError):
+    except ValueError, TypeError:
         return 50
 
 
@@ -1417,7 +1418,7 @@ def get_compaction_threshold():
         threshold = float(val) if val else 0.85
         # Clamp between reasonable bounds
         return max(0.5, min(0.95, threshold))
-    except (ValueError, TypeError):
+    except ValueError, TypeError:
         return 0.85
 
 
@@ -1466,7 +1467,7 @@ def get_message_limit(default: int = 1000) -> int:
     val = get_value("message_limit")
     try:
         return int(val) if val else default
-    except (ValueError, TypeError):
+    except ValueError, TypeError:
         return default
 
 
@@ -1487,7 +1488,7 @@ def save_command_to_history(command: str):
             command = command.encode("utf-8", errors="surrogatepass").decode(
                 "utf-8", errors="replace"
             )
-        except (UnicodeEncodeError, UnicodeDecodeError):
+        except UnicodeEncodeError, UnicodeDecodeError:
             # If that fails, do a more aggressive cleanup
             command = "".join(
                 char if ord(char) < 0xD800 or ord(char) > 0xDFFF else "\ufffd"
@@ -1604,7 +1605,7 @@ def get_max_saved_sessions() -> int:
         try:
             val = int(cfg_val)
             return max(0, val)  # Ensure non-negative
-        except (ValueError, TypeError):
+        except ValueError, TypeError:
             pass
     return 20
 
@@ -1636,7 +1637,7 @@ _DEFAULT_DIFF_ADDITION_HEX = "#0b1f0b"  # darker green
 _DEFAULT_DIFF_DELETION_HEX = "#390e1a"  # wine
 
 
-def _coerce_to_hex(value: Optional[str], fallback: str) -> str:
+def _coerce_to_hex(value: str | None, fallback: str) -> str:
     """Normalize any color string to '#RRGGBB'.
 
     Accepts:
@@ -1910,11 +1911,11 @@ def get_diff_context_lines() -> int:
         context_lines = int(val) if val else 6
         # Apply reasonable bounds: minimum 0, maximum 50
         return max(0, min(context_lines, 50))
-    except (ValueError, TypeError):
+    except ValueError, TypeError:
         return 6
 
 
-def get_terminal_tty() -> Optional[str]:
+def get_terminal_tty() -> str | None:
     """Return the TTY device path for stdin, or None if unavailable.
 
     This identifies the physical terminal so /switch-agent can resume the
@@ -1924,7 +1925,7 @@ def get_terminal_tty() -> Optional[str]:
         import sys
 
         return os.ttyname(sys.stdin.fileno())
-    except (OSError, AttributeError, ValueError):
+    except OSError, AttributeError, ValueError:
         return None
 
 
@@ -1967,7 +1968,7 @@ def record_terminal_session(session_name: str, *, overwrite: bool = True) -> Non
         pass
 
 
-def get_last_terminal_session() -> Optional[str]:
+def get_last_terminal_session() -> str | None:
     """Return the last autosave session recorded for this terminal."""
     tty = get_terminal_tty()
     if not tty:

@@ -2,8 +2,9 @@
 MCP Stop Command - Stops a specific MCP server.
 """
 
+from __future__ import annotations
+
 import logging
-from typing import List, Optional
 
 from rich.text import Text
 
@@ -24,7 +25,7 @@ class StopCommand(MCPCommandBase):
     Stops a specific MCP server by name and reloads the agent.
     """
 
-    def execute(self, args: List[str], group_id: Optional[str] = None) -> None:
+    def execute(self, args: list[str], group_id: str | None = None) -> None:
         """
         Stop a specific MCP server.
 

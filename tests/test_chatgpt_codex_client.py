@@ -5,6 +5,8 @@ request interception and stream-to-response conversion for the ChatGPT
 Codex API.
 """
 
+from __future__ import annotations
+
 import json
 from unittest.mock import AsyncMock, Mock, patch
 

@@ -3,6 +3,8 @@
 Covers model fetching, filtering, storage, and configuration updates.
 """
 
+from __future__ import annotations
+
 import json
 from unittest.mock import Mock, patch
 

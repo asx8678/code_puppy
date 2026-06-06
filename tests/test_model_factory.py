@@ -5,6 +5,8 @@ files. Repetitive trivial cases are collapsed via @pytest.mark.parametrize and
 exact/near-duplicate tests across files have been removed.
 """
 
+from __future__ import annotations
+
 import json
 import os
 import sys

@@ -1,5 +1,7 @@
 """Tests for AgentCreatorAgent functionality."""
 
+from __future__ import annotations
+
 from unittest.mock import patch
 
 from code_puppy.agents.agent_creator_agent import AgentCreatorAgent

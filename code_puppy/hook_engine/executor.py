@@ -12,6 +12,8 @@ Claude Code Hook Compatibility:
   - Exit code 2  => error feedback to Claude (stderr fed back as tool error)
 """
 
+from __future__ import annotations
+
 import asyncio
 import json
 import logging
@@ -19,7 +21,7 @@ import os
 import re
 import shlex
 import time
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from .matcher import _extract_file_path
 from .models import EventData, ExecutionResult, HookConfig
@@ -73,7 +75,7 @@ def _build_stdin_payload(event_data: EventData) -> bytes:
 async def execute_hook(
     hook: HookConfig,
     event_data: EventData,
-    env_vars: Optional[Dict[str, str]] = None,
+    env_vars: dict[str, str] | None = None,
 ) -> ExecutionResult:
     """
     Execute a hook command with timeout and variable substitution.
@@ -119,7 +121,7 @@ async def execute_hook(
                 proc.communicate(input=stdin_payload),
                 timeout=hook.timeout / 1000.0,
             )
-        except asyncio.TimeoutError:
+        except TimeoutError:
             try:
                 proc.kill()
                 await proc.wait()
@@ -175,7 +177,7 @@ async def execute_hook(
 def _substitute_variables(
     command: str,
     event_data: EventData,
-    env_vars: Dict[str, str],
+    env_vars: dict[str, str],
 ) -> str:
     # Model/tool-derived values are shell-quoted to prevent command injection:
     # a filename or tool result containing `; rm -rf ~` or `$(...)` must not
@@ -193,7 +195,7 @@ def _substitute_variables(
         if "duration_ms" in event_data.context:
             untrusted["duration_ms"] = str(event_data.context["duration_ms"])
 
-    substitutions: Dict[str, str] = {
+    substitutions: dict[str, str] = {
         var: shlex.quote(str(value)) for var, value in untrusted.items()
     }
     # User-configured env vars are trusted (they may intentionally expand to
@@ -214,8 +216,8 @@ def _substitute_variables(
 
 def _build_environment(
     event_data: EventData,
-    env_vars: Optional[Dict[str, str]] = None,
-) -> Dict[str, str]:
+    env_vars: dict[str, str] | None = None,
+) -> dict[str, str]:
     env = os.environ.copy()
     env["CLAUDE_PROJECT_DIR"] = os.getcwd()
     env["CLAUDE_TOOL_INPUT"] = json.dumps(event_data.tool_args)
@@ -233,10 +235,10 @@ def _build_environment(
 
 
 async def execute_hooks_parallel(
-    hooks: List[HookConfig],
+    hooks: list[HookConfig],
     event_data: EventData,
-    env_vars: Optional[Dict[str, str]] = None,
-) -> List[ExecutionResult]:
+    env_vars: dict[str, str] | None = None,
+) -> list[ExecutionResult]:
     if not hooks:
         return []
     tasks = [execute_hook(hook, event_data, env_vars) for hook in hooks]
@@ -262,11 +264,11 @@ async def execute_hooks_parallel(
 
 
 async def execute_hooks_sequential(
-    hooks: List[HookConfig],
+    hooks: list[HookConfig],
     event_data: EventData,
-    env_vars: Optional[Dict[str, str]] = None,
+    env_vars: dict[str, str] | None = None,
     stop_on_block: bool = True,
-) -> List[ExecutionResult]:
+) -> list[ExecutionResult]:
     results = []
     for hook in hooks:
         result = await execute_hook(hook, event_data, env_vars)
@@ -277,18 +279,18 @@ async def execute_hooks_sequential(
     return results
 
 
-def get_blocking_result(results: List[ExecutionResult]) -> Optional[ExecutionResult]:
+def get_blocking_result(results: list[ExecutionResult]) -> ExecutionResult | None:
     for result in results:
         if result.blocked:
             return result
     return None
 
 
-def get_failed_results(results: List[ExecutionResult]) -> List[ExecutionResult]:
+def get_failed_results(results: list[ExecutionResult]) -> list[ExecutionResult]:
     return [result for result in results if not result.success]
 
 
-def format_execution_summary(results: List[ExecutionResult]) -> str:
+def format_execution_summary(results: list[ExecutionResult]) -> str:
     if not results:
         return "No hooks executed"
     total = len(results)

@@ -1,5 +1,7 @@
 """Full coverage tests for browser_interactions.py - exception branches."""
 
+from __future__ import annotations
+
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest

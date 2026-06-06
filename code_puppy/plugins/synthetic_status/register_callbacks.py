@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-from typing import List, Optional, Tuple
-
 from rich.panel import Panel
 
 from code_puppy.callbacks import register_callback
@@ -24,7 +22,7 @@ _PROVIDER_ENV_KEYS = {
 }
 
 
-def _custom_help() -> List[Tuple[str, str]]:
+def _custom_help() -> list[tuple[str, str]]:
     return [
         ("synthetic-status", "Check Synthetic subscription quota and renewal time"),
         ("provider", "Provider utilities (usage: /provider synthetic status)"),
@@ -88,7 +86,7 @@ def _is_synthetic_only_provider_configured() -> bool:
     return configured == {"synthetic"}
 
 
-def _handle_provider_command(command: str) -> Optional[bool]:
+def _handle_provider_command(command: str) -> bool | None:
     tokens = command.strip().split()
     if len(tokens) < 2:
         return None
@@ -105,7 +103,7 @@ def _handle_provider_command(command: str) -> Optional[bool]:
     return True
 
 
-def _handle_custom_command(command: str, name: str) -> Optional[bool]:
+def _handle_custom_command(command: str, name: str) -> bool | None:
     if not name:
         return None
 

@@ -15,7 +15,7 @@ from __future__ import annotations
 
 import uuid
 from abc import ABC, abstractmethod
-from typing import Any, Dict, List, Optional, Set
+from typing import Any
 
 import pydantic_ai.models
 
@@ -44,7 +44,7 @@ should_retry_streaming_exception = should_retry_streaming
 __all__ = ["BaseAgent", "should_retry_streaming_exception"]
 
 
-def _extract_pydantic_agent_tools(pyd_agent: Any) -> Optional[Dict[str, Any]]:
+def _extract_pydantic_agent_tools(pyd_agent: Any) -> dict[str, Any] | None:
     """Return the registered tool dict for a pydantic-ai agent, or None.
 
     Handles the modern shape (``agent._function_toolset.tools``) and falls
@@ -67,30 +67,30 @@ class BaseAgent(ABC):
 
     def __init__(self) -> None:
         self.id: str = str(uuid.uuid4())
-        self._message_history: List[Any] = []
-        self._compacted_message_hashes: Set[int] = set()
+        self._message_history: list[Any] = []
+        self._compacted_message_hashes: set[int] = set()
         self._code_generation_agent: Any = None
-        self._last_model_name: Optional[str] = None
-        self._puppy_rules: Optional[str] = None
-        self._mcp_servers: List[Any] = []
-        self.cur_model: Optional[pydantic_ai.models.Model] = None
+        self._last_model_name: str | None = None
+        self._puppy_rules: str | None = None
+        self._mcp_servers: list[Any] = []
+        self.cur_model: pydantic_ai.models.Model | None = None
         self.pydantic_agent: Any = None
         # Cached probe agent used to count tool overhead before the real
         # pydantic agent has been built. Keyed implicitly by ``_last_model_name``
         # so model swaps invalidate it via ``_probe_model_name``.
         self._tool_probe_agent: Any = None
-        self._probe_model_name: Optional[str] = None
+        self._probe_model_name: str | None = None
         # Memo for the resolved context-window length, keyed by model name so a
         # model switch recomputes it. Avoids re-reading model config on every
         # per-request history-processor cycle.
-        self._ctx_len_cache: Optional[tuple[Optional[str], int]] = None
+        self._ctx_len_cache: tuple[str | None, int] | None = None
         # Memo for the context-overhead estimate, keyed by
         # ``(model_name, hash(resolved_system_prompt))`` so a model switch or a
         # changed system prompt recomputes it. The history processor invokes
         # ``_estimate_context_overhead`` on every model request; without this we
         # re-resolve the system prompt + re-run prepare_prompt_for_model each
         # time. Stored as ``(key, value)``; recompute only when the key changes.
-        self._ctx_overhead_cache: Optional[tuple[tuple[Optional[str], int], int]] = None
+        self._ctx_overhead_cache: tuple[tuple[str | None, int], int] | None = None
 
     # ---- Abstract interface ------------------------------------------------
     @property
@@ -113,17 +113,17 @@ class BaseAgent(ABC):
         """Return the agent's system prompt (identity is appended separately)."""
 
     @abstractmethod
-    def get_available_tools(self) -> List[str]:
+    def get_available_tools(self) -> list[str]:
         """Return the list of tool names this agent should register."""
 
     # ---- Optional overrides ------------------------------------------------
-    def get_tools_config(self) -> Optional[Dict[str, Any]]:
+    def get_tools_config(self) -> dict[str, Any] | None:
         return None
 
-    def get_user_prompt(self) -> Optional[str]:
+    def get_user_prompt(self) -> str | None:
         return None
 
-    def get_model_name(self) -> Optional[str]:
+    def get_model_name(self) -> str | None:
         pinned = get_agent_pinned_model(self.name)
         return pinned if pinned else get_global_model_name()
 
@@ -159,10 +159,10 @@ class BaseAgent(ABC):
         return prompt + self.get_identity_prompt()
 
     # ---- Message history (plain dict-level access) ------------------------
-    def get_message_history(self) -> List[Any]:
+    def get_message_history(self) -> list[Any]:
         return self._message_history
 
-    def set_message_history(self, history: List[Any]) -> None:
+    def set_message_history(self, history: list[Any]) -> None:
         self._message_history = history
 
     def clear_message_history(self) -> None:
@@ -258,7 +258,7 @@ class BaseAgent(ABC):
     # ---- Orchestration (thin delegations) ---------------------------------
     def summarize_messages(
         self,
-        messages: List[Any],
+        messages: list[Any],
         with_protection: bool = True,
     ) -> tuple[list, list]:
         """Delegate to ``_compaction.summarize`` with config-derived protection."""
@@ -269,7 +269,7 @@ class BaseAgent(ABC):
             model_name=self.get_model_name(),
         )
 
-    def reload_code_generation_agent(self, message_group: Optional[str] = None) -> Any:
+    def reload_code_generation_agent(self, message_group: str | None = None) -> Any:
         return build_pydantic_agent(self, output_type=str, message_group=message_group)
 
     async def run_with_mcp(self, prompt: str, **kwargs: Any) -> Any:
@@ -295,11 +295,15 @@ class BaseAgent(ABC):
         if not servers:
             return None
 
+        # Only warm the cache when already inside a running loop. Using
+        # get_running_loop() (instead of the deprecated get_event_loop())
+        # raises RuntimeError when no loop is running, which is exactly the
+        # "nothing to warm" case.
         try:
-            loop = asyncio.get_event_loop()
+            loop = asyncio.get_running_loop()
         except RuntimeError:
             return None
-        if loop is None or not loop.is_running():
+        if not loop.is_running():
             return None
 
         async def _warm(server: Any) -> None:
@@ -320,5 +324,5 @@ class BaseAgent(ABC):
                 continue
         return None
 
-    def reload_mcp_servers(self) -> List[Any]:
+    def reload_mcp_servers(self) -> list[Any]:
         return reload_mcp_servers(agent_name=self.name)

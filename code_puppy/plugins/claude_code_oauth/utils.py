@@ -10,7 +10,7 @@ import re
 import secrets
 import time
 from dataclasses import dataclass
-from typing import Any, Dict, List, Optional, Tuple, Union
+from typing import Any
 from urllib.parse import urlencode
 
 import requests
@@ -37,10 +37,10 @@ class OAuthContext:
     code_verifier: str
     code_challenge: str
     created_at: float
-    redirect_uri: Optional[str] = None
+    redirect_uri: str | None = None
 
 
-_oauth_context: Optional[OAuthContext] = None
+_oauth_context: OAuthContext | None = None
 
 
 def _urlsafe_b64encode(data: bytes) -> str:
@@ -71,7 +71,7 @@ def prepare_oauth_context() -> OAuthContext:
     return _oauth_context
 
 
-def get_oauth_context() -> Optional[OAuthContext]:
+def get_oauth_context() -> OAuthContext | None:
     return _oauth_context
 
 
@@ -110,7 +110,7 @@ def build_authorization_url(context: OAuthContext) -> str:
     return f"{CLAUDE_CODE_OAUTH_CONFIG['auth_url']}?{urlencode(params)}"
 
 
-def parse_authorization_code(raw_input: str) -> Tuple[str, Optional[str]]:
+def parse_authorization_code(raw_input: str) -> tuple[str, str | None]:
     value = raw_input.strip()
     if not value:
         raise ValueError("Authorization code cannot be empty")
@@ -126,55 +126,55 @@ def parse_authorization_code(raw_input: str) -> Tuple[str, Optional[str]]:
     return value, None
 
 
-def load_stored_tokens() -> Optional[Dict[str, Any]]:
+def load_stored_tokens() -> dict[str, Any] | None:
     try:
         token_path = get_token_storage_path()
         if token_path.exists():
-            with open(token_path, "r", encoding="utf-8") as handle:
+            with open(token_path, encoding="utf-8") as handle:
                 return json.load(handle)
     except Exception as exc:  # pragma: no cover - defensive logging
         logger.error("Failed to load tokens: %s", exc)
     return None
 
 
-def _calculate_expires_at(expires_in: Optional[float]) -> Optional[float]:
+def _calculate_expires_at(expires_in: float | None) -> float | None:
     if expires_in is None:
         return None
     try:
         return time.time() + float(expires_in)
-    except (TypeError, ValueError):
+    except TypeError, ValueError:
         return None
 
 
-def _calculate_refresh_buffer(expires_in: Optional[float]) -> float:
+def _calculate_refresh_buffer(expires_in: float | None) -> float:
     default_buffer = float(TOKEN_REFRESH_BUFFER_SECONDS)
     if expires_in is None:
         return default_buffer
     try:
         expires_value = float(expires_in)
-    except (TypeError, ValueError):
+    except TypeError, ValueError:
         return default_buffer
     return min(default_buffer, max(MIN_REFRESH_BUFFER_SECONDS, expires_value * 0.1))
 
 
-def _get_expires_at_value(tokens: Dict[str, Any]) -> Optional[float]:
+def _get_expires_at_value(tokens: dict[str, Any]) -> float | None:
     expires_at = tokens.get("expires_at")
     if expires_at is None:
         return None
     try:
         return float(expires_at)
-    except (TypeError, ValueError):
+    except TypeError, ValueError:
         return None
 
 
-def _is_token_actually_expired(tokens: Dict[str, Any]) -> bool:
+def _is_token_actually_expired(tokens: dict[str, Any]) -> bool:
     expires_at_value = _get_expires_at_value(tokens)
     if expires_at_value is None:
         return False
     return time.time() >= expires_at_value
 
 
-def is_token_expired(tokens: Dict[str, Any]) -> bool:
+def is_token_expired(tokens: dict[str, Any]) -> bool:
     expires_at_value = _get_expires_at_value(tokens)
     if expires_at_value is None:
         return False
@@ -205,7 +205,7 @@ def update_claude_code_model_tokens(access_token: str) -> bool:
     return False
 
 
-def refresh_access_token(force: bool = False) -> Optional[str]:
+def refresh_access_token(force: bool = False) -> str | None:
     tokens = load_stored_tokens()
     if not tokens:
         return None
@@ -271,7 +271,7 @@ def refresh_access_token(force: bool = False) -> Optional[str]:
     return None
 
 
-def get_valid_access_token() -> Optional[str]:
+def get_valid_access_token() -> str | None:
     tokens = load_stored_tokens()
     if not tokens:
         logger.debug("No stored Claude Code OAuth tokens found")
@@ -298,7 +298,7 @@ def get_valid_access_token() -> Optional[str]:
     return access_token
 
 
-def save_tokens(tokens: Dict[str, Any]) -> bool:
+def save_tokens(tokens: dict[str, Any]) -> bool:
     try:
         token_path = get_token_storage_path()
         with open(token_path, "w", encoding="utf-8") as handle:
@@ -310,18 +310,18 @@ def save_tokens(tokens: Dict[str, Any]) -> bool:
         return False
 
 
-def load_claude_models() -> Dict[str, Any]:
+def load_claude_models() -> dict[str, Any]:
     try:
         models_path = get_claude_models_path()
         if models_path.exists():
-            with open(models_path, "r", encoding="utf-8") as handle:
+            with open(models_path, encoding="utf-8") as handle:
                 return json.load(handle)
     except Exception as exc:  # pragma: no cover - defensive logging
         logger.error("Failed to load Claude models: %s", exc)
     return {}
 
 
-def load_claude_models_filtered() -> Dict[str, Any]:
+def load_claude_models_filtered() -> dict[str, Any]:
     """Load Claude models and filter to only the latest versions.
 
     This loads the stored models and applies the same filtering logic
@@ -368,7 +368,7 @@ def load_claude_models_filtered() -> Dict[str, Any]:
     return {}
 
 
-def save_claude_models(models: Dict[str, Any]) -> bool:
+def save_claude_models(models: dict[str, Any]) -> bool:
     try:
         models_path = get_claude_models_path()
         with open(models_path, "w", encoding="utf-8") as handle:
@@ -381,7 +381,7 @@ def save_claude_models(models: Dict[str, Any]) -> bool:
 
 def exchange_code_for_tokens(
     auth_code: str, context: OAuthContext
-) -> Optional[Dict[str, Any]]:
+) -> dict[str, Any] | None:
     if not context.redirect_uri:
         raise RuntimeError("Redirect URI missing from OAuth context")
 
@@ -441,8 +441,8 @@ def exchange_code_for_tokens(
 
 
 def filter_latest_claude_models(
-    models: List[str], max_per_family: Union[int, Dict[str, int]] = 2
-) -> List[str]:
+    models: list[str], max_per_family: int | dict[str, int] = 2
+) -> list[str]:
     """Filter models to keep the top N latest haiku, sonnet, and opus.
 
     Parses model names in the format claude-{family}-{major}-{minor}-{date}
@@ -457,7 +457,7 @@ def filter_latest_claude_models(
     """
     # Collect all parsed models per family
     # family -> list of (model_name, major, minor, date)
-    family_models: Dict[str, List[Tuple[str, int, int, int]]] = {}
+    family_models: dict[str, list[tuple[str, int, int, int]]] = {}
 
     for model_name in models:
         if model_name == "claude-opus-4-8":
@@ -492,7 +492,7 @@ def filter_latest_claude_models(
         family_models.setdefault(family, []).append((model_name, major, minor, date))
 
     # Sort each family descending and keep the top N
-    filtered: List[str] = []
+    filtered: list[str] = []
     for family, family_entries in family_models.items():
         if isinstance(max_per_family, dict):
             limit = max_per_family.get(family, max_per_family.get("default", 2))
@@ -512,7 +512,7 @@ def filter_latest_claude_models(
     return filtered
 
 
-def fetch_claude_code_models(access_token: str) -> Optional[List[str]]:
+def fetch_claude_code_models(access_token: str) -> list[str] | None:
     try:
         api_url = f"{CLAUDE_CODE_OAUTH_CONFIG['api_base_url']}/v1/models"
         headers = {
@@ -539,7 +539,7 @@ def fetch_claude_code_models(access_token: str) -> Optional[List[str]]:
                 logger.error("Failed to parse models response as JSON: %s", e)
                 return None
             if isinstance(data.get("data"), list):
-                models: List[str] = []
+                models: list[str] = []
                 for model in data["data"]:
                     name = model.get("id") or model.get("name")
                     if name:
@@ -596,7 +596,7 @@ def _build_model_entry(model_name: str, access_token: str, context_length: int) 
     }
 
 
-def add_models_to_extra_config(models: List[str]) -> bool:
+def add_models_to_extra_config(models: list[str]) -> bool:
     try:
         # Filter to only latest haiku, sonnet, and opus models
         filtered_models = filter_latest_claude_models(

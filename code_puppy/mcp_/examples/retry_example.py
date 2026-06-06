@@ -6,6 +6,8 @@ This demonstrates how the RetryManager can be integrated with MCP server calls
 to handle transient failures gracefully with intelligent backoff strategies.
 """
 
+from __future__ import annotations
+
 import asyncio
 import logging
 import random
@@ -193,7 +195,7 @@ async def demonstrate_error_classification():
     # Test different error types
     test_errors = [
         ConnectionError("Network connection failed"),
-        asyncio.TimeoutError("Request timeout"),
+        TimeoutError("Request timeout"),
         ValueError("JSON decode error: invalid format"),
         ValueError("Schema validation failed"),
         Exception("Authentication failed"),

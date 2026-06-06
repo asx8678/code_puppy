@@ -1,5 +1,7 @@
 """Tests for load_context_completion.py - 100% coverage."""
 
+from __future__ import annotations
+
 import os
 import tempfile
 from unittest.mock import MagicMock, patch

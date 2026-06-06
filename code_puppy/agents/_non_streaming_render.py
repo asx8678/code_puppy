@@ -17,7 +17,8 @@ run because the caller still has the raw result.
 
 from __future__ import annotations
 
-from typing import Any, Callable, List, Optional
+from collections.abc import Callable
+from typing import Any
 
 from pydantic_ai import PartDeltaEvent, PartStartEvent
 from pydantic_ai.messages import (
@@ -75,7 +76,7 @@ def _collect_thinking_from_messages(result: Any) -> str:
     if len(model_responses) <= 1:
         return ""
 
-    chunks: List[str] = []
+    chunks: list[str] = []
     for response in model_responses[:-1]:
         for part in getattr(response, "parts", []) or []:
             if isinstance(part, ThinkingPart):
@@ -127,7 +128,7 @@ def render_result_without_streaming(result: Any) -> None:
 
 
 def should_render_fallback(
-    detector: Optional[StreamingTextDetector],
+    detector: StreamingTextDetector | None,
     *,
     skip: bool,
 ) -> bool:

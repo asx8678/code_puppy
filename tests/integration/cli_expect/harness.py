@@ -5,6 +5,8 @@ with the quirks we learned (\r line endings, tiny delays, optional stdout
 capture). Includes fixtures for pytest.
 """
 
+from __future__ import annotations
+
 import os
 import pathlib
 import random
@@ -96,7 +98,7 @@ def _capture_initial_files(temp_home: pathlib.Path) -> set[pathlib.Path]:
         for root, dirs, files in os.walk(temp_home):
             for file in files:
                 initial_files.add(pathlib.Path(root) / file)
-    except (OSError, PermissionError):
+    except OSError, PermissionError:
         # If we can't walk the directory, just return empty set
         pass
     return initial_files
@@ -125,14 +127,14 @@ def _cleanup_test_only_files(
         ):
             try:
                 file_path.unlink()
-            except (OSError, PermissionError):
+            except OSError, PermissionError:
                 # Best effort cleanup
                 pass
 
         # Try to remove empty directories
         _cleanup_empty_directories(temp_home, initial_files)
 
-    except (OSError, PermissionError):
+    except OSError, PermissionError:
         # Fallback to full cleanup if selective cleanup fails
         shutil.rmtree(temp_home, ignore_errors=True)
 
@@ -161,9 +163,9 @@ def _cleanup_empty_directories(
             try:
                 if dir_path.exists() and not any(dir_path.iterdir()):
                     dir_path.rmdir()
-            except (OSError, PermissionError):
+            except OSError, PermissionError:
                 pass
-    except (OSError, PermissionError):
+    except OSError, PermissionError:
         pass
 
 

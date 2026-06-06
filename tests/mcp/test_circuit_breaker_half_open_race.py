@@ -5,6 +5,8 @@ Verifies that only one test call is allowed through at a time when the
 circuit breaker is in HALF_OPEN state.
 """
 
+from __future__ import annotations
+
 import asyncio
 from unittest.mock import AsyncMock
 

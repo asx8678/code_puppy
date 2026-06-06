@@ -4,6 +4,8 @@ This module tests shared utility functions for the tools package including
 ignore patterns, path matching, fuzzy text search, and ID generation.
 """
 
+from __future__ import annotations
+
 import importlib.util
 import re
 from pathlib import Path

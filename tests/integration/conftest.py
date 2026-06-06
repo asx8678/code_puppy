@@ -4,6 +4,8 @@ Integration tests require specific environment variables to be set to prevent
 hanging issues with Rich's Live() display in pexpect PTY environments.
 """
 
+from __future__ import annotations
+
 import os
 
 import pytest

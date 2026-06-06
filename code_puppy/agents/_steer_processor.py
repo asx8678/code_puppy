@@ -20,7 +20,8 @@ tool calls within one turn), so the steer lands at the next safe boundary.
 
 from __future__ import annotations
 
-from typing import Any, Callable, List
+from collections.abc import Callable
+from typing import Any
 
 from pydantic_ai.messages import ModelMessage, ModelRequest, UserPromptPart
 
@@ -28,7 +29,7 @@ from code_puppy.messaging import emit_info
 from code_puppy.messaging.pause_controller import get_pause_controller
 
 
-def make_steer_history_processor(agent: Any) -> Callable[..., List[ModelMessage]]:
+def make_steer_history_processor(agent: Any) -> Callable[..., list[ModelMessage]]:
     """Build a history processor that injects queued steers as user messages.
 
     Returns a closure suitable for pydantic-ai's ``history_processors`` list.
@@ -36,7 +37,7 @@ def make_steer_history_processor(agent: Any) -> Callable[..., List[ModelMessage]
     call.
     """
 
-    def steer_history_processor(messages: List[ModelMessage]) -> List[ModelMessage]:
+    def steer_history_processor(messages: list[ModelMessage]) -> list[ModelMessage]:
         # Drain ONLY ``now``-mode steers. ``queue``-mode steers are owned
         # by ``_runtime._do_run``'s between-turns loop; draining both here
         # would double-inject them.
@@ -47,7 +48,7 @@ def make_steer_history_processor(agent: Any) -> Callable[..., List[ModelMessage]
         # Build one user message per steer (so each shows up as a discrete
         # turn in the model's view of the conversation — clearer than
         # concatenating them).
-        injected: List[ModelMessage] = []
+        injected: list[ModelMessage] = []
         for steer_text in pending:
             preview = steer_text[:80] + ("..." if len(steer_text) > 80 else "")
             emit_info(f"🎯 Injecting steer mid-turn — model will see: {preview!r}")

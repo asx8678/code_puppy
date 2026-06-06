@@ -1,5 +1,7 @@
 """Simple working test for browser locators to get basic coverage."""
 
+from __future__ import annotations
+
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest

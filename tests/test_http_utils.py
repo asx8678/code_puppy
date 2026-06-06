@@ -5,6 +5,8 @@ rate-limit retry handling, cert bundle helpers, auth headers, env-var
 header resolution, reopenable client creation and port discovery.
 """
 
+from __future__ import annotations
+
 import os
 import socket
 from unittest.mock import AsyncMock, MagicMock, patch

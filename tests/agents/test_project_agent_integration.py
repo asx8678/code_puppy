@@ -1,5 +1,7 @@
 """Integration tests for project-level agent discovery using real filesystem."""
 
+from __future__ import annotations
+
 import json
 from unittest.mock import patch
 

@@ -8,6 +8,8 @@ calls, no caching, no yolo-mode checks. Covers:
 - Windows CMD: rd, rmdir, del, erase with /s /q flags, format, diskpart
 """
 
+from __future__ import annotations
+
 import re
 from dataclasses import dataclass
 

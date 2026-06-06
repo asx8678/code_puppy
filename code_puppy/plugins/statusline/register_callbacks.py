@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import logging
-from typing import Any, List, Optional, Tuple
+from typing import Any
 
 from code_puppy.callbacks import register_callback
 
@@ -20,11 +20,11 @@ def _on_startup() -> None:
         logger.debug("statusline: failed to install prompt patch", exc_info=True)
 
 
-def _custom_command_help() -> List[Tuple[str, str]]:
+def _custom_command_help() -> list[tuple[str, str]]:
     return statusline_command_help()
 
 
-def _handle_custom_command(command: str, name: str) -> Optional[Any]:
+def _handle_custom_command(command: str, name: str) -> Any | None:
     try:
         return handle_statusline_command(command, name)
     except Exception:

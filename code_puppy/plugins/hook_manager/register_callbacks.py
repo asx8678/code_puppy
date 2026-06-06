@@ -9,8 +9,10 @@ Provides:
   /hooks status    – Show summary counts per event type
 """
 
+from __future__ import annotations
+
 import logging
-from typing import Any, List, Optional, Tuple
+from typing import Any
 
 from code_puppy.callbacks import register_callback
 
@@ -25,7 +27,7 @@ _ALIASES = ("hook",)
 # ---------------------------------------------------------------------------
 
 
-def _hooks_command_help() -> List[Tuple[str, str]]:
+def _hooks_command_help() -> list[tuple[str, str]]:
     """Advertise /hooks in the /help menu."""
     return [
         (
@@ -41,7 +43,7 @@ def _hooks_command_help() -> List[Tuple[str, str]]:
 # ---------------------------------------------------------------------------
 
 
-def _handle_hooks_command(command: str, name: str) -> Optional[Any]:
+def _handle_hooks_command(command: str, name: str) -> Any | None:
     """Handle /hooks (and /hook) slash commands.
 
     Sub-commands

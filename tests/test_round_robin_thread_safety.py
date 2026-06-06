@@ -1,5 +1,7 @@
 """Tests for thread-safety of RoundRobinModel._get_next_model."""
 
+from __future__ import annotations
+
 import threading
 from collections import Counter
 from unittest.mock import AsyncMock, MagicMock

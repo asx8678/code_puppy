@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-from typing import List
-
 import pytest
 
 from code_puppy.agents import _key_listeners
@@ -50,7 +48,7 @@ class _BusSpy:
         from code_puppy.messaging import get_message_bus
 
         self.bus = get_message_bus()
-        self.commands: List[object] = []
+        self.commands: list[object] = []
         self._orig = self.bus.provide_response
         self.bus.provide_response = self._recording  # type: ignore[assignment]
 

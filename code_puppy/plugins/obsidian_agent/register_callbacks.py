@@ -1,5 +1,7 @@
 """Register the Obsidian Agent plugin."""
 
+from __future__ import annotations
+
 from code_puppy.callbacks import register_callback
 
 from .agent_obsidian import ObsidianAgent

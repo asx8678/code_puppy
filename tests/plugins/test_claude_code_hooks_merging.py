@@ -5,6 +5,8 @@ Tests that verify global and project-level hooks are merged correctly
 when both configuration files exist.
 """
 
+from __future__ import annotations
+
 import json
 import os
 import tempfile

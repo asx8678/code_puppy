@@ -21,7 +21,7 @@ from __future__ import annotations
 import json
 import logging
 import time
-from typing import Any, Dict, Optional
+from typing import Any
 
 from code_puppy.callbacks import register_callback
 from code_puppy.plugins.frontend_emitter.emitter import emit_event
@@ -42,7 +42,7 @@ _MAX_ARGS_TRUNCATED_STR = 4000
 
 
 async def on_pre_tool_call(
-    tool_name: str, tool_args: Dict[str, Any], context: Any = None
+    tool_name: str, tool_args: dict[str, Any], context: Any = None
 ) -> None:
     """Emit an event when a tool call starts.
 
@@ -67,7 +67,7 @@ async def on_pre_tool_call(
 
 async def on_post_tool_call(
     tool_name: str,
-    tool_args: Dict[str, Any],
+    tool_args: dict[str, Any],
     result: Any,
     duration_ms: float,
     context: Any = None,
@@ -100,7 +100,7 @@ async def on_post_tool_call(
 
 
 async def on_stream_event(
-    event_type: str, event_data: Any, agent_session_id: Optional[str] = None
+    event_type: str, event_data: Any, agent_session_id: str | None = None
 ) -> None:
     """Emit streaming events from the agent.
 
@@ -153,7 +153,7 @@ async def on_invoke_agent(*args: Any, **kwargs: Any) -> None:
 # ─── sanitizers ─────────────────────────────────────────────────────────
 
 
-def _sanitize_args(args: Dict[str, Any]) -> Dict[str, Any]:
+def _sanitize_args(args: dict[str, Any]) -> dict[str, Any]:
     """Sanitize tool arguments for safe emission.
 
     Strategy:
@@ -176,7 +176,7 @@ def _sanitize_args(args: Dict[str, Any]) -> Dict[str, Any]:
     if not isinstance(args, dict):
         return {}
 
-    sanitized: Dict[str, Any] = {}
+    sanitized: dict[str, Any] = {}
     for key, value in args.items():
         if isinstance(value, str):
             sanitized[key] = _truncate_string(value, max_length=500)
@@ -209,7 +209,7 @@ def _preserve_structured(value: Any) -> Any:
     """
     try:
         serialised = json.dumps(value, default=str, ensure_ascii=False)
-    except (TypeError, ValueError):
+    except TypeError, ValueError:
         # Not JSON-serialisable at all -- fall back to a short repr.
         try:
             return _truncate_string(repr(value), max_length=_MAX_ARGS_TRUNCATED_STR)
@@ -322,7 +322,7 @@ def _sanitize_event_data(data: Any) -> Any:
     return f"<{type_name}>"
 
 
-def _safe_getattr_str(obj: Any, name: str) -> Optional[str]:
+def _safe_getattr_str(obj: Any, name: str) -> str | None:
     """Return ``str(getattr(obj, name))`` or ``None`` if missing / failing."""
     try:
         val = getattr(obj, name, None)
@@ -385,7 +385,7 @@ def _summarize_result(result: Any) -> str:
     return _truncate_string(str(result), max_length=200)
 
 
-def _truncate_string(value: Any, max_length: int = 100) -> Optional[str]:
+def _truncate_string(value: Any, max_length: int = 100) -> str | None:
     """Truncate a string value if it exceeds ``max_length``.
 
     Args:

@@ -4,6 +4,8 @@ These tests focus on the shell_safety_callback function execution paths
 and the register() function for callback registration.
 """
 
+from __future__ import annotations
+
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest

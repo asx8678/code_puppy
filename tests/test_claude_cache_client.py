@@ -6,6 +6,8 @@ injection (both the bytes-based and in-place payload variants), retry logic,
 and the full send() flow.
 """
 
+from __future__ import annotations
+
 import base64
 import json
 import time

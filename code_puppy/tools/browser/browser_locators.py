@@ -1,6 +1,8 @@
 """Browser element discovery tools using semantic locators and XPath."""
 
-from typing import Any, Dict, Optional
+from __future__ import annotations
+
+from typing import Any
 
 from pydantic_ai import RunContext
 
@@ -12,10 +14,10 @@ from .browser_manager import get_session_browser_manager
 
 async def find_by_role(
     role: str,
-    name: Optional[str] = None,
+    name: str | None = None,
     exact: bool = False,
     timeout: int = 10000,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """Find elements by ARIA role."""
     group_id = generate_group_id("browser_find_by_role", f"{role}_{name or 'any'}")
     emit_info(
@@ -67,7 +69,7 @@ async def find_by_text(
     text: str,
     exact: bool = False,
     timeout: int = 10000,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """Find elements containing specific text."""
     group_id = generate_group_id("browser_find_by_text", text[:50])
     emit_info(
@@ -119,7 +121,7 @@ async def find_by_label(
     text: str,
     exact: bool = False,
     timeout: int = 10000,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """Find form elements by their associated label text."""
     group_id = generate_group_id("browser_find_by_label", text[:50])
     emit_info(
@@ -182,7 +184,7 @@ async def find_by_placeholder(
     text: str,
     exact: bool = False,
     timeout: int = 10000,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """Find elements by placeholder text."""
     group_id = generate_group_id("browser_find_by_placeholder", text[:50])
     emit_info(
@@ -240,7 +242,7 @@ async def find_by_placeholder(
 async def find_by_test_id(
     test_id: str,
     timeout: int = 10000,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """Find elements by test ID attribute."""
     group_id = generate_group_id("browser_find_by_test_id", test_id)
     emit_info(
@@ -296,7 +298,7 @@ async def find_by_test_id(
 async def run_xpath_query(
     xpath: str,
     timeout: int = 10000,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """Find elements using XPath selector."""
     group_id = generate_group_id("browser_xpath_query", xpath[:100])
     emit_info(
@@ -350,8 +352,8 @@ async def run_xpath_query(
 
 
 async def find_buttons(
-    text_filter: Optional[str] = None, timeout: int = 10000
-) -> Dict[str, Any]:
+    text_filter: str | None = None, timeout: int = 10000
+) -> dict[str, Any]:
     """Find all button elements on the page."""
     group_id = generate_group_id("browser_find_buttons", text_filter or "all")
     emit_info(
@@ -401,8 +403,8 @@ async def find_buttons(
 
 
 async def find_links(
-    text_filter: Optional[str] = None, timeout: int = 10000
-) -> Dict[str, Any]:
+    text_filter: str | None = None, timeout: int = 10000
+) -> dict[str, Any]:
     """Find all link elements on the page."""
     group_id = generate_group_id("browser_find_links", text_filter or "all")
     emit_info(
@@ -461,10 +463,10 @@ def register_find_by_role(agent):
     async def browser_find_by_role(
         context: RunContext,
         role: str,
-        name: Optional[str] = None,
+        name: str | None = None,
         exact: bool = False,
         timeout: int = 10000,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         Find elements by ARIA role (recommended for accessibility).
 
@@ -489,7 +491,7 @@ def register_find_by_text(agent):
         text: str,
         exact: bool = False,
         timeout: int = 10000,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         Find elements containing specific text content.
 
@@ -513,7 +515,7 @@ def register_find_by_label(agent):
         text: str,
         exact: bool = False,
         timeout: int = 10000,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         Find form elements by their associated label text.
 
@@ -537,7 +539,7 @@ def register_find_by_placeholder(agent):
         text: str,
         exact: bool = False,
         timeout: int = 10000,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         Find elements by placeholder text.
 
@@ -560,7 +562,7 @@ def register_find_by_test_id(agent):
         context: RunContext,
         test_id: str,
         timeout: int = 10000,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         Find elements by test ID attribute (data-testid).
 
@@ -582,7 +584,7 @@ def register_run_xpath_query(agent):
         context: RunContext,
         xpath: str,
         timeout: int = 10000,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         Find elements using XPath selector (fallback when semantic locators fail).
 
@@ -602,9 +604,9 @@ def register_find_buttons(agent):
     @agent.tool
     async def browser_find_buttons(
         context: RunContext,
-        text_filter: Optional[str] = None,
+        text_filter: str | None = None,
         timeout: int = 10000,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         Find all button elements on the page.
 
@@ -624,9 +626,9 @@ def register_find_links(agent):
     @agent.tool
     async def browser_find_links(
         context: RunContext,
-        text_filter: Optional[str] = None,
+        text_filter: str | None = None,
         timeout: int = 10000,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         Find all link elements on the page.
 

@@ -7,6 +7,8 @@ Tests cover plugin loading functions including:
 - Idempotent loading behavior
 """
 
+from __future__ import annotations
+
 import sys
 from pathlib import Path
 from unittest.mock import MagicMock, patch

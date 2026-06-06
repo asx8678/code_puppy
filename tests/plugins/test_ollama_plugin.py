@@ -1,5 +1,7 @@
 """Tests for the Ollama plugin model type handler."""
 
+from __future__ import annotations
+
 from unittest.mock import MagicMock, patch
 
 import pytest

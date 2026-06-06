@@ -1,5 +1,7 @@
 """Tests for code_puppy/command_line/mcp/custom_server_form.py"""
 
+from __future__ import annotations
+
 import json
 from unittest.mock import MagicMock, mock_open, patch
 

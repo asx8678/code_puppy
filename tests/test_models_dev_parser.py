@@ -11,6 +11,8 @@ Covers:
 - Edge cases and error handling
 """
 
+from __future__ import annotations
+
 import json
 from unittest.mock import MagicMock, mock_open, patch
 
@@ -457,9 +459,7 @@ class TestPrefetchModelsDev:
 
     def test_prefetch_is_idempotent(self):
         """A second prefetch must not spawn another thread."""
-        with patch(
-            "code_puppy.models_dev_parser.threading.Thread"
-        ) as mock_thread:
+        with patch("code_puppy.models_dev_parser.threading.Thread") as mock_thread:
             mock_thread.return_value = MagicMock()
             models_dev_parser.prefetch_models_dev()
             models_dev_parser.prefetch_models_dev()
@@ -468,9 +468,7 @@ class TestPrefetchModelsDev:
     def test_prefetch_skips_when_cache_warm(self):
         """No thread is spawned when a payload is already cached."""
         models_dev_parser._CACHED_API_DATA = {"x": {}}
-        with patch(
-            "code_puppy.models_dev_parser.threading.Thread"
-        ) as mock_thread:
+        with patch("code_puppy.models_dev_parser.threading.Thread") as mock_thread:
             models_dev_parser.prefetch_models_dev()
             mock_thread.assert_not_called()
 

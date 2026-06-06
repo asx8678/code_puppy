@@ -31,7 +31,7 @@ import json
 import logging
 import os
 import pathlib
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from code_puppy.config import CONFIG_DIR
 
@@ -39,19 +39,19 @@ logger = logging.getLogger(__name__)
 
 BINDINGS_FILE = os.path.join(CONFIG_DIR, "mcp_agent_bindings.json")
 
-_EMPTY: Dict[str, Any] = {"bindings": {}}
+_EMPTY: dict[str, Any] = {"bindings": {}}
 
 # In-memory bindings that live ONLY for the current process. Used by ephemeral
 # flows like ``/mcp start`` which should make a server visible to the current
 # agent right now without permanently editing ``mcp_agent_bindings.json``.
 # Same shape as the persisted bindings: ``{agent: {server: {"auto_start": bool}}}``.
-_session_bindings: Dict[str, Dict[str, Dict[str, Any]]] = {}
+_session_bindings: dict[str, dict[str, dict[str, Any]]] = {}
 
 
 # ---------- low-level I/O ----------------------------------------------------
 
 
-def _read() -> Dict[str, Any]:
+def _read() -> dict[str, Any]:
     """Load the bindings file, returning an empty skeleton if missing/broken."""
     path = pathlib.Path(BINDINGS_FILE)
     if not path.exists():
@@ -67,7 +67,7 @@ def _read() -> Dict[str, Any]:
     return data
 
 
-def _write(data: Dict[str, Any]) -> None:
+def _write(data: dict[str, Any]) -> None:
     """Atomically persist the bindings file."""
     path = pathlib.Path(BINDINGS_FILE)
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -80,12 +80,12 @@ def _write(data: Dict[str, Any]) -> None:
 # ---------- public API -------------------------------------------------------
 
 
-def load_bindings() -> Dict[str, Dict[str, Dict[str, Any]]]:
+def load_bindings() -> dict[str, dict[str, dict[str, Any]]]:
     """Return the entire bindings map (agent → server → options)."""
     return _read().get("bindings", {})
 
 
-def _load_json_declared_bindings(agent_name: str) -> Dict[str, Dict[str, Any]]:
+def _load_json_declared_bindings(agent_name: str) -> dict[str, dict[str, Any]]:
     """Load MCP bindings declared inside a JSON sub-agent's config file.
 
     Lazy-imports the agent layer to avoid a circular dependency: this
@@ -113,7 +113,7 @@ def _load_json_declared_bindings(agent_name: str) -> Dict[str, Dict[str, Any]]:
         return {}
 
 
-def get_bound_servers(agent_name: str) -> Dict[str, Dict[str, Any]]:
+def get_bound_servers(agent_name: str) -> dict[str, dict[str, Any]]:
     """Return ``{server_name: {"auto_start": bool}}`` for one agent.
 
     Merges two sources, with the per-machine bindings file winning on
@@ -136,7 +136,7 @@ def get_bound_servers(agent_name: str) -> Dict[str, Dict[str, Any]]:
     #   declared (JSON config)  <  file (persistent)  <  session (in-memory)
     # Session wins so the most recent user action (e.g. /mcp start xyz) is
     # what the agent actually sees this run.
-    merged: Dict[str, Dict[str, Any]] = {
+    merged: dict[str, dict[str, Any]] = {
         name: dict(opts) for name, opts in declared.items()
     }
     for name, opts in file_bindings.items():
@@ -241,7 +241,7 @@ def toggle_binding(agent_name: str, server_name: str) -> bool:
     return True
 
 
-def toggle_auto_start(agent_name: str, server_name: str) -> Optional[bool]:
+def toggle_auto_start(agent_name: str, server_name: str) -> bool | None:
     """Flip auto-start for an existing binding.
 
     Returns the new auto-start flag, or ``None`` if the server isn't bound
@@ -254,7 +254,7 @@ def toggle_auto_start(agent_name: str, server_name: str) -> Optional[bool]:
     return new_value
 
 
-def get_agents_for_server(server_name: str) -> List[str]:
+def get_agents_for_server(server_name: str) -> list[str]:
     """Reverse lookup: which agents are bound to this server?"""
     return [
         agent for agent, servers in load_bindings().items() if server_name in servers

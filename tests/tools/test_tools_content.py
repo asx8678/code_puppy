@@ -5,6 +5,8 @@ user-facing documentation about Fast Puppy's available tools.
 """
 
 # Import directly from the module file to avoid heavy dependencies in __init__.py
+from __future__ import annotations
+
 import importlib.util
 from pathlib import Path
 

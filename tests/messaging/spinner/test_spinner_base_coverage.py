@@ -1,5 +1,7 @@
 """Tests for code_puppy.messaging.spinner.spinner_base."""
 
+from __future__ import annotations
+
 from code_puppy.messaging.spinner.spinner_base import SpinnerBase
 
 

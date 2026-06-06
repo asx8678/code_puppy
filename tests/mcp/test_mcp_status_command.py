@@ -5,6 +5,8 @@ Covers detailed server status display, error handling,
 server lookup, and edge cases.
 """
 
+from __future__ import annotations
+
 from unittest.mock import ANY, Mock, patch
 
 from code_puppy.command_line.mcp.status_command import StatusCommand

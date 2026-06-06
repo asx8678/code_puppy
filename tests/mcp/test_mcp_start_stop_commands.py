@@ -5,6 +5,8 @@ Covers server lifecycle operations, error handling,
 agent reloading, and edge cases.
 """
 
+from __future__ import annotations
+
 from unittest.mock import Mock, patch
 
 from code_puppy.command_line.mcp.restart_command import RestartCommand

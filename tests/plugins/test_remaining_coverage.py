@@ -12,6 +12,8 @@ Covers:
 - universal_constructor/sandbox.py (multiple missing lines)
 """
 
+from __future__ import annotations
+
 import ast
 from pathlib import Path
 from types import ModuleType
@@ -305,7 +307,7 @@ class TestMetadataMissingLines:
 
     def test_load_full_skill_content_read_error(self, tmp_path):
         (tmp_path / "SKILL.md").write_text("test")
-        with patch.object(Path, "read_text", side_effect=IOError("fail")):
+        with patch.object(Path, "read_text", side_effect=OSError("fail")):
             result = load_full_skill_content(tmp_path)
             assert result is None
 
@@ -973,7 +975,7 @@ def test():
         """Lines 434-437: file read error in validate_tool_file."""
         f = tmp_path / "tool.py"
         f.write_text("x = 1")
-        with patch.object(Path, "read_text", side_effect=IOError("read fail")):
+        with patch.object(Path, "read_text", side_effect=OSError("read fail")):
             result = validate_tool_file(f)
             assert not result.valid
 

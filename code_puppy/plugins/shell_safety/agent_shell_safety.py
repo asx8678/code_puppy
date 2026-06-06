@@ -5,7 +5,9 @@ It's designed to be ultra-lightweight with a concise prompt (<200 tokens) and
 uses structured output for reliable parsing.
 """
 
-from typing import TYPE_CHECKING, List
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
 
 from code_puppy.agents.base_agent import BaseAgent
 
@@ -64,6 +66,6 @@ class ShellSafetyAgent(BaseAgent):
 
 **Output:** Risk level + reasoning (max 1 sentence)."""
 
-    def get_available_tools(self) -> List[str]:
+    def get_available_tools(self) -> list[str]:
         """This agent uses no tools - pure reasoning only."""
         return []

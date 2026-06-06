@@ -5,6 +5,8 @@ To cover those inner function bodies, we make agent.tool act as a pass-through
 decorator, then call the registered function directly.
 """
 
+from __future__ import annotations
+
 from unittest.mock import MagicMock, patch
 
 import pytest

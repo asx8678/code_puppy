@@ -5,6 +5,8 @@ This module provides the MCPCommandHandler class that routes MCP commands
 to their respective command modules.
 """
 
+from __future__ import annotations
+
 import logging
 import shlex
 

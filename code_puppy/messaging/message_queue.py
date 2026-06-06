@@ -4,14 +4,16 @@ Message queue system for decoupling Rich console output from renderers.
 This allows interactive mode to consume messages and render them appropriately.
 """
 
+from __future__ import annotations
+
 import asyncio
 import logging
 import queue
 import threading
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from enum import Enum
-from typing import Any, Dict, Optional, Union
+from typing import Any
 
 from rich.text import Text
 
@@ -52,13 +54,13 @@ class UIMessage:
     """A message to be displayed in the UI."""
 
     type: MessageType
-    content: Union[str, Text, Any]  # Can be Rich Text, Table, Markdown, etc.
+    content: str | Text | Any  # Can be Rich Text, Table, Markdown, etc.
     timestamp: datetime = None
-    metadata: Dict[str, Any] = None
+    metadata: dict[str, Any] = None
 
     def __post_init__(self):
         if self.timestamp is None:
-            self.timestamp = datetime.now(timezone.utc)
+            self.timestamp = datetime.now(UTC)
         if self.metadata is None:
             self.metadata = {}
 
@@ -143,7 +145,7 @@ class MessageQueue:
         msg = UIMessage(type=message_type, content=content, metadata=metadata)
         self.emit(msg)
 
-    def get_nowait(self) -> Optional[UIMessage]:
+    def get_nowait(self) -> UIMessage | None:
         """Get a message without blocking."""
         try:
             return self._queue.get_nowait()
@@ -300,7 +302,7 @@ class MessageQueue:
 
 
 # Global message queue instance
-_global_queue: Optional[MessageQueue] = None
+_global_queue: MessageQueue | None = None
 _queue_lock = threading.Lock()
 
 

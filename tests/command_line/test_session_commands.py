@@ -1,5 +1,7 @@
 """Tests for session_commands.py to achieve 100% coverage."""
 
+from __future__ import annotations
+
 from unittest.mock import MagicMock, patch
 
 

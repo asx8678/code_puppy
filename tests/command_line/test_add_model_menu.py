@@ -10,6 +10,8 @@ Tests interactive model browser TUI including:
 - Custom model support
 """
 
+from __future__ import annotations
+
 from unittest.mock import MagicMock, patch
 
 from code_puppy.command_line.add_model_menu import (

@@ -7,13 +7,14 @@ This module provides MCP servers that:
 3. Optionally emit stderr to users (disabled by default to reduce console noise)
 """
 
+from __future__ import annotations
+
 import asyncio
 import os
 import threading
 import uuid
 from collections import deque
 from contextlib import asynccontextmanager
-from typing import List, Optional
 
 from mcp.client.stdio import StdioServerParameters, stdio_client
 from pydantic_ai.mcp import MCPServerStdio
@@ -33,7 +34,7 @@ class StderrFileCapture:
         self,
         server_name: str,
         emit_to_user: bool = False,  # Disabled by default to reduce console noise
-        message_group: Optional[uuid.UUID] = None,
+        message_group: uuid.UUID | None = None,
     ):
         self.server_name = server_name
         self.emit_to_user = emit_to_user
@@ -86,9 +87,7 @@ class StderrFileCapture:
 
             while not self.stop_monitoring.is_set():
                 try:
-                    with open(
-                        self.log_path, "r", encoding="utf-8", errors="replace"
-                    ) as f:
+                    with open(self.log_path, encoding="utf-8", errors="replace") as f:
                         f.seek(self._last_read_pos)
                         new_content = f.read()
                         if new_content:
@@ -134,7 +133,7 @@ class StderrFileCapture:
         # Read any remaining content for in-memory capture
         if self.log_path and os.path.exists(self.log_path):
             try:
-                with open(self.log_path, "r", encoding="utf-8", errors="replace") as f:
+                with open(self.log_path, encoding="utf-8", errors="replace") as f:
                     f.seek(self._last_read_pos)
                     content = f.read()
                     for line in content.splitlines():
@@ -158,7 +157,7 @@ class StderrFileCapture:
             except Exception:
                 pass
 
-    def get_captured_lines(self) -> List[str]:
+    def get_captured_lines(self) -> list[str]:
         """Get all captured lines from this session."""
         return list(self.captured_lines)
 
@@ -175,7 +174,7 @@ class SimpleCapturedMCPServerStdio(MCPServerStdio):
         env=None,
         cwd=None,
         emit_stderr: bool = True,
-        message_group: Optional[uuid.UUID] = None,
+        message_group: uuid.UUID | None = None,
         **kwargs,
     ):
         super().__init__(command=command, args=args, env=env, cwd=cwd, **kwargs)
@@ -206,7 +205,7 @@ class SimpleCapturedMCPServerStdio(MCPServerStdio):
         finally:
             self._stderr_capture.stop()
 
-    def get_captured_stderr(self) -> List[str]:
+    def get_captured_stderr(self) -> list[str]:
         """Get captured stderr lines."""
         if self._stderr_capture:
             return self._stderr_capture.get_captured_lines()
@@ -224,7 +223,7 @@ class BlockingMCPServerStdio(SimpleCapturedMCPServerStdio):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self._initialized = asyncio.Event()
-        self._init_error: Optional[Exception] = None
+        self._init_error: Exception | None = None
         self._initialization_task = None
 
     async def __aenter__(self):
@@ -302,7 +301,7 @@ class BlockingMCPServerStdio(SimpleCapturedMCPServerStdio):
 
             return True
 
-        except asyncio.TimeoutError:
+        except TimeoutError:
             server_name = getattr(self, "tool_prefix", self.command)
             raise TimeoutError(
                 f"Server '{server_name}' initialization timeout after {timeout}s"
@@ -341,7 +340,7 @@ class StartupMonitor:
     and ensures all are ready before proceeding.
     """
 
-    def __init__(self, message_group: Optional[uuid.UUID] = None):
+    def __init__(self, message_group: uuid.UUID | None = None):
         self.servers = {}
         self.startup_times = {}
         self.message_group = message_group or uuid.uuid4()
@@ -430,7 +429,7 @@ class StartupMonitor:
 async def start_servers_with_blocking(
     *servers: BlockingMCPServerStdio,
     timeout: float = 30.0,
-    message_group: Optional[uuid.UUID] = None,
+    message_group: uuid.UUID | None = None,
 ):
     """
     Start multiple servers and wait for all to be ready.

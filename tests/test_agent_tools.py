@@ -1,5 +1,7 @@
 """Tests for agent tools functionality (consolidated)."""
 
+from __future__ import annotations
+
 import json
 import tempfile
 from pathlib import Path

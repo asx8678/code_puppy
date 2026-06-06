@@ -1,5 +1,7 @@
 """Tests for code_puppy.messaging.renderers."""
 
+from __future__ import annotations
+
 import asyncio
 import time
 from io import StringIO

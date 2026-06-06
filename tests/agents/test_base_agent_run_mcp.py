@@ -6,6 +6,8 @@ This module tests the run_with_mcp async method which handles:
 - Usage limits
 """
 
+from __future__ import annotations
+
 import asyncio
 from unittest.mock import AsyncMock, MagicMock, patch
 

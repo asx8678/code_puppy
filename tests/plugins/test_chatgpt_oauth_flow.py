@@ -1,5 +1,7 @@
 """Comprehensive test coverage for ChatGPT OAuth flow."""
 
+from __future__ import annotations
+
 import time
 import urllib.parse
 from unittest.mock import Mock, patch

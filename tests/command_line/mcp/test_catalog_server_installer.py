@@ -1,5 +1,7 @@
 """Tests for code_puppy/command_line/mcp/catalog_server_installer.py"""
 
+from __future__ import annotations
+
 import os
 from unittest.mock import MagicMock, patch
 

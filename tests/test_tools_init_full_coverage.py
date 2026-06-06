@@ -1,5 +1,7 @@
 """Full coverage tests for tools/__init__.py."""
 
+from __future__ import annotations
+
 from unittest.mock import MagicMock, patch
 
 import pytest

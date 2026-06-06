@@ -5,9 +5,10 @@ This module provides persistent log file management for MCP servers.
 Logs are stored in STATE_DIR/mcp_logs/<server_name>.log
 """
 
+from __future__ import annotations
+
 from datetime import datetime
 from pathlib import Path
-from typing import List, Optional
 
 from code_puppy.config import STATE_DIR
 
@@ -102,8 +103,8 @@ def write_log(server_name: str, message: str, level: str = "INFO") -> None:
 
 
 def read_logs(
-    server_name: str, lines: Optional[int] = None, include_rotated: bool = False
-) -> List[str]:
+    server_name: str, lines: int | None = None, include_rotated: bool = False
+) -> list[str]:
     """
     Read log lines for a server.
 
@@ -125,13 +126,13 @@ def read_logs(
         for i in range(MAX_ROTATED_LOGS, 0, -1):
             rotated_path = logs_dir / f"{safe_name}.log.{i}"
             if rotated_path.exists():
-                with open(rotated_path, "r", encoding="utf-8", errors="replace") as f:
+                with open(rotated_path, encoding="utf-8", errors="replace") as f:
                     all_lines.extend(f.read().splitlines())
 
     # Read current log
     log_path = get_log_file_path(server_name)
     if log_path.exists():
-        with open(log_path, "r", encoding="utf-8", errors="replace") as f:
+        with open(log_path, encoding="utf-8", errors="replace") as f:
             all_lines.extend(f.read().splitlines())
 
     # Return requested number of lines
@@ -164,7 +165,7 @@ def clear_logs(server_name: str, include_rotated: bool = True) -> None:
                 rotated_path.unlink()
 
 
-def list_servers_with_logs() -> List[str]:
+def list_servers_with_logs() -> list[str]:
     """
     List all servers that have log files.
 
@@ -208,7 +209,7 @@ def get_log_stats(server_name: str) -> dict:
     if log_path.exists():
         stats["size_bytes"] = log_path.stat().st_size
         stats["total_size_bytes"] = stats["size_bytes"]
-        with open(log_path, "r", encoding="utf-8", errors="replace") as f:
+        with open(log_path, encoding="utf-8", errors="replace") as f:
             stats["line_count"] = sum(1 for _ in f)
 
     # Count rotated logs

@@ -4,6 +4,8 @@ Covers menu initialization, user input handling, navigation, rendering,
 state management, error scenarios, and console I/O interactions.
 """
 
+from __future__ import annotations
+
 import json
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch

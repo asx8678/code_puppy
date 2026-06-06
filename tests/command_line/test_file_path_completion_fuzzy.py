@@ -1,5 +1,7 @@
 """Tests for the pi-style fuzzy @file completion in file_path_completion.py."""
 
+from __future__ import annotations
+
 import os
 import tempfile
 from unittest.mock import MagicMock
@@ -12,7 +14,6 @@ from code_puppy.command_line.file_path_completion import (
     _looks_like_path_navigation,
     _score,
 )
-
 
 # ----------------------------------------------------------------- unit: scorer
 

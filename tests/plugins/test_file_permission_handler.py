@@ -5,6 +5,8 @@ Tests cover permission prompts, preview generation, thread-safety,
 user feedback handling, and YOLO mode support.
 """
 
+from __future__ import annotations
+
 import os
 import tempfile
 import threading

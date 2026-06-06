@@ -1,4 +1,6 @@
 # agent_tools.py
+from __future__ import annotations
+
 import asyncio
 import json
 import pickle
@@ -9,7 +11,6 @@ from contextlib import AsyncExitStack
 from datetime import datetime
 from functools import partial
 from pathlib import Path
-from typing import List, Set
 
 from pydantic import BaseModel
 
@@ -40,7 +41,7 @@ from code_puppy.tools.common import atomic_write_text, generate_group_id
 from code_puppy.tools.subagent_context import subagent_context
 
 # Set to track active subagent invocation tasks
-_active_subagent_tasks: Set[asyncio.Task] = set()
+_active_subagent_tasks: set[asyncio.Task] = set()
 
 
 def _generate_session_hash_suffix() -> str:
@@ -124,7 +125,7 @@ def _get_subagent_sessions_dir() -> Path:
 
 def _save_session_history(
     session_id: str,
-    message_history: List[ModelMessage],
+    message_history: list[ModelMessage],
     agent_name: str,
     initial_prompt: str | None = None,
 ) -> None:
@@ -167,7 +168,7 @@ def _save_session_history(
     elif txt_path.exists():
         # Update message count on subsequent saves
         try:
-            with open(txt_path, "r") as f:
+            with open(txt_path) as f:
                 metadata = json.load(f)
             metadata["message_count"] = len(message_history)
             metadata["last_updated"] = datetime.now().isoformat()
@@ -176,7 +177,7 @@ def _save_session_history(
             pass  # If we can't update metadata, no big deal
 
 
-def _load_session_history(session_id: str) -> List[ModelMessage]:
+def _load_session_history(session_id: str) -> list[ModelMessage]:
     """Load session history from filesystem.
 
     Args:
@@ -216,7 +217,7 @@ class AgentInfo(BaseModel):
 class ListAgentsOutput(BaseModel):
     """Output for the list_agents tool."""
 
-    agents: List[AgentInfo]
+    agents: list[AgentInfo]
     error: str | None = None
 
 

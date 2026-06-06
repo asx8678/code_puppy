@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import os
 import time
-from typing import Generator
+from collections.abc import Generator
 
 import pexpect
 import pytest
@@ -32,7 +32,7 @@ __all__ = [
 
 
 @pytest.fixture
-def live_cli(cli_harness: CliHarness) -> Generator[SpawnResult, None, None]:
+def live_cli(cli_harness: CliHarness) -> Generator[SpawnResult]:
     """Spawn the CLI using the caller's environment (for live network tests)."""
     env = os.environ.copy()
     env.setdefault("CODE_PUPPY_TEST_FAST", "1")

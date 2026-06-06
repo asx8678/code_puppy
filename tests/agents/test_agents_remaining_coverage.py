@@ -1,5 +1,7 @@
 """Tests targeting remaining uncovered lines in code_puppy/agents/ (non-base_agent)."""
 
+from __future__ import annotations
+
 import json
 from unittest.mock import MagicMock, patch
 

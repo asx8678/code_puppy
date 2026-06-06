@@ -9,6 +9,8 @@ Examples:
     !python --version
 """
 
+from __future__ import annotations
+
 import os
 import subprocess
 import sys

@@ -6,7 +6,6 @@ import pytest
 
 from code_puppy import keymap
 
-
 # NOTE: keymap functions import ``get_value`` and ``should_use_alternate_cancel_key``
 # lazily inside the functions, so we patch at the source modules.
 

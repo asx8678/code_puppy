@@ -1,5 +1,7 @@
 """Tests for code_puppy/tools/__init__.py - 100% coverage."""
 
+from __future__ import annotations
+
 from unittest.mock import MagicMock, patch
 
 

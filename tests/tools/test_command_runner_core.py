@@ -7,6 +7,8 @@ command_runner.py in isolation, focusing on:
 - kill_all_running_shell_processes: process cleanup delegation
 """
 
+from __future__ import annotations
+
 import importlib.util
 from pathlib import Path
 from unittest.mock import MagicMock, patch

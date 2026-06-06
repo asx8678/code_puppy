@@ -10,6 +10,8 @@ Tests focus on:
 Uses simple mocking to keep tests focused and maintainable.
 """
 
+from __future__ import annotations
+
 from datetime import datetime, timedelta
 from unittest.mock import AsyncMock, Mock, patch
 

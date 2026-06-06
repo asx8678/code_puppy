@@ -9,8 +9,9 @@ State is persisted in ``puppy.cfg`` under ``mcp_unbound_warning_silenced`` so
 the silence survives restarts.
 """
 
+from __future__ import annotations
+
 import logging
-from typing import List, Optional
 
 from rich.text import Text
 
@@ -36,7 +37,7 @@ class _ToggleSilenceCommand(MCPCommandBase):
     #: Target value for ``mcp_unbound_warning_silenced`` after this runs.
     target_silenced: bool = True
 
-    def execute(self, args: List[str], group_id: Optional[str] = None) -> None:
+    def execute(self, args: list[str], group_id: str | None = None) -> None:
         if group_id is None:
             group_id = self.generate_group_id()
 

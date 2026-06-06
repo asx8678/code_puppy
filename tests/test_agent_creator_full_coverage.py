@@ -1,11 +1,12 @@
 """Full coverage tests for agents/agent_creator_agent.py."""
 
+from __future__ import annotations
+
 from unittest.mock import MagicMock, patch
 
 import pytest
 
 from code_puppy.agents.agent_creator_agent import AgentCreatorAgent
-
 
 VALID_CONFIG = {
     "name": "test-agent",

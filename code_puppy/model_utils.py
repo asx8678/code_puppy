@@ -10,6 +10,8 @@ Plugins can register:
 - ``get_model_system_prompt``: augment/override the system prompt for a model.
 """
 
+from __future__ import annotations
+
 from dataclasses import dataclass
 
 # Model alias/id substrings that should default to adaptive thinking. Defined at

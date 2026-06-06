@@ -4,11 +4,12 @@ Provides a split-panel interface for browsing and managing UC tools
 with live preview of tool details and inline source code viewing.
 """
 
+from __future__ import annotations
+
 import asyncio
 import sys
 import unicodedata
 from pathlib import Path
-from typing import List, Optional, Tuple
 
 from prompt_toolkit.application import Application
 from prompt_toolkit.key_binding import KeyBindings
@@ -72,7 +73,7 @@ def _sanitize_display_text(text: str) -> str:
     return cleaned
 
 
-def _get_tool_entries() -> List[UCToolInfo]:
+def _get_tool_entries() -> list[UCToolInfo]:
     """Get all UC tools sorted by name.
 
     Returns:
@@ -172,7 +173,7 @@ def _delete_tool(tool: UCToolInfo) -> bool:
         return False
 
 
-def _load_source_code(tool: UCToolInfo) -> Tuple[List[str], Optional[str]]:
+def _load_source_code(tool: UCToolInfo) -> tuple[list[str], str | None]:
     """Load source code lines from a tool's file.
 
     Args:
@@ -190,10 +191,10 @@ def _load_source_code(tool: UCToolInfo) -> Tuple[List[str], Optional[str]]:
 
 
 def _render_menu_panel(
-    tools: List[UCToolInfo],
+    tools: list[UCToolInfo],
     page: int,
     selected_idx: int,
-) -> List:
+) -> list:
     """Render the left menu panel with pagination.
 
     Args:
@@ -261,7 +262,7 @@ def _render_menu_panel(
     return lines
 
 
-def _render_preview_panel(tool: Optional[UCToolInfo]) -> List:
+def _render_preview_panel(tool: UCToolInfo | None) -> list:
     """Render the right preview panel with tool details.
 
     Args:
@@ -358,10 +359,10 @@ def _render_preview_panel(tool: Optional[UCToolInfo]) -> List:
 
 def _render_source_panel(
     tool: UCToolInfo,
-    source_lines: List[str],
+    source_lines: list[str],
     scroll_offset: int,
-    error: Optional[str] = None,
-) -> List:
+    error: str | None = None,
+) -> list:
     """Render source code panel with syntax highlighting.
 
     Args:
@@ -441,7 +442,7 @@ def _render_source_panel(
     return lines
 
 
-def _highlight_python_line(line: str) -> List[Tuple[str, str]]:
+def _highlight_python_line(line: str) -> list[tuple[str, str]]:
     """Apply basic Python syntax highlighting to a line.
 
     Args:
@@ -582,7 +583,7 @@ def _show_source_code(tool: UCToolInfo) -> None:
         emit_error(f"Could not read source: {e}")
 
 
-async def interactive_uc_picker() -> Optional[str]:
+async def interactive_uc_picker() -> str | None:
     """Show interactive TUI to browse UC tools.
 
     Returns:
@@ -602,12 +603,12 @@ async def interactive_uc_picker() -> Optional[str]:
 
     total_pages = [get_total_pages(len(tools), PAGE_SIZE)]
 
-    def get_current_tool() -> Optional[UCToolInfo]:
+    def get_current_tool() -> UCToolInfo | None:
         if 0 <= selected_idx[0] < len(tools):
             return tools[selected_idx[0]]
         return None
 
-    def refresh_tools(selected_name: Optional[str] = None) -> None:
+    def refresh_tools(selected_name: str | None = None) -> None:
         nonlocal tools
         tools = _get_tool_entries()
         total_pages[0] = get_total_pages(len(tools), PAGE_SIZE)

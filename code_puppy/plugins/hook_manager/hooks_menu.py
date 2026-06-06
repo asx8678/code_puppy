@@ -8,9 +8,10 @@ Built with prompt_toolkit to match the existing skills_menu aesthetic exactly
 (VSplit, FormattedTextControl, Frame).
 """
 
+from __future__ import annotations
+
 import sys
 import time
-from typing import List, Optional
 
 from prompt_toolkit.application import Application
 from prompt_toolkit.key_binding import KeyBindings
@@ -50,15 +51,15 @@ class HooksMenu:
     """Interactive TUI for managing hooks from both global and project sources."""
 
     def __init__(self) -> None:
-        self.entries: List[HookEntry] = []
+        self.entries: list[HookEntry] = []
         self.selected_idx: int = 0
         self.current_page: int = 0
-        self.result: Optional[str] = None
+        self.result: str | None = None
         self.status_message: str = ""
 
         # prompt_toolkit controls (set during run())
-        self.list_control: Optional[FormattedTextControl] = None
-        self.detail_control: Optional[FormattedTextControl] = None
+        self.list_control: FormattedTextControl | None = None
+        self.detail_control: FormattedTextControl | None = None
 
         self._refresh_data()
 
@@ -79,13 +80,13 @@ class HooksMenu:
             emit_error(f"Failed to refresh hooks data: {exc}")
             self.entries = []
 
-    def _current_entry(self) -> Optional[HookEntry]:
+    def _current_entry(self) -> HookEntry | None:
         if 0 <= self.selected_idx < len(self.entries):
             return self.entries[self.selected_idx]
         return None
 
     def _save_current_entry(
-        self, entry: HookEntry, new_enabled: Optional[bool] = None
+        self, entry: HookEntry, new_enabled: bool | None = None
     ) -> None:
         """Persist changes to the current entry's source file."""
         if entry.source == "global":
@@ -221,9 +222,9 @@ class HooksMenu:
     # Rendering helpers
     # ------------------------------------------------------------------
 
-    def _render_list(self) -> List:
+    def _render_list(self) -> list:
         """Render the left-hand hooks list panel."""
-        lines: List = []
+        lines: list = []
 
         total = len(self.entries)
         enabled_count = sum(1 for e in self.entries if e.enabled)
@@ -284,7 +285,7 @@ class HooksMenu:
         self._render_nav_hints(lines)
         return lines
 
-    def _render_nav_hints(self, lines: List) -> None:
+    def _render_nav_hints(self, lines: list) -> None:
         """Append keyboard shortcut hints to lines."""
         lines.append(("", "\n"))
         lines.append((_C_DIM, "  ↑/↓ j/k "))
@@ -302,9 +303,9 @@ class HooksMenu:
         lines.append((_C_DISABLED, "  q/Esc   "))
         lines.append(("", "Exit"))
 
-    def _render_detail(self) -> List:
+    def _render_detail(self) -> list:
         """Render the right-hand hook detail panel."""
-        lines: List = []
+        lines: list = []
         lines.append((_C_HEADER, " HOOK DETAILS"))
         lines.append(("", "\n\n"))
 
@@ -394,7 +395,7 @@ class HooksMenu:
     # Main entry point
     # ------------------------------------------------------------------
 
-    def run(self) -> Optional[str]:
+    def run(self) -> str | None:
         """Launch the interactive TUI.  Returns the exit reason string."""
         self.result = None
 
@@ -538,11 +539,11 @@ class HooksMenu:
 # ---------------------------------------------------------------------------
 
 
-def _wrap(text: str, width: int) -> List[str]:
+def _wrap(text: str, width: int) -> list[str]:
     """Wrap text to *width* characters, splitting on whitespace."""
     words = text.split()
-    lines: List[str] = []
-    current: List[str] = []
+    lines: list[str] = []
+    current: list[str] = []
     length = 0
     for word in words:
         if length + len(word) + (1 if current else 0) <= width:

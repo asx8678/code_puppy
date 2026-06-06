@@ -16,7 +16,6 @@ import asyncio
 import logging
 import time
 from contextlib import asynccontextmanager
-from typing import Optional
 
 logger = logging.getLogger(__name__)
 
@@ -46,7 +45,7 @@ class TokenRefreshHeartbeat:
     ):
         self._interval = interval
         self._min_refresh_interval = min_refresh_interval
-        self._task: Optional[asyncio.Task] = None
+        self._task: asyncio.Task | None = None
         self._stop_event = asyncio.Event()
         self._lock = asyncio.Lock()
         self._refresh_count = 0
@@ -93,7 +92,7 @@ class TokenRefreshHeartbeat:
                     )
                     # If we got here, stop event was set
                     break
-                except asyncio.TimeoutError:
+                except TimeoutError:
                     # Normal timeout - time to check token
                     pass
 
@@ -170,7 +169,7 @@ class TokenRefreshHeartbeat:
 
 
 # Global heartbeat instance for the current session
-_current_heartbeat: Optional[TokenRefreshHeartbeat] = None
+_current_heartbeat: TokenRefreshHeartbeat | None = None
 
 
 @asynccontextmanager
@@ -206,7 +205,7 @@ def is_heartbeat_running() -> bool:
     return _current_heartbeat is not None and _current_heartbeat.is_running
 
 
-def get_current_heartbeat() -> Optional[TokenRefreshHeartbeat]:
+def get_current_heartbeat() -> TokenRefreshHeartbeat | None:
     """Get the currently running heartbeat instance, if any."""
     return _current_heartbeat
 

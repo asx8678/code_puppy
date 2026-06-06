@@ -1,5 +1,7 @@
 """Hook engine package for Fast Puppy."""
 
+from __future__ import annotations
+
 from . import aliases
 from .engine import HookEngine
 from .models import (

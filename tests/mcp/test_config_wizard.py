@@ -11,6 +11,8 @@ Tests cover:
 - run_add_wizard() entry point
 """
 
+from __future__ import annotations
+
 from unittest.mock import Mock, patch
 
 import pytest

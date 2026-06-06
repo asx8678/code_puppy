@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import logging
 
 from code_puppy.callbacks import on_register_agent_tools, on_register_tools
@@ -379,7 +381,7 @@ def _register_uc_tool_wrapper(agent, uc_tool_name: str):
         sig = inspect.signature(func)
         # Get annotations from the original function
         annotations = getattr(func, "__annotations__", {}).copy()
-    except (ValueError, TypeError):
+    except ValueError, TypeError:
         sig = None
         annotations = {}
 
@@ -438,7 +440,7 @@ def _register_uc_tool_wrapper(agent, uc_tool_name: str):
                     parameters=new_params, return_annotation=return_annotation
                 )
                 uc_tool_wrapper.__signature__ = new_sig
-            except (ValueError, TypeError):
+            except ValueError, TypeError:
                 pass  # Signature manipulation failed, continue without it
 
         return uc_tool_wrapper

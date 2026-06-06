@@ -4,6 +4,8 @@ Covers both the ``AgentRunStats`` state container and the three callback
 hooks that drive it (agent_run_start / stream_event / agent_run_end).
 """
 
+from __future__ import annotations
+
 import time
 
 import pytest

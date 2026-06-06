@@ -11,11 +11,13 @@ Usage:
     >>> await subagent_stream_handler(ctx, events, session_id="my-session-123")
 """
 
+from __future__ import annotations
+
 import asyncio
 import logging
 import math
 from collections.abc import AsyncIterable
-from typing import Any, Optional
+from typing import Any
 
 from pydantic_ai import PartDeltaEvent, PartEndEvent, PartStartEvent, RunContext
 from pydantic_ai.messages import (
@@ -51,7 +53,7 @@ def _on_stream_event_task_done(task) -> None:
 # =============================================================================
 
 
-def _fire_callback(event_type: str, event_data: Any, session_id: Optional[str]) -> None:
+def _fire_callback(event_type: str, event_data: Any, session_id: str | None) -> None:
     """Fire stream_event callback non-blocking.
 
     Schedules the callback to run asynchronously without waiting for it.
@@ -121,7 +123,7 @@ def _estimate_tokens(content: str) -> int:
 async def subagent_stream_handler(
     ctx: RunContext,
     events: AsyncIterable[Any],
-    session_id: Optional[str] = None,
+    session_id: str | None = None,
 ) -> None:
     """Silent event stream handler for sub-agents.
 
@@ -186,7 +188,7 @@ async def subagent_stream_handler(
 async def _handle_event(
     event: Any,
     manager: Any,  # SubAgentConsoleManager
-    session_id: Optional[str],
+    session_id: str | None,
     token_count: int,
     tool_call_count: int,
     active_tool_parts: set[int],

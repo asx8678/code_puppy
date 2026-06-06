@@ -1,5 +1,7 @@
 """Tests for code_puppy.messaging.spinner.console_spinner."""
 
+from __future__ import annotations
+
 import time
 from io import StringIO
 from unittest.mock import MagicMock, patch

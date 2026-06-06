@@ -1,5 +1,7 @@
 """Tests for model_picker_completion.py to achieve 100% coverage."""
 
+from __future__ import annotations
+
 from unittest.mock import MagicMock, patch
 
 import pytest

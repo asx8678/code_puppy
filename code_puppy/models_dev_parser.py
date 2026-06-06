@@ -18,7 +18,7 @@ import json
 import threading
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 import httpx
 
@@ -36,14 +36,14 @@ BUNDLED_JSON_FILENAME = "models_dev_api.json"
 # repeated constructions reuse it instead of hitting the network again. Only
 # real successful fetches are cached (failures leave it None so the bundled
 # fallback still kicks in). Tests reset this between cases for isolation.
-_CACHED_API_DATA: Optional[Dict[str, Any]] = None
+_CACHED_API_DATA: dict[str, Any] | None = None
 
 # Guards the background prefetch so we only ever launch one warm-up thread.
 _PREFETCH_LOCK = threading.Lock()
 _PREFETCH_STARTED = False
 
 
-def _load_api_payload() -> Optional[Dict[str, Any]]:
+def _load_api_payload() -> dict[str, Any] | None:
     """Fetch the models.dev payload, memoizing the first successful result.
 
     Shared by ``ModelsDevRegistry._fetch_from_api`` (blocking, on demand) and
@@ -72,7 +72,9 @@ def _load_api_payload() -> Optional[Dict[str, Any]]:
         )
         return None
     except Exception as e:
-        emit_warning(f"Failed to fetch from models.dev API: {e}, using bundled fallback")
+        emit_warning(
+            f"Failed to fetch from models.dev API: {e}, using bundled fallback"
+        )
         return None
 
 
@@ -102,11 +104,11 @@ class ProviderInfo:
 
     id: str
     name: str
-    env: List[str]
+    env: list[str]
     api: str
-    npm: Optional[str] = None
-    doc: Optional[str] = None
-    models: Dict[str, Dict[str, Any]] = field(default_factory=dict)
+    npm: str | None = None
+    doc: str | None = None
+    models: dict[str, dict[str, Any]] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
         """Validate provider data after initialization."""
@@ -133,16 +135,16 @@ class ModelInfo:
     tool_call: bool = False
     temperature: bool = False
     structured_output: bool = False
-    cost_input: Optional[float] = None
-    cost_output: Optional[float] = None
-    cost_cache_read: Optional[float] = None
+    cost_input: float | None = None
+    cost_output: float | None = None
+    cost_cache_read: float | None = None
     context_length: int = 0
     max_output: int = 0
-    input_modalities: List[str] = field(default_factory=list)
-    output_modalities: List[str] = field(default_factory=list)
-    knowledge: Optional[str] = None
-    release_date: Optional[str] = None
-    last_updated: Optional[str] = None
+    input_modalities: list[str] = field(default_factory=list)
+    output_modalities: list[str] = field(default_factory=list)
+    knowledge: str | None = None
+    release_date: str | None = None
+    last_updated: str | None = None
     open_weights: bool = False
 
     def __post_init__(self) -> None:
@@ -199,15 +201,15 @@ class ModelsDevRegistry:
             ValueError: If required fields are missing or malformed
         """
         self.json_path = Path(json_path) if json_path else None
-        self.providers: Dict[str, ProviderInfo] = {}
-        self.models: Dict[str, ModelInfo] = {}
-        self.provider_models: Dict[
-            str, List[str]
+        self.providers: dict[str, ProviderInfo] = {}
+        self.models: dict[str, ModelInfo] = {}
+        self.provider_models: dict[
+            str, list[str]
         ] = {}  # Maps provider_id to list of model IDs
         self.data_source: str = "unknown"  # Track where data came from
         self._load_data()
 
-    def _fetch_from_api(self) -> Optional[Dict[str, Any]]:
+    def _fetch_from_api(self) -> dict[str, Any] | None:
         """Fetch data from the live models.dev API.
 
         Reuses a process-wide cache of the last successful payload so repeated
@@ -226,14 +228,14 @@ class ModelsDevRegistry:
 
     def _load_data(self) -> None:
         """Load data from API or fallback sources, populating internal data structures."""
-        data: Optional[Dict[str, Any]] = None
+        data: dict[str, Any] | None = None
 
         # If explicit json_path provided, use that directly (for testing)
         if self.json_path:
             if not self.json_path.exists():
                 raise FileNotFoundError(f"Models API file not found: {self.json_path}")
             try:
-                with open(self.json_path, "r", encoding="utf-8") as f:
+                with open(self.json_path, encoding="utf-8") as f:
                     data = json.load(f)
                 self.data_source = f"file:{self.json_path}"
             except json.JSONDecodeError as e:
@@ -250,7 +252,7 @@ class ModelsDevRegistry:
                 bundled_path = self._get_bundled_json_path()
                 if bundled_path.exists():
                     try:
-                        with open(bundled_path, "r", encoding="utf-8") as f:
+                        with open(bundled_path, encoding="utf-8") as f:
                             data = json.load(f)
                         self.data_source = f"bundled:{bundled_path.name}"
                         emit_info(
@@ -297,7 +299,7 @@ class ModelsDevRegistry:
             f"Loaded {len(self.providers)} providers and {len(self.models)} models"
         )
 
-    def _parse_provider(self, provider_id: str, data: Dict[str, Any]) -> ProviderInfo:
+    def _parse_provider(self, provider_id: str, data: dict[str, Any]) -> ProviderInfo:
         """Parse provider data from JSON."""
         # Only name and env are truly required - api is optional for SDK-based providers
         # like Anthropic, OpenAI, Azure that don't need a custom API URL
@@ -317,7 +319,7 @@ class ModelsDevRegistry:
         )
 
     def _parse_model(
-        self, provider_id: str, model_id: str, data: Dict[str, Any]
+        self, provider_id: str, model_id: str, data: dict[str, Any]
     ) -> ModelInfo:
         """Parse model data from JSON."""
         if not data.get("name"):
@@ -361,7 +363,7 @@ class ModelsDevRegistry:
             open_weights=data.get("open_weights", False),
         )
 
-    def get_providers(self) -> List[ProviderInfo]:
+    def get_providers(self) -> list[ProviderInfo]:
         """
         Get all providers, sorted by name.
 
@@ -370,7 +372,7 @@ class ModelsDevRegistry:
         """
         return sorted(self.providers.values(), key=lambda p: p.name.lower())
 
-    def get_provider(self, provider_id: str) -> Optional[ProviderInfo]:
+    def get_provider(self, provider_id: str) -> ProviderInfo | None:
         """
         Get a specific provider by ID.
 
@@ -382,7 +384,7 @@ class ModelsDevRegistry:
         """
         return self.providers.get(provider_id)
 
-    def get_models(self, provider_id: Optional[str] = None) -> List[ModelInfo]:
+    def get_models(self, provider_id: str | None = None) -> list[ModelInfo]:
         """
         Get models, optionally filtered by provider.
 
@@ -404,7 +406,7 @@ class ModelsDevRegistry:
 
         return sorted(models, key=lambda m: m.name.lower())
 
-    def get_model(self, provider_id: str, model_id: str) -> Optional[ModelInfo]:
+    def get_model(self, provider_id: str, model_id: str) -> ModelInfo | None:
         """
         Get a specific model.
 
@@ -420,9 +422,9 @@ class ModelsDevRegistry:
 
     def search_models(
         self,
-        query: Optional[str] = None,
-        capability_filters: Optional[Dict[str, Any]] = None,
-    ) -> List[ModelInfo]:
+        query: str | None = None,
+        capability_filters: dict[str, Any] | None = None,
+    ) -> list[ModelInfo]:
         """
         Search models by name/query and filter by capabilities.
 
@@ -463,10 +465,10 @@ class ModelsDevRegistry:
 
     def filter_by_cost(
         self,
-        models: List[ModelInfo],
-        max_input_cost: Optional[float] = None,
-        max_output_cost: Optional[float] = None,
-    ) -> List[ModelInfo]:
+        models: list[ModelInfo],
+        max_input_cost: float | None = None,
+        max_output_cost: float | None = None,
+    ) -> list[ModelInfo]:
         """
         Filter models by cost constraints.
 
@@ -497,8 +499,8 @@ class ModelsDevRegistry:
         return filtered_models
 
     def filter_by_context(
-        self, models: List[ModelInfo], min_context_length: int
-    ) -> List[ModelInfo]:
+        self, models: list[ModelInfo], min_context_length: int
+    ) -> list[ModelInfo]:
         """
         Filter models by minimum context length.
 
@@ -527,7 +529,7 @@ PROVIDER_TYPE_MAP = {
 
 def convert_to_code_puppy_config(
     model: ModelInfo, provider: ProviderInfo
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """
     Convert a model and provider to Fast Puppy configuration format.
 

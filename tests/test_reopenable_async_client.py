@@ -10,6 +10,8 @@ Tests the reopenable HTTP client wrapper including:
 - Edge cases and error conditions
 """
 
+from __future__ import annotations
+
 from unittest.mock import AsyncMock, MagicMock, Mock, patch
 
 import httpx

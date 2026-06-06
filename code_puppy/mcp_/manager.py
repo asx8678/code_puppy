@@ -7,11 +7,13 @@ point for managing servers, registering configurations, and providing servers
 to agents.
 """
 
+from __future__ import annotations
+
 import asyncio
 import logging
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Any, Dict, List, Optional, Union
+from typing import Any
 
 from pydantic_ai.mcp import MCPServerSSE, MCPServerStdio, MCPServerStreamableHTTP
 
@@ -33,7 +35,7 @@ logger = logging.getLogger(__name__)
 _WARNED_UNBOUND: set = set()
 
 
-def _warn_unbound_servers(server_names: List[str], agent_name: str) -> None:
+def _warn_unbound_servers(server_names: list[str], agent_name: str) -> None:
     """Warn once, in a single consolidated block, about registered-but-unbound MCP servers.
 
     Companion to ``code_puppy.agents._builder._warn_missing_server``: that one
@@ -98,11 +100,11 @@ class ServerInfo:
     enabled: bool
     state: ServerState
     quarantined: bool
-    uptime_seconds: Optional[float]
-    error_message: Optional[str]
-    health: Optional[Dict[str, Any]] = None
-    start_time: Optional[datetime] = None
-    latency_ms: Optional[float] = None
+    uptime_seconds: float | None
+    error_message: str | None
+    health: dict[str, Any] | None = None
+    start_time: datetime | None = None
+    latency_ms: float | None = None
 
 
 class MCPManager:
@@ -140,7 +142,7 @@ class MCPManager:
         self.status_tracker = ServerStatusTracker()
 
         # Active managed servers (server_id -> ManagedMCPServer)
-        self._managed_servers: Dict[str, ManagedMCPServer] = {}
+        self._managed_servers: dict[str, ManagedMCPServer] = {}
 
         # Sync servers from mcp_servers.json into registry
         self.sync_from_config()
@@ -293,8 +295,8 @@ class MCPManager:
 
     def get_servers_for_agent(
         self,
-        agent_name: Optional[str] = None,
-    ) -> List[Union[MCPServerSSE, MCPServerStdio, MCPServerStreamableHTTP]]:
+        agent_name: str | None = None,
+    ) -> list[MCPServerSSE | MCPServerStdio | MCPServerStreamableHTTP]:
         """
         Get pydantic-ai compatible servers for agent use.
 
@@ -311,7 +313,7 @@ class MCPManager:
         Returns:
             List of actual pydantic-ai MCP server instances ready for use
         """
-        bound_names: Optional[set] = None
+        bound_names: set | None = None
         if agent_name is not None:
             try:
                 from code_puppy.mcp_.agent_bindings import get_bound_servers
@@ -324,7 +326,7 @@ class MCPManager:
                 bound_names = set()
 
         servers = []
-        unbound_to_warn: List[str] = []
+        unbound_to_warn: list[str] = []
 
         for server_id, managed_server in self._managed_servers.items():
             try:
@@ -386,7 +388,7 @@ class MCPManager:
         logger.debug(f"Returning {len(servers)} servers for agent use")
         return servers
 
-    def get_server(self, server_id: str) -> Optional[ManagedMCPServer]:
+    def get_server(self, server_id: str) -> ManagedMCPServer | None:
         """
         Get managed server by ID.
 
@@ -398,7 +400,7 @@ class MCPManager:
         """
         return self._managed_servers.get(server_id)
 
-    def get_server_by_name(self, name: str) -> Optional[ServerConfig]:
+    def get_server_by_name(self, name: str) -> ServerConfig | None:
         """
         Get server configuration by name.
 
@@ -435,7 +437,7 @@ class MCPManager:
 
         return True
 
-    def list_servers(self) -> List[ServerInfo]:
+    def list_servers(self) -> list[ServerInfo]:
         """
         Get information about all registered servers.
 
@@ -861,7 +863,7 @@ class MCPManager:
             logger.warning(f"Attempted to remove non-existent server: {server_id}")
             return False
 
-    def get_server_status(self, server_id: str) -> Dict[str, Any]:
+    def get_server_status(self, server_id: str) -> dict[str, Any]:
         """
         Get comprehensive status for a server.
 
@@ -914,7 +916,7 @@ class MCPManager:
 
 
 # Singleton instance
-_manager_instance: Optional[MCPManager] = None
+_manager_instance: MCPManager | None = None
 
 
 def get_mcp_manager() -> MCPManager:

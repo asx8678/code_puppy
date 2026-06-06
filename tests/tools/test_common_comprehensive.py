@@ -10,6 +10,8 @@ This module provides extensive coverage for the common utilities module, testing
 - Browser suppression detection
 """
 
+from __future__ import annotations
+
 import os
 from unittest.mock import patch
 
@@ -378,7 +380,7 @@ class TestBrightenHex:
             result = brighten_hex("invalid", 0.2)
             # If it doesn't raise, it returned something
             assert result is not None
-        except (ValueError, IndexError, TypeError):
+        except ValueError, IndexError, TypeError:
             # If it raises, that's also acceptable for invalid input
             pass
 

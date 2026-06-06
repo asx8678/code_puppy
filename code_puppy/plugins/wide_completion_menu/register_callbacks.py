@@ -29,8 +29,6 @@ The patch is:
 
 from __future__ import annotations
 
-from typing import List, Tuple
-
 from code_puppy.callbacks import register_callback
 
 _COMMAND_NAME = "widemenu"
@@ -121,7 +119,7 @@ def _on_startup() -> None:
 _USAGE = "Usage: /widemenu [on|off|toggle|status]"
 
 
-def _custom_help() -> List[Tuple[str, str]]:
+def _custom_help() -> list[tuple[str, str]]:
     return [
         (
             _COMMAND_NAME,

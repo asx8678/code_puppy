@@ -5,6 +5,8 @@ These tests target specific uncovered lines in registry.py
 to achieve higher coverage.
 """
 
+from __future__ import annotations
+
 import json
 import tempfile
 from pathlib import Path
@@ -510,10 +512,10 @@ class TestLoadEdgeCases:
                 call_count[0] += 1
                 if "r" in args[1] if len(args) > 1 else kwargs.get("mode", "r") == "r":
                     if call_count[0] > 0:  # Fail on read
-                        raise IOError("Read error")
+                        raise OSError("Read error")
                 return original_open(*args, **kwargs)
 
-            with patch("builtins.open", side_effect=IOError("Read error")):
+            with patch("builtins.open", side_effect=OSError("Read error")):
                 registry = ServerRegistry(storage_path=str(storage_path))
                 assert len(registry._servers) == 0
 

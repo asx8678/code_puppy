@@ -5,6 +5,8 @@ Focuses on server lifecycle, start/stop operations, error handling,
 and uncovered code paths.
 """
 
+from __future__ import annotations
+
 import os
 from datetime import datetime, timedelta
 from unittest.mock import AsyncMock, MagicMock, Mock, patch

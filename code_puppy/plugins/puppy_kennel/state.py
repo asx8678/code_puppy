@@ -28,7 +28,7 @@ def is_enabled() -> bool:
     """Read the persisted enabled flag. Defaults to True if no state file."""
     try:
         payload = json.loads(STATE_PATH.read_text(encoding="utf-8"))
-    except (FileNotFoundError, json.JSONDecodeError, OSError):
+    except FileNotFoundError, json.JSONDecodeError, OSError:
         return True
     value = payload.get("enabled", True)
     return bool(value)

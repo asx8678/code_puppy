@@ -5,6 +5,8 @@
 /sa                    — alias for /switch-agent
 """
 
+from __future__ import annotations
+
 import datetime
 import os
 from pathlib import Path

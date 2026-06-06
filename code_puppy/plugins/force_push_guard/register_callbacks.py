@@ -5,8 +5,10 @@ commands and prompt the user for approval before allowing them through.
 Returns {"blocked": True} to deny, None to allow.
 """
 
+from __future__ import annotations
+
 import sys
-from typing import Any, Dict, Optional
+from typing import Any
 
 from rich.text import Text
 
@@ -19,13 +21,13 @@ def _is_interactive() -> bool:
     """Check if we're in an interactive terminal that can show prompts."""
     try:
         return sys.stdin.isatty()
-    except (AttributeError, OSError):
+    except AttributeError, OSError:
         return False
 
 
 async def force_push_guard_callback(
-    context: Any, command: str, cwd: Optional[str] = None, timeout: int = 60
-) -> Optional[Dict[str, Any]]:
+    context: Any, command: str, cwd: str | None = None, timeout: int = 60
+) -> dict[str, Any] | None:
     """Intercept shell commands containing git force push operations.
 
     When a force push is detected:
@@ -58,7 +60,7 @@ async def force_push_guard_callback(
     return _block_command(command, match)
 
 
-async def _prompt_user_approval(command: str, match: Any) -> Optional[Dict[str, Any]]:
+async def _prompt_user_approval(command: str, match: Any) -> dict[str, Any] | None:
     """Show an interactive approval prompt for the detected force push.
 
     Args:
@@ -107,7 +109,7 @@ async def _prompt_user_approval(command: str, match: Any) -> Optional[Dict[str, 
     }
 
 
-def _block_command(command: str, match: Any) -> Dict[str, Any]:
+def _block_command(command: str, match: Any) -> dict[str, Any]:
     """Hard-block a force push in non-interactive contexts.
 
     Args:

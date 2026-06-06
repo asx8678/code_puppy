@@ -5,14 +5,16 @@ loads tool metadata, extracts function signatures, and provides access
 to enabled tools for the LLM.
 """
 
+from __future__ import annotations
+
 import importlib.util
 import inspect
 import logging
 import sys
+from collections.abc import Callable
 from datetime import datetime
 from pathlib import Path
 from types import ModuleType
-from typing import Callable, Dict, List, Optional, Tuple
 
 from . import USER_UC_DIR
 from .models import ToolMeta, UCToolInfo
@@ -28,16 +30,16 @@ class UCRegistry:
     subdirectories (e.g., api/weather.py → "api.weather").
     """
 
-    def __init__(self, tools_dir: Optional[Path] = None):
+    def __init__(self, tools_dir: Path | None = None):
         """Initialize the registry.
 
         Args:
             tools_dir: Directory to scan for tools. Defaults to USER_UC_DIR.
         """
         self._tools_dir = tools_dir or USER_UC_DIR
-        self._tools: Dict[str, UCToolInfo] = {}
-        self._modules: Dict[str, ModuleType] = {}
-        self._last_scan: Optional[datetime] = None
+        self._tools: dict[str, UCToolInfo] = {}
+        self._modules: dict[str, ModuleType] = {}
+        self._last_scan: datetime | None = None
 
     def ensure_tools_dir(self) -> Path:
         """Ensure the tools directory exists.
@@ -81,7 +83,7 @@ class UCRegistry:
         logger.info(f"Scanned {len(self._tools)} tools from {self._tools_dir}")
         return len(self._tools)
 
-    def _load_tool_file(self, file_path: Path) -> Optional[UCToolInfo]:
+    def _load_tool_file(self, file_path: Path) -> UCToolInfo | None:
         """Load a tool from a Python file.
 
         Args:
@@ -133,7 +135,7 @@ class UCRegistry:
         try:
             sig = inspect.signature(func)
             signature_str = f"{func_name}{sig}"
-        except (ValueError, TypeError):
+        except ValueError, TypeError:
             signature_str = f"{func_name}(...)"
 
         # Extract docstring
@@ -151,7 +153,7 @@ class UCRegistry:
             docstring=docstring,
         )
 
-    def _load_module(self, file_path: Path) -> Optional[ModuleType]:
+    def _load_module(self, file_path: Path) -> ModuleType | None:
         """Load a Python module from a file path.
 
         Args:
@@ -176,7 +178,7 @@ class UCRegistry:
 
     def _find_tool_function(
         self, module: ModuleType, tool_name: str
-    ) -> Tuple[Optional[Callable], str]:
+    ) -> tuple[Callable | None, str]:
         """Find the callable function in a tool module.
 
         Looks for:
@@ -211,7 +213,7 @@ class UCRegistry:
 
         return None, ""
 
-    def list_tools(self, include_disabled: bool = False) -> List[UCToolInfo]:
+    def list_tools(self, include_disabled: bool = False) -> list[UCToolInfo]:
         """List all discovered tools.
 
         Args:
@@ -229,7 +231,7 @@ class UCRegistry:
 
         return sorted(tools, key=lambda t: t.full_name)
 
-    def get_tool(self, name: str) -> Optional[UCToolInfo]:
+    def get_tool(self, name: str) -> UCToolInfo | None:
         """Get a specific tool by name.
 
         Args:
@@ -243,7 +245,7 @@ class UCRegistry:
 
         return self._tools.get(name)
 
-    def get_tool_function(self, name: str) -> Optional[Callable]:
+    def get_tool_function(self, name: str) -> Callable | None:
         """Get the callable function for a tool.
 
         Args:
@@ -263,7 +265,7 @@ class UCRegistry:
         func, _ = self._find_tool_function(module, tool.meta.name)
         return func
 
-    def load_tool_module(self, name: str) -> Optional[ModuleType]:
+    def load_tool_module(self, name: str) -> ModuleType | None:
         """Get the loaded module for a tool.
 
         Args:
@@ -287,7 +289,7 @@ class UCRegistry:
 
 
 # Global registry instance
-_registry: Optional[UCRegistry] = None
+_registry: UCRegistry | None = None
 
 
 def get_registry() -> UCRegistry:

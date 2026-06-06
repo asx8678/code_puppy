@@ -10,7 +10,7 @@ import json
 import logging
 import time
 from dataclasses import dataclass
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 import requests
 
@@ -41,7 +41,7 @@ class CopilotToken:
     user: str = ""
 
 
-def get_token_for_host(host: str) -> Optional[CopilotToken]:
+def get_token_for_host(host: str) -> CopilotToken | None:
     """Return a stored Device Flow token whose host matches *host* exactly.
 
     Returns ``None`` if no token for the given host is found.
@@ -58,7 +58,7 @@ def get_token_for_host(host: str) -> Optional[CopilotToken]:
 # ---------------------------------------------------------------------------
 
 
-def start_device_flow(host: str = "github.com") -> Optional[Dict[str, Any]]:
+def start_device_flow(host: str = "github.com") -> dict[str, Any] | None:
     """Initiate the GitHub Device Flow and return the device code response.
 
     Returns a dict with ``device_code``, ``user_code``, ``verification_uri``,
@@ -93,7 +93,7 @@ def poll_for_token(
     host: str = "github.com",
     interval: int = 5,
     expires_in: int = 900,
-) -> Optional[str]:
+) -> str | None:
     """Poll GitHub until the user completes the Device Flow authorization.
 
     Returns the OAuth ``access_token`` on success, or ``None`` on timeout/denial.
@@ -141,9 +141,9 @@ def save_device_token(host: str, oauth_token: str, user: str = "") -> bool:
     """Persist a token obtained via the Device Flow to disk."""
     try:
         path = get_device_token_storage_path()
-        data: Dict[str, Any] = {}
+        data: dict[str, Any] = {}
         if path.exists():
-            with open(path, "r", encoding="utf-8") as fh:
+            with open(path, encoding="utf-8") as fh:
                 data = json.load(fh)
         data[host] = {
             "oauth_token": oauth_token,
@@ -159,14 +159,14 @@ def save_device_token(host: str, oauth_token: str, user: str = "") -> bool:
         return False
 
 
-def load_device_tokens() -> List[CopilotToken]:
+def load_device_tokens() -> list[CopilotToken]:
     """Load tokens previously obtained via the Device Flow."""
-    tokens: List[CopilotToken] = []
+    tokens: list[CopilotToken] = []
     try:
         path = get_device_token_storage_path()
         if not path.exists():
             return tokens
-        with open(path, "r", encoding="utf-8") as fh:
+        with open(path, encoding="utf-8") as fh:
             data = json.load(fh)
         if isinstance(data, dict):
             for host, entry in data.items():
@@ -204,11 +204,11 @@ class SessionToken:
 
 
 # Module-level cache keyed by (host, oauth_token[:16])
-_session_cache: Dict[str, SessionToken] = {}
+_session_cache: dict[str, SessionToken] = {}
 
 # Stores the API base URL returned by the most recent session-token exchange
 # per host, so that model registration can use it.
-_host_api_endpoints: Dict[str, str] = {}
+_host_api_endpoints: dict[str, str] = {}
 
 
 def _cache_key(oauth_token: str, host: str) -> str:
@@ -224,7 +224,7 @@ def _token_endpoint(host: str) -> str:
 
 def exchange_for_session_token(
     oauth_token: str, host: str = "github.com"
-) -> Optional[SessionToken]:
+) -> SessionToken | None:
     """Exchange a GitHub OAuth token for a short-lived Copilot session token.
 
     The response ``endpoints.api`` value is the correct API base URL for this
@@ -292,9 +292,9 @@ def _persist_session(st: SessionToken, host: str, oauth_token: str = "") -> None
     """
     try:
         path = get_session_cache_path()
-        data: Dict[str, Any] = {}
+        data: dict[str, Any] = {}
         if path.exists():
-            with open(path, "r", encoding="utf-8") as fh:
+            with open(path, encoding="utf-8") as fh:
                 data = json.load(fh)
         data[host] = {
             "token": st.token,
@@ -309,7 +309,7 @@ def _persist_session(st: SessionToken, host: str, oauth_token: str = "") -> None
         logger.debug("Could not persist session token: %s", exc)
 
 
-def _load_persisted_session(host: str, oauth_token: str = "") -> Optional[SessionToken]:
+def _load_persisted_session(host: str, oauth_token: str = "") -> SessionToken | None:
     """Load a previously persisted session token from disk.
 
     If *oauth_token* is provided, the persisted entry is only returned when
@@ -320,7 +320,7 @@ def _load_persisted_session(host: str, oauth_token: str = "") -> Optional[Sessio
         path = get_session_cache_path()
         if not path.exists():
             return None
-        with open(path, "r", encoding="utf-8") as fh:
+        with open(path, encoding="utf-8") as fh:
             data = json.load(fh)
         entry = data.get(host)
         if entry:
@@ -348,9 +348,7 @@ def _load_persisted_session(host: str, oauth_token: str = "") -> Optional[Sessio
     return None
 
 
-def get_valid_session_token(
-    oauth_token: str, host: str = "github.com"
-) -> Optional[str]:
+def get_valid_session_token(oauth_token: str, host: str = "github.com") -> str | None:
     """Return a valid Copilot session token, refreshing if needed.
 
     Checks in-memory cache → on-disk cache → exchanges for a new one.
@@ -405,12 +403,12 @@ def clear_caches() -> None:
 # ---------------------------------------------------------------------------
 
 
-def load_copilot_models() -> Dict[str, Any]:
+def load_copilot_models() -> dict[str, Any]:
     """Load registered Copilot models from copilot_models.json."""
     try:
         path = get_copilot_models_path()
         if path.exists():
-            with open(path, "r", encoding="utf-8") as fh:
+            with open(path, encoding="utf-8") as fh:
                 data = json.load(fh)
             if isinstance(data, dict):
                 return data
@@ -420,7 +418,7 @@ def load_copilot_models() -> Dict[str, Any]:
     return {}
 
 
-def save_copilot_models(models: Dict[str, Any]) -> bool:
+def save_copilot_models(models: dict[str, Any]) -> bool:
     """Persist Copilot models to copilot_models.json."""
     try:
         path = get_copilot_models_path()
@@ -450,7 +448,7 @@ def remove_copilot_models() -> int:
     return 0
 
 
-def fetch_copilot_models(session_token: str, host: str = "github.com") -> List[str]:
+def fetch_copilot_models(session_token: str, host: str = "github.com") -> list[str]:
     """Try to fetch the model catalogue from the Copilot API.
 
     Falls back to ``DEFAULT_COPILOT_MODELS`` if the endpoint is unavailable.
@@ -501,7 +499,7 @@ def _is_openai_model(model_name: str) -> bool:
     return lower.startswith("gpt-") or lower.startswith("o3") or lower.startswith("o4")
 
 
-def _build_claude_model_settings(model_name: str) -> Dict[str, Any]:
+def _build_claude_model_settings(model_name: str) -> dict[str, Any]:
     """Build model_settings fields for a Claude model.
 
     Mirrors the conventions in the claude_code_oauth plugin's
@@ -523,7 +521,7 @@ def _build_claude_model_settings(model_name: str) -> Dict[str, Any]:
     return {"supported_settings": supported_settings}
 
 
-def _build_openai_model_settings(model_name: str) -> Dict[str, Any]:
+def _build_openai_model_settings(model_name: str) -> dict[str, Any]:
     """Build model_settings fields for an OpenAI/GPT model behind Copilot.
 
     The Copilot API only proxies a subset of OpenAI features.  Currently
@@ -535,7 +533,7 @@ def _build_openai_model_settings(model_name: str) -> Dict[str, Any]:
     return {"supported_settings": ["temperature"]}
 
 
-def _model_settings_for(model_name: str) -> Dict[str, Any]:
+def _model_settings_for(model_name: str) -> dict[str, Any]:
     """Return family-specific config fields for a Copilot model.
 
     Claude models get extended_thinking/effort/etc.; OpenAI models get
@@ -550,7 +548,7 @@ def _model_settings_for(model_name: str) -> Dict[str, Any]:
 
 
 def add_models_to_config(
-    models: List[str],
+    models: list[str],
     host: str = "github.com",
 ) -> bool:
     """Register Copilot models in copilot_models.json."""
@@ -562,7 +560,7 @@ def add_models_to_config(
         api_url = get_api_endpoint_for_host(host)
         for model_name in models:
             prefixed = f"{prefix}{model_name}"
-            entry: Dict[str, Any] = {
+            entry: dict[str, Any] = {
                 "type": "copilot",
                 "name": model_name,
                 "custom_endpoint": {

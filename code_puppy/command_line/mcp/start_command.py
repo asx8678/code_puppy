@@ -2,8 +2,9 @@
 MCP Start Command - Starts a specific MCP server.
 """
 
+from __future__ import annotations
+
 import logging
-from typing import List, Optional
 
 from rich.text import Text
 
@@ -26,7 +27,7 @@ class StartCommand(MCPCommandBase):
     The server subprocess starts asynchronously in the background.
     """
 
-    def execute(self, args: List[str], group_id: Optional[str] = None) -> None:
+    def execute(self, args: list[str], group_id: str | None = None) -> None:
         """
         Start a specific MCP server.
 

@@ -4,6 +4,8 @@ This module provides customizations to Rich's default Markdown rendering,
 particularly for header justification which is hardcoded to center in Rich.
 """
 
+from __future__ import annotations
+
 from rich import box
 from rich.markdown import Heading, Markdown
 from rich.panel import Panel

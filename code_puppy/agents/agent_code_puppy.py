@@ -1,5 +1,7 @@
 """Fast-Puppy - The default code generation agent."""
 
+from __future__ import annotations
+
 from code_puppy.config import get_owner_name, get_puppy_name
 
 from .base_agent import BaseAgent

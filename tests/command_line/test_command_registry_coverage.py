@@ -1,5 +1,7 @@
 """Tests for command_registry.py - 100% coverage."""
 
+from __future__ import annotations
+
 import pytest
 
 from code_puppy.command_line.command_registry import (

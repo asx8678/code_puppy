@@ -5,12 +5,14 @@ This module provides a managed wrapper around pydantic-ai MCP server classes
 that adds management capabilities while maintaining 100% compatibility.
 """
 
+from __future__ import annotations
+
 import os
 import uuid
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from enum import Enum
-from typing import Any, Dict, Optional, Union
+from typing import Any
 
 import httpx
 from pydantic_ai import RunContext
@@ -51,7 +53,7 @@ def _expand_env_vars(value: Any) -> Any:
     return value
 
 
-def _build_tool_prefix(server_name: str, config: Dict[str, Any]) -> str:
+def _build_tool_prefix(server_name: str, config: dict[str, Any]) -> str:
     """Build the pydantic-ai MCP tool prefix for a configured server."""
     configured_prefix = _expand_env_vars(config.get("tool_prefix"))
     if configured_prefix:
@@ -78,7 +80,7 @@ class ServerConfig:
     name: str
     type: str  # "sse", "stdio", or "http"
     enabled: bool = True
-    config: Dict = field(default_factory=dict)  # Raw config from JSON
+    config: dict = field(default_factory=dict)  # Raw config from JSON
 
 
 async def process_tool_call(
@@ -126,15 +128,15 @@ class ManagedMCPServer:
             server_config: Server configuration containing type, connection details, etc.
         """
         self.config = server_config
-        self._pydantic_server: Optional[
-            Union[MCPServerSSE, MCPServerStdio, MCPServerStreamableHTTP]
-        ] = None
+        self._pydantic_server: (
+            MCPServerSSE | MCPServerStdio | MCPServerStreamableHTTP | None
+        ) = None
         self._state = ServerState.STOPPED
         self._enabled = server_config.enabled
-        self._quarantine_until: Optional[datetime] = None
-        self._start_time: Optional[datetime] = None
-        self._stop_time: Optional[datetime] = None
-        self._error_message: Optional[str] = None
+        self._quarantine_until: datetime | None = None
+        self._start_time: datetime | None = None
+        self._stop_time: datetime | None = None
+        self._error_message: str | None = None
 
         # Initialize the pydantic server
         try:
@@ -147,7 +149,7 @@ class ManagedMCPServer:
 
     def get_pydantic_server(
         self,
-    ) -> Union[MCPServerSSE, MCPServerStdio, MCPServerStreamableHTTP]:
+    ) -> MCPServerSSE | MCPServerStdio | MCPServerStreamableHTTP:
         """
         Get the actual pydantic-ai server instance.
 
@@ -400,7 +402,7 @@ class ManagedMCPServer:
         if isinstance(self._pydantic_server, BlockingMCPServerStdio):
             await self._pydantic_server.ensure_ready(timeout)
 
-    def get_status(self) -> Dict[str, Any]:
+    def get_status(self) -> dict[str, Any]:
         """
         Return current status information.
 

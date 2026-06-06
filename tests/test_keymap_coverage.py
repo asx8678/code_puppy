@@ -7,6 +7,8 @@ This module tests keyboard shortcut configuration including:
 - Windows/uvx detection integration
 """
 
+from __future__ import annotations
+
 from unittest.mock import patch
 
 import pytest

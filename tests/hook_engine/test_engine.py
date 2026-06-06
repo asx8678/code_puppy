@@ -1,5 +1,7 @@
 """Tests for hook engine main class."""
 
+from __future__ import annotations
+
 import pytest
 
 from code_puppy.hook_engine import EventData, HookConfig, HookEngine

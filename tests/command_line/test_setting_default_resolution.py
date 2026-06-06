@@ -6,6 +6,8 @@ the TUI display (and "reset to default") agrees with what the runtime
 model_factory actually sends to Anthropic.
 """
 
+from __future__ import annotations
+
 from code_puppy.command_line.model_settings_menu import (
     SETTING_DEFINITIONS,
     _get_setting_default,

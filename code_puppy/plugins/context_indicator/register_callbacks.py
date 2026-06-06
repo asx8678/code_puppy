@@ -12,8 +12,6 @@ Idempotent: re-installing the prompt patch is a no-op.
 
 from __future__ import annotations
 
-from typing import List, Tuple
-
 from code_puppy.callbacks import register_callback
 from code_puppy.plugins.context_indicator.usage import (
     ContextUsage,
@@ -48,7 +46,7 @@ def _emit_error(message: str) -> None:
 # ---------------------------------------------------------------------------
 # Prompt patching
 # ---------------------------------------------------------------------------
-def _build_indicator_tuple(usage: ContextUsage) -> Tuple[str, str]:
+def _build_indicator_tuple(usage: ContextUsage) -> tuple[str, str]:
     """Build the (style, text) tuple that gets inserted into the prompt."""
     return ("class:context-indicator", f"{usage.indicator} ")
 
@@ -118,7 +116,7 @@ def _on_startup() -> None:
 # ---------------------------------------------------------------------------
 # /context slash command
 # ---------------------------------------------------------------------------
-def _custom_help() -> List[Tuple[str, str]]:
+def _custom_help() -> list[tuple[str, str]]:
     return [
         (
             _COMMAND_NAME,

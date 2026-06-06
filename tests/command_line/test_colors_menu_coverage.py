@@ -1,5 +1,7 @@
 """Coverage tests for colors_menu.py - exercises all uncovered code paths."""
 
+from __future__ import annotations
+
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest

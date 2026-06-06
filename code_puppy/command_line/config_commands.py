@@ -4,6 +4,8 @@ This module contains @register_command decorated handlers that are automatically
 discovered by the command registry system.
 """
 
+from __future__ import annotations
+
 import json
 
 from code_puppy.command_line.command_registry import register_command
@@ -257,7 +259,7 @@ def _get_json_agents_pinned_to_model(model_name: str) -> list:
     json_agents = discover_json_agents()
     for agent_name, agent_path in json_agents.items():
         try:
-            with open(agent_path, "r") as f:
+            with open(agent_path) as f:
                 agent_data = json.load(f)
                 if agent_data.get("model") == model_name:
                     pinned.append(agent_name)
@@ -354,7 +356,7 @@ def handle_pin_model_command(command: str) -> bool:
             # Handle JSON agent - modify the JSON file
             agent_file_path = json_agents[agent_name]
 
-            with open(agent_file_path, "r", encoding="utf-8") as f:
+            with open(agent_file_path, encoding="utf-8") as f:
                 agent_config = json.load(f)
 
             # Set the model
@@ -431,7 +433,7 @@ def handle_unpin_command(command: str) -> bool:
             for agent_name, agent_path in json_agents.items():
                 # Read the JSON file to check for pinned model
                 try:
-                    with open(agent_path, "r") as f:
+                    with open(agent_path) as f:
                         agent_config = json.load(f)
                     pinned_model = agent_config.get("model")
                     if pinned_model:
@@ -492,7 +494,7 @@ def handle_unpin_command(command: str) -> bool:
             # Handle JSON agent - remove the model from JSON file
             agent_file_path = json_agents[agent_name]
 
-            with open(agent_file_path, "r", encoding="utf-8") as f:
+            with open(agent_file_path, encoding="utf-8") as f:
                 agent_config = json.load(f)
 
             # Remove the model key if it exists

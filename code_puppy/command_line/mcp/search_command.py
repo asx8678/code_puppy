@@ -2,8 +2,9 @@
 MCP Search Command - Searches for pre-configured MCP servers in the registry.
 """
 
+from __future__ import annotations
+
 import logging
-from typing import List, Optional
 
 from rich.table import Table
 from rich.text import Text
@@ -23,7 +24,7 @@ class SearchCommand(MCPCommandBase):
     Searches for pre-configured MCP servers with optional query terms.
     """
 
-    def execute(self, args: List[str], group_id: Optional[str] = None) -> None:
+    def execute(self, args: list[str], group_id: str | None = None) -> None:
         """
         Search for pre-configured MCP servers in the registry.
 

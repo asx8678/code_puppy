@@ -29,7 +29,7 @@ def _coerce_questions_json_string(v: Any) -> Any:
     if isinstance(v, str):
         try:
             return json.loads(v)
-        except (json.JSONDecodeError, ValueError):
+        except json.JSONDecodeError, ValueError:
             return v
     return v
 

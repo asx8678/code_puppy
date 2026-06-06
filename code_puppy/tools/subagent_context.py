@@ -47,9 +47,11 @@ print(is_subagent())  # False
 4. **Zero Overhead**: When not in a sub-agent context, minimal performance impact
 """
 
+from __future__ import annotations
+
+from collections.abc import Generator
 from contextlib import contextmanager
 from contextvars import ContextVar
-from typing import Generator
 
 __all__ = [
     "subagent_context",
@@ -66,7 +68,7 @@ _subagent_name: ContextVar[str | None] = ContextVar("subagent_name", default=Non
 
 
 @contextmanager
-def subagent_context(agent_name: str) -> Generator[None, None, None]:
+def subagent_context(agent_name: str) -> Generator[None]:
     """Context manager for tracking sub-agent execution.
 
     Increments the sub-agent depth and sets the current agent name on entry,

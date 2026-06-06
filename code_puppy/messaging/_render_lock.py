@@ -12,6 +12,8 @@ prints a header then delegates to another printing helper) doesn't
 self-deadlock.
 """
 
+from __future__ import annotations
+
 import threading
 
 CONSOLE_RENDER_LOCK = threading.RLock()

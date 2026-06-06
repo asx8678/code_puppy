@@ -4,6 +4,8 @@ The wiggum feature allows users to automatically re-run the same prompt
 when the agent finishes, like Chief Wiggum chasing donuts in circles. 🍩
 """
 
+from __future__ import annotations
+
 
 class TestWiggumState:
     """Test wiggum state management."""

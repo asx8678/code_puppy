@@ -8,6 +8,8 @@ Covers the .fast_puppy/ directory feature (PUP-34):
 - Edge cases (dir is file, empty dir, etc.)
 """
 
+from __future__ import annotations
+
 from unittest.mock import patch
 
 import pytest

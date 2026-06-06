@@ -5,6 +5,8 @@ we don't need to spin up the entire BaseAgent circus just to verify whether
 network gremlins get another chance.
 """
 
+from __future__ import annotations
+
 import asyncio
 from unittest.mock import AsyncMock, patch
 

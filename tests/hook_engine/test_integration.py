@@ -19,6 +19,8 @@ Implementation targets:
   code_puppy/hook_engine/__init__.py
 """
 
+from __future__ import annotations
+
 import json
 import os
 

@@ -6,10 +6,11 @@
 # CYAN = '\033[1;36m'
 # YELLOW = '\033[1;33m'
 # BOLD = '\033[1m'
+from __future__ import annotations
+
 import asyncio
 import os
 import sys
-from typing import Optional
 
 from prompt_toolkit import PromptSession
 from prompt_toolkit.completion import Completer, Completion, merge_completers
@@ -78,7 +79,7 @@ def _sanitize_for_encoding(text: str) -> str:
             "utf-8", errors="replace"
         )
         return cleaned
-    except (UnicodeEncodeError, UnicodeDecodeError):
+    except UnicodeEncodeError, UnicodeDecodeError:
         # Last resort: filter out all non-BMP and surrogate characters
         return "".join(
             char
@@ -339,7 +340,7 @@ class CDCompleter(Completer):
                     display=d + os.sep,
                     display_meta="Directory",
                 )
-        except (OSError, PermissionError, RuntimeError):
+        except OSError, PermissionError, RuntimeError:
             # Non-fatal: ignore filesystem errors (permission issues,
             # non-existent dir). ``list_directory`` wraps the underlying OSError
             # in a RuntimeError, so we catch that here too. Narrowed from a bare
@@ -410,8 +411,8 @@ class SlashCompleter(Completer):
         # Cached, fully-assembled+sorted candidate list (built with an empty
         # prefix). Each '/'-keystroke only FILTERS this cached list instead of
         # re-querying the registry, re-running plugin help, and re-sorting.
-        self._cached_completions: Optional[list] = None
-        self._cached_signature: Optional[tuple] = None
+        self._cached_completions: list | None = None
+        self._cached_signature: tuple | None = None
 
     def _candidates_signature(self):
         """Cheap signature that flips when the candidate set could change.
@@ -440,7 +441,7 @@ class SlashCompleter(Completer):
 
         return (registry_size, custom_sig)
 
-    def _build_all_candidates(self) -> Optional[list]:
+    def _build_all_candidates(self) -> list | None:
         """Assemble and sort the full (unfiltered) candidate list.
 
         Mirrors the original per-keystroke assembly with an empty prefix, so
@@ -688,7 +689,7 @@ def _left_justify_completion_menu(session: PromptSession) -> None:
 
 
 async def get_input_with_combined_completion(
-    prompt_str=">>> ", history_file: Optional[str] = None
+    prompt_str=">>> ", history_file: str | None = None
 ) -> str:
     # Use SafeFileHistory to handle encoding errors gracefully on Windows
     history = SafeFileHistory(history_file) if history_file else None

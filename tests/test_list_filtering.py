@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from code_puppy.list_filtering import normalize_filter_text, query_matches_text
 
 

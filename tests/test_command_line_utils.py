@@ -4,6 +4,8 @@ This module tests directory listing and table generation utilities
 used in the command-line interface.
 """
 
+from __future__ import annotations
+
 import os
 
 import pytest

@@ -10,7 +10,6 @@ Covers:
 
 from __future__ import annotations
 
-from typing import List
 from unittest.mock import patch
 
 from pydantic_ai.messages import (
@@ -71,10 +70,10 @@ def _tool_return(tool_name: str, content: str, call_id: str) -> ModelMessage:
 
 def _build_long_history(
     n_turns: int = 20, payload_chars: int = 400
-) -> List[ModelMessage]:
+) -> list[ModelMessage]:
     """Build a realistic tool-heavy message history with paired calls/returns."""
     payload = "x" * payload_chars
-    msgs: List[ModelMessage] = [_sys_msg("You are a helpful test agent.")]
+    msgs: list[ModelMessage] = [_sys_msg("You are a helpful test agent.")]
     for i in range(n_turns):
         msgs.append(_user_msg(f"user question {i}: {payload}"))
         call_id = f"call_{i}"
@@ -94,7 +93,7 @@ class _FakeAgent:
         name: str = "fake-agent",
     ):
         self.name = name
-        self._message_history: List[ModelMessage] = []
+        self._message_history: list[ModelMessage] = []
         self._compacted_message_hashes: set = set()
         self._model_max = model_max
         self._overhead = overhead

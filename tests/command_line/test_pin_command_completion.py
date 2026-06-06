@@ -1,5 +1,7 @@
 """Tests for pin_command_completion.py to achieve 100% coverage."""
 
+from __future__ import annotations
+
 from unittest.mock import mock_open, patch
 
 from prompt_toolkit.document import Document
@@ -48,7 +50,7 @@ class TestGetJsonAgentsForModel:
                 "code_puppy.agents.json_agent.discover_json_agents",
                 return_value={"agent1": "/tmp/a1.json"},
             ),
-            patch("builtins.open", side_effect=IOError("nope")),
+            patch("builtins.open", side_effect=OSError("nope")),
         ):
             assert _get_json_agents_for_model("gpt-4") == []
 

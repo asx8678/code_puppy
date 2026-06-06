@@ -9,6 +9,8 @@ Tests interactive TUI for banner color configuration including:
 - Error handling and edge cases
 """
 
+from __future__ import annotations
+
 from unittest.mock import patch
 
 from code_puppy.command_line.colors_menu import (

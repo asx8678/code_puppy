@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from code_puppy.tools import file_modifications
 
 

@@ -8,7 +8,7 @@ unit-test with hand-built fixtures.
 
 from __future__ import annotations
 
-from typing import Any, List, Tuple
+from typing import Any
 
 from code_puppy.plugins.prune.prune_model import (
     C_CHECKED,
@@ -25,11 +25,10 @@ from code_puppy.plugins.prune.prune_model import (
     ToolCallInfo,
 )
 
-
 # ── small atomic helpers ────────────────────────────────────────────────────
 
 
-def ctx_indicator(entry: MessageEntry) -> Tuple[str, str]:
+def ctx_indicator(entry: MessageEntry) -> tuple[str, str]:
     """Return (glyph, style) for the in-context indicator."""
     if entry.in_context is True:
         return ("●", C_FOOTER_OK)
@@ -52,7 +51,7 @@ def ctx_detail_text(entry: MessageEntry) -> str:
     return ""
 
 
-def format_args_full(full_args: dict, fallback: str) -> List[str]:
+def format_args_full(full_args: dict, fallback: str) -> list[str]:
     """Pretty-print tool args with no truncation, no JSON escaping.
 
     Recursive YAML-ish layout:
@@ -71,7 +70,7 @@ def format_args_full(full_args: dict, fallback: str) -> List[str]:
     if not isinstance(full_args, dict):
         return [fallback or str(full_args)]
 
-    lines: List[str] = []
+    lines: list[str] = []
     for key, value in full_args.items():
         lines.extend(_format_kv(str(key), value))
     return lines or ["<no args>"]
@@ -89,7 +88,7 @@ def _is_inline_scalar(value: Any) -> bool:
     return False
 
 
-def _format_kv(key: str, value: Any) -> List[str]:
+def _format_kv(key: str, value: Any) -> list[str]:
     """Render ``key: value``, recursing for complex values."""
     if _is_inline_scalar(value):
         return [f"{key}: {value}"]
@@ -104,7 +103,7 @@ def _format_kv(key: str, value: Any) -> List[str]:
     return [f"{key}:"] + [f"{_INDENT}{line}" for line in nested]
 
 
-def _format_value_lines(value: Any) -> List[str]:
+def _format_value_lines(value: Any) -> list[str]:
     """Render ``value`` (with no leading key) as a list of lines."""
     if _is_inline_scalar(value):
         return [str(value)]
@@ -116,7 +115,7 @@ def _format_value_lines(value: Any) -> List[str]:
     if isinstance(value, dict):
         if not value:
             return ["{}"]
-        lines: List[str] = []
+        lines: list[str] = []
         for k, v in value.items():
             lines.extend(_format_kv(str(k), v))
         return lines
@@ -136,7 +135,7 @@ def _format_value_lines(value: Any) -> List[str]:
     return [str(value)]
 
 
-def render_budget_line(budget: ContextBudget) -> List[tuple]:
+def render_budget_line(budget: ContextBudget) -> list[tuple]:
     if not budget.available or budget.context_length is None:
         return [(C_DIM, "context: unavailable\n")]
 
@@ -149,7 +148,7 @@ def render_budget_line(budget: ContextBudget) -> List[tuple]:
     else:
         style = C_SHELL
 
-    parts: List[tuple] = [
+    parts: list[tuple] = [
         (
             style,
             f"context: {total:,}/{budget.context_length:,} tokens ({pct:.0f}%)",
@@ -171,7 +170,7 @@ def render_budget_line(budget: ContextBudget) -> List[tuple]:
     return parts
 
 
-def render_legend() -> List[tuple]:
+def render_legend() -> list[tuple]:
     """One-line legend explaining the context-window indicator glyphs.
 
     Placed under the budget header so a first-time pruner can map the
@@ -197,13 +196,13 @@ def render_legend() -> List[tuple]:
 # ── list pane ───────────────────────────────────────────────────────────────
 
 
-def render_list(menu: Any) -> List[tuple]:
+def render_list(menu: Any) -> list[tuple]:
     """Render the left (history list) pane.
 
     Reads from the menu: entries, rows, viewport_top, _visible_rows,
     cursor, selected_messages, budget.
     """
-    out: List[tuple] = []
+    out: list[tuple] = []
     out.append(
         (
             C_HEADER,
@@ -247,7 +246,7 @@ def render_list(menu: Any) -> List[tuple]:
     return out
 
 
-def render_row(menu: Any, idx: int, row: Row, out: List[tuple]) -> None:
+def render_row(menu: Any, idx: int, row: Row, out: list[tuple]) -> None:
     is_cursor = idx == menu.cursor
     cursor_marker = "▶ " if is_cursor else "  "
     cursor_style = C_CURSOR if is_cursor else ""
@@ -292,14 +291,14 @@ def render_row(menu: Any, idx: int, row: Row, out: List[tuple]) -> None:
 # ── detail pane ─────────────────────────────────────────────────────────────
 
 
-def render_detail(menu: Any) -> List[tuple]:
+def render_detail(menu: Any) -> list[tuple]:
     """Render the right (detail) pane for whatever the cursor is on."""
     if not menu.rows:
         return [("", "")]
 
     row = menu.rows[menu.cursor]
     entry = menu.entries[row.message_idx]
-    out: List[tuple] = []
+    out: list[tuple] = []
     _render_message_detail(entry, out)
 
     out.append(("", "\n"))
@@ -314,7 +313,7 @@ def render_detail(menu: Any) -> List[tuple]:
     return out
 
 
-def _render_message_detail(entry: MessageEntry, out: List[tuple]) -> None:
+def _render_message_detail(entry: MessageEntry, out: list[tuple]) -> None:
     out.append((C_HEADER, f" {entry.role}  (message)\n"))
     tok = f" · ~{entry.tokens}t" if entry.tokens is not None else ""
     location = f"history index {entry.history_index}"
@@ -343,7 +342,7 @@ def _render_message_detail(entry: MessageEntry, out: List[tuple]) -> None:
             _render_tool_call_block(tc, out)
 
 
-def _render_tool_call_block(tc: ToolCallInfo, out: List[tuple]) -> None:
+def _render_tool_call_block(tc: ToolCallInfo, out: list[tuple]) -> None:
     """Inline tool-call block inside a message detail view, full args."""
     out.append((C_TOOL, f"   {tc.icon} {tc.name}"))
     out.append(("", "\n"))

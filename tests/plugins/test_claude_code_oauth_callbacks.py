@@ -3,6 +3,8 @@
 Covers custom command routing, authentication flow, status checks, and logout.
 """
 
+from __future__ import annotations
+
 import threading
 import time
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -832,7 +834,6 @@ class TestAgentRunEnd:
 class TestCallbackRegistration:
     def test_callbacks_registered(self):
         from code_puppy.callbacks import get_callbacks, register_callback
-
         from code_puppy.plugins.claude_code_oauth.register_callbacks import (
             _custom_help,
             _handle_custom_command,

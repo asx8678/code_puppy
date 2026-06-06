@@ -10,7 +10,7 @@ Provides:
 from __future__ import annotations
 
 import logging
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any
 
 from code_puppy.callbacks import register_callback
 from code_puppy.messaging import emit_error, emit_info, emit_success, emit_warning
@@ -39,7 +39,7 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 
 
-def _custom_help() -> List[Tuple[str, str]]:
+def _custom_help() -> list[tuple[str, str]]:
     return [
         (
             "copilot-login",
@@ -217,7 +217,7 @@ def _handle_copilot_login(command: str) -> None:
             host = raw if raw else "github.com"
         except ImportError:
             host = "github.com"
-        except (EOFError, KeyboardInterrupt):
+        except EOFError, KeyboardInterrupt:
             emit_warning("Copilot login cancelled.")
             return
 
@@ -325,7 +325,7 @@ def _handle_copilot_login(command: str) -> None:
 # ---------------------------------------------------------------------------
 
 
-def _handle_custom_command(command: str, name: str) -> Optional[bool]:
+def _handle_custom_command(command: str, name: str) -> bool | None:
     if not name:
         return None
     if name == "copilot-login":
@@ -345,7 +345,7 @@ def _handle_custom_command(command: str, name: str) -> Optional[bool]:
 # ---------------------------------------------------------------------------
 
 
-def _create_copilot_model(model_name: str, model_config: Dict, config: Dict) -> Any:
+def _create_copilot_model(model_name: str, model_config: dict, config: dict) -> Any:
     """Create an OpenAI-compatible model backed by GitHub Copilot API.
 
     Called by ``model_factory`` when ``type == "copilot"``.
@@ -449,7 +449,7 @@ def _create_copilot_model(model_name: str, model_config: Dict, config: Dict) -> 
     )
 
 
-def _register_model_types() -> List[Dict[str, Any]]:
+def _register_model_types() -> list[dict[str, Any]]:
     """Register the ``copilot`` model type handler."""
     return [{"type": "copilot", "handler": _create_copilot_model}]
 

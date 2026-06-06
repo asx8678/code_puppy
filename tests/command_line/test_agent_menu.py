@@ -4,6 +4,8 @@ Covers menu initialization, agent entry retrieval, rendering,
 pagination, current agent marking, and preview panel display.
 """
 
+from __future__ import annotations
+
 from unittest.mock import patch
 
 from code_puppy.command_line.agent_menu import (
@@ -797,7 +799,7 @@ class TestApplyPinnedModelWithJSONAgents:
         _apply_pinned_model("test_agent", "claude-3-opus")
 
         # Verify the file was updated
-        with open(json_file, "r") as f:
+        with open(json_file) as f:
             agent_config = json.load(f)
 
         assert agent_config.get("model") == "claude-3-opus"
@@ -839,7 +841,7 @@ class TestApplyPinnedModelWithJSONAgents:
         _apply_pinned_model("test_agent", "(unpin)")
 
         # Verify the model key was removed
-        with open(json_file, "r") as f:
+        with open(json_file) as f:
             agent_config = json.load(f)
 
         assert "model" not in agent_config

@@ -4,6 +4,8 @@ Focuses on comprehensive testing of the interactive pickers, error handling,
 state management, and edge cases to boost coverage from 35% to 80%+.
 """
 
+from __future__ import annotations
+
 import concurrent.futures
 from unittest.mock import ANY, AsyncMock, MagicMock, patch
 

@@ -9,7 +9,8 @@ daemon thread.
 from __future__ import annotations
 
 import asyncio
-from typing import Any, Callable, Optional
+from collections.abc import Callable
+from typing import Any
 
 from code_puppy.messaging import emit_info, emit_warning
 from code_puppy.tools.agent_tools import _active_subagent_tasks
@@ -115,7 +116,7 @@ def reset_pause_state_at_run_start() -> None:
         )
 
 
-def prepare_queued_steer_injection(agent: Any, result: Any) -> Optional[str]:
+def prepare_queued_steer_injection(agent: Any, result: Any) -> str | None:
     """Drain ONE queue-mode steer and prep for between-turns injection.
 
     Called from ``_runtime._do_run``'s while-loop after each ``agent.run()``.

@@ -10,6 +10,8 @@ Consolidated single-file suite covering:
 Plus a small set of CLI-contract smoke tests (argparse / env vars).
 """
 
+from __future__ import annotations
+
 import asyncio
 import os
 from contextlib import ExitStack

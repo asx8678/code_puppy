@@ -4,6 +4,8 @@ This module contains @register_command decorated handlers that are automatically
 discovered by the command registry system.
 """
 
+from __future__ import annotations
+
 import os
 
 from code_puppy.command_line.agent_menu import interactive_agent_picker

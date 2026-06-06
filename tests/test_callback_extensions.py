@@ -8,6 +8,8 @@ Covers four hook phases used for plugin agent-wrapping and run lifecycle:
 * ``should_skip_fallback_render`` — sync, any-True wins
 """
 
+from __future__ import annotations
+
 import asyncio
 from contextlib import asynccontextmanager
 

@@ -5,6 +5,8 @@ defined in SKILL.md files. Skills can be placed in user-specific or
 project-specific directories for easy sharing and organization.
 """
 
+from __future__ import annotations
+
 from .metadata import (
     SkillMetadata,
     get_skill_resources,

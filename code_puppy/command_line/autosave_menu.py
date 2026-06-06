@@ -4,13 +4,14 @@ Provides a beautiful split-panel interface for browsing and loading
 autosave sessions with live preview of message content.
 """
 
+from __future__ import annotations
+
 import asyncio
 import json
 import sys
 from datetime import datetime
 from io import StringIO
 from pathlib import Path
-from typing import List, Optional, Tuple
 
 from prompt_toolkit.application import Application
 from prompt_toolkit.key_binding import KeyBindings
@@ -43,11 +44,11 @@ def _get_session_metadata(base_dir: Path, session_name: str) -> dict:
         return {}
 
 
-def _get_session_entries(base_dir: Path) -> List[Tuple[str, dict]]:
+def _get_session_entries(base_dir: Path) -> list[tuple[str, dict]]:
     """Get all sessions with their metadata, sorted by timestamp."""
     try:
         sessions = list_sessions(base_dir)
-    except (FileNotFoundError, PermissionError):
+    except FileNotFoundError, PermissionError:
         return []
 
     entries = []
@@ -55,7 +56,7 @@ def _get_session_entries(base_dir: Path) -> List[Tuple[str, dict]]:
     for name in sessions:
         try:
             metadata = _get_session_metadata(base_dir, name)
-        except (FileNotFoundError, PermissionError):
+        except FileNotFoundError, PermissionError:
             metadata = {}
         entries.append((name, metadata))
 
@@ -93,7 +94,7 @@ def _extract_last_user_message(history: list) -> str:
     return "[No messages found]"
 
 
-def _extract_message_content(msg) -> Tuple[str, str]:
+def _extract_message_content(msg) -> tuple[str, str]:
     """Extract role and content from a message.
 
     Returns:
@@ -160,11 +161,11 @@ def _extract_message_content(msg) -> Tuple[str, str]:
 
 
 def _render_menu_panel(
-    entries: List[Tuple[str, dict]],
+    entries: list[tuple[str, dict]],
     page: int,
     selected_idx: int,
     browse_mode: bool = False,
-) -> List:
+) -> list:
     """Render the left menu panel with pagination."""
     lines = []
     total_pages = get_total_pages(len(entries), PAGE_SIZE)
@@ -238,7 +239,7 @@ def _render_message_browser_panel(
     history: list,
     message_idx: int,
     session_name: str,
-) -> List:
+) -> list:
     """Render the message browser panel showing a single message.
 
     Args:
@@ -331,7 +332,7 @@ def _render_message_browser_panel(
     return lines
 
 
-def _render_preview_panel(base_dir: Path, entry: Optional[Tuple[str, dict]]) -> List:
+def _render_preview_panel(base_dir: Path, entry: tuple[str, dict] | None) -> list:
     """Render the right preview panel with message content using rich markdown."""
     lines = []
 
@@ -500,7 +501,7 @@ def display_resumed_history(
     console.print()
 
 
-async def interactive_autosave_picker() -> Optional[str]:
+async def interactive_autosave_picker() -> str | None:
     """Show interactive terminal UI to select an autosave session.
 
     Returns:
@@ -527,7 +528,7 @@ async def interactive_autosave_picker() -> Optional[str]:
 
     total_pages = get_total_pages(len(entries), PAGE_SIZE)
 
-    def get_current_entry() -> Optional[Tuple[str, dict]]:
+    def get_current_entry() -> tuple[str, dict] | None:
         if 0 <= selected_idx[0] < len(entries):
             return entries[selected_idx[0]]
         return None

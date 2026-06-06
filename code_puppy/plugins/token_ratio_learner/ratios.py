@@ -14,6 +14,8 @@ Storage lives at ``~/.fast_puppy/token_ratios.json``, overridable via
 the env var ``CODE_PUPPY_TOKEN_RATIOS_PATH``.
 """
 
+from __future__ import annotations
+
 import json
 import logging
 import os
@@ -99,7 +101,7 @@ def _load_learned_ratios() -> dict[str, float]:
                         # Old files may have mixed-case keys.
                         clamped[k.lower()] = max(_MIN_RATIO, min(_MAX_RATIO, float(v)))
                 return clamped
-    except (OSError, json.JSONDecodeError, ValueError):
+    except OSError, json.JSONDecodeError, ValueError:
         pass
     return {}
 

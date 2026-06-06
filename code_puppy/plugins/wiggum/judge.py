@@ -274,7 +274,7 @@ async def judge_goal(
                 usage_limits=UsageLimits(request_limit=GOAL_JUDGE_REQUEST_LIMIT),
             )
         output = result.output
-    except (asyncio.CancelledError, KeyboardInterrupt):
+    except asyncio.CancelledError, KeyboardInterrupt:
         # Propagate cancellation — the orchestrator handles cleanup.
         raise
     except Exception as exc:

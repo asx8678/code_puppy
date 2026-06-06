@@ -13,17 +13,18 @@ handles SIGINT correctly on Windows.
 On non-Windows platforms, this is not an issue - Ctrl+C works fine with uvx.
 """
 
+from __future__ import annotations
+
 import os
 import platform
 import sys
 from functools import lru_cache
-from typing import Optional
 
 # Cache the detection result - it won't change during runtime
-_uvx_detection_cache: Optional[bool] = None
+_uvx_detection_cache: bool | None = None
 
 
-def _get_parent_process_name_psutil(pid: int) -> Optional[str]:
+def _get_parent_process_name_psutil(pid: int) -> str | None:
     """Get parent process name using psutil (if available).
 
     Args:

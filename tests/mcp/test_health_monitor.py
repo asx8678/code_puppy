@@ -10,6 +10,8 @@ Tests health monitoring system including:
 - Error handling and edge cases
 """
 
+from __future__ import annotations
+
 import asyncio
 from datetime import datetime, timedelta
 from unittest.mock import AsyncMock, Mock, patch

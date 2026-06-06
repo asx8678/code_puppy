@@ -5,6 +5,8 @@ Tests cover message emission, request/response correlation, session context,
 queue management, and async/sync operation.
 """
 
+from __future__ import annotations
+
 import asyncio
 import queue
 import threading

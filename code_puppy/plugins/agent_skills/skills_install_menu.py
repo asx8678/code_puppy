@@ -13,11 +13,12 @@ This module is intentionally defensive: if the remote catalog isn't available,
 it shows an empty menu and returns False.
 """
 
+from __future__ import annotations
+
 import logging
 import sys
 import time
 from pathlib import Path
-from typing import List, Optional
 
 from prompt_toolkit.application import Application
 from prompt_toolkit.key_binding import KeyBindings
@@ -65,7 +66,7 @@ def _format_bytes(num_bytes: int) -> str:
     return f"{size:.1f} GB"
 
 
-def _wrap_text(text: str, width: int) -> List[str]:
+def _wrap_text(text: str, width: int) -> list[str]:
     """Simple word-wrap for display in the details panel."""
 
     if not text:
@@ -105,21 +106,21 @@ class SkillsInstallMenu:
         """Initialize the skills install menu with catalog data."""
 
         self.catalog = catalog
-        self.categories: List[str] = []
-        self.current_category: Optional[str] = None
-        self.current_skills: List[SkillCatalogEntry] = []
+        self.categories: list[str] = []
+        self.current_category: str | None = None
+        self.current_skills: list[SkillCatalogEntry] = []
 
         # State
         self.view_mode = "categories"  # categories | skills
         self.selected_category_idx = 0
         self.selected_skill_idx = 0
         self.current_page = 0
-        self.result: Optional[str] = None
-        self.pending_entry: Optional[SkillCatalogEntry] = None
+        self.result: str | None = None
+        self.pending_entry: SkillCatalogEntry | None = None
 
         # UI controls
-        self.menu_control: Optional[FormattedTextControl] = None
-        self.preview_control: Optional[FormattedTextControl] = None
+        self.menu_control: FormattedTextControl | None = None
+        self.preview_control: FormattedTextControl | None = None
 
         self._initialize_catalog()
 
@@ -146,14 +147,14 @@ class SkillsInstallMenu:
         }
         return icons.get(_category_key(category), "📁")
 
-    def _get_current_category(self) -> Optional[str]:
+    def _get_current_category(self) -> str | None:
         """Get the currently highlighted category name."""
 
         if 0 <= self.selected_category_idx < len(self.categories):
             return self.categories[self.selected_category_idx]
         return None
 
-    def _get_current_skill(self) -> Optional[SkillCatalogEntry]:
+    def _get_current_skill(self) -> SkillCatalogEntry | None:
         """Get the currently highlighted skill entry."""
 
         if self.view_mode == "skills" and self.current_skills:
@@ -161,7 +162,7 @@ class SkillsInstallMenu:
                 return self.current_skills[self.selected_skill_idx]
         return None
 
-    def _render_navigation_hints(self, lines: List) -> None:
+    def _render_navigation_hints(self, lines: list) -> None:
         """Render keyboard shortcut hints at the bottom."""
 
         lines.append(("", "\n"))
@@ -182,7 +183,7 @@ class SkillsInstallMenu:
         lines.append(("fg:ansired", "  Ctrl+C "))
         lines.append(("", "Cancel"))
 
-    def _render_category_list(self) -> List:
+    def _render_category_list(self) -> list:
         """Render the left panel with category navigation."""
 
         lines = []
@@ -238,7 +239,7 @@ class SkillsInstallMenu:
         self._render_navigation_hints(lines)
         return lines
 
-    def _render_skill_list(self) -> List:
+    def _render_skill_list(self) -> list:
         """Render the middle panel with skills in the selected category."""
 
         lines = []
@@ -292,7 +293,7 @@ class SkillsInstallMenu:
         self._render_navigation_hints(lines)
         return lines
 
-    def _render_details(self) -> List:
+    def _render_details(self) -> list:
         """Render the right panel with details for the selected skill."""
 
         lines = []
@@ -652,7 +653,7 @@ def _prompt_and_install(entry: SkillCatalogEntry) -> bool:
                 return False
             force = False
 
-    except (KeyboardInterrupt, EOFError):
+    except KeyboardInterrupt, EOFError:
         emit_warning("Installation cancelled")
         return False
 

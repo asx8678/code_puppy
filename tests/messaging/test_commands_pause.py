@@ -1,6 +1,8 @@
 """Tests for routing PauseAgentCommand / ResumeAgentCommand / SteerAgentCommand
 through MessageBus.provide_response() into the global PauseController."""
 
+from __future__ import annotations
+
 import pytest
 
 from code_puppy.messaging.bus import get_message_bus, reset_message_bus

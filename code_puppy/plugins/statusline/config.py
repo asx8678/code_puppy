@@ -26,7 +26,7 @@ def _get_int(key: str, default: int) -> int:
         return default
     try:
         return int(str(raw).strip())
-    except (TypeError, ValueError):
+    except TypeError, ValueError:
         return default
 
 

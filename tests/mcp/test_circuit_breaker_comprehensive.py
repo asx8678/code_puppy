@@ -5,6 +5,8 @@ This module tests all state transitions and edge cases for the circuit breaker
 pattern implementation used to protect against cascading failures in MCP servers.
 """
 
+from __future__ import annotations
+
 import asyncio
 import time
 from unittest.mock import AsyncMock, Mock

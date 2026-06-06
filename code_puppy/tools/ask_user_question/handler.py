@@ -49,7 +49,7 @@ def is_interactive() -> bool:
     try:
         if not sys.stdin.isatty():
             return False
-    except (AttributeError, OSError):
+    except AttributeError, OSError:
         return False
 
     return not any(os.environ.get(var) for var in CI_ENV_VARS)
@@ -141,7 +141,7 @@ def ask_user_question(
 
         return AskUserQuestionOutput(answers=answers)
 
-    except (CancelledException, KeyboardInterrupt):
+    except CancelledException, KeyboardInterrupt:
         return _cancelled_response()
 
     except OSError as e:

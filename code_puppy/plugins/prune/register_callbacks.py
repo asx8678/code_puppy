@@ -16,10 +16,9 @@ Usage:
 
 from __future__ import annotations
 
-from typing import Any, List, Optional, Set, Tuple
+from typing import Any
 
 from code_puppy.callbacks import register_callback
-
 
 # ── messaging wrappers ──────────────────────────────────────────────────────
 
@@ -51,7 +50,7 @@ def emit_warning(message: Any) -> None:
 # ── /help integration ───────────────────────────────────────────────────────
 
 
-def _custom_help() -> List[Tuple[str, str]]:
+def _custom_help() -> list[tuple[str, str]]:
     return [
         (
             "prune",
@@ -69,9 +68,9 @@ def _custom_help() -> List[Tuple[str, str]]:
 # history.
 
 
-def _collect_tool_ids(history: List[Any]) -> Tuple[Set[str], Set[str]]:
-    call_ids: Set[str] = set()
-    return_ids: Set[str] = set()
+def _collect_tool_ids(history: list[Any]) -> tuple[set[str], set[str]]:
+    call_ids: set[str] = set()
+    return_ids: set[str] = set()
     try:
         from pydantic_ai.messages import ToolCallPart, ToolReturnPart
     except Exception:
@@ -90,7 +89,7 @@ def _collect_tool_ids(history: List[Any]) -> Tuple[Set[str], Set[str]]:
     return call_ids, return_ids
 
 
-def _has_orphaned_returns(message: Any, call_ids: Set[str]) -> bool:
+def _has_orphaned_returns(message: Any, call_ids: set[str]) -> bool:
     try:
         from pydantic_ai.messages import ModelRequest, ToolReturnPart
 
@@ -109,7 +108,7 @@ def _has_orphaned_returns(message: Any, call_ids: Set[str]) -> bool:
         return False
 
 
-def _has_orphaned_calls(message: Any, return_ids: Set[str]) -> bool:
+def _has_orphaned_calls(message: Any, return_ids: set[str]) -> bool:
     try:
         from pydantic_ai.messages import ModelResponse, ToolCallPart
 
@@ -125,7 +124,7 @@ def _has_orphaned_calls(message: Any, return_ids: Set[str]) -> bool:
         return False
 
 
-def _prune_dangling_tool_fragments(history: List[Any]) -> Tuple[List[Any], int]:
+def _prune_dangling_tool_fragments(history: list[Any]) -> tuple[list[Any], int]:
     """Strip genuinely orphaned tool-call sequences from the tail."""
     pruned = 0
     while history:
@@ -147,16 +146,16 @@ def _prune_dangling_tool_fragments(history: List[Any]) -> Tuple[List[Any], int]:
 
 
 def _collect_removed_tool_call_ids(
-    history: List[Any],
-    drop_indices: Set[int],
-) -> Set[str]:
+    history: list[Any],
+    drop_indices: set[int],
+) -> set[str]:
     """Compute the full set of tool_call_ids whose returns must also go.
 
     Collects every ToolCallPart id living inside the messages we're
     dropping wholesale, so the matching ToolReturnPart fragments
     elsewhere in history can be cascaded out as orphans.
     """
-    removed: Set[str] = set()
+    removed: set[str] = set()
     try:
         from pydantic_ai.messages import ModelResponse, ToolCallPart
     except Exception:
@@ -194,7 +193,7 @@ def _message_carries_system_prompt(message: Any) -> bool:
     return False
 
 
-def _message_has_orphan_tool_return(message: Any, orphan_call_ids: Set[str]) -> bool:
+def _message_has_orphan_tool_return(message: Any, orphan_call_ids: set[str]) -> bool:
     """True if ``message`` is a ModelRequest carrying a ToolReturnPart
     whose ``tool_call_id`` is in ``orphan_call_ids``.
 
@@ -226,7 +225,7 @@ def _message_has_orphan_tool_return(message: Any, orphan_call_ids: Set[str]) -> 
     return False
 
 
-def _perform_prune(drop_indices: Set[int]) -> None:
+def _perform_prune(drop_indices: set[int]) -> None:
     """Apply the prune selection to current agent history.
 
     Operates on whole messages only: each index in ``drop_indices`` is
@@ -242,7 +241,7 @@ def _perform_prune(drop_indices: Set[int]) -> None:
         emit_error(f"/prune: could not get current agent – {exc}")
         return
 
-    history: List[Any] = list(agent.get_message_history())
+    history: list[Any] = list(agent.get_message_history())
     if not history:
         emit_warning("/prune: conversation history is empty – nothing to remove")
         return
@@ -266,7 +265,7 @@ def _perform_prune(drop_indices: Set[int]) -> None:
 
     before_count = len(history)
 
-    new_history: List[Any] = []
+    new_history: list[Any] = []
     msgs_dropped = 0
     cascade_dropped = 0
 
@@ -329,7 +328,7 @@ def _launch_menu() -> None:
         emit_error(f"/prune: could not get current agent – {exc}")
         return
 
-    raw_history: List[Any] = list(agent.get_message_history())
+    raw_history: list[Any] = list(agent.get_message_history())
 
     # Sibling modules within the same package.
     from code_puppy.plugins.prune.prune_menu import PruneMenu
@@ -376,7 +375,7 @@ def _launch_menu() -> None:
 # ── custom_command plumbing ────────────────────────────────────────────────
 
 
-def _handle_custom_command(command: str, name: str) -> Optional[bool]:
+def _handle_custom_command(command: str, name: str) -> bool | None:
     if name != "prune":
         return None
     return _handle_prune_command(command)

@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import requests
 
@@ -53,8 +53,8 @@ def _parse_renews_at(value: object) -> datetime | None:
         return None
 
     if parsed.tzinfo is None:
-        parsed = parsed.replace(tzinfo=timezone.utc)
-    return parsed.astimezone(timezone.utc)
+        parsed = parsed.replace(tzinfo=UTC)
+    return parsed.astimezone(UTC)
 
 
 def fetch_synthetic_quota(
@@ -127,7 +127,7 @@ def fetch_synthetic_quota(
     try:
         limit = float(subscription.get("limit"))
         requests_used = float(subscription.get("requests"))
-    except (TypeError, ValueError):
+    except TypeError, ValueError:
         return SyntheticQuotaResult(
             error="Synthetic API response has invalid numeric quota values."
         )

@@ -1,5 +1,7 @@
 """Tests for the error_logging module."""
 
+from __future__ import annotations
+
 import os
 import tempfile
 from unittest.mock import patch
@@ -67,7 +69,7 @@ class TestErrorLogging:
 
                 # Verify the log file was created and contains expected content
                 assert os.path.exists(test_log_file)
-                with open(test_log_file, "r") as f:
+                with open(test_log_file) as f:
                     content = f.read()
                     assert "ValueError" in content
                     assert "Test error message" in content
@@ -96,7 +98,7 @@ class TestErrorLogging:
                 except Exception as e:
                     log_error(e, include_traceback=False)
 
-                with open(test_log_file, "r") as f:
+                with open(test_log_file) as f:
                     content = f.read()
                     assert "RuntimeError" in content
                     assert "No traceback test" in content
@@ -123,7 +125,7 @@ class TestErrorLogging:
                 log_error_message("Simple error message", context="Simple context")
 
                 assert os.path.exists(test_log_file)
-                with open(test_log_file, "r") as f:
+                with open(test_log_file) as f:
                     content = f.read()
                     assert "Simple error message" in content
                     assert "Simple context" in content

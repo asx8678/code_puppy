@@ -15,7 +15,7 @@ plugin — exactly per the Contributing guide.
 
 from __future__ import annotations
 
-from typing import Any, Dict, Optional
+from typing import Any
 
 # The instruction override Anthropic's Claude Code CLI expects as the system
 # prompt. When using OAuth-authenticated claude-code models, the *real* system
@@ -41,7 +41,7 @@ def prepare_claude_code_prompt(
     system_prompt: str,
     user_prompt: str,
     prepend_system_to_user: bool = True,
-) -> Optional[Dict[str, Any]]:
+) -> dict[str, Any] | None:
     """Callback for the ``prepare_model_prompt`` hook.
 
     For claude-code models, swap in the Anthropic-expected instruction string

@@ -29,9 +29,12 @@ Event and silently swallow `RuntimeError`. This is essential because the
 raw stdin key listener runs in a daemon thread with no asyncio loop.
 """
 
+from __future__ import annotations
+
 import asyncio
 import threading
-from typing import Callable, List, Literal, Optional
+from collections.abc import Callable
+from typing import Literal
 
 SteerMode = Literal["now", "queue"]
 ResumeListener = Callable[[], None]
@@ -51,13 +54,13 @@ class PauseController:
         self._lock = threading.Lock()
         self._paused: bool = False
         # Two queues, one per delivery mode (see ``request_steer`` docs).
-        self._steer_queue_now: List[str] = []
-        self._steer_queue_queued: List[str] = []
-        self._resume_event: Optional[asyncio.Event] = None
-        self._loop: Optional[asyncio.AbstractEventLoop] = None
+        self._steer_queue_now: list[str] = []
+        self._steer_queue_queued: list[str] = []
+        self._resume_event: asyncio.Event | None = None
+        self._loop: asyncio.AbstractEventLoop | None = None
         # Resume listeners (tiny pub-sub for things that want to wake up
         # when paused -> not-paused, e.g. the renderer flushing its buffer).
-        self._resume_listeners: List[ResumeListener] = []
+        self._resume_listeners: list[ResumeListener] = []
         self._resume_listeners_lock = threading.Lock()
 
     # =========================================================================
@@ -171,7 +174,7 @@ class PauseController:
             else:
                 self._steer_queue_now.append(text)
 
-    def drain_pending_steer_now(self) -> List[str]:
+    def drain_pending_steer_now(self) -> list[str]:
         """Atomically pop + return every queued ``now``-mode steer.
 
         Owned by the steer ``history_processor`` — do NOT call from the
@@ -182,7 +185,7 @@ class PauseController:
             self._steer_queue_now = []
         return drained
 
-    def drain_pending_steer_queued(self) -> List[str]:
+    def drain_pending_steer_queued(self) -> list[str]:
         """Atomically pop + return every queued ``queue``-mode steer.
 
         Owned by ``_runtime._do_run``'s between-turns loop — do NOT call
@@ -203,7 +206,7 @@ class PauseController:
         with self._lock:
             return bool(self._steer_queue_queued)
 
-    def drain_pending_steer(self) -> List[str]:
+    def drain_pending_steer(self) -> list[str]:
         """Drain BOTH queues (queued-mode first, then now-mode).
 
         Used by the cancel-path + start-of-run hygiene helpers in
@@ -225,7 +228,7 @@ class PauseController:
     # Async wait
     # =========================================================================
 
-    async def wait_if_paused(self, timeout: Optional[float] = None) -> bool:
+    async def wait_if_paused(self, timeout: float | None = None) -> bool:
         """Block until the controller is resumed (or until timeout).
 
         - Returns True immediately when not paused.
@@ -246,7 +249,7 @@ class PauseController:
                 await event.wait()
             else:
                 await asyncio.wait_for(event.wait(), timeout=timeout)
-        except asyncio.TimeoutError:
+        except TimeoutError:
             # Force-resume so we don't leave the controller stuck.
             self.resume()
             return False
@@ -275,7 +278,7 @@ class PauseController:
 
     @staticmethod
     def _call_on_loop(
-        loop: Optional[asyncio.AbstractEventLoop],
+        loop: asyncio.AbstractEventLoop | None,
         fn,
     ) -> None:
         """Best-effort thread-safe call into the captured event loop.
@@ -301,7 +304,7 @@ class PauseController:
 # Module-level singleton
 # =============================================================================
 
-_pause_controller: Optional[PauseController] = None
+_pause_controller: PauseController | None = None
 _pause_controller_lock = threading.Lock()
 
 

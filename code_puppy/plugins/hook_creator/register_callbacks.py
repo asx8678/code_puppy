@@ -2,6 +2,8 @@
 Hook Creator Plugin - Simple command that injects MCP prompt
 """
 
+from __future__ import annotations
+
 from code_puppy.callbacks import register_callback
 from code_puppy.mcp_prompts.hook_creator import HOOK_CREATION_PROMPT
 from code_puppy.messaging import emit_info

@@ -30,6 +30,8 @@ Note: Fast Puppy requires models with strong tool/function calling support.
 Models without tool calling will notwork properly.
 """
 
+from __future__ import annotations
+
 import logging
 import os
 from typing import Any

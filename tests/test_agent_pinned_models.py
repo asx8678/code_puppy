@@ -1,5 +1,7 @@
 """Tests for agent-specific model pinning functionality."""
 
+from __future__ import annotations
+
 import os
 import tempfile
 

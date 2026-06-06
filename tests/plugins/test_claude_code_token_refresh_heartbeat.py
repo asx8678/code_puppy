@@ -1,5 +1,7 @@
 """Tests for Claude Code OAuth token refresh heartbeat."""
 
+from __future__ import annotations
+
 import asyncio
 from unittest.mock import patch
 

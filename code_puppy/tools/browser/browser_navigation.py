@@ -1,6 +1,8 @@
 """Browser navigation and control tools."""
 
-from typing import Any, Dict
+from __future__ import annotations
+
+from typing import Any
 
 from pydantic_ai import RunContext
 
@@ -10,7 +12,7 @@ from code_puppy.tools.common import generate_group_id
 from .browser_manager import get_session_browser_manager
 
 
-async def navigate_to_url(url: str) -> Dict[str, Any]:
+async def navigate_to_url(url: str) -> dict[str, Any]:
     """Navigate to a specific URL."""
     group_id = generate_group_id("browser_navigate", url)
     emit_info(
@@ -40,7 +42,7 @@ async def navigate_to_url(url: str) -> Dict[str, Any]:
         return {"success": False, "error": str(e), "url": url}
 
 
-async def get_page_info() -> Dict[str, Any]:
+async def get_page_info() -> dict[str, Any]:
     """Get current page information."""
     group_id = generate_group_id("browser_get_page_info")
     emit_info(
@@ -63,7 +65,7 @@ async def get_page_info() -> Dict[str, Any]:
         return {"success": False, "error": str(e)}
 
 
-async def go_back() -> Dict[str, Any]:
+async def go_back() -> dict[str, Any]:
     """Navigate back in browser history."""
     group_id = generate_group_id("browser_go_back")
     emit_info(
@@ -85,7 +87,7 @@ async def go_back() -> Dict[str, Any]:
         return {"success": False, "error": str(e)}
 
 
-async def go_forward() -> Dict[str, Any]:
+async def go_forward() -> dict[str, Any]:
     """Navigate forward in browser history."""
     group_id = generate_group_id("browser_go_forward")
     emit_info(
@@ -107,7 +109,7 @@ async def go_forward() -> Dict[str, Any]:
         return {"success": False, "error": str(e)}
 
 
-async def reload_page(wait_until: str = "domcontentloaded") -> Dict[str, Any]:
+async def reload_page(wait_until: str = "domcontentloaded") -> dict[str, Any]:
     """Reload the current page."""
     group_id = generate_group_id("browser_reload", wait_until)
     emit_info(
@@ -131,7 +133,7 @@ async def reload_page(wait_until: str = "domcontentloaded") -> Dict[str, Any]:
 
 async def wait_for_load_state(
     state: str = "domcontentloaded", timeout: int = 30000
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """Wait for page to reach a specific load state."""
     group_id = generate_group_id("browser_wait_for_load", f"{state}_{timeout}")
     emit_info(
@@ -157,7 +159,7 @@ def register_navigate_to_url(agent):
     """Register the navigation tool."""
 
     @agent.tool
-    async def browser_navigate(context: RunContext, url: str) -> Dict[str, Any]:
+    async def browser_navigate(context: RunContext, url: str) -> dict[str, Any]:
         """
         Navigate the browser to a specific URL.
 
@@ -174,7 +176,7 @@ def register_get_page_info(agent):
     """Register the page info tool."""
 
     @agent.tool
-    async def browser_get_page_info(context: RunContext) -> Dict[str, Any]:
+    async def browser_get_page_info(context: RunContext) -> dict[str, Any]:
         """
         Get information about the current page.
 
@@ -188,7 +190,7 @@ def register_browser_go_back(agent):
     """Register browser go back tool."""
 
     @agent.tool
-    async def browser_go_back(context: RunContext) -> Dict[str, Any]:
+    async def browser_go_back(context: RunContext) -> dict[str, Any]:
         """
         Navigate back in browser history.
 
@@ -202,7 +204,7 @@ def register_browser_go_forward(agent):
     """Register browser go forward tool."""
 
     @agent.tool
-    async def browser_go_forward(context: RunContext) -> Dict[str, Any]:
+    async def browser_go_forward(context: RunContext) -> dict[str, Any]:
         """
         Navigate forward in browser history.
 
@@ -218,7 +220,7 @@ def register_reload_page(agent):
     @agent.tool
     async def browser_reload(
         context: RunContext, wait_until: str = "domcontentloaded"
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         Reload the current page.
 
@@ -237,7 +239,7 @@ def register_wait_for_load_state(agent):
     @agent.tool
     async def browser_wait_for_load(
         context: RunContext, state: str = "domcontentloaded", timeout: int = 30000
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         Wait for the page to reach a specific load state.
 

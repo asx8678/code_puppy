@@ -4,6 +4,8 @@ This plugin handles user permission prompts for file operations,
 providing a consistent and extensible permission system.
 """
 
+from __future__ import annotations
+
 import difflib
 import os
 import threading
@@ -77,7 +79,7 @@ def _preview_delete_snippet(file_path: str, snippet: str) -> str | None:
         if not os.path.exists(file_path) or not os.path.isfile(file_path):
             return None
 
-        with open(file_path, "r", encoding="utf-8", errors="surrogateescape") as f:
+        with open(file_path, encoding="utf-8", errors="surrogateescape") as f:
             original = f.read()
 
         # Sanitize any surrogate characters
@@ -85,7 +87,7 @@ def _preview_delete_snippet(file_path: str, snippet: str) -> str | None:
             original = original.encode("utf-8", errors="surrogatepass").decode(
                 "utf-8", errors="replace"
             )
-        except (UnicodeEncodeError, UnicodeDecodeError):
+        except UnicodeEncodeError, UnicodeDecodeError:
             pass
 
         if snippet not in original:
@@ -140,7 +142,7 @@ def _preview_replace_in_file(
     try:
         file_path = os.path.abspath(file_path)
 
-        with open(file_path, "r", encoding="utf-8", errors="surrogateescape") as f:
+        with open(file_path, encoding="utf-8", errors="surrogateescape") as f:
             original = f.read()
 
         # Sanitize any surrogate characters
@@ -148,7 +150,7 @@ def _preview_replace_in_file(
             original = original.encode("utf-8", errors="surrogatepass").decode(
                 "utf-8", errors="replace"
             )
-        except (UnicodeEncodeError, UnicodeDecodeError):
+        except UnicodeEncodeError, UnicodeDecodeError:
             pass
 
         modified = original

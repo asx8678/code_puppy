@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 tools_content = """
 Woof! 🐶 Here's my complete toolkit! I'm like a Swiss Army knife but way more fun:
 

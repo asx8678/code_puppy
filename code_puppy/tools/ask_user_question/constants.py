@@ -1,5 +1,7 @@
 """Constants for the ask_user_question tool."""
 
+from __future__ import annotations
+
 from typing import Final
 
 # Question constraints

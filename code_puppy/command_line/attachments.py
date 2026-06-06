@@ -5,9 +5,9 @@ from __future__ import annotations
 import mimetypes
 import os
 import shlex
+from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Iterable, List, Sequence
 
 from pydantic_ai import BinaryContent, DocumentUrl, ImageUrl
 
@@ -51,9 +51,9 @@ class ProcessedPrompt:
     """Container for parsed input prompt and attachments."""
 
     prompt: str
-    attachments: List[PromptAttachment]
-    link_attachments: List[PromptLinkAttachment]
-    warnings: List[str]
+    attachments: list[PromptAttachment]
+    link_attachments: list[PromptLinkAttachment]
+    warnings: list[str]
 
 
 class AttachmentParsingError(RuntimeError):
@@ -319,10 +319,10 @@ def _detect_path_tokens(prompt: str) -> tuple[list[_DetectedPath], list[str]]:
 def parse_prompt_attachments(prompt: str) -> ProcessedPrompt:
     """Extract attachments from the prompt returning cleaned text and metadata."""
 
-    attachments: List[PromptAttachment] = []
+    attachments: list[PromptAttachment] = []
 
     detections, detection_warnings = _detect_path_tokens(prompt)
-    warnings: List[str] = list(detection_warnings)
+    warnings: list[str] = list(detection_warnings)
 
     link_attachments = [d.link for d in detections if d.link is not None]
 

@@ -1,5 +1,7 @@
 """Full coverage tests for tools/ask_user_question/handler.py."""
 
+from __future__ import annotations
+
 import asyncio
 import os
 import sys

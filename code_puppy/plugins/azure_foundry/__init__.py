@@ -12,4 +12,6 @@ Supported models:
 - Claude Haiku 4.5 (200K context)
 """
 
+from __future__ import annotations
+
 __version__ = "0.1.0"

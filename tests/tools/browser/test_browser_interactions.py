@@ -5,6 +5,8 @@ hovering, and other user actions. Achieves 70%+ coverage.
 """
 
 # Import the module directly to avoid circular imports
+from __future__ import annotations
+
 import sys
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch

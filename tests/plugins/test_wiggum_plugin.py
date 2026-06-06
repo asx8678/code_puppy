@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import importlib
-
 from unittest.mock import patch
 
 
@@ -111,10 +110,9 @@ def test_goal_command_has_puppy_themed_aliases():
     feels most natural. They MUST share the same handler so behavior is
     identical \u2014 if they ever diverge, that's a bug.
     """
-    from code_puppy.command_line.command_registry import get_all_commands
-
     # Importing the plugin module triggers @register_command via side-effect.
     import code_puppy.plugins.wiggum.register_callbacks  # noqa: F401
+    from code_puppy.command_line.command_registry import get_all_commands
 
     cmds = get_all_commands()
     goal = cmds.get("goal")

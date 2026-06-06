@@ -9,11 +9,13 @@ Both configurations are loaded and merged so that hooks from both levels
 coexist and execute together.
 """
 
+from __future__ import annotations
+
 import json
 import logging
 import os
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -21,7 +23,7 @@ PROJECT_HOOKS_FILE = ".claude/settings.json"
 GLOBAL_HOOKS_FILE = os.path.expanduser("~/.fast_puppy/hooks.json")
 
 
-def _deep_merge_hooks(base: Dict[str, Any], overlay: Dict[str, Any]) -> Dict[str, Any]:
+def _deep_merge_hooks(base: dict[str, Any], overlay: dict[str, Any]) -> dict[str, Any]:
     """
     Merge hook configurations, combining event types and hook groups.
 
@@ -61,7 +63,7 @@ def _deep_merge_hooks(base: Dict[str, Any], overlay: Dict[str, Any]) -> Dict[str
     return merged
 
 
-def load_hooks_config() -> Optional[Dict[str, Any]]:
+def load_hooks_config() -> dict[str, Any] | None:
     """
     Load and merge hooks configuration from available sources.
 
@@ -72,14 +74,14 @@ def load_hooks_config() -> Optional[Dict[str, Any]]:
     Returns:
         Configuration dictionary or None if no config found
     """
-    merged_config: Dict[str, Any] = {}
+    merged_config: dict[str, Any] = {}
 
     # Load global hooks first
     global_config_path = Path(GLOBAL_HOOKS_FILE)
 
     if global_config_path.exists():
         try:
-            with open(global_config_path, "r", encoding="utf-8") as f:
+            with open(global_config_path, encoding="utf-8") as f:
                 config = json.load(f)
             if "hooks" in config and isinstance(config["hooks"], dict):
                 logger.info(
@@ -99,7 +101,7 @@ def load_hooks_config() -> Optional[Dict[str, Any]]:
 
     if project_config_path.exists():
         try:
-            with open(project_config_path, "r", encoding="utf-8") as f:
+            with open(project_config_path, encoding="utf-8") as f:
                 config = json.load(f)
             hooks_config = config.get("hooks")
             if hooks_config:

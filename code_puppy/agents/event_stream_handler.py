@@ -1,10 +1,12 @@
 """Event stream handler for processing streaming events from agent runs."""
 
+from __future__ import annotations
+
 import asyncio
 import logging
 import math
 from collections.abc import AsyncIterable
-from typing import Any, Optional
+from typing import Any
 
 from pydantic_ai import PartDeltaEvent, PartEndEvent, PartStartEvent, RunContext
 from pydantic_ai.messages import (
@@ -93,10 +95,10 @@ def _fire_stream_event(event_type: str, event_data: Any) -> None:
 
 # Module-level console for streaming output
 # Set via set_streaming_console() to share console with spinner
-_streaming_console: Optional[Console] = None
+_streaming_console: Console | None = None
 
 
-def set_streaming_console(console: Optional[Console]) -> None:
+def set_streaming_console(console: Console | None) -> None:
     """Set the console used for streaming output.
 
     This should be called with the same console used by the spinner
@@ -274,7 +276,7 @@ async def event_stream_handler(
 
             try:
                 max_pause = float(get_value("max_pause_seconds") or 180.0)
-            except (TypeError, ValueError):
+            except TypeError, ValueError:
                 max_pause = 180.0
             resumed = await _pc.wait_if_paused(timeout=max_pause)
             if not resumed:

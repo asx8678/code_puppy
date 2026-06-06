@@ -32,7 +32,7 @@ from __future__ import annotations
 import json
 import math
 from dataclasses import dataclass
-from typing import Any, List, Optional
+from typing import Any
 
 # Thresholds (fractions of context window). Match the visual indicator buckets:
 #   <30% green, 30–<65% yellow, ≥65% red.
@@ -126,7 +126,7 @@ def _raw_tokens_for_message(message: Any) -> int:
     return total
 
 
-def _raw_tokens_for_pydantic_tools(tools: Optional[dict]) -> int:
+def _raw_tokens_for_pydantic_tools(tools: dict | None) -> int:
     """Estimate tokens contributed by pydantic-ai registered tools.
 
     Mirrors ``_history.estimate_context_overhead`` but uses the raw
@@ -149,7 +149,7 @@ def _raw_tokens_for_pydantic_tools(tools: Optional[dict]) -> int:
         if schema is not None:
             try:
                 total += _raw_estimate_tokens(json.dumps(schema))
-            except (TypeError, ValueError):
+            except TypeError, ValueError:
                 total += _raw_estimate_tokens(repr(schema))
         else:
             annotations = getattr(tool_obj, "__annotations__", None)
@@ -158,7 +158,7 @@ def _raw_tokens_for_pydantic_tools(tools: Optional[dict]) -> int:
     return total
 
 
-def _raw_tokens_for_mcp_servers(mcp_servers: Optional[List[Any]]) -> int:
+def _raw_tokens_for_mcp_servers(mcp_servers: list[Any] | None) -> int:
     """Estimate tokens contributed by MCP toolsets — raw, no multiplier."""
     if not mcp_servers:
         return 0
@@ -181,7 +181,7 @@ def _raw_tokens_for_mcp_servers(mcp_servers: Optional[List[Any]]) -> int:
             if schema:
                 try:
                     total += _raw_estimate_tokens(json.dumps(schema, sort_keys=True))
-                except (TypeError, ValueError):
+                except TypeError, ValueError:
                     total += _raw_estimate_tokens(repr(schema))
     return total
 
@@ -371,7 +371,7 @@ def compute_overhead_breakdown(agent) -> OverheadBreakdown:
     )
 
 
-def get_current_usage() -> Optional[ContextUsage]:
+def get_current_usage() -> ContextUsage | None:
     """Compute current context-window usage for the active agent.
 
     Returns ``None`` whenever any required piece of data is unavailable —

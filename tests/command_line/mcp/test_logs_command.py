@@ -1,5 +1,7 @@
 """Tests for code_puppy/command_line/mcp/logs_command.py"""
 
+from __future__ import annotations
+
 from unittest.mock import MagicMock, patch
 
 MODULE = "code_puppy.command_line.mcp.logs_command"

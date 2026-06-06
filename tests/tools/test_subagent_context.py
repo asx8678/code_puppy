@@ -4,6 +4,8 @@ This module tests the sub-agent context management functionality including
 ContextVar state tracking, context manager behavior, and async isolation.
 """
 
+from __future__ import annotations
+
 import asyncio
 import importlib.util
 from pathlib import Path

@@ -3,6 +3,8 @@
 Tests all functions and code paths with edge cases and error handling.
 """
 
+from __future__ import annotations
+
 from io import StringIO
 from unittest.mock import Mock, patch
 

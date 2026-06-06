@@ -4,11 +4,13 @@ Captures screenshots and returns them via ToolReturn with BinaryContent
 so multimodal models can directly see and analyze - no separate VQA agent needed.
 """
 
+from __future__ import annotations
+
 import time
 from datetime import datetime
 from pathlib import Path
 from tempfile import gettempdir, mkdtemp
-from typing import Any, Dict, Optional, Union
+from typing import Any
 
 from pydantic_ai import BinaryContent, RunContext, ToolReturn
 
@@ -31,10 +33,10 @@ def _build_screenshot_path(timestamp: str) -> Path:
 async def _capture_screenshot(
     page,
     full_page: bool = False,
-    element_selector: Optional[str] = None,
+    element_selector: str | None = None,
     save_screenshot: bool = True,
-    group_id: Optional[str] = None,
-) -> Dict[str, Any]:
+    group_id: str | None = None,
+) -> dict[str, Any]:
     """Internal screenshot capture function."""
     try:
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
@@ -51,7 +53,7 @@ async def _capture_screenshot(
         else:
             screenshot_bytes = await page.screenshot(full_page=full_page)
 
-        result: Dict[str, Any] = {
+        result: dict[str, Any] = {
             "success": True,
             "screenshot_bytes": screenshot_bytes,
             "timestamp": timestamp,
@@ -77,9 +79,9 @@ async def _capture_screenshot(
 
 async def take_screenshot(
     full_page: bool = False,
-    element_selector: Optional[str] = None,
+    element_selector: str | None = None,
     save_screenshot: bool = True,
-) -> Union[ToolReturn, Dict[str, Any]]:
+) -> ToolReturn | dict[str, Any]:
     """Take a screenshot of the browser page.
 
     Returns a ToolReturn with BinaryContent so multimodal models can
@@ -158,8 +160,8 @@ def register_take_screenshot_and_analyze(agent):
     async def browser_screenshot_analyze(
         context: RunContext,
         full_page: bool = False,
-        element_selector: Optional[str] = None,
-    ) -> Union[ToolReturn, Dict[str, Any]]:
+        element_selector: str | None = None,
+    ) -> ToolReturn | dict[str, Any]:
         """
         Take a screenshot of the browser page.
 

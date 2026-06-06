@@ -4,12 +4,14 @@ HTTP utilities module for fast-puppy.
 This module provides functions for creating properly configured HTTP clients.
 """
 
+from __future__ import annotations
+
 import asyncio
 import os
 import socket
 import time
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any, Dict, Optional, Union
+from typing import TYPE_CHECKING, Any
 
 import httpx
 
@@ -22,14 +24,14 @@ from code_puppy.config import get_http2
 class ProxyConfig:
     """Configuration for proxy and SSL settings."""
 
-    verify: Union[bool, str, None]
+    verify: bool | str | None
     trust_env: bool
     proxy_url: str | None
     disable_retry: bool
     http2_enabled: bool
 
 
-def _resolve_proxy_config(verify: Union[bool, str, None] = None) -> ProxyConfig:
+def _resolve_proxy_config(verify: bool | str | None = None) -> ProxyConfig:
     """Resolve proxy, SSL, and retry settings from environment.
 
     This centralizes the logic for detecting proxies, determining SSL verification,
@@ -213,8 +215,8 @@ def get_cert_bundle_path() -> str | None:
 
 def create_client(
     timeout: int = 180,
-    verify: Union[bool, str] = None,
-    headers: Optional[Dict[str, str]] = None,
+    verify: bool | str = None,
+    headers: dict[str, str] | None = None,
     retry_status_codes: tuple = (429, 502, 503, 504),
 ) -> httpx.Client:
     if verify is None:
@@ -236,8 +238,8 @@ def create_client(
 
 def create_async_client(
     timeout: int = 180,
-    verify: Union[bool, str] = None,
-    headers: Optional[Dict[str, str]] = None,
+    verify: bool | str = None,
+    headers: dict[str, str] | None = None,
     retry_status_codes: tuple = (429, 502, 503, 504),
     model_name: str = "",
 ) -> httpx.AsyncClient:
@@ -267,8 +269,8 @@ def create_async_client(
 
 def create_requests_session(
     timeout: float = 5.0,
-    verify: Union[bool, str] = None,
-    headers: Optional[Dict[str, str]] = None,
+    verify: bool | str = None,
+    headers: dict[str, str] | None = None,
 ) -> "requests.Session":
     import requests
 
@@ -287,11 +289,11 @@ def create_requests_session(
 
 def create_auth_headers(
     api_key: str, header_name: str = "Authorization"
-) -> Dict[str, str]:
+) -> dict[str, str]:
     return {header_name: f"Bearer {api_key}"}
 
 
-def resolve_env_var_in_header(headers: Dict[str, str]) -> Dict[str, str]:
+def resolve_env_var_in_header(headers: dict[str, str]) -> dict[str, str]:
     resolved_headers = {}
 
     for key, value in headers.items():
@@ -309,11 +311,11 @@ def resolve_env_var_in_header(headers: Dict[str, str]) -> Dict[str, str]:
 
 def create_reopenable_async_client(
     timeout: int = 180,
-    verify: Union[bool, str] = None,
-    headers: Optional[Dict[str, str]] = None,
+    verify: bool | str = None,
+    headers: dict[str, str] | None = None,
     retry_status_codes: tuple = (429, 502, 503, 504),
     model_name: str = "",
-) -> Union[ReopenableAsyncClient, httpx.AsyncClient]:
+) -> ReopenableAsyncClient | httpx.AsyncClient:
     config = _resolve_proxy_config(verify)
 
     base_kwargs = {

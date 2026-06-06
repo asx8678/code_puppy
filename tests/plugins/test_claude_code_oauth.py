@@ -4,6 +4,8 @@ Covers OAuth flow, token handling, API integration, error paths,
 model discovery, and CLI command handlers with comprehensive mocking.
 """
 
+from __future__ import annotations
+
 import json
 import time
 from unittest.mock import Mock, patch

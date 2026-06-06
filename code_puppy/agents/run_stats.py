@@ -27,7 +27,7 @@ from __future__ import annotations
 import math
 import time
 from threading import Lock
-from typing import Any, Optional, Tuple
+from typing import Any
 
 from pydantic_ai.messages import (
     TextPart,
@@ -156,7 +156,7 @@ class AgentRunStats:
     @classmethod
     def get_conversation_stats(
         cls,
-    ) -> Tuple[Optional[float], Optional[float]]:
+    ) -> tuple[float | None, float | None]:
         """Return ``(avg_ttft_seconds, avg_gen_tps)`` for the whole session.
 
         Folds in the currently-active cycle (if it has measurable values) so
@@ -188,9 +188,7 @@ class AgentRunStats:
             return avg_ttft, avg_gen
 
     @staticmethod
-    def format_conversation_stats(
-        avg_ttft: Optional[float], avg_gen: Optional[float]
-    ) -> str:
+    def format_conversation_stats(avg_ttft: float | None, avg_gen: float | None) -> str:
         """Format conversation-wide averages as a compact suffix string.
 
         Note: a space is intentionally inserted between the TTFT value and

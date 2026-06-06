@@ -10,7 +10,6 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Optional
 
 
 @dataclass(frozen=True, slots=True)
@@ -19,4 +18,4 @@ class InstallResult:
 
     success: bool
     message: str
-    installed_path: Optional[Path] = None
+    installed_path: Path | None = None

@@ -4,10 +4,10 @@ build-backend = "hatchling.build"
 
 [project]
 name = "fast-puppy"
-version = "0.3.1"
+version = "0.4.0"
 description = "Code generation agent"
 readme = "README.md"
-requires-python = ">=3.11,<3.15"
+requires-python = ">=3.14,<3.15"
 dependencies = [
     "pydantic-ai-slim[openai,anthropic,mcp]==1.56.0",
     "typer>=0.12.0",
@@ -34,7 +34,7 @@ dev-dependencies = [
     "pytest>=8.3.4",
     "pytest-cov>=6.1.1",
     "pytest-asyncio>=0.23.1",
-    "ruff>=0.11.11",
+    "ruff>=0.15",
     "pexpect>=4.9.0",
 ]
 authors = [
@@ -43,9 +43,6 @@ authors = [
 license = {text = "MIT"}
 classifiers = [
     "Programming Language :: Python :: 3",
-    "Programming Language :: Python :: 3.11",
-    "Programming Language :: Python :: 3.12",
-    "Programming Language :: Python :: 3.13",
     "Programming Language :: Python :: 3.14",
     "License :: OSI Approved :: MIT License",
     "Operating System :: OS Independent",
@@ -79,10 +76,40 @@ path = "code_puppy/models.json"
 
 [[tool.hatch.build.targets.sdist.include]]
 path = "code_puppy/models_dev_api.json"
+[tool.ruff]
+target-version = "py314"
+
+[tool.ruff.lint]
+# E4/E7/E9/F: ruff's default lint baseline (what CI checked before). I: import
+# sorting (also enforces the required `from __future__ import annotations` below).
+# UP: pyupgrade (PEP 585/604 typing modernization — the core of the sweep).
+# E501 (line-too-long) is intentionally NOT enforced — `ruff format` owns line
+# length. Not enabling PTH (no autofix, huge noisy report). B/C4/SIM deferred to a
+# later cleanup so this sweep stays "typing + imports" rather than logic rewrites.
+select = ["E4", "E7", "E9", "F", "I", "UP"]
+# UP042 (str+Enum -> StrEnum) changes str()/format output, which the messaging
+# renderers depend on; deferred as a behavioral change. UP047 (PEP 695 generics)
+# is a single-occurrence semantic syntax shift, deferred to a focused follow-up.
+# UP037 (de-quote annotations) is unsafe for forward references in runtime-
+# evaluated positions (module/class variable annotations, decorator-time tool
+# signatures) in files without `from __future__ import annotations`; its only
+# benefit is cosmetic, so it is disabled to avoid NameErrors at import time.
+ignore = ["UP042", "UP047", "UP037"]
+
 [tool.ruff.lint.per-file-ignores]
-"code_puppy/main.py" = ["E402"]
-"code_puppy/cli_runner.py" = ["E402"]
-"code_puppy/messaging/__init__.py" = ["E402"]
+# E402: deliberate deferred/ordered imports. I001: don't let isort reorder the
+# ordered import blocks in these files (import side-effects depend on order).
+"code_puppy/main.py" = ["E402", "I001"]
+"code_puppy/cli_runner.py" = ["E402", "I001"]
+"code_puppy/messaging/__init__.py" = ["E402", "I001"]
+
+[tool.ruff.lint.isort]
+# Require `from __future__ import annotations` in every module. This makes all
+# annotations lazy (PEP 563 strings), which is what makes the PEP 604 (`X | None`)
+# and PEP 585 (`list[...]`) rewrites safe even in runtime-evaluated annotation
+# positions (singletons, function defaults, pydantic models) — otherwise
+# `"ForwardRef" | None` raises TypeError at import time on the target interpreter.
+required-imports = ["from __future__ import annotations"]
 
 [tool.pytest.ini_options]
 addopts = "--cov=code_puppy --cov-report=term-missing"
@@ -100,6 +127,6 @@ dev = [
     "pytest>=8.3.4",
     "pytest-cov>=6.1.1",
     "pytest-asyncio>=0.23.1",
-    "ruff>=0.11.11",
+    "ruff>=0.15",
     "pexpect>=4.9.0",
 ]

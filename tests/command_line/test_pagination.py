@@ -1,5 +1,7 @@
 """Tests for shared command-line pagination helpers."""
 
+from __future__ import annotations
+
 import pytest
 
 from code_puppy.command_line.pagination import (

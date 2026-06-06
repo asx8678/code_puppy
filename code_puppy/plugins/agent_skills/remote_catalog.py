@@ -18,7 +18,7 @@ import logging
 import time
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any
 from urllib.parse import urljoin
 
 import httpx
@@ -98,7 +98,7 @@ def _cache_is_fresh(cache_path: Path, ttl_seconds: int) -> bool:
         return False
 
 
-def _read_cache(cache_path: Path) -> Optional[dict[str, Any]]:
+def _read_cache(cache_path: Path) -> dict[str, Any] | None:
     """Read and deserialize the cached catalog JSON from disk."""
 
     try:
@@ -130,7 +130,7 @@ def _write_cache(cache_path: Path, data: dict[str, Any]) -> bool:
         return False
 
 
-def _fetch_remote_json(url: str) -> Optional[dict[str, Any]]:
+def _fetch_remote_json(url: str) -> dict[str, Any] | None:
     """Fetch the skills catalog JSON from the remote URL."""
 
     headers = {
@@ -167,7 +167,7 @@ def _fetch_remote_json(url: str) -> Optional[dict[str, Any]]:
         return None
 
 
-def _parse_catalog(raw: dict[str, Any]) -> Optional[RemoteCatalogData]:
+def _parse_catalog(raw: dict[str, Any]) -> RemoteCatalogData | None:
     """Parse raw JSON dicts into a list of RemoteSkillEntry objects."""
 
     try:
@@ -259,7 +259,7 @@ def _parse_catalog(raw: dict[str, Any]) -> Optional[RemoteCatalogData]:
         return None
 
 
-def fetch_remote_catalog(force_refresh: bool = False) -> Optional[RemoteCatalogData]:
+def fetch_remote_catalog(force_refresh: bool = False) -> RemoteCatalogData | None:
     """Fetch the remote skills catalog with caching and offline fallback.
 
     Cache behavior:

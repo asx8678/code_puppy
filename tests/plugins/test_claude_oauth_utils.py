@@ -1,5 +1,7 @@
 """Comprehensive test coverage for Claude Code OAuth utilities."""
 
+from __future__ import annotations
+
 import base64
 import hashlib
 import json
@@ -435,7 +437,7 @@ class TestTokenStorage:
         # Verify file was created
         assert temp_token_file.exists()
 
-        with open(temp_token_file, "r") as f:
+        with open(temp_token_file) as f:
             saved_data = json.load(f)
 
         assert saved_data == test_tokens
@@ -608,7 +610,7 @@ class TestModelStorage:
 
         assert result is True
 
-        with open(temp_models_file, "r") as f:
+        with open(temp_models_file) as f:
             saved_data = json.load(f)
 
         assert saved_data == test_models

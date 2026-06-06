@@ -1,5 +1,7 @@
 """Coverage tests for agent_menu.py - exercises all uncovered code paths."""
 
+from __future__ import annotations
+
 import json
 import os
 import tempfile

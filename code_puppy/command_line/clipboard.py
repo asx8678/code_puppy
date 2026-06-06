@@ -8,13 +8,14 @@ Also provides a thread-safe ClipboardAttachmentManager for managing
 pending clipboard image attachments in the CLI.
 """
 
+from __future__ import annotations
+
 import io
 import logging
 import subprocess
 import sys
 import threading
 import time
-from typing import Optional
 
 # Try to import PIL - it's optional but needed for clipboard image support
 try:
@@ -52,7 +53,7 @@ CLIPBOARD_RATE_LIMIT_SECONDS: float = 0.5  # SEC-CLIP-004: Max 2 captures per se
 _last_clipboard_capture: float = 0.0
 
 
-def _safe_open_image(image_bytes: bytes) -> Optional["Image.Image"]:
+def _safe_open_image(image_bytes: bytes) -> "Image.Image" | None:
     """Safely open and verify an image from bytes.
 
     Verifies image integrity to protect against malicious images.
@@ -88,7 +89,7 @@ def _safe_open_image(image_bytes: bytes) -> Optional["Image.Image"]:
         return None
 
 
-def _check_linux_clipboard_tool() -> Optional[str]:
+def _check_linux_clipboard_tool() -> str | None:
     """Check which Linux clipboard tool is available.
 
     Returns:
@@ -102,7 +103,7 @@ def _check_linux_clipboard_tool() -> Optional[str]:
             timeout=5,
         )
         return "wl-paste"
-    except (FileNotFoundError, subprocess.TimeoutExpired):
+    except FileNotFoundError, subprocess.TimeoutExpired:
         pass
 
     # Check for xclip (X11)
@@ -113,13 +114,13 @@ def _check_linux_clipboard_tool() -> Optional[str]:
             timeout=5,
         )
         return "xclip"
-    except (FileNotFoundError, subprocess.TimeoutExpired):
+    except FileNotFoundError, subprocess.TimeoutExpired:
         pass
 
     return None
 
 
-def _get_linux_clipboard_image() -> Optional[bytes]:
+def _get_linux_clipboard_image() -> bytes | None:
     """Get clipboard image on Linux using xclip or wl-paste.
 
     Returns:
@@ -246,7 +247,7 @@ def has_image_in_clipboard() -> bool:
                     text=True,
                 )
                 return "image/png" in result.stdout or "image/" in result.stdout
-        except (subprocess.TimeoutExpired, Exception):
+        except subprocess.TimeoutExpired, Exception:
             return False
 
         return False
@@ -263,7 +264,7 @@ def has_image_in_clipboard() -> bool:
         return False
 
 
-def get_clipboard_image() -> Optional[bytes]:
+def get_clipboard_image() -> bytes | None:
     """Get clipboard image as PNG bytes.
 
     Handles cross-platform clipboard access:
@@ -275,7 +276,7 @@ def get_clipboard_image() -> Optional[bytes]:
     Returns:
         PNG bytes if clipboard contains an image, None otherwise.
     """
-    image_bytes: Optional[bytes] = None
+    image_bytes: bytes | None = None
 
     # Linux path - use command line tools
     if sys.platform == "linux":
@@ -363,7 +364,7 @@ def get_clipboard_image() -> Optional[bytes]:
         return None
 
 
-def get_clipboard_image_as_binary_content() -> Optional["BinaryContent"]:
+def get_clipboard_image_as_binary_content() -> "BinaryContent" | None:
     """Get clipboard image as pydantic-ai BinaryContent.
 
     This is the preferred method for integrating clipboard images
@@ -477,7 +478,7 @@ class ClipboardAttachmentManager:
 
 
 # Global singleton instance
-_clipboard_manager: Optional[ClipboardAttachmentManager] = None
+_clipboard_manager: ClipboardAttachmentManager | None = None
 _manager_lock = threading.Lock()
 
 
@@ -498,7 +499,7 @@ def get_clipboard_manager() -> ClipboardAttachmentManager:
     return _clipboard_manager
 
 
-def capture_clipboard_image_to_pending() -> Optional[str]:
+def capture_clipboard_image_to_pending() -> str | None:
     """Convenience function to capture clipboard image and add to pending.
 
     This combines get_clipboard_image() and add_image() into a single call.

@@ -20,10 +20,11 @@ Two flush paths cover both wake-up modes:
    pause clears.
 """
 
+from __future__ import annotations
+
 import asyncio
 import threading
 from abc import ABC, abstractmethod
-from typing import List, Optional
 
 from rich.console import Console
 from rich.markdown import Markdown
@@ -92,7 +93,7 @@ class MessageRenderer(ABC):
             try:
                 message = await asyncio.wait_for(self.queue.get_async(), timeout=0.1)
                 await self.render_message(message)
-            except asyncio.TimeoutError:
+            except TimeoutError:
                 continue
             except asyncio.CancelledError:
                 break
@@ -104,13 +105,13 @@ class MessageRenderer(ABC):
                 sys.stderr.write(f"Error rendering message: {e}\n")
 
 
-def _classify_style(message: UIMessage) -> Optional[str]:
+def _classify_style(message: UIMessage) -> str | None:
     """Map a message's type to a Rich style string (or None for default).
 
     Shared by both renderers so styling stays consistent and the file
     isn't duplicating a chain of ``if`` branches.
     """
-    style: Optional[str]
+    style: str | None
     if message.type == MessageType.ERROR:
         style = "bold red"
     elif message.type == MessageType.WARNING:
@@ -168,10 +169,10 @@ class InteractiveRenderer(MessageRenderer):
     path and gets the full treatment).
     """
 
-    def __init__(self, queue: MessageQueue, console: Optional[Console] = None):
+    def __init__(self, queue: MessageQueue, console: Console | None = None):
         super().__init__(queue)
         self.console = console or Console()
-        self._paused_buffer: List[UIMessage] = []
+        self._paused_buffer: list[UIMessage] = []
         self._buffer_lock = threading.Lock()
 
     async def render_message(self, message: UIMessage):
@@ -222,12 +223,12 @@ class SynchronousInteractiveRenderer:
     those are blocking prompts the runtime is waiting on.
     """
 
-    def __init__(self, queue: MessageQueue, console: Optional[Console] = None):
+    def __init__(self, queue: MessageQueue, console: Console | None = None):
         self.queue = queue
         self.console = console or Console()
         self._running = False
         self._thread = None
-        self._paused_buffer: List[UIMessage] = []
+        self._paused_buffer: list[UIMessage] = []
         self._buffer_lock = threading.Lock()
 
     def start(self):
@@ -353,7 +354,7 @@ class SynchronousInteractiveRenderer:
             from .message_queue import provide_prompt_response
 
             provide_prompt_response(prompt_id, response)
-        except (EOFError, KeyboardInterrupt):
+        except EOFError, KeyboardInterrupt:
             from .message_queue import provide_prompt_response
 
             provide_prompt_response(prompt_id, "")

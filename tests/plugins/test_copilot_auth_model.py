@@ -5,6 +5,8 @@ the Copilot session token before every HTTP request, preventing the
 30-minute token expiry issue during long-running conversations.
 """
 
+from __future__ import annotations
+
 from dataclasses import dataclass
 from unittest.mock import patch
 

@@ -23,7 +23,7 @@ from __future__ import annotations
 import hashlib
 import json
 import logging
-from typing import Any, Dict
+from typing import Any
 
 import httpx
 from httpx import AsyncByteStream
@@ -66,7 +66,7 @@ class _OpaqueCapturingStream(AsyncByteStream):
     def __init__(
         self,
         inner_stream: Any,
-        opaque_cache: Dict[str, str],
+        opaque_cache: dict[str, str],
         thinking_field: str,
     ):
         self._inner = inner_stream
@@ -117,7 +117,7 @@ class _OpaqueCapturingStream(AsyncByteStream):
             try:
                 event = json.loads(data_str)
                 self._extract_from_event(event)
-            except (json.JSONDecodeError, TypeError):
+            except json.JSONDecodeError, TypeError:
                 pass
 
     def _extract_from_event(self, event: dict) -> None:
@@ -166,7 +166,7 @@ class _OpaqueCapturingStream(AsyncByteStream):
 
 def _capture_from_content(
     content: bytes,
-    opaque_cache: Dict[str, str],
+    opaque_cache: dict[str, str],
     thinking_field: str,
 ) -> None:
     """Extract ``reasoning_opaque`` from an already-read response body."""
@@ -178,7 +178,7 @@ def _capture_from_content(
             opaque = msg.get("reasoning_opaque")
             if text and opaque:
                 opaque_cache[_text_key(text)] = opaque
-    except (json.JSONDecodeError, TypeError, AttributeError):
+    except json.JSONDecodeError, TypeError, AttributeError:
         pass
 
 
@@ -211,7 +211,7 @@ def _rebuild_request_body(
 
 def _inject_opaque_into_request(
     request: httpx.Request,
-    opaque_cache: Dict[str, str],
+    opaque_cache: dict[str, str],
     client: httpx.AsyncClient,
     thinking_field: str,
 ) -> None:
@@ -355,7 +355,7 @@ def patch_client_for_reasoning_opaque(
         thinking_field: JSON field name that carries the thinking content
             (default ``"reasoning_text"`` — the Copilot Claude convention).
     """
-    opaque_cache: Dict[str, str] = {}
+    opaque_cache: dict[str, str] = {}
     original_send = client.send
 
     async def _patched_send(

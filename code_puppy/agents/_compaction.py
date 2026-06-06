@@ -14,7 +14,8 @@ let the next ``history_processor`` invocation handle it.
 from __future__ import annotations
 
 import dataclasses
-from typing import Any, Callable, List, Optional, Set, Tuple, Union
+from collections.abc import Callable
+from typing import Any
 
 from pydantic_ai.messages import (
     ModelMessage,
@@ -63,7 +64,7 @@ _SUMMARIZATION_INSTRUCTIONS = (
 # weak reference to scheduled tasks, so without this set a fire-and-forget task
 # can be garbage-collected mid-flight (and its exception silently dropped). The
 # done-callback discards the task and retrieves any exception so it's observed.
-_PENDING_PRECOMPACT_TASKS: Set[Any] = set()
+_PENDING_PRECOMPACT_TASKS: set[Any] = set()
 
 
 def _on_precompact_task_done(task: Any) -> None:
@@ -79,7 +80,7 @@ def _on_precompact_task_done(task: Any) -> None:
             )
 
 
-def _find_safe_split_index(messages: List[ModelMessage], initial_split_idx: int) -> int:
+def _find_safe_split_index(messages: list[ModelMessage], initial_split_idx: int) -> int:
     """Adjust split index so we never sever a tool_call from its tool_return.
 
     Uses the shared :func:`_history._classify_tool_part` classifier so builtin
@@ -90,7 +91,7 @@ def _find_safe_split_index(messages: List[ModelMessage], initial_split_idx: int)
     if initial_split_idx <= 1:
         return initial_split_idx
 
-    protected_tool_return_ids: Set[str] = set()
+    protected_tool_return_ids: set[str] = set()
     for msg in messages[initial_split_idx:]:
         for part in getattr(msg, "parts", []) or []:
             if _classify_tool_part(part) == "return":
@@ -121,10 +122,10 @@ def _find_safe_split_index(messages: List[ModelMessage], initial_split_idx: int)
 
 
 def split_for_protected_summarization(
-    messages: List[ModelMessage],
+    messages: list[ModelMessage],
     protected_tokens: int,
-    model_name: Optional[str] = None,
-) -> Tuple[List[ModelMessage], List[ModelMessage]]:
+    model_name: str | None = None,
+) -> tuple[list[ModelMessage], list[ModelMessage]]:
     """Split messages into (to_summarize, protected) groups.
 
     The system message (index 0) is always protected. Starting from the most
@@ -139,7 +140,7 @@ def split_for_protected_summarization(
     system_message = messages[0]
     system_tokens = estimate_tokens_for_message(system_message, model_name)
 
-    protected_messages: List[ModelMessage] = []
+    protected_messages: list[ModelMessage] = []
     running_tokens = system_tokens
 
     for i in range(len(messages) - 1, 0, -1):
@@ -166,10 +167,10 @@ def split_for_protected_summarization(
 
 
 def truncate(
-    messages: List[ModelMessage],
+    messages: list[ModelMessage],
     protected_tokens: int,
-    model_name: Optional[str] = None,
-) -> List[ModelMessage]:
+    model_name: str | None = None,
+) -> list[ModelMessage]:
     """Drop middle messages, keeping system prompt, optional thinking, and recent tail."""
     import queue
 
@@ -177,7 +178,7 @@ def truncate(
         return messages
 
     emit_info("Truncating message history to manage token usage")
-    result: List[ModelMessage] = [messages[0]]
+    result: list[ModelMessage] = [messages[0]]
 
     # Preserve the 2nd message if it's an extended-thinking context.
     skip_second = False
@@ -205,11 +206,11 @@ def truncate(
 
 
 def _run_summarization_core(
-    messages: List[ModelMessage],
+    messages: list[ModelMessage],
     protected_tokens: int,
     with_protection: bool,
-    model_name: Optional[str],
-) -> Tuple[List[ModelMessage], List[ModelMessage]]:
+    model_name: str | None,
+) -> tuple[list[ModelMessage], list[ModelMessage]]:
     """Inner summarization that propagates exceptions to the caller.
 
     Returns ``(compacted_messages, summarized_source_messages)`` or raises
@@ -247,7 +248,7 @@ def _run_summarization_core(
         )
         new_messages = [ModelRequest([TextPart(str(new_messages))])]
 
-    compacted: List[ModelMessage] = [system_message] + list(new_messages)
+    compacted: list[ModelMessage] = [system_message] + list(new_messages)
     compacted.extend(msg for msg in protected_messages if msg is not system_message)
     return prune_interrupted_tool_calls(compacted), messages_to_summarize
 
@@ -265,11 +266,11 @@ def _log_summarization_failure(error: Exception, fallback_note: str = "") -> Non
 
 
 def summarize(
-    messages: List[ModelMessage],
+    messages: list[ModelMessage],
     protected_tokens: int,
     with_protection: bool = True,
-    model_name: Optional[str] = None,
-) -> Tuple[List[ModelMessage], List[ModelMessage]]:
+    model_name: str | None = None,
+) -> tuple[list[ModelMessage], list[ModelMessage]]:
     """Summarize older messages, preserving the protected recent tail.
 
     Returns ``(compacted_messages, summarized_source_messages)``. On failure
@@ -288,10 +289,10 @@ def summarize(
 
 
 def _truncate_with_dropped(
-    filtered: List[ModelMessage],
+    filtered: list[ModelMessage],
     protected_tokens: int,
-    model_name: Optional[str],
-) -> Tuple[List[ModelMessage], List[ModelMessage]]:
+    model_name: str | None,
+) -> tuple[list[ModelMessage], list[ModelMessage]]:
     """Truncate ``filtered`` and compute which messages got dropped.
 
     Shared by the truncation strategy and the summarization-failure fallback
@@ -305,10 +306,10 @@ def _truncate_with_dropped(
 
 def compact(
     agent: Any,
-    messages: List[ModelMessage],
+    messages: list[ModelMessage],
     model_max: int,
-    context_overhead: Union[int, Callable[[], int]],
-) -> Tuple[List[ModelMessage], List[ModelMessage]]:
+    context_overhead: int | Callable[[], int],
+) -> tuple[list[ModelMessage], list[ModelMessage]]:
     """Unified compaction entrypoint. Replaces ``message_history_processor``.
 
     Args:
@@ -328,7 +329,7 @@ def compact(
     """
     # Resolve model name once so all downstream estimators apply the same
     # per-model calibration multiplier.
-    model_name: Optional[str] = None
+    model_name: str | None = None
     if agent is not None:
         try:
             model_name = agent.get_model_name()
@@ -438,10 +439,10 @@ def compact(
 
 
 def _strip_empty_thinking_parts(
-    messages: List[ModelMessage],
-) -> Tuple[List[ModelMessage], int]:
+    messages: list[ModelMessage],
+) -> tuple[list[ModelMessage], int]:
     """Remove empty ThinkingParts; drop messages rendered empty by removal."""
-    cleaned: List[ModelMessage] = []
+    cleaned: list[ModelMessage] = []
     filtered_count = 0
     for msg in messages:
         parts = list(msg.parts)
@@ -468,7 +469,7 @@ def _strip_empty_thinking_parts(
     return cleaned, filtered_count
 
 
-def make_history_processor(agent: Any) -> Callable[..., List[ModelMessage]]:
+def make_history_processor(agent: Any) -> Callable[..., list[ModelMessage]]:
     """Build the pydantic-ai ``history_processors`` callback for ``agent``.
 
     The returned closure:
@@ -489,12 +490,12 @@ def make_history_processor(agent: Any) -> Callable[..., List[ModelMessage]]:
       - ``agent.name`` / ``agent.session_id`` (optional)
     """
 
-    def history_processor(messages: List[ModelMessage]) -> List[ModelMessage]:
+    def history_processor(messages: list[ModelMessage]) -> list[ModelMessage]:
         # pydantic-ai picks 1-arg vs 2-arg processor by inspecting the first
         # parameter's type annotation (must be ``RunContext`` for 2-arg form).
         # We don't need ctx, so we use the 1-arg form.
-        history: List[ModelMessage] = agent._message_history
-        compacted_hashes: Set[int] = agent._compacted_message_hashes
+        history: list[ModelMessage] = agent._message_history
+        compacted_hashes: set[int] = agent._compacted_message_hashes
 
         on_message_history_processor_start(
             agent_name=getattr(agent, "name", None),

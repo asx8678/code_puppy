@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import asyncio
 from unittest.mock import patch
 
@@ -11,8 +13,8 @@ from code_puppy.callbacks import (
     on_custom_command,
     on_delete_snippet,
     on_edit_file,
-    on_load_prompt,
     on_load_model_config,
+    on_load_prompt,
     on_post_tool_call,
     on_pre_tool_call,
     on_replace_in_file,

@@ -1,5 +1,7 @@
 """Full coverage tests for mcp_/status_tracker.py."""
 
+from __future__ import annotations
+
 from datetime import datetime, timedelta
 
 from code_puppy.mcp_.managed_server import ServerState

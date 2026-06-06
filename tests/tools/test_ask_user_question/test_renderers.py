@@ -1,5 +1,7 @@
 """Tests for ask_user_question renderers module."""
 
+from __future__ import annotations
+
 import re
 
 from code_puppy.tools.ask_user_question.models import Question, QuestionOption

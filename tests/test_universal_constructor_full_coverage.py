@@ -1,5 +1,7 @@
 """Full coverage tests for tools/universal_constructor.py."""
 
+from __future__ import annotations
+
 from contextlib import contextmanager
 from unittest.mock import MagicMock, patch
 

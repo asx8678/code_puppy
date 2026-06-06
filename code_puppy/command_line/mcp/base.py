@@ -4,6 +4,8 @@ MCP Command Base Classes - Shared functionality for MCP command handlers.
 Provides base classes and common utilities used across all MCP command modules.
 """
 
+from __future__ import annotations
+
 import logging
 
 from code_puppy.mcp_.manager import get_mcp_manager

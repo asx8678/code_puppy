@@ -4,7 +4,10 @@ These specifically target the registered agent tool (not the bare helper),
 because that's where malformed payloads from a model would arrive.
 """
 
-from typing import Callable, Dict, Any
+from __future__ import annotations
+
+from collections.abc import Callable
+from typing import Any
 from unittest.mock import patch
 
 import pytest
@@ -25,14 +28,14 @@ class _CapturingAgent:
     """Tiny fake agent that captures @agent.tool decorated functions."""
 
     def __init__(self) -> None:
-        self.captured: Dict[str, Callable[..., Any]] = {}
+        self.captured: dict[str, Callable[..., Any]] = {}
 
     def tool(self, func: Callable[..., Any]) -> Callable[..., Any]:
         self.captured[func.__name__] = func
         return func
 
 
-def _get_replace_in_file_tool() -> Callable[..., Dict[str, Any]]:
+def _get_replace_in_file_tool() -> Callable[..., dict[str, Any]]:
     agent = _CapturingAgent()
     register_replace_in_file(agent)
     return agent.captured["replace_in_file"]

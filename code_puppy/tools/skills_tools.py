@@ -1,7 +1,8 @@
 """Skills tools - dedicated tools for Agent Skills integration."""
 
+from __future__ import annotations
+
 import logging
-from typing import List, Optional
 
 from pydantic import BaseModel
 from pydantic_ai import RunContext
@@ -20,10 +21,10 @@ logger = logging.getLogger(__name__)
 class SkillListOutput(BaseModel):
     """Output for list_or_search_skills tool."""
 
-    skills: List[dict]  # Each has: name, description, path, tags
+    skills: list[dict]  # Each has: name, description, path, tags
     total_count: int
-    query: Optional[str] = None  # The search query if provided
-    error: Optional[str] = None
+    query: str | None = None  # The search query if provided
+    error: str | None = None
 
 
 class SkillActivateOutput(BaseModel):
@@ -31,8 +32,8 @@ class SkillActivateOutput(BaseModel):
 
     skill_name: str
     content: str  # Full SKILL.md content
-    resources: List[str]  # Available resource files
-    error: Optional[str] = None
+    resources: list[str]  # Available resource files
+    error: str | None = None
 
 
 def register_activate_skill(agent):
@@ -125,7 +126,7 @@ def register_list_or_search_skills(agent):
 
     @agent.tool
     async def list_or_search_skills(
-        context: RunContext, query: Optional[str] = None
+        context: RunContext, query: str | None = None
     ) -> SkillListOutput:
         """List available skills, optionally filtered by search query.
 

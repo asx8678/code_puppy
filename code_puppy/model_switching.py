@@ -2,12 +2,10 @@
 
 from __future__ import annotations
 
-from typing import Optional
-
 from code_puppy.config import set_model_name
 
 
-def _get_effective_agent_model(agent) -> Optional[str]:
+def _get_effective_agent_model(agent) -> str | None:
     """Safely fetch the effective model name for an agent."""
     try:
         return agent.get_model_name()

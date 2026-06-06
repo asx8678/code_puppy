@@ -4,8 +4,10 @@ Comprehensive tests for MessageQueue functionality.
 Tests cover message queueing, buffering, rendering state, and async operations.
 """
 
+from __future__ import annotations
+
 import threading
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from rich.table import Table
 from rich.text import Text
@@ -26,7 +28,7 @@ class TestUIMessage:
 
     def test_ui_message_with_custom_timestamp(self):
         """Test creating a UIMessage with custom timestamp."""
-        ts = datetime.now(timezone.utc)
+        ts = datetime.now(UTC)
         msg = UIMessage(type=MessageType.INFO, content="Test", timestamp=ts)
         assert msg.timestamp == ts
 

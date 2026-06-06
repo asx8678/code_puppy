@@ -4,6 +4,8 @@ Tests the global spinner management functions including registration,
 pausing/resuming, and context info updates.
 """
 
+from __future__ import annotations
+
 from unittest.mock import MagicMock, patch
 
 import pytest

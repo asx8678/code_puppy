@@ -12,13 +12,14 @@ from __future__ import annotations
 
 import json
 import sqlite3
+from collections.abc import Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any, Iterator
+from typing import Any
 
-from .config import DB_PATH, MAX_DRAWER_CHARS, KENNEL_ROOT
+from .config import DB_PATH, KENNEL_ROOT, MAX_DRAWER_CHARS
 from .schema import PRAGMAS, SCHEMA_SQL
 
 
@@ -36,7 +37,7 @@ class Drawer:
 
 
 def _now_iso() -> str:
-    return datetime.now(timezone.utc).isoformat(timespec="seconds")
+    return datetime.now(UTC).isoformat(timespec="seconds")
 
 
 def _ensure_root() -> None:

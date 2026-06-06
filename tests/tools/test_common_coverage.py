@@ -8,6 +8,8 @@ Target functions:
 - Diff utilities (brighten_hex, _extract_file_extension_from_diff, _format_diff_with_syntax_highlighting)
 """
 
+from __future__ import annotations
+
 import importlib.util
 from pathlib import Path
 from unittest.mock import patch

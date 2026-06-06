@@ -5,13 +5,15 @@ This module provides continuous health monitoring for MCP servers with
 automatic recovery actions when consecutive failures are detected.
 """
 
+from __future__ import annotations
+
 import asyncio
 import logging
 import time
 from collections import defaultdict, deque
+from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Callable, Dict, List, Optional
 
 import httpx
 
@@ -31,8 +33,8 @@ class HealthStatus:
 
     timestamp: datetime
     is_healthy: bool
-    latency_ms: Optional[float]
-    error: Optional[str]
+    latency_ms: float | None
+    error: str | None
     check_type: str  # "ping", "list_tools", "get_request", etc.
 
 
@@ -42,7 +44,7 @@ class HealthCheckResult:
 
     success: bool
     latency_ms: float
-    error: Optional[str]
+    error: str | None
 
 
 class HealthMonitor:
@@ -76,20 +78,20 @@ class HealthMonitor:
             check_interval: Interval between health checks in seconds
         """
         self.check_interval = check_interval
-        self.monitoring_tasks: Dict[str, asyncio.Task] = {}
-        self.health_history: Dict[str, deque] = defaultdict(lambda: deque(maxlen=1000))
-        self.custom_health_checks: Dict[str, Callable] = {}
-        self.consecutive_failures: Dict[str, int] = defaultdict(int)
-        self.last_check_time: Dict[str, datetime] = {}
+        self.monitoring_tasks: dict[str, asyncio.Task] = {}
+        self.health_history: dict[str, deque] = defaultdict(lambda: deque(maxlen=1000))
+        self.custom_health_checks: dict[str, Callable] = {}
+        self.consecutive_failures: dict[str, int] = defaultdict(int)
+        self.last_check_time: dict[str, datetime] = {}
         # Timestamp of the last recovery attempt per server, used to enforce a
         # cooldown so we don't thrash disable/enable on every failed poll.
-        self.last_recovery_time: Dict[str, float] = {}
+        self.last_recovery_time: dict[str, float] = {}
         self._lock = asyncio.Lock()
 
         # A single long-lived HTTP client reused across all health checks.
         # Creating a fresh client per check (on a repeating per-server loop)
         # is wasteful and bypasses proxy/cert configuration. Created lazily.
-        self._http_client: Optional[httpx.AsyncClient] = None
+        self._http_client: httpx.AsyncClient | None = None
 
         # Register default health checks for each server type
         self._register_default_health_checks()
@@ -266,7 +268,7 @@ class HealthMonitor:
 
     async def get_health_history(
         self, server_id: str, limit: int = 100
-    ) -> List[HealthStatus]:
+    ) -> list[HealthStatus]:
         """
         Get health check history for a server.
 

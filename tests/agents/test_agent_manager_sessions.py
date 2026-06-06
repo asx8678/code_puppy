@@ -8,6 +8,8 @@ Covers:
 - Session caching
 """
 
+from __future__ import annotations
+
 import json
 import os
 import platform
@@ -166,7 +168,7 @@ class TestSessionDataPersistence:
             ):
                 _save_session_data(sessions)
 
-            with open(session_file, "r") as f:
+            with open(session_file) as f:
                 loaded = json.load(f)
 
             assert loaded["session_123"] == "fast-puppy"

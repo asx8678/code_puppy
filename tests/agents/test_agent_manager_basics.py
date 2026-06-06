@@ -1,5 +1,7 @@
 """Tests for agent manager core functionality."""
 
+from __future__ import annotations
+
 import importlib
 import tempfile
 from pathlib import Path

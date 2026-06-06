@@ -1,5 +1,7 @@
 """Tests for code_puppy.messaging.bus - MessageBus and global functions."""
 
+from __future__ import annotations
+
 import asyncio
 import queue
 from unittest.mock import patch

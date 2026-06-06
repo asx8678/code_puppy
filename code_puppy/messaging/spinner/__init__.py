@@ -4,6 +4,8 @@ Shared spinner implementation for CLI mode.
 This module provides consistent spinner animations across different UI modes.
 """
 
+from __future__ import annotations
+
 import threading
 
 from .console_spinner import ConsoleSpinner

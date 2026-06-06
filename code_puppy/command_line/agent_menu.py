@@ -4,10 +4,11 @@ Provides a split-panel interface for browsing and selecting agents
 with live preview of agent details.
 """
 
+from __future__ import annotations
+
 import asyncio
 import sys
 import unicodedata
-from typing import List, Optional, Tuple
 
 from prompt_toolkit.application import Application
 from prompt_toolkit.key_binding import KeyBindings
@@ -24,7 +25,6 @@ from code_puppy.agents import (
     is_clone_agent_name,
 )
 from code_puppy.command_line.mcp_binding_menu import interactive_mcp_binding_menu
-from code_puppy.mcp_.agent_bindings import get_bound_servers
 from code_puppy.command_line.model_picker_completion import (
     ModelSelectionMenu,
     load_model_names,
@@ -40,6 +40,7 @@ from code_puppy.config import (
     get_agent_pinned_model,
     set_agent_pinned_model,
 )
+from code_puppy.mcp_.agent_bindings import get_bound_servers
 from code_puppy.messaging import emit_info, emit_success, emit_warning
 from code_puppy.tools.command_runner import set_awaiting_user_input
 
@@ -64,10 +65,10 @@ PAGE_SIZE = 10  # Agents per page
 # Solution: queue the reload here and let the caller drain the queue on the
 # main event loop *after* ``future.result()`` returns. That way MCP tasks
 # live on the main loop where they belong.
-_PENDING_PIN_RELOADS: List[Tuple[str, Optional[str]]] = []
+_PENDING_PIN_RELOADS: list[tuple[str, str | None]] = []
 
 
-def consume_pending_pin_reloads() -> List[Tuple[str, Optional[str]]]:
+def consume_pending_pin_reloads() -> list[tuple[str, str | None]]:
     """Drain and return queued (agent_name, pinned_model) reload requests.
 
     Callers MUST invoke this from the main event loop after the picker
@@ -80,7 +81,7 @@ def consume_pending_pin_reloads() -> List[Tuple[str, Optional[str]]]:
     return pending
 
 
-def apply_pending_pin_reload(agent_name: str, pinned_model: Optional[str]) -> None:
+def apply_pending_pin_reload(agent_name: str, pinned_model: str | None) -> None:
     """Reload the active agent if its pinned model changed during the picker.
 
     Safe to call from the main event loop only. No-ops if the named agent
@@ -151,7 +152,7 @@ def _sanitize_display_text(text: str) -> str:
     return cleaned
 
 
-def _get_pinned_model(agent_name: str) -> Optional[str]:
+def _get_pinned_model(agent_name: str) -> str | None:
     """Return the pinned model for an agent, if any.
 
     Checks both built-in agent config and JSON agent files.
@@ -173,7 +174,7 @@ def _get_pinned_model(agent_name: str) -> Optional[str]:
         json_agents = discover_json_agents()
         if agent_name in json_agents:
             agent_file_path = json_agents[agent_name]
-            with open(agent_file_path, "r", encoding="utf-8") as f:
+            with open(agent_file_path, encoding="utf-8") as f:
                 agent_config = json.load(f)
             model = agent_config.get("model")
             return model if model else None
@@ -183,7 +184,7 @@ def _get_pinned_model(agent_name: str) -> Optional[str]:
     return None
 
 
-async def _select_pinned_model(agent_name: str) -> Optional[str]:
+async def _select_pinned_model(agent_name: str) -> str | None:
     """Prompt for a model to pin to the agent, reusing the /model picker."""
     try:
         model_names = load_model_names() or []
@@ -197,7 +198,7 @@ async def _select_pinned_model(agent_name: str) -> Optional[str]:
 
 def _reload_agent_if_current(
     agent_name: str,
-    pinned_model: Optional[str],
+    pinned_model: str | None,
 ) -> None:
     """Reload the current agent when its pinned model changes."""
     current_agent = get_current_agent()
@@ -237,7 +238,7 @@ def _apply_pinned_model(agent_name: str, model_choice: str) -> None:
             # Handle JSON agent - modify the JSON file
             agent_file_path = json_agents[agent_name]
 
-            with open(agent_file_path, "r", encoding="utf-8") as f:
+            with open(agent_file_path, encoding="utf-8") as f:
                 agent_config = json.load(f)
 
             if model_choice == "(unpin)":
@@ -275,7 +276,7 @@ def _apply_pinned_model(agent_name: str, model_choice: str) -> None:
         emit_warning(f"Failed to apply pinned model: {exc}")
 
 
-def _get_agent_entries() -> List[Tuple[str, str, str]]:
+def _get_agent_entries() -> list[tuple[str, str, str]]:
     """Get all agents with their display names and descriptions.
 
     Returns:
@@ -295,11 +296,11 @@ def _get_agent_entries() -> List[Tuple[str, str, str]]:
 
 
 def _render_menu_panel(
-    entries: List[Tuple[str, str, str]],
+    entries: list[tuple[str, str, str]],
     page: int,
     selected_idx: int,
     current_agent_name: str,
-) -> List:
+) -> list:
     """Render the left menu panel with pagination.
 
     Args:
@@ -374,9 +375,9 @@ def _render_menu_panel(
 
 
 def _render_preview_panel(
-    entry: Optional[Tuple[str, str, str]],
+    entry: tuple[str, str, str] | None,
     current_agent_name: str,
-) -> List:
+) -> list:
     """Render the right preview panel with agent details.
 
     Args:
@@ -476,7 +477,7 @@ def _render_preview_panel(
     return lines
 
 
-async def interactive_agent_picker() -> Optional[str]:
+async def interactive_agent_picker() -> str | None:
     """Show interactive terminal UI to select an agent.
 
     Returns:
@@ -498,12 +499,12 @@ async def interactive_agent_picker() -> Optional[str]:
 
     total_pages = [get_total_pages(len(entries), PAGE_SIZE)]
 
-    def get_current_entry() -> Optional[Tuple[str, str, str]]:
+    def get_current_entry() -> tuple[str, str, str] | None:
         if 0 <= selected_idx[0] < len(entries):
             return entries[selected_idx[0]]
         return None
 
-    def refresh_entries(selected_name: Optional[str] = None) -> None:
+    def refresh_entries(selected_name: str | None = None) -> None:
         nonlocal entries
 
         entries = _get_agent_entries()

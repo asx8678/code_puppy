@@ -7,6 +7,8 @@ message type inference, and error handling.
 Target coverage: 85%+
 """
 
+from __future__ import annotations
+
 from io import StringIO
 from unittest.mock import MagicMock, Mock, patch
 

@@ -1,5 +1,7 @@
 """Tests for MCP edit command."""
 
+from __future__ import annotations
+
 import json
 from unittest.mock import MagicMock, mock_open, patch
 

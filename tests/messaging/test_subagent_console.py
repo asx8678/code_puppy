@@ -1,5 +1,7 @@
 """Tests for code_puppy.messaging.subagent_console."""
 
+from __future__ import annotations
+
 import time
 from io import StringIO
 from unittest.mock import MagicMock

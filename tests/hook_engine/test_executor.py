@@ -1,5 +1,7 @@
 """Tests for hook engine command executor."""
 
+from __future__ import annotations
+
 import pytest
 
 from code_puppy.hook_engine.executor import (

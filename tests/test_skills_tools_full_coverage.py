@@ -1,5 +1,7 @@
 """Full coverage tests for tools/skills_tools.py."""
 
+from __future__ import annotations
+
 import contextlib
 from unittest.mock import MagicMock, patch
 

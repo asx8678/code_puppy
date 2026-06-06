@@ -14,7 +14,8 @@ import math
 import re
 import threading
 from collections import OrderedDict
-from typing import Any, Dict, Iterable, List, Optional, Set, Tuple
+from collections.abc import Iterable
+from typing import Any
 
 import pydantic
 from pydantic_ai import BinaryContent
@@ -38,7 +39,7 @@ from pydantic_ai.messages import ModelMessage
 # never grow without limit.
 # ---------------------------------------------------------------------------
 _MESSAGE_STATS_MAX = 4096
-_message_stats_cache: "OrderedDict[int, Tuple[Any, int, int]]" = OrderedDict()
+_message_stats_cache: "OrderedDict[int, tuple[Any, int, int]]" = OrderedDict()
 _message_stats_lock = threading.Lock()
 
 # A single message at/above this many tokens is too large to ever sit in the
@@ -54,7 +55,7 @@ HUGE_MESSAGE_FLOOR_TOKENS = 50000
 # token contribution is computed once per tool object. Same id()+identity-guard
 # scheme as above.
 _TOOL_OVERHEAD_MAX = 1024
-_tool_overhead_cache: "OrderedDict[int, Tuple[Any, str, int]]" = OrderedDict()
+_tool_overhead_cache: "OrderedDict[int, tuple[Any, str, int]]" = OrderedDict()
 _tool_overhead_lock = threading.Lock()
 
 # Per-MCP-tool overhead (prefixed name + description + JSON input schema tokens).
@@ -64,7 +65,7 @@ _tool_overhead_lock = threading.Lock()
 # ``_tool_overhead_cache``; the prefix is part of the guard because the same
 # tool object can be served under different server prefixes.
 _MCP_TOOL_OVERHEAD_MAX = 1024
-_mcp_tool_overhead_cache: "OrderedDict[int, Tuple[Any, str, int]]" = OrderedDict()
+_mcp_tool_overhead_cache: "OrderedDict[int, tuple[Any, str, int]]" = OrderedDict()
 _mcp_tool_overhead_lock = threading.Lock()
 
 
@@ -75,7 +76,7 @@ def stringify_part(part: Any) -> str:
     otherwise-identical parts emitted at different times collapse to the same
     string, which is exactly what we want for dedup.
     """
-    attributes: List[str] = [part.__class__.__name__]
+    attributes: list[str] = [part.__class__.__name__]
 
     if hasattr(part, "role") and part.role:
         attributes.append(f"role={part.role}")
@@ -108,7 +109,7 @@ def stringify_part(part: Any) -> str:
     return "|".join(attributes)
 
 
-def _compute_message_stats(message: Any) -> Tuple[int, int]:
+def _compute_message_stats(message: Any) -> tuple[int, int]:
     """Stringify a message once; return ``(raw_token_total, stable_hash)``.
 
     ``raw_token_total`` is the pre-multiplier token count (sum over parts);
@@ -117,7 +118,7 @@ def _compute_message_stats(message: Any) -> Tuple[int, int]:
     """
     role = getattr(message, "role", None)
     instructions = getattr(message, "instructions", None)
-    header_bits: List[str] = []
+    header_bits: list[str] = []
     if role:
         header_bits.append(f"role={role}")
     if instructions:
@@ -131,7 +132,7 @@ def _compute_message_stats(message: Any) -> Tuple[int, int]:
     return raw_tokens, hash(canonical)
 
 
-def _message_stats(message: Any) -> Tuple[int, int]:
+def _message_stats(message: Any) -> tuple[int, int]:
     """Memoized ``_compute_message_stats`` keyed on message identity."""
     key = id(message)
     with _message_stats_lock:
@@ -198,7 +199,7 @@ _TOKEN_MULTIPLIER_RULES: tuple[tuple[tuple[str, ...], float], ...] = (
 )
 
 
-def model_token_multiplier(model_name: Optional[str]) -> float:
+def model_token_multiplier(model_name: str | None) -> float:
     """Per-model fudge factor for our char-based token estimator.
 
     Returns 1.0 when ``model_name`` is falsy or doesn't match any rule.
@@ -219,13 +220,13 @@ def _scale_raw(raw_tokens: int, multiplier: float) -> int:
     return max(1, math.floor(raw_tokens * multiplier))
 
 
-def _apply_multiplier(raw_tokens: int, model_name: Optional[str]) -> int:
+def _apply_multiplier(raw_tokens: int, model_name: str | None) -> int:
     return _scale_raw(raw_tokens, model_token_multiplier(model_name))
 
 
 def estimate_tokens_for_message(
     message: ModelMessage,
-    model_name: Optional[str] = None,
+    model_name: str | None = None,
 ) -> int:
     """Estimate the number of tokens in a single model message.
 
@@ -239,7 +240,7 @@ def estimate_tokens_for_message(
 
 def estimate_history_tokens(
     messages: Iterable[ModelMessage],
-    model_name: Optional[str] = None,
+    model_name: str | None = None,
 ) -> int:
     """Total estimated tokens across ``messages`` for ``model_name``.
 
@@ -278,7 +279,7 @@ def _extract_tool_description(tool_obj: Any) -> str:
     return doc or ""
 
 
-def _extract_tool_json_schema(tool_obj: Any) -> Optional[dict]:
+def _extract_tool_json_schema(tool_obj: Any) -> dict | None:
     """Pull the JSON schema off a tool, regardless of shape."""
     fs = getattr(tool_obj, "function_schema", None)
     if fs is not None:
@@ -318,7 +319,7 @@ def _mcp_tool_tokens(mcp_tool: Any, prefix: str) -> int:
     if schema:
         try:
             tokens += estimate_tokens(json.dumps(schema, sort_keys=True))
-        except (TypeError, ValueError):
+        except TypeError, ValueError:
             # Schema isn't JSON-serializable for some reason — fall
             # back to repr so we at least account for *something*.
             tokens += estimate_tokens(repr(schema))
@@ -331,7 +332,7 @@ def _mcp_tool_tokens(mcp_tool: Any, prefix: str) -> int:
     return tokens
 
 
-def _estimate_mcp_tool_tokens(mcp_servers: Optional[List[Any]]) -> int:
+def _estimate_mcp_tool_tokens(mcp_servers: list[Any] | None) -> int:
     """Count tokens contributed by MCP toolsets' tool definitions.
 
     Reads each server's ``_cached_tools`` (populated by pydantic-ai after the
@@ -396,9 +397,9 @@ def _tool_overhead_tokens(tool_name: str, tool_obj: Any) -> int:
 
 def estimate_context_overhead(
     system_prompt: str,
-    pydantic_tools: Optional[Dict[str, Any]],
-    model_name: Optional[str] = None,
-    mcp_servers: Optional[List[Any]] = None,
+    pydantic_tools: dict[str, Any] | None,
+    model_name: str | None = None,
+    mcp_servers: list[Any] | None = None,
 ) -> int:
     """Estimate fixed token overhead for the system prompt + tool definitions.
 
@@ -464,8 +465,8 @@ def _classify_tool_part(part: object) -> str | None:
 
 
 def prune_interrupted_tool_calls(
-    messages: List[ModelMessage],
-) -> List[ModelMessage]:
+    messages: list[ModelMessage],
+) -> list[ModelMessage]:
     """Drop messages participating in mismatched tool_call/tool_return pairs.
 
     A mismatched ``tool_call_id`` is one that appears only as a call or only
@@ -475,8 +476,8 @@ def prune_interrupted_tool_calls(
     if not messages:
         return messages
 
-    tool_call_ids: Set[str] = set()
-    tool_return_ids: Set[str] = set()
+    tool_call_ids: set[str] = set()
+    tool_return_ids: set[str] = set()
 
     for msg in messages:
         for part in getattr(msg, "parts", []) or []:
@@ -490,7 +491,7 @@ def prune_interrupted_tool_calls(
     if not mismatched:
         return messages
 
-    pruned: List[ModelMessage] = []
+    pruned: list[ModelMessage] = []
     for msg in messages:
         if any(
             getattr(part, "tool_call_id", None) in mismatched
@@ -501,7 +502,7 @@ def prune_interrupted_tool_calls(
     return pruned
 
 
-def has_pending_tool_calls(messages: List[ModelMessage]) -> bool:
+def has_pending_tool_calls(messages: list[ModelMessage]) -> bool:
     """Return True if any tool call is still waiting for its response.
 
     Recognizes both regular (``tool-call`` / ``tool-return``) and builtin
@@ -511,8 +512,8 @@ def has_pending_tool_calls(messages: List[ModelMessage]) -> bool:
     if not messages:
         return False
 
-    tool_call_ids: Set[str] = set()
-    tool_return_ids: Set[str] = set()
+    tool_call_ids: set[str] = set()
+    tool_return_ids: set[str] = set()
 
     for msg in messages:
         for part in getattr(msg, "parts", []) or []:
@@ -526,10 +527,10 @@ def has_pending_tool_calls(messages: List[ModelMessage]) -> bool:
 
 
 def filter_huge_messages(
-    messages: List[ModelMessage],
-    model_name: Optional[str] = None,
+    messages: list[ModelMessage],
+    model_name: str | None = None,
     max_message_tokens: int = HUGE_MESSAGE_FLOOR_TOKENS,
-) -> List[ModelMessage]:
+) -> list[ModelMessage]:
     """Drop messages at/above the huge-message floor, then prune orphans.
 
     A single message whose own token count meets or exceeds the effective
@@ -561,8 +562,8 @@ _LITELLM_THOUGHT_RE = re.compile(r"__thought__[A-Za-z0-9+/=]+$")
 
 
 def sanitize_tool_call_ids(
-    messages: List[ModelMessage],
-) -> List[ModelMessage]:
+    messages: list[ModelMessage],
+) -> list[ModelMessage]:
     """Replace tool_call_ids that don't match Anthropic's required pattern.
 
     Anthropic's API enforces ``^[a-zA-Z0-9_-]+$`` on ``tool_use.id`` fields.
@@ -579,7 +580,7 @@ def sanitize_tool_call_ids(
     match the pattern pass through unchanged.
     """
     # Collect all non-conforming IDs and build a deterministic mapping.
-    bad_ids: Dict[str, str] = {}
+    bad_ids: dict[str, str] = {}
     for msg in messages:
         for part in getattr(msg, "parts", []) or []:
             tcid = getattr(part, "tool_call_id", None)
@@ -614,11 +615,11 @@ def sanitize_tool_call_ids(
         return messages
 
     # Rebuild messages with sanitized IDs.
-    sanitized: List[ModelMessage] = []
+    sanitized: list[ModelMessage] = []
     for msg in messages:
         parts = list(getattr(msg, "parts", []) or [])
         needs_rebuild = False
-        new_parts: List[Any] = []
+        new_parts: list[Any] = []
         for part in parts:
             tcid = getattr(part, "tool_call_id", None)
             if tcid and tcid in bad_ids:
@@ -633,7 +634,7 @@ def sanitize_tool_call_ids(
                     try:
                         part.tool_call_id = bad_ids[tcid]  # type: ignore[misc]
                         new_parts.append(part)
-                    except (AttributeError, TypeError):
+                    except AttributeError, TypeError:
                         # Truly immutable — skip this part's ID fix.
                         new_parts.append(part)
             else:
@@ -649,7 +650,7 @@ def sanitize_tool_call_ids(
                     # hash_message/token counts reflect the sanitized parts.
                     _invalidate_message_stats(msg)
                     sanitized.append(msg)
-                except (AttributeError, TypeError):
+                except AttributeError, TypeError:
                     sanitized.append(msg)
         else:
             sanitized.append(msg)
