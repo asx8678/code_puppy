@@ -1,4 +1,5 @@
 """Tests for code_puppy/tools/skills_tools.py - 100% coverage."""
+from __future__ import annotations
 
 from unittest.mock import MagicMock, patch
 

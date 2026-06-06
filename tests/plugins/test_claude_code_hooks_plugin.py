@@ -10,6 +10,7 @@ Implementation targets:
   code_puppy/plugins/claude_code_hooks/config.py
   code_puppy/plugins/claude_code_hooks/register_callbacks.py
 """
+from __future__ import annotations
 
 import json
 import os

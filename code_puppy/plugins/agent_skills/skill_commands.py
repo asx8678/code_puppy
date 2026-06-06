@@ -12,7 +12,7 @@ focused on wiring callbacks (SRP, and the file-size cap).
 from __future__ import annotations
 
 import logging
-from typing import Any, List, Optional, Tuple
+from typing import Any
 
 from code_puppy.messaging import emit_info
 
@@ -42,9 +42,9 @@ def _iter_enabled_skills():
         yield meta
 
 
-def skill_command_help() -> List[Tuple[str, str]]:
+def skill_command_help() -> list[tuple[str, str]]:
     """Advertise every enabled skill in the ``/help`` menu."""
-    entries: List[Tuple[str, str]] = []
+    entries: list[tuple[str, str]] = []
     for meta in _iter_enabled_skills():
         desc = meta.description or "(no description)"
         # Trim ridiculously long descriptions for the help table.
@@ -54,7 +54,7 @@ def skill_command_help() -> List[Tuple[str, str]]:
     return entries
 
 
-def handle_skill_command(command: str, name: str) -> Optional[Any]:
+def handle_skill_command(command: str, name: str) -> Any | None:
     """Return the SKILL.md content as a MarkdownCommandResult if ``name``
     matches an enabled skill, otherwise ``None``.
 

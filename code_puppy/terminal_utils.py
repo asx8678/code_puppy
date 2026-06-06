@@ -2,18 +2,20 @@
 
 Handles Windows console mode resets and Unix terminal sanity restoration.
 """
+from __future__ import annotations
 
 import os
 import platform
 import subprocess
 import sys
-from typing import TYPE_CHECKING, Callable, Optional
+from collections.abc import Callable
+from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from rich.console import Console
 
 # Store the original console ctrl handler so we can restore it if needed
-_original_ctrl_handler: Optional[Callable] = None
+_original_ctrl_handler: Callable | None = None
 
 
 def reset_windows_terminal_ansi() -> None:
@@ -243,7 +245,7 @@ _keep_ctrl_c_disabled: bool = False
 # Keep a reference to the installed SetConsoleCtrlHandler callback so the
 # garbage collector doesn't yank it out from under the Windows kernel.
 # (If this gets collected mid-flight, you get a nice juicy access violation.)
-_ctrl_c_swallower_ref: Optional[Callable] = None
+_ctrl_c_swallower_ref: Callable | None = None
 
 
 def install_windows_ctrl_c_swallower() -> bool:
@@ -439,7 +441,7 @@ def detect_truecolor_support() -> bool:
     return False
 
 
-def print_truecolor_warning(console: Optional["Console"] = None) -> None:
+def print_truecolor_warning(console: "Console" | None = None) -> None:
     """Print a big fat red warning if truecolor is not supported.
 
     Args:

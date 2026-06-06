@@ -14,10 +14,9 @@ from __future__ import annotations
 
 import logging
 import os
-from typing import Dict, List, Optional
 
 
-def extract_env_var_from_model_config(model_config: dict) -> Optional[str]:
+def extract_env_var_from_model_config(model_config: dict) -> str | None:
     """Return the ``$ENV`` key a single model config depends on, if any.
 
     Mirrors ``model_factory`` resolution: a credential is referenced as a
@@ -48,7 +47,7 @@ def extract_env_var_from_model_config(model_config: dict) -> Optional[str]:
     return None
 
 
-def _load_merged_model_config() -> Dict[str, dict]:
+def _load_merged_model_config() -> dict[str, dict]:
     """Load the merged model catalog (builtin + extra + plugin sources)."""
     try:
         from code_puppy.model_factory import ModelFactory
@@ -62,13 +61,13 @@ def _load_merged_model_config() -> Dict[str, dict]:
     return {}
 
 
-def required_env_vars_by_provider() -> Dict[str, List[str]]:
+def required_env_vars_by_provider() -> dict[str, list[str]]:
     """Map each configured provider id -> sorted list of required env vars.
 
     Only includes providers whose models reference a ``$ENV`` credential, so
     keyless/OAuth providers are naturally excluded.
     """
-    grouped: Dict[str, set] = {}
+    grouped: dict[str, set] = {}
     for _model_name, model_config in _load_merged_model_config().items():
         if not isinstance(model_config, dict):
             continue
@@ -80,7 +79,7 @@ def required_env_vars_by_provider() -> Dict[str, List[str]]:
     return {provider: sorted(vars_) for provider, vars_ in sorted(grouped.items())}
 
 
-def required_env_var_for_model(model_name: str) -> Optional[str]:
+def required_env_var_for_model(model_name: str) -> str | None:
     """Return the env var the named model needs, or ``None`` if keyless/unknown."""
     config = _load_merged_model_config()
     model_config = config.get(model_name)
@@ -89,7 +88,7 @@ def required_env_var_for_model(model_name: str) -> Optional[str]:
     return extract_env_var_from_model_config(model_config)
 
 
-def all_required_env_vars() -> List[str]:
+def all_required_env_vars() -> list[str]:
     """Sorted list of every env var referenced by any configured model."""
     found: set = set()
     for vars_ in required_env_vars_by_provider().values():
@@ -97,7 +96,7 @@ def all_required_env_vars() -> List[str]:
     return sorted(found)
 
 
-def get_credential_value(env_var: str) -> Optional[str]:
+def get_credential_value(env_var: str) -> str | None:
     """Resolve a credential exactly like ``model_factory.get_api_key``.
 
     puppy.cfg (case-insensitive key) first, then ``os.environ``.
@@ -115,7 +114,7 @@ def is_credential_set(env_var: str) -> bool:
     return bool(get_credential_value(env_var))
 
 
-def mask_secret(value: Optional[str]) -> str:
+def mask_secret(value: str | None) -> str:
     """Mask a secret for display, revealing only the last 4 characters."""
     if not value:
         return ""

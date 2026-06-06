@@ -13,6 +13,7 @@ absurdly high ratios from inflating token estimates.
 Storage lives at ``~/.fast_puppy/token_ratios.json``, overridable via
 the env var ``CODE_PUPPY_TOKEN_RATIOS_PATH``.
 """
+from __future__ import annotations
 
 import json
 import logging

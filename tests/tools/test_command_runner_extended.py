@@ -10,6 +10,7 @@ This module tests previously uncovered code paths including:
 - Process registration and cleanup
 - Error handling in streaming
 """
+from __future__ import annotations
 
 import asyncio
 import importlib.util

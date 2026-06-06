@@ -1,4 +1,5 @@
 """Full coverage tests for mcp_/captured_stdio_server.py."""
+from __future__ import annotations
 
 import os
 from unittest.mock import MagicMock, patch

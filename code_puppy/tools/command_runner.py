@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import asyncio
 import ctypes
 import os
@@ -10,10 +12,11 @@ import threading
 import time
 import traceback
 from collections import deque
+from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import contextmanager
 from functools import partial
-from typing import Callable, List, Literal, Optional, Set
+from typing import Literal
 
 from pydantic import BaseModel
 from pydantic_ai import RunContext
@@ -137,7 +140,7 @@ _AWAITING_USER_INPUT = threading.Event()
 # bolting on their own lock.
 
 # Track running shell processes so we can kill them on Ctrl-C from the UI
-_RUNNING_PROCESSES: Set[subprocess.Popen] = set()
+_RUNNING_PROCESSES: set[subprocess.Popen] = set()
 _RUNNING_PROCESSES_LOCK = threading.Lock()
 
 
@@ -152,7 +155,7 @@ class _BoundedPidSet:
 
     def __init__(self, maxlen: int = 512) -> None:
         self._maxlen = maxlen
-        self._set: Set[int] = set()
+        self._set: set[int] = set()
         self._order: deque = deque()
 
     def add(self, pid: int) -> None:
@@ -194,8 +197,8 @@ class _BoundedPidSet:
 _USER_KILLED_PROCESSES = _BoundedPidSet(maxlen=512)
 
 # Global state for shell command keyboard handling
-_SHELL_CTRL_X_STOP_EVENT: Optional[threading.Event] = None
-_SHELL_CTRL_X_THREAD: Optional[threading.Thread] = None
+_SHELL_CTRL_X_STOP_EVENT: threading.Event | None = None
+_SHELL_CTRL_X_THREAD: threading.Thread | None = None
 _ORIGINAL_SIGINT_HANDLER = None
 
 # Reference-counted keyboard context - stays active while ANY command is running
@@ -203,7 +206,7 @@ _KEYBOARD_CONTEXT_REFCOUNT = 0
 _KEYBOARD_CONTEXT_LOCK = threading.Lock()
 
 # Thread-safe registry of active stop events for concurrent shell commands
-_ACTIVE_STOP_EVENTS: Set[threading.Event] = set()
+_ACTIVE_STOP_EVENTS: set[threading.Event] = set()
 _ACTIVE_STOP_EVENTS_LOCK = threading.Lock()
 
 # Thread pool for running blocking shell commands without blocking the event loop
@@ -328,7 +331,7 @@ def get_running_shell_process_count() -> int:
     """Return the number of currently-active shell processes being tracked."""
     with _RUNNING_PROCESSES_LOCK:
         alive = 0
-        stale: Set[subprocess.Popen] = set()
+        stale: set[subprocess.Popen] = set()
         for proc in _RUNNING_PROCESSES:
             if proc.poll() is None:
                 alive += 1
@@ -563,7 +566,7 @@ def _listen_for_ctrl_x_posix(
 def _spawn_ctrl_x_key_listener(
     stop_event: threading.Event,
     on_escape: Callable[[], None],
-) -> Optional[threading.Thread]:
+) -> threading.Thread | None:
     """Start a Ctrl+X key listener thread for CLI sessions."""
     try:
         import sys
@@ -839,7 +842,7 @@ def run_shell_command_streaming(
                     # POSIX: use select with timeout
                     try:
                         ready, _, _ = select.select([fd], [], [], 0.1)  # 100ms timeout
-                    except (ValueError, OSError, select.error):
+                    except (ValueError, OSError):
                         break
 
                     if ready:
@@ -907,7 +910,7 @@ def run_shell_command_streaming(
                 else:
                     try:
                         ready, _, _ = select.select([fd], [], [], 0.1)
-                    except (ValueError, OSError, select.error):
+                    except (ValueError, OSError):
                         break
 
                     if ready:
@@ -1447,7 +1450,7 @@ class ReasoningOutput(BaseModel):
 
 
 def share_your_reasoning(
-    context: RunContext, reasoning: str, next_steps: str | List[str] | None = None
+    context: RunContext, reasoning: str, next_steps: str | list[str] | None = None
 ) -> ReasoningOutput:
     # Handle list of next steps by formatting them
     formatted_next_steps = next_steps
@@ -1493,7 +1496,7 @@ def register_agent_share_your_reasoning(agent):
     def agent_share_your_reasoning(
         context: RunContext,
         reasoning: str = "",
-        next_steps: str | List[str] | None = None,
+        next_steps: str | list[str] | None = None,
     ) -> ReasoningOutput:
         """Share the agent's current reasoning and planned next steps with the user.
 

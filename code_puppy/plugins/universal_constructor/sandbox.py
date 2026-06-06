@@ -4,12 +4,13 @@ This module provides utilities for validating tool code before
 execution or storage, including syntax checking, function extraction,
 and dangerous pattern detection.
 """
+from __future__ import annotations
 
 import ast
 import logging
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Set
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -17,7 +18,7 @@ logger = logging.getLogger(__name__)
 TOOL_META_REQUIRED_FIELDS = {"name", "description"}
 
 # Imports that might indicate dangerous operations
-DANGEROUS_IMPORTS: Set[str] = {
+DANGEROUS_IMPORTS: set[str] = {
     # Execution/code generation
     "subprocess",
     "os.system",
@@ -41,7 +42,7 @@ DANGEROUS_IMPORTS: Set[str] = {
 }
 
 # Dangerous function calls
-DANGEROUS_CALLS: Set[str] = {
+DANGEROUS_CALLS: set[str] = {
     # Code execution
     "eval",
     "exec",
@@ -74,11 +75,11 @@ class FunctionInfo:
 
     name: str
     signature: str
-    docstring: Optional[str] = None
-    parameters: List[str] = field(default_factory=list)
-    return_annotation: Optional[str] = None
+    docstring: str | None = None
+    parameters: list[str] = field(default_factory=list)
+    return_annotation: str | None = None
     is_async: bool = False
-    decorators: List[str] = field(default_factory=list)
+    decorators: list[str] = field(default_factory=list)
     line_number: int = 0
 
 
@@ -87,9 +88,9 @@ class ValidationResult:
     """Result of code validation."""
 
     valid: bool
-    errors: List[str] = field(default_factory=list)
-    warnings: List[str] = field(default_factory=list)
-    functions: List[FunctionInfo] = field(default_factory=list)
+    errors: list[str] = field(default_factory=list)
+    warnings: list[str] = field(default_factory=list)
+    functions: list[FunctionInfo] = field(default_factory=list)
 
 
 def validate_syntax(code: str) -> ValidationResult:
@@ -220,7 +221,7 @@ def check_dangerous_patterns(code: str) -> ValidationResult:
         return result
 
     # Track dangerous imports
-    dangerous_found: List[str] = []
+    dangerous_found: list[str] = []
 
     for node in ast.walk(tree):
         # Check imports
@@ -327,12 +328,12 @@ class ToolFileValidationResult(ValidationResult):
     Includes TOOL_META extraction and main function validation.
     """
 
-    tool_meta: Optional[Dict[str, Any]] = None
-    main_function: Optional[FunctionInfo] = None
-    file_path: Optional[Path] = None
+    tool_meta: dict[str, Any] | None = None
+    main_function: FunctionInfo | None = None
+    file_path: Path | None = None
 
 
-def _extract_tool_meta(code: str) -> Optional[Dict[str, Any]]:
+def _extract_tool_meta(code: str) -> dict[str, Any] | None:
     """Extract TOOL_META dictionary from code.
 
     Args:
@@ -361,7 +362,7 @@ def _extract_tool_meta(code: str) -> Optional[Dict[str, Any]]:
     return None
 
 
-def _validate_tool_meta(meta: Dict[str, Any]) -> List[str]:
+def _validate_tool_meta(meta: dict[str, Any]) -> list[str]:
     """Validate that TOOL_META has required fields.
 
     Args:
@@ -380,8 +381,8 @@ def _validate_tool_meta(meta: Dict[str, Any]) -> List[str]:
 
 
 def _find_main_function(
-    functions: List[FunctionInfo], tool_name: str
-) -> Optional[FunctionInfo]:
+    functions: list[FunctionInfo], tool_name: str
+) -> FunctionInfo | None:
     """Find the main function for a tool.
 
     The main function is expected to have the same name as the tool.
@@ -503,7 +504,7 @@ def _validate_safe_path(file_path: Path, safe_root: Path) -> bool:
 
 
 def validate_and_write_tool(
-    code: str, file_path: Path, safe_root: Optional[Path] = None
+    code: str, file_path: Path, safe_root: Path | None = None
 ) -> ToolFileValidationResult:
     """Validate code and write to file only if valid.
 

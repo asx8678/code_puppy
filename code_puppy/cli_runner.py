@@ -4,6 +4,7 @@ Contains the main application logic, interactive mode, and entry point.
 """
 
 # Apply pydantic-ai patches BEFORE any pydantic-ai imports
+from __future__ import annotations
 from code_puppy.pydantic_patches import apply_all_patches
 
 apply_all_patches()

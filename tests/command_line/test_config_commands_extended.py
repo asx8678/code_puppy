@@ -10,6 +10,7 @@ This module provides comprehensive coverage for configuration commands including
 - Error handling and edge cases
 - Integration scenarios
 """
+from __future__ import annotations
 
 import concurrent.futures
 import json
@@ -259,7 +260,7 @@ class TestPinModelCommand:
                             assert result is True
 
                             # Verify file was updated
-                            with open(temp_path, "r") as f:
+                            with open(temp_path) as f:
                                 updated_config = json.load(f)
                                 assert updated_config["model"] == "gpt-4"
         finally:
@@ -433,7 +434,7 @@ class TestUnpinCommand:
                             assert result is True
 
                             # Verify model was removed from file
-                            with open(temp_path, "r") as f:
+                            with open(temp_path) as f:
                                 updated_config = json.load(f)
                                 assert "model" not in updated_config
         finally:

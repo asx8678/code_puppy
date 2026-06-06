@@ -1,4 +1,5 @@
 """Tests for code_puppy/command_line/mcp/wizard_utils.py"""
+from __future__ import annotations
 
 import json
 import os

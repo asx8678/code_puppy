@@ -9,6 +9,7 @@ This module tests error paths and edge cases in the agent manager:
 
 Focuses on ensuring proper exception handling and graceful error recovery.
 """
+from __future__ import annotations
 
 from unittest.mock import MagicMock, patch
 

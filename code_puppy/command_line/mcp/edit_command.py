@@ -2,11 +2,11 @@
 
 Provides a TUI for editing custom MCP server configurations.
 """
+from __future__ import annotations
 
 import json
 import logging
 import os
-from typing import List, Optional
 
 from rich.text import Text
 
@@ -27,7 +27,7 @@ class EditCommand(MCPCommandBase):
     with the existing server's configuration.
     """
 
-    def execute(self, args: List[str], group_id: Optional[str] = None) -> None:
+    def execute(self, args: list[str], group_id: str | None = None) -> None:
         """Edit an existing MCP server configuration.
 
         Args:
@@ -83,7 +83,7 @@ class EditCommand(MCPCommandBase):
 
     def _load_server_config(
         self, server_name: str, group_id: str
-    ) -> Optional[tuple[str, dict]]:
+    ) -> tuple[str, dict] | None:
         """Load an existing server configuration from mcp_servers.json.
 
         Args:
@@ -105,7 +105,7 @@ class EditCommand(MCPCommandBase):
             return None
 
         try:
-            with open(MCP_SERVERS_FILE, "r") as f:
+            with open(MCP_SERVERS_FILE) as f:
                 data = json.load(f)
 
             servers = data.get("mcp_servers", {})

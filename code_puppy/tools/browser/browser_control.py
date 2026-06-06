@@ -1,6 +1,7 @@
 """Browser initialization and control tools."""
+from __future__ import annotations
 
-from typing import Any, Dict, Optional
+from typing import Any
 
 from pydantic_ai import RunContext
 
@@ -14,7 +15,7 @@ async def initialize_browser(
     headless: bool = False,
     browser_type: str = "chromium",
     homepage: str = "https://www.google.com",
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """Initialize the browser with specified settings."""
     group_id = generate_group_id("browser_initialize", f"{browser_type}_{homepage}")
     emit_info(
@@ -67,7 +68,7 @@ async def initialize_browser(
         }
 
 
-async def close_browser() -> Dict[str, Any]:
+async def close_browser() -> dict[str, Any]:
     """Close the browser and clean up resources."""
     group_id = generate_group_id("browser_close")
     emit_info(
@@ -86,7 +87,7 @@ async def close_browser() -> Dict[str, Any]:
         return {"success": False, "error": str(e)}
 
 
-async def get_browser_status() -> Dict[str, Any]:
+async def get_browser_status() -> dict[str, Any]:
     """Get current browser status and information."""
     group_id = generate_group_id("browser_status")
     emit_info(
@@ -131,7 +132,7 @@ async def get_browser_status() -> Dict[str, Any]:
         return {"success": False, "error": str(e)}
 
 
-async def create_new_page(url: Optional[str] = None) -> Dict[str, Any]:
+async def create_new_page(url: str | None = None) -> dict[str, Any]:
     """Create a new browser page/tab."""
     group_id = generate_group_id("browser_new_page", url or "blank")
     emit_info(
@@ -160,7 +161,7 @@ async def create_new_page(url: Optional[str] = None) -> Dict[str, Any]:
         return {"success": False, "error": str(e), "url": url}
 
 
-async def list_pages() -> Dict[str, Any]:
+async def list_pages() -> dict[str, Any]:
     """List all open browser pages/tabs."""
     group_id = generate_group_id("browser_list_pages")
     emit_info(
@@ -212,7 +213,7 @@ def register_initialize_browser(agent):
         headless: bool = False,
         browser_type: str = "chromium",
         homepage: str = "https://www.google.com",
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         Initialize the browser with specified settings. Must be called before using other browser tools.
 
@@ -231,7 +232,7 @@ def register_close_browser(agent):
     """Register the browser close tool."""
 
     @agent.tool
-    async def browser_close(context: RunContext) -> Dict[str, Any]:
+    async def browser_close(context: RunContext) -> dict[str, Any]:
         """
         Close the browser and clean up all resources.
 
@@ -245,7 +246,7 @@ def register_get_browser_status(agent):
     """Register the browser status tool."""
 
     @agent.tool
-    async def browser_status(context: RunContext) -> Dict[str, Any]:
+    async def browser_status(context: RunContext) -> dict[str, Any]:
         """
         Get current browser status and information.
 
@@ -261,8 +262,8 @@ def register_create_new_page(agent):
     @agent.tool
     async def browser_new_page(
         context: RunContext,
-        url: Optional[str] = None,
-    ) -> Dict[str, Any]:
+        url: str | None = None,
+    ) -> dict[str, Any]:
         """
         Create a new browser page/tab.
 
@@ -279,7 +280,7 @@ def register_list_pages(agent):
     """Register the list pages tool."""
 
     @agent.tool
-    async def browser_list_pages(context: RunContext) -> Dict[str, Any]:
+    async def browser_list_pages(context: RunContext) -> dict[str, Any]:
         """
         List all open browser pages/tabs.
 

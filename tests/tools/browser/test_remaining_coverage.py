@@ -1,9 +1,9 @@
 """Tests for remaining uncovered lines across browser tool files."""
+from __future__ import annotations
 
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-
 
 # ===== browser_manager.py =====
 
@@ -46,8 +46,8 @@ class TestBrowserManagerRemainingLines:
     @pytest.mark.asyncio
     async def test_cleanup_exception_branch(self):
         """Cover lines 267-269: outer exception during cleanup with silent=False."""
-        from code_puppy.tools.browser.browser_manager import BrowserManager
         import code_puppy.tools.browser.browser_manager as bm_mod
+        from code_puppy.tools.browser.browser_manager import BrowserManager
 
         mgr = BrowserManager.__new__(BrowserManager)
         mgr.session_id = "test-exc-outer"
@@ -71,11 +71,11 @@ class TestBrowserManagerRemainingLines:
     @pytest.mark.asyncio
     async def test_atexit_cleanup_with_running_loop(self):
         """Cover lines 353-354: atexit handler when event loop is running."""
-        from code_puppy.tools.browser.browser_manager import (
-            _sync_cleanup_browsers,
-            _active_managers,
-        )
         import code_puppy.tools.browser.browser_manager as bm_mod
+        from code_puppy.tools.browser.browser_manager import (
+            _active_managers,
+            _sync_cleanup_browsers,
+        )
 
         # Ensure early-exit guards don't trigger
         old_cleanup_done = bm_mod._cleanup_done
@@ -92,8 +92,8 @@ class TestBrowserManagerRemainingLines:
 
     def test_atexit_cleanup_no_running_loop(self):
         """Cover the no-running-loop path."""
-        from code_puppy.tools.browser.browser_manager import _sync_cleanup_browsers
         import code_puppy.tools.browser.browser_manager as bm_mod
+        from code_puppy.tools.browser.browser_manager import _sync_cleanup_browsers
 
         old_cleanup_done = bm_mod._cleanup_done
         bm_mod._cleanup_done = False

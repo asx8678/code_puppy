@@ -33,8 +33,8 @@ from __future__ import annotations
 import asyncio
 import logging
 from dataclasses import dataclass
-from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional, Set
+from datetime import UTC, datetime
+from typing import Any
 from uuid import uuid4
 
 from code_puppy.config import (
@@ -65,8 +65,8 @@ _UNSET: Any = _Unset()
 class _Subscriber:
     """A subscription handle. Wraps an asyncio.Queue plus an optional filter."""
 
-    queue: "asyncio.Queue[Dict[str, Any]]"
-    session_id: Optional[str] = None  # None == wildcard (all events)
+    queue: "asyncio.Queue[dict[str, Any]]"
+    session_id: str | None = None  # None == wildcard (all events)
 
 
 # Global state for event distribution.
@@ -78,12 +78,12 @@ class _Subscriber:
 #     iterated during fan-out.
 #
 # Both are kept in sync by ``subscribe`` / ``unsubscribe``.
-_subscribers: Set["asyncio.Queue[Dict[str, Any]]"] = set()
-_subscriber_records: Set[_Subscriber] = set()
-_recent_events: List[Dict[str, Any]] = []  # Keep last N events for new subscribers
+_subscribers: set["asyncio.Queue[dict[str, Any]]"] = set()
+_subscriber_records: set[_Subscriber] = set()
+_recent_events: list[dict[str, Any]] = []  # Keep last N events for new subscribers
 
 
-def _resolve_session_id(explicit: Any) -> Optional[str]:
+def _resolve_session_id(explicit: Any) -> str | None:
     """Resolve the effective session_id for an emit call.
 
     Precedence: explicit kwarg > ContextVar > None.
@@ -134,10 +134,10 @@ def emit_event(
 
     resolved_sid = _resolve_session_id(session_id)
 
-    event: Dict[str, Any] = {
+    event: dict[str, Any] = {
         "id": str(uuid4()),
         "type": event_type,
-        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "timestamp": datetime.now(UTC).isoformat(),
         "session_id": resolved_sid,
         "data": data or {},
     }
@@ -186,8 +186,8 @@ def emit_event(
 
 
 def subscribe(
-    session_id: Optional[str] = None,
-) -> "asyncio.Queue[Dict[str, Any]]":
+    session_id: str | None = None,
+) -> "asyncio.Queue[dict[str, Any]]":
     """Subscribe to events.
 
     Creates and returns a new async queue that will receive future events.
@@ -204,7 +204,7 @@ def subscribe(
         An ``asyncio.Queue`` that will receive matching event dictionaries.
     """
     queue_size = get_frontend_emitter_queue_size()
-    queue: "asyncio.Queue[Dict[str, Any]]" = asyncio.Queue(maxsize=queue_size)
+    queue: "asyncio.Queue[dict[str, Any]]" = asyncio.Queue(maxsize=queue_size)
     _subscribers.add(queue)
     _subscriber_records.add(_Subscriber(queue=queue, session_id=session_id))
     logger.debug(
@@ -214,7 +214,7 @@ def subscribe(
     return queue
 
 
-def unsubscribe(queue: "asyncio.Queue[Dict[str, Any]]") -> None:
+def unsubscribe(queue: "asyncio.Queue[dict[str, Any]]") -> None:
     """Unsubscribe from events.
 
     Removes the queue from the subscriber set. Safe to call even if the
@@ -234,7 +234,7 @@ def unsubscribe(queue: "asyncio.Queue[Dict[str, Any]]") -> None:
     )
 
 
-def get_recent_events() -> List[Dict[str, Any]]:
+def get_recent_events() -> list[dict[str, Any]]:
     """Get recent events for new subscribers.
 
     Returns a copy of the most recent events (up to

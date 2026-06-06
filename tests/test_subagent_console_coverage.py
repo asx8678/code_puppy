@@ -10,6 +10,7 @@ Focuses on:
 - Context manager support
 - Convenience functions
 """
+from __future__ import annotations
 
 import threading
 import time

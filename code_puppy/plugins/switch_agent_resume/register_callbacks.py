@@ -4,6 +4,7 @@
 /switch-agent          — show interactive agent picker, then switch + resume
 /sa                    — alias for /switch-agent
 """
+from __future__ import annotations
 
 import datetime
 import os

@@ -1,16 +1,16 @@
 """Plugin-level config helpers for agent_skills."""
+from __future__ import annotations
 
 import json
 import logging
 from pathlib import Path
-from typing import List, Set
 
 from code_puppy.config import get_value, set_value
 
 logger = logging.getLogger(__name__)
 
 
-def get_skill_directories() -> List[str]:
+def get_skill_directories() -> list[str]:
     """Get configured skill directories.
 
     Returns:
@@ -154,7 +154,7 @@ def set_frontmatter_in_system_prompt(enabled: bool) -> None:
     logger.info(f"Frontmatter in system prompt {'enabled' if enabled else 'disabled'}")
 
 
-def get_disabled_skills() -> Set[str]:
+def get_disabled_skills() -> set[str]:
     """Get set of explicitly disabled skill names.
 
     Returns:

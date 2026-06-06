@@ -3,9 +3,9 @@ MCP Dashboard Implementation
 
 Provides visual status dashboard for MCP servers using Rich tables.
 """
+from __future__ import annotations
 
 from datetime import datetime
-from typing import Dict, List, Optional
 
 from rich import box
 from rich.console import Console
@@ -80,7 +80,7 @@ class MCPDashboard:
 
         return table
 
-    def render_server_row(self, server) -> List[str]:
+    def render_server_row(self, server) -> list[str]:
         """
         Render a single server row for the dashboard
 
@@ -121,7 +121,7 @@ class MCPDashboard:
             latency_str,
         ]
 
-    def render_health_indicator(self, health: Optional[Dict]) -> str:
+    def render_health_indicator(self, health: dict | None) -> str:
         """
         Render health status indicator
 
@@ -165,7 +165,7 @@ class MCPDashboard:
 
         return indicators.get(state, "[dim]? Unk[/dim]")
 
-    def render_metrics_summary(self, metrics: Dict) -> str:
+    def render_metrics_summary(self, metrics: dict) -> str:
         """
         Render a summary of server metrics
 

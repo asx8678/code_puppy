@@ -4,6 +4,7 @@ Covers missed lines in:
 - universal_constructor/register_callbacks.py
 - agent_skills/discovery.py
 """
+from __future__ import annotations
 
 from unittest.mock import MagicMock, patch
 

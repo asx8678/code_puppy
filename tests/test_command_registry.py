@@ -8,6 +8,7 @@ Tests the decorator-based command registration system including:
 - Alias handling
 - Category management
 """
+from __future__ import annotations
 
 import pytest
 

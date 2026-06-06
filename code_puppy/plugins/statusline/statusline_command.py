@@ -17,7 +17,7 @@ from __future__ import annotations
 
 import stat
 from pathlib import Path
-from typing import Any, List, Optional, Tuple
+from typing import Any
 
 from code_puppy.messaging import emit_info, emit_success, emit_warning
 
@@ -53,7 +53,7 @@ printf '%b' "$line"
 """
 
 
-def statusline_command_help() -> List[Tuple[str, str]]:
+def statusline_command_help() -> list[tuple[str, str]]:
     return [
         (_COMMAND_NAME, "Customize the bottom status line (init/on/off/show/json)"),
     ]
@@ -97,7 +97,7 @@ def _has_jq() -> bool:
     return which("jq") is not None
 
 
-def handle_statusline_command(command: str, name: str) -> Optional[Any]:
+def handle_statusline_command(command: str, name: str) -> Any | None:
     if name != _COMMAND_NAME:
         return None
 

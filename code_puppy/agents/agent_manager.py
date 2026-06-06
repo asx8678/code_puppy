@@ -1,4 +1,5 @@
 """Agent manager for handling different agent configurations."""
+from __future__ import annotations
 
 import importlib
 import json
@@ -8,7 +9,6 @@ import re
 import threading
 import uuid
 from pathlib import Path
-from typing import Dict, List, Optional, Type, Union
 
 from pydantic_ai.messages import ModelMessage
 
@@ -19,19 +19,19 @@ from code_puppy.messaging import emit_success, emit_warning
 from code_puppy.tools.common import atomic_write_text
 
 # Registry of available agents (Python classes and JSON file paths)
-_AGENT_REGISTRY: Dict[str, Union[Type[BaseAgent], str]] = {}
+_AGENT_REGISTRY: dict[str, type[BaseAgent] | str] = {}
 # Pre-rename agent ids -> current ids, so saved sessions/configs that reference
 # the legacy "code-puppy" agent still resolve after the fast-puppy rename.
-_LEGACY_AGENT_ALIASES: Dict[str, str] = {"code-puppy": "fast-puppy"}
-_AGENT_HISTORIES: Dict[str, List[ModelMessage]] = {}
-_CURRENT_AGENT: Optional[BaseAgent] = None
+_LEGACY_AGENT_ALIASES: dict[str, str] = {"code-puppy": "fast-puppy"}
+_AGENT_HISTORIES: dict[str, list[ModelMessage]] = {}
+_CURRENT_AGENT: BaseAgent | None = None
 
 # Cache-buster signature for agent discovery. ``_discover_agents`` clears the
 # registry and re-imports/instantiates every agent module, which is expensive to
 # run on nearly every public call (load_agent, get_available_agents, ...).
 # ``_ensure_discovered`` skips the rebuild when this signature is unchanged.
 # ``None`` means "never discovered" so the first call always rebuilds.
-_DISCOVERY_SIGNATURE: Optional[tuple] = None
+_DISCOVERY_SIGNATURE: tuple | None = None
 
 # Terminal session-based agent selection
 _SESSION_AGENTS_CACHE: dict[str, str] = {}
@@ -153,12 +153,12 @@ def _load_session_data() -> dict[str, str]:
     session_file = _get_session_file_path()
     try:
         if session_file.exists():
-            with open(session_file, "r", encoding="utf-8") as f:
+            with open(session_file, encoding="utf-8") as f:
                 data = json.load(f)
                 # Clean up dead sessions while loading
                 return _cleanup_dead_sessions(data)
         return {}
-    except (json.JSONDecodeError, IOError, OSError):
+    except (json.JSONDecodeError, OSError):
         # File corrupted or permission issues, start fresh
         return {}
 
@@ -185,7 +185,7 @@ def _save_session_data(sessions: dict[str, str]) -> None:
         # Atomic rename (works on all platforms)
         temp_file.replace(session_file)
 
-    except (IOError, OSError):
+    except OSError:
         # File permission issues, etc. - just continue without persistence
         pass
 
@@ -199,7 +199,7 @@ def _ensure_session_cache_loaded() -> None:
             _SESSION_FILE_LOADED = True
 
 
-def _compute_discovery_signature() -> Optional[tuple]:
+def _compute_discovery_signature() -> tuple | None:
     """Cheap signature of everything ``_discover_agents`` depends on.
 
     Combines:
@@ -220,7 +220,7 @@ def _compute_discovery_signature() -> Optional[tuple]:
         )
 
         dir_candidates = [get_user_agents_directory(), get_project_agents_directory()]
-        file_sig: List[tuple] = []
+        file_sig: list[tuple] = []
         for dir_str in dir_candidates:
             if not dir_str:
                 continue
@@ -252,7 +252,7 @@ def _compute_discovery_signature() -> Optional[tuple]:
         return None
 
 
-def _ensure_discovered(message_group_id: Optional[str] = None) -> None:
+def _ensure_discovered(message_group_id: str | None = None) -> None:
     """Discover agents only when the discovery signature has changed.
 
     Skips the (expensive) ``_discover_agents`` rebuild when the registry is
@@ -275,7 +275,7 @@ def _ensure_discovered(message_group_id: Optional[str] = None) -> None:
     _DISCOVERY_SIGNATURE = _compute_discovery_signature()
 
 
-def _discover_agents(message_group_id: Optional[str] = None):
+def _discover_agents(message_group_id: str | None = None):
     """Dynamically discover all agent classes and JSON agents."""
     # Always clear the registry to force refresh
     _AGENT_REGISTRY.clear()
@@ -419,7 +419,7 @@ def _discover_agents(message_group_id: Optional[str] = None):
         )
 
 
-def get_available_agents() -> Dict[str, str]:
+def get_available_agents() -> dict[str, str]:
     """Get a dictionary of available agents with their display names.
 
     Returns:
@@ -578,7 +578,7 @@ def load_agent(agent_name: str) -> BaseAgent:
         return agent_ref()
 
 
-def get_agent_descriptions() -> Dict[str, str]:
+def get_agent_descriptions() -> dict[str, str]:
     """Get descriptions for all available agents.
 
     Returns:
@@ -670,7 +670,7 @@ def _build_clone_display_name(display_name: str, clone_index: int) -> str:
     return f"{base_name} (Clone {clone_index})"
 
 
-def _filter_available_tools(tool_names: List[str]) -> List[str]:
+def _filter_available_tools(tool_names: list[str]) -> list[str]:
     """Filter a tool list to only available tool names."""
     from code_puppy.tools import get_available_tool_names
 
@@ -698,7 +698,7 @@ def _next_clone_index(
         next_index += 1
 
 
-def clone_agent(agent_name: str) -> Optional[str]:
+def clone_agent(agent_name: str) -> str | None:
     """Clone an agent definition into the user agents directory.
 
     Args:
@@ -727,7 +727,7 @@ def clone_agent(agent_name: str) -> Optional[str]:
 
     try:
         if isinstance(agent_ref, str):
-            with open(agent_ref, "r", encoding="utf-8") as f:
+            with open(agent_ref, encoding="utf-8") as f:
                 source_config = json.load(f)
 
             source_display_name = source_config.get("display_name")

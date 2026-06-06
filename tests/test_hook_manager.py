@@ -8,11 +8,12 @@ Covers:
 
 These tests are immutable per project policy.  Do NOT modify or delete them.
 """
+from __future__ import annotations
 
 import copy
 import json
 from pathlib import Path
-from typing import Any, Dict
+from typing import Any
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -21,7 +22,7 @@ import pytest
 # Fixtures
 # ---------------------------------------------------------------------------
 
-SAMPLE_CONFIG: Dict[str, Any] = {
+SAMPLE_CONFIG: dict[str, Any] = {
     "PreToolUse": [
         {
             "matcher": "Bash || agent_run_shell_command",

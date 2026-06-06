@@ -106,6 +106,7 @@ def test_no_user_facing_alt_m_label():
     they must not advertise Alt+M.
     """
     import re
+
     from code_puppy.command_line import judges_menu
 
     source = open(judges_menu.__file__, encoding="utf-8").read()
@@ -207,8 +208,8 @@ def test_render_model_list_empty_state():
 def test_render_model_list_paginates_correctly():
     """With more models than PAGE_SIZE, only the active page is shown."""
     from code_puppy.command_line.judges_menu import (
-        _render_model_list,
         MODEL_PAGE_SIZE,
+        _render_model_list,
     )
 
     models = [f"m{i}" for i in range(MODEL_PAGE_SIZE * 2 + 3)]

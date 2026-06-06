@@ -18,7 +18,6 @@ from code_puppy.agents._key_listeners import (
     set_active_handle,
 )
 
-
 # =============================================================================
 # KeyListenerHandle basic mechanics
 # =============================================================================

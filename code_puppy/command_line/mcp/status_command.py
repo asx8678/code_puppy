@@ -1,10 +1,10 @@
 """
 MCP Status Command - Shows detailed status for MCP servers.
 """
+from __future__ import annotations
 
 import logging
 from datetime import datetime
-from typing import List, Optional
 
 from rich.panel import Panel
 from rich.text import Text
@@ -32,7 +32,7 @@ class StatusCommand(MCPCommandBase):
     Shows detailed status for a specific server or brief status for all servers.
     """
 
-    def execute(self, args: List[str], group_id: Optional[str] = None) -> None:
+    def execute(self, args: list[str], group_id: str | None = None) -> None:
         """
         Show detailed status for a specific server or all servers.
 
@@ -69,7 +69,7 @@ class StatusCommand(MCPCommandBase):
             emit_info(f"Failed to get server status: {e}", message_group=group_id)
 
     def _show_detailed_server_status(
-        self, server_id: str, server_name: str, group_id: Optional[str] = None
+        self, server_id: str, server_name: str, group_id: str | None = None
     ) -> None:
         """
         Show comprehensive status information for a specific server.

@@ -3,6 +3,7 @@
 Covers menu initialization, user input handling, navigation across languages,
 rendering, state management, error scenarios, and console I/O interactions.
 """
+from __future__ import annotations
 
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -781,7 +782,7 @@ class TestEdgeCasesAndErrorHandling:
                 )
 
     @pytest.mark.asyncio
-    @patch("sys.stdout.write", side_effect=IOError("stdout error"))
+    @patch("sys.stdout.write", side_effect=OSError("stdout error"))
     async def test_stdout_write_errors(self, mock_stdout):
         """Test handling of stdout write errors."""
         with patch(
@@ -793,7 +794,7 @@ class TestEdgeCasesAndErrorHandling:
                 await interactive_diff_picker()
                 # If we get here, errors were handled gracefully
                 assert True
-            except IOError:
+            except OSError:
                 # If IOError propagates, that's also acceptable behavior
                 assert True
 

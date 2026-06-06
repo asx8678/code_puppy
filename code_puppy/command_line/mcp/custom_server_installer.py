@@ -3,6 +3,7 @@
 Handles prompting users for custom server configuration and installing
 custom MCP servers with JSON configuration.
 """
+from __future__ import annotations
 
 import json
 import os
@@ -169,7 +170,7 @@ def prompt_and_install_custom_server(manager) -> bool:
 
         # Save to mcp_servers.json for persistence
         if os.path.exists(MCP_SERVERS_FILE):
-            with open(MCP_SERVERS_FILE, "r") as f:
+            with open(MCP_SERVERS_FILE) as f:
                 data = json.load(f)
                 servers = data.get("mcp_servers", {})
         else:

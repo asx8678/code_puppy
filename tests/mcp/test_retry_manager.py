@@ -1,6 +1,7 @@
 """
 Tests for the RetryManager class.
 """
+from __future__ import annotations
 
 import asyncio
 from unittest.mock import AsyncMock, Mock
@@ -163,7 +164,7 @@ class TestRetryManager:
         """Test that retryable errors are identified correctly."""
         # Network errors
         assert self.retry_manager.should_retry(ConnectionError("Connection failed"))
-        assert self.retry_manager.should_retry(asyncio.TimeoutError("Timeout"))
+        assert self.retry_manager.should_retry(TimeoutError("Timeout"))
         assert self.retry_manager.should_retry(OSError("Network error"))
 
         # HTTP timeout

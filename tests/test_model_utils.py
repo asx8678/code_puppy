@@ -5,6 +5,7 @@ so we import those bits from the plugin and also import its
 ``register_callbacks`` module to ensure the ``prepare_model_prompt`` callback
 is registered for tests that exercise the dispatcher.
 """
+from __future__ import annotations
 
 import pytest
 

@@ -2,6 +2,7 @@
 
 Targets all uncovered lines to achieve 100% coverage.
 """
+from __future__ import annotations
 
 import json
 import os
@@ -198,7 +199,7 @@ class TestSaveSessionData:
         bad_path = tmp_path / "sessions.json"
         with (
             patch.object(am, "_get_session_file_path", return_value=bad_path),
-            patch("builtins.open", side_effect=IOError("fail")),
+            patch("builtins.open", side_effect=OSError("fail")),
         ):
             # Should not raise
             am._save_session_data({"x": "y"})

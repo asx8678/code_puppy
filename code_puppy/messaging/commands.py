@@ -19,9 +19,10 @@ The agent processes them and may emit messages in response.
 
 NO Rich markup or formatting should be embedded in any string fields.
 """
+from __future__ import annotations
 
-from datetime import datetime, timezone
-from typing import Literal, Optional, Union
+from datetime import UTC, datetime
+from typing import Literal
 from uuid import uuid4
 
 from pydantic import BaseModel, Field
@@ -39,7 +40,7 @@ class BaseCommand(BaseModel):
         description="Unique identifier for this command instance",
     )
     timestamp: datetime = Field(
-        default_factory=lambda: datetime.now(timezone.utc),
+        default_factory=lambda: datetime.now(UTC),
         description="When this command was created (UTC)",
     )
 
@@ -58,7 +59,7 @@ class CancelAgentCommand(BaseCommand):
     and return control to the user. This is a soft cancellation.
     """
 
-    reason: Optional[str] = Field(
+    reason: str | None = Field(
         default=None,
         description="Optional reason for cancellation (for logging/debugging)",
     )
@@ -72,7 +73,7 @@ class InterruptShellCommand(BaseCommand):
     too long or producing unwanted output.
     """
 
-    command_id: Optional[str] = Field(
+    command_id: str | None = Field(
         default=None,
         description="ID of the specific shell command to interrupt (None = current)",
     )
@@ -85,7 +86,7 @@ class PauseAgentCommand(BaseCommand):
     consumed but not rendered. Use ResumeAgentCommand to continue.
     """
 
-    reason: Optional[str] = Field(
+    reason: str | None = Field(
         default=None,
         description="Optional reason for pause (for logging/debugging)",
     )
@@ -152,7 +153,7 @@ class ConfirmationResponse(BaseCommand):
     confirmed: bool = Field(
         description="Whether the user confirmed (True) or denied (False)"
     )
-    feedback: Optional[str] = Field(
+    feedback: str | None = Field(
         default=None,
         description="Optional feedback text from the user",
     )
@@ -181,16 +182,16 @@ class SelectionResponse(BaseCommand):
 
 
 # All concrete command types (excludes BaseCommand itself)
-AnyCommand = Union[
-    CancelAgentCommand,
-    InterruptShellCommand,
-    PauseAgentCommand,
-    ResumeAgentCommand,
-    SteerAgentCommand,
-    UserInputResponse,
-    ConfirmationResponse,
-    SelectionResponse,
-]
+AnyCommand = (
+    CancelAgentCommand
+    | InterruptShellCommand
+    | PauseAgentCommand
+    | ResumeAgentCommand
+    | SteerAgentCommand
+    | UserInputResponse
+    | ConfirmationResponse
+    | SelectionResponse
+)
 """Union of all command types for type checking."""
 
 

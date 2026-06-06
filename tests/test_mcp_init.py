@@ -2,6 +2,7 @@
 
 This module tests that the MCP package properly exports all its public API.
 """
+from __future__ import annotations
 
 import code_puppy.mcp_ as mcp_package
 

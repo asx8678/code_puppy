@@ -20,8 +20,9 @@ import asyncio
 import signal
 import threading
 import uuid
+from collections.abc import Callable, Sequence
 from contextlib import AsyncExitStack
-from typing import Any, Callable, List, Optional, Sequence, Type, Union
+from typing import Any
 
 import httpcore
 import httpx
@@ -53,18 +54,18 @@ except ImportError:  # pragma: no cover - 3.10 only
 
 from code_puppy.agents import _history, _key_listeners
 from code_puppy.agents._builder import build_pydantic_agent
+from code_puppy.agents._diagnostics import emit_exception_diagnostics
+from code_puppy.agents._non_streaming_render import (
+    StreamingTextDetector,
+    render_result_without_streaming,
+    should_render_fallback,
+)
 from code_puppy.agents._run_signals import (
     drain_pause_state_on_cancel,
     make_schedule_cancel,
     make_schedule_pause,
     prepare_queued_steer_injection,
     reset_pause_state_at_run_start,
-)
-from code_puppy.agents._diagnostics import emit_exception_diagnostics
-from code_puppy.agents._non_streaming_render import (
-    StreamingTextDetector,
-    render_result_without_streaming,
-    should_render_fallback,
 )
 from code_puppy.agents.event_stream_handler import event_stream_handler
 from code_puppy.callbacks import (
@@ -169,7 +170,7 @@ def streaming_retry(
 
     def decorator(factory: Callable[[], Any]) -> Callable[[], Any]:
         async def runner() -> Any:
-            last_exc: Optional[Exception] = None
+            last_exc: Exception | None = None
             for attempt in range(max_attempts):
                 try:
                     return await factory()
@@ -213,11 +214,11 @@ def _sanitize_prompt(prompt: str) -> str:
 
 def _build_prompt_payload(
     prompt: str,
-    attachments: Optional[Sequence[BinaryContent]],
-    link_attachments: Optional[Sequence[Union[ImageUrl, DocumentUrl]]],
-) -> Union[str, List[Any]]:
+    attachments: Sequence[BinaryContent] | None,
+    link_attachments: Sequence[ImageUrl | DocumentUrl] | None,
+) -> str | list[Any]:
     """Merge prompt + binary/link attachments into the pydantic-ai payload shape."""
-    parts: List[Any] = []
+    parts: list[Any] = []
     if attachments:
         parts.extend(attachments)
     if link_attachments:
@@ -226,7 +227,7 @@ def _build_prompt_payload(
     if not parts:
         return prompt
 
-    payload: List[Any] = []
+    payload: list[Any] = []
     if prompt:
         payload.append(prompt)
     payload.extend(parts)
@@ -268,10 +269,10 @@ def _should_prepend_system_prompt(agent: Any, prompt: str) -> str:
 
 def _collect_exceptions(
     group: BaseException, predicate: Callable[[BaseException], bool]
-) -> List[BaseException]:
+) -> list[BaseException]:
     """Flatten an ExceptionGroup tree, returning leaves matching ``predicate``."""
-    out: List[BaseException] = []
-    stack: List[BaseException] = [group]
+    out: list[BaseException] = []
+    stack: list[BaseException] = [group]
     while stack:
         exc = stack.pop()
         if isinstance(exc, BaseExceptionGroup):
@@ -288,9 +289,9 @@ async def run_with_mcp(
     agent: Any,
     prompt: str,
     *,
-    attachments: Optional[Sequence[BinaryContent]] = None,
-    link_attachments: Optional[Sequence[Union[ImageUrl, DocumentUrl]]] = None,
-    output_type: Optional[Type[Any]] = None,
+    attachments: Sequence[BinaryContent] | None = None,
+    link_attachments: Sequence[ImageUrl | DocumentUrl] | None = None,
+    output_type: type[Any] | None = None,
     **kwargs: Any,
 ) -> Any:
     """Run ``agent`` against ``prompt`` with full MCP + cancellation support."""
@@ -340,7 +341,7 @@ async def run_with_mcp(
         # final result. When it's enabled we wrap the handler in a detector
         # and fall back to a one-shot render only if no text actually streamed.
         use_streaming = get_enable_streaming()
-        detector: Optional[StreamingTextDetector] = (
+        detector: StreamingTextDetector | None = (
             StreamingTextDetector(event_stream_handler) if use_streaming else None
         )
         stream_handler = detector if detector is not None else None
@@ -551,17 +552,17 @@ async def run_with_mcp(
         emit_info(f"Use {get_cancel_agent_display_name()} to cancel the agent task.")
 
     original_handler = None
-    key_listener_stop_event: Optional[threading.Event] = None
-    key_listener_handle: Optional[_key_listeners.KeyListenerHandle] = None
+    key_listener_stop_event: threading.Event | None = None
+    key_listener_handle: _key_listeners.KeyListenerHandle | None = None
 
     run_success = False
-    run_error: Optional[BaseException] = None
+    run_error: BaseException | None = None
     run_response_text = ""
 
     try:
         if cancel_agent_uses_signal():
             original_handler = signal.signal(signal.SIGINT, keyboard_interrupt_handler)
-            cancel_cb: Optional[Callable[[], None]] = None  # SIGINT owns cancel
+            cancel_cb: Callable[[], None] | None = None  # SIGINT owns cancel
         else:
             original_handler = signal.signal(signal.SIGINT, graceful_sigint_handler)
             cancel_cb = schedule_agent_cancel

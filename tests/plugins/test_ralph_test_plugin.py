@@ -1,4 +1,5 @@
 """Tests for the ralph_test plugin and new callback hooks."""
+from __future__ import annotations
 
 import pytest
 

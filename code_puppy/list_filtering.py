@@ -1,4 +1,5 @@
 """Helpers for lightweight case-insensitive list filtering in TUIs."""
+from __future__ import annotations
 
 import re
 

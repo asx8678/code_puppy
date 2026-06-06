@@ -1,4 +1,5 @@
 """Version checking utilities for Fast Puppy."""
+from __future__ import annotations
 
 import httpx
 

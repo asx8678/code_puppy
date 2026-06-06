@@ -19,7 +19,7 @@ from __future__ import annotations
 import glob
 import heapq
 import os
-from typing import Iterable, List, Tuple
+from collections.abc import Iterable
 
 from prompt_toolkit.completion import Completer, Completion
 from prompt_toolkit.document import Document
@@ -69,7 +69,7 @@ def _ensure_index_for_cwd() -> None:
 # -------------------------------------------------------------- fuzzy results
 
 
-def _fuzzy_completions(query: str, start_position: int) -> List[Completion]:
+def _fuzzy_completions(query: str, start_position: int) -> list[Completion]:
     """Pi-style ranked completions from the in-memory file index."""
     _ensure_index_for_cwd()
     snap = file_index.get_index()
@@ -77,7 +77,7 @@ def _fuzzy_completions(query: str, start_position: int) -> List[Completion]:
         return []
 
     q_lower = query.lower()
-    scored: List[Tuple[int, str]] = []  # (-score, path)
+    scored: list[tuple[int, str]] = []  # (-score, path)
     for path, path_lower, basename_lower in zip(
         snap.paths, snap.lowered, snap.basenames_lower, strict=True
     ):

@@ -15,7 +15,7 @@ import json
 import os
 import traceback
 import warnings
-from typing import Annotated, Any, Dict, List, Optional, Union
+from typing import Annotated, Any
 
 import json_repair
 from pydantic import BaseModel, BeforeValidator, WithJsonSchema
@@ -38,7 +38,7 @@ from code_puppy.tools.common import (
 )
 
 
-def _create_rejection_response(file_path: str) -> Dict[str, Any]:
+def _create_rejection_response(file_path: str) -> dict[str, Any]:
     """Create a standardized rejection response with user feedback if available.
 
     Args:
@@ -91,7 +91,7 @@ class Replacement(BaseModel):
 
 class ReplacementsPayload(BaseModel):
     file_path: str
-    replacements: List[Replacement]
+    replacements: list[Replacement]
 
 
 class ContentPayload(BaseModel):
@@ -100,10 +100,10 @@ class ContentPayload(BaseModel):
     overwrite: bool = False
 
 
-EditFilePayload = Union[DeleteSnippetPayload, ReplacementsPayload, ContentPayload]
+EditFilePayload = DeleteSnippetPayload | ReplacementsPayload | ContentPayload
 
 
-def _parse_diff_lines(diff_text: str) -> List[DiffLine]:
+def _parse_diff_lines(diff_text: str) -> list[DiffLine]:
     """Parse unified diff text into structured DiffLine objects.
 
     Args:
@@ -218,7 +218,7 @@ def _delete_snippet_from_file(
     file_path: str,
     snippet: str,
     message_group: str | None = None,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     file_path = os.path.abspath(file_path)
     diff_text = ""
     try:
@@ -257,9 +257,9 @@ def _delete_snippet_from_file(
 def _replace_in_file(
     context: RunContext | None,
     path: str,
-    replacements: List[Dict[str, str]],
+    replacements: list[dict[str, str]],
     message_group: str | None = None,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """Robust replacement engine with explicit edge‑case reporting."""
     file_path = os.path.abspath(path)
     diff_text = ""
@@ -354,7 +354,7 @@ def _write_to_file(
     content: str,
     overwrite: bool = False,
     message_group: str | None = None,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     file_path = os.path.abspath(path)
 
     try:
@@ -404,7 +404,7 @@ def _write_to_file(
 
 def delete_snippet_from_file(
     context: RunContext, file_path: str, snippet: str, message_group: str | None = None
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     # Use the plugin system for permission handling with operation data
     from code_puppy.callbacks import on_file_permission
 
@@ -434,7 +434,7 @@ def write_to_file(
     content: str,
     overwrite: bool,
     message_group: str | None = None,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     # Use the plugin system for permission handling with operation data
     from code_puppy.callbacks import on_file_permission
 
@@ -463,9 +463,9 @@ def write_to_file(
 def replace_in_file(
     context: RunContext,
     path: str,
-    replacements: List[Dict[str, str]],
+    replacements: list[dict[str, str]],
     message_group: str | None = None,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     # Use the plugin system for permission handling with operation data
     from code_puppy.callbacks import on_file_permission
 
@@ -489,7 +489,7 @@ def replace_in_file(
 
 def _edit_file(
     context: RunContext, payload: EditFilePayload, group_id: str | None = None
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """
     High-level implementation of the *edit_file* behaviour.
 
@@ -580,7 +580,7 @@ def _edit_file(
 
 def _delete_file(
     context: RunContext, file_path: str, message_group: str | None = None
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     file_path = os.path.abspath(file_path)
 
     # Use the plugin system for permission handling with operation data
@@ -639,7 +639,7 @@ def register_edit_file(agent):
     def edit_file(
         context: RunContext,
         payload: EditFilePayload | str = "",
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Comprehensive file editing tool supporting multiple modification strategies.
 
         Supports: ContentPayload (create/overwrite), ReplacementsPayload (targeted edits),
@@ -698,7 +698,7 @@ def register_delete_file(agent):
     """Register only the delete_file tool."""
 
     @agent.tool
-    def delete_file(context: RunContext, file_path: str = "") -> Dict[str, Any]:
+    def delete_file(context: RunContext, file_path: str = "") -> dict[str, Any]:
         """Safely delete a file and report the deletion.
 
         Delete operations intentionally do not generate or print diffs of removed content.
@@ -740,7 +740,7 @@ def register_create_file(agent):
         file_path: str = "",
         content: str = "",
         overwrite: bool = False,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Create a new file or overwrite an existing one with the provided content."""
         group_id = generate_group_id("create_file", file_path)
         result = _write_file(
@@ -777,7 +777,7 @@ _REPLACEMENT_ITEM_SCHEMA = {
 
 # Type alias used by the tool signature.  The Annotated + WithJsonSchema
 # tells Pydantic to emit _REPLACEMENT_ITEM_SCHEMA inline instead of a $ref.
-InlineReplacement = Annotated[Dict[str, str], WithJsonSchema(_REPLACEMENT_ITEM_SCHEMA)]
+InlineReplacement = Annotated[dict[str, str], WithJsonSchema(_REPLACEMENT_ITEM_SCHEMA)]
 
 
 def _try_json_repair(v: Any) -> Any:
@@ -812,7 +812,7 @@ def _coerce_replacements_arg(v: Any) -> Any:
 # BeforeValidator runs prior to type validation, so the advertised JSON schema
 # (array of InlineReplacement) is unchanged — only inbound coercion is widened.
 RepairableReplacementsList = Annotated[
-    List[InlineReplacement],
+    list[InlineReplacement],
     BeforeValidator(_coerce_replacements_arg),
 ]
 
@@ -824,8 +824,8 @@ def register_replace_in_file(agent):
     def replace_in_file(
         context: RunContext,
         file_path: str = "",
-        replacements: Optional[RepairableReplacementsList] = None,
-    ) -> Dict[str, Any]:
+        replacements: RepairableReplacementsList | None = None,
+    ) -> dict[str, Any]:
         """Apply targeted text replacements to an existing file.
 
         Each replacement specifies an old_str to find and a new_str to replace it with.
@@ -838,7 +838,7 @@ def register_replace_in_file(agent):
             # Validate replacements up front so a malformed payload from the
             # model returns a clean error instead of bubbling a KeyError up
             # through pydantic_ai and tearing down the whole agent run.
-            normalized: List[Dict[str, str]] = []
+            normalized: list[dict[str, str]] = []
             for idx, raw in enumerate(replacements):
                 # Per-item json_repair: some models stringify each replacement
                 # individually (e.g. ["{\"old_str\": ...}", ...]). Heal those
@@ -904,7 +904,7 @@ def register_delete_snippet(agent):
         context: RunContext,
         file_path: str = "",
         snippet: str = "",
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Remove the first occurrence of a text snippet from a file."""
         group_id = generate_group_id("delete_snippet", file_path)
         result = _remove_snippet(context, file_path, snippet, message_group=group_id)

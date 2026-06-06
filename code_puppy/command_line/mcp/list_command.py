@@ -1,9 +1,9 @@
 """
 MCP List Command - Lists all registered MCP servers in a formatted table.
 """
+from __future__ import annotations
 
 import logging
-from typing import List, Optional
 
 from rich.table import Table
 from rich.text import Text
@@ -25,7 +25,7 @@ class ListCommand(MCPCommandBase):
     Displays all registered MCP servers in a formatted table with status information.
     """
 
-    def execute(self, args: List[str], group_id: Optional[str] = None) -> None:
+    def execute(self, args: list[str], group_id: str | None = None) -> None:
         """
         List all registered MCP servers in a formatted table.
 

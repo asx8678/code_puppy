@@ -20,7 +20,6 @@ from __future__ import annotations
 
 import os
 import random
-from typing import List, Set
 
 import pytest
 from pydantic_ai.messages import (
@@ -90,7 +89,7 @@ def _big_blob(approx_tokens: int, rng: random.Random) -> str:
     so ``approx_tokens * 2.5`` chars → the intended token estimate.
     """
     target_chars = int(approx_tokens * 2.5)
-    chunks: List[str] = []
+    chunks: list[str] = []
     total = 0
     while total < target_chars:
         chunk = _LOREM_CORPUS + f" (random-seed-{rng.randint(0, 1_000_000)}) "
@@ -101,7 +100,7 @@ def _big_blob(approx_tokens: int, rng: random.Random) -> str:
 
 def _build_huge_history(
     target_tokens: int = 180_000, seed: int = 42
-) -> List[ModelMessage]:
+) -> list[ModelMessage]:
     """Build a realistic ~``target_tokens`` message history.
 
     Mix:
@@ -114,7 +113,7 @@ def _build_huge_history(
     Returns a history that will come in close to but not exceeding the target.
     """
     rng = random.Random(seed)
-    msgs: List[ModelMessage] = [
+    msgs: list[ModelMessage] = [
         ModelRequest(
             parts=[
                 UserPromptPart(
@@ -193,10 +192,10 @@ def _build_huge_history(
     return msgs
 
 
-def _count_orphan_tool_ids(messages: List[ModelMessage]) -> tuple[Set[str], Set[str]]:
+def _count_orphan_tool_ids(messages: list[ModelMessage]) -> tuple[set[str], set[str]]:
     """Return (call_ids_without_return, return_ids_without_call)."""
-    calls: Set[str] = set()
-    returns: Set[str] = set()
+    calls: set[str] = set()
+    returns: set[str] = set()
     for msg in messages:
         for part in msg.parts:
             tool_call_id = getattr(part, "tool_call_id", None)
@@ -214,7 +213,7 @@ def _count_orphan_tool_ids(messages: List[ModelMessage]) -> tuple[Set[str], Set[
 
 
 @pytest.fixture
-def huge_history() -> List[ModelMessage]:
+def huge_history() -> list[ModelMessage]:
     return _build_huge_history(target_tokens=200_000)
 
 

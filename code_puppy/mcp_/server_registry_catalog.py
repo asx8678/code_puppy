@@ -2,28 +2,28 @@
 MCP Server Registry Catalog - Pre-configured MCP servers.
 A curated collection of MCP servers that can be easily searched and installed.
 """
+from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Dict, List, Optional, Union
 
 
 @dataclass
 class MCPServerRequirements:
     """Comprehensive requirements for an MCP server installation."""
 
-    environment_vars: List[str] = field(
+    environment_vars: list[str] = field(
         default_factory=list
     )  # ["GITHUB_TOKEN", "API_KEY"]
-    command_line_args: List[Dict[str, Union[str, bool]]] = field(
+    command_line_args: list[dict[str, str | bool]] = field(
         default_factory=list
     )  # [{"name": "port", "prompt": "Port number", "default": "3000", "required": False}]
-    required_tools: List[str] = field(
+    required_tools: list[str] = field(
         default_factory=list
     )  # ["node", "python", "npm", "npx"]
-    package_dependencies: List[str] = field(
+    package_dependencies: list[str] = field(
         default_factory=list
     )  # ["jupyter", "@modelcontextprotocol/server-discord"]
-    system_requirements: List[str] = field(
+    system_requirements: list[str] = field(
         default_factory=list
     )  # ["Docker installed", "Git configured"]
 
@@ -37,13 +37,13 @@ class MCPServerTemplate:
     display_name: str
     description: str
     category: str
-    tags: List[str]
+    tags: list[str]
     type: str  # "stdio", "http", "sse"
-    config: Dict
+    config: dict
     author: str = "Community"
     verified: bool = False
     popular: bool = False
-    requires: Union[List[str], MCPServerRequirements] = field(
+    requires: list[str] | MCPServerRequirements = field(
         default_factory=list
     )  # Backward compatible
     example_usage: str = ""
@@ -55,7 +55,7 @@ class MCPServerTemplate:
             return MCPServerRequirements(required_tools=self.requires)
         return self.requires
 
-    def get_environment_vars(self) -> List[str]:
+    def get_environment_vars(self) -> list[str]:
         """Get list of required environment variables."""
         requirements = self.get_requirements()
         env_vars = requirements.environment_vars.copy()
@@ -70,23 +70,23 @@ class MCPServerTemplate:
 
         return env_vars
 
-    def get_command_line_args(self) -> List[Dict]:
+    def get_command_line_args(self) -> list[dict]:
         """Get list of configurable command line arguments."""
         return self.get_requirements().command_line_args
 
-    def get_required_tools(self) -> List[str]:
+    def get_required_tools(self) -> list[str]:
         """Get list of required system tools."""
         return self.get_requirements().required_tools
 
-    def get_package_dependencies(self) -> List[str]:
+    def get_package_dependencies(self) -> list[str]:
         """Get list of package dependencies."""
         return self.get_requirements().package_dependencies
 
-    def get_system_requirements(self) -> List[str]:
+    def get_system_requirements(self) -> list[str]:
         """Get list of system requirements."""
         return self.get_requirements().system_requirements
 
-    def to_server_config(self, custom_name: Optional[str] = None, **cmd_args) -> Dict:
+    def to_server_config(self, custom_name: str | None = None, **cmd_args) -> dict:
         """Convert template to server configuration with optional overrides.
 
         Replaces placeholders in the config with actual values.
@@ -133,7 +133,7 @@ class MCPServerTemplate:
 
 
 # Pre-configured MCP Server Registry
-MCP_SERVER_REGISTRY: List[MCPServerTemplate] = [
+MCP_SERVER_REGISTRY: list[MCPServerTemplate] = [
     MCPServerTemplate(
         id="serena",
         name="serena",
@@ -1050,7 +1050,7 @@ class MCPServerCatalog:
                 self.by_category[server.category] = []
             self.by_category[server.category].append(server)
 
-    def search(self, query: str) -> List[MCPServerTemplate]:
+    def search(self, query: str) -> list[MCPServerTemplate]:
         """
         Search for servers by name, description, or tags.
 
@@ -1100,24 +1100,24 @@ class MCPServerCatalog:
 
         return results
 
-    def get_by_id(self, server_id: str) -> Optional[MCPServerTemplate]:
+    def get_by_id(self, server_id: str) -> MCPServerTemplate | None:
         """Get server template by ID."""
         return self.by_id.get(server_id)
 
-    def get_by_category(self, category: str) -> List[MCPServerTemplate]:
+    def get_by_category(self, category: str) -> list[MCPServerTemplate]:
         """Get all servers in a category."""
         return self.by_category.get(category, [])
 
-    def list_categories(self) -> List[str]:
+    def list_categories(self) -> list[str]:
         """List all available categories."""
         return sorted(self.by_category.keys())
 
-    def get_popular(self, limit: int = 10) -> List[MCPServerTemplate]:
+    def get_popular(self, limit: int = 10) -> list[MCPServerTemplate]:
         """Get popular servers."""
         popular = [s for s in self.servers if s.popular]
         return popular[:limit]
 
-    def get_verified(self) -> List[MCPServerTemplate]:
+    def get_verified(self) -> list[MCPServerTemplate]:
         """Get all verified servers."""
         return [s for s in self.servers if s.verified]
 

@@ -17,8 +17,6 @@ Default: OFF. Opt-in only.
 
 from __future__ import annotations
 
-from typing import List, Optional, Tuple
-
 from code_puppy.callbacks import register_callback
 from code_puppy.plugins.prompt_newline.config import is_enabled, set_enabled
 
@@ -90,7 +88,7 @@ def _on_startup() -> None:
         _emit_error(f"prompt_newline: failed to install prompt patch — {exc}")
 
 
-def _custom_help() -> List[Tuple[str, str]]:
+def _custom_help() -> list[tuple[str, str]]:
     return [
         (
             _COMMAND_NAME,
@@ -99,7 +97,7 @@ def _custom_help() -> List[Tuple[str, str]]:
     ]
 
 
-def _parse_toggle_arg(command: str) -> Optional[bool]:
+def _parse_toggle_arg(command: str) -> bool | None:
     """Parse ``/prompt_newline [on|off|true|false|toggle]``.
 
     Returns:

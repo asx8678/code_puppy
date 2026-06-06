@@ -15,7 +15,8 @@ interleaved-thinking pattern for consistency.
 
 from __future__ import annotations
 
-from typing import Any, Callable, Dict, MutableMapping
+from collections.abc import Callable, MutableMapping
+from typing import Any
 
 # Anthropic beta marker for fast mode. Keep as a module-level constant so
 # there's one source of truth for both header setup and tests.
@@ -66,7 +67,7 @@ def ensure_fast_beta_header(headers: MutableMapping[str, str], enabled: bool) ->
         del headers["anthropic-beta"]
 
 
-def _inject_speed_in_payload(payload: Dict[str, Any]) -> None:
+def _inject_speed_in_payload(payload: dict[str, Any]) -> None:
     """Inject ``speed: "fast"`` into a /v1/messages payload dict in place."""
     if not isinstance(payload, dict):
         return

@@ -4,13 +4,13 @@ ServerRegistry implementation for managing MCP server configurations.
 This module provides a registry that tracks all MCP server configurations
 and provides thread-safe CRUD operations with JSON persistence.
 """
+from __future__ import annotations
 
 import json
 import logging
 import threading
 import uuid
 from pathlib import Path
-from typing import Dict, List, Optional
 
 from code_puppy import config
 
@@ -32,7 +32,7 @@ class ServerRegistry:
     server type requirements.
     """
 
-    def __init__(self, storage_path: Optional[str] = None):
+    def __init__(self, storage_path: str | None = None):
         """
         Initialize the server registry.
 
@@ -51,7 +51,7 @@ class ServerRegistry:
         self._lock = threading.RLock()
 
         # In-memory storage: server_id -> ServerConfig
-        self._servers: Dict[str, ServerConfig] = {}
+        self._servers: dict[str, ServerConfig] = {}
 
         # Load existing configurations
         self._load()
@@ -123,7 +123,7 @@ class ServerRegistry:
             logger.info(f"Unregistered server: {server_name} (ID: {server_id})")
             return True
 
-    def get(self, server_id: str) -> Optional[ServerConfig]:
+    def get(self, server_id: str) -> ServerConfig | None:
         """
         Get server configuration by ID.
 
@@ -136,7 +136,7 @@ class ServerRegistry:
         with self._lock:
             return self._servers.get(server_id)
 
-    def get_by_name(self, name: str) -> Optional[ServerConfig]:
+    def get_by_name(self, name: str) -> ServerConfig | None:
         """
         Get server configuration by name.
 
@@ -152,7 +152,7 @@ class ServerRegistry:
                     return config
             return None
 
-    def list_all(self) -> List[ServerConfig]:
+    def list_all(self) -> list[ServerConfig]:
         """
         Get all server configurations.
 
@@ -219,7 +219,7 @@ class ServerRegistry:
         with self._lock:
             return server_id in self._servers
 
-    def validate_config(self, config: ServerConfig) -> List[str]:
+    def validate_config(self, config: ServerConfig) -> list[str]:
         """
         Validate server configuration.
 
@@ -385,7 +385,7 @@ class ServerRegistry:
                 )
                 return
 
-            with open(self._storage_path, "r", encoding="utf-8") as f:
+            with open(self._storage_path, encoding="utf-8") as f:
                 data = json.load(f)
 
             if not isinstance(data, dict):

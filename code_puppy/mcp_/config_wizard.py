@@ -4,10 +4,10 @@ MCP Configuration Wizard - Interactive setup for MCP servers.
 Note: This module imports ServerConfig and get_mcp_manager directly from
 .fast_puppy.mcp.manager to avoid circular imports with the package __init__.py
 """
+from __future__ import annotations
 
 import re
 from pathlib import Path
-from typing import Dict, Optional
 from urllib.parse import urlparse
 
 from rich.text import Text
@@ -23,8 +23,8 @@ from code_puppy.messaging import (
 
 
 def prompt_ask(
-    prompt_text: str, default: Optional[str] = None, choices: Optional[list] = None
-) -> Optional[str]:
+    prompt_text: str, default: str | None = None, choices: list | None = None
+) -> str | None:
     """Helper function to replace rich.prompt.Prompt.ask with emit_prompt."""
     try:
         if default:
@@ -79,7 +79,7 @@ class MCPConfigWizard:
     def __init__(self):
         self.manager = get_mcp_manager()
 
-    def run_wizard(self, group_id: str = None) -> Optional[ServerConfig]:
+    def run_wizard(self, group_id: str = None) -> ServerConfig | None:
         """
         Run the interactive configuration wizard.
 
@@ -133,7 +133,7 @@ class MCPConfigWizard:
 
         return None
 
-    def prompt_server_name(self, group_id: str = None) -> Optional[str]:
+    def prompt_server_name(self, group_id: str = None) -> str | None:
         """Prompt for server name with validation."""
         while True:
             name = prompt_ask("Enter server name", default=None)
@@ -159,7 +159,7 @@ class MCPConfigWizard:
 
             return name
 
-    def prompt_server_type(self, group_id: str = None) -> Optional[str]:
+    def prompt_server_type(self, group_id: str = None) -> str | None:
         """Prompt for server type."""
         emit_info("\nServer types:", message_group=group_id)
         emit_info(
@@ -180,7 +180,7 @@ class MCPConfigWizard:
                 "Invalid type. Choose: sse, http, or stdio", message_group=group_id
             )
 
-    def prompt_sse_config(self, group_id: str = None) -> Optional[Dict]:
+    def prompt_sse_config(self, group_id: str = None) -> dict | None:
         """Prompt for SSE server configuration."""
         emit_info("Configuring SSE server", message_group=group_id)
 
@@ -206,7 +206,7 @@ class MCPConfigWizard:
 
         return config
 
-    def prompt_http_config(self, group_id: str = None) -> Optional[Dict]:
+    def prompt_http_config(self, group_id: str = None) -> dict | None:
         """Prompt for HTTP server configuration."""
         emit_info("Configuring HTTP server", message_group=group_id)
 
@@ -232,7 +232,7 @@ class MCPConfigWizard:
 
         return config
 
-    def prompt_stdio_config(self, group_id: str = None) -> Optional[Dict]:
+    def prompt_stdio_config(self, group_id: str = None) -> dict | None:
         """Prompt for Stdio server configuration."""
         emit_info("Configuring Stdio server", message_group=group_id)
         emit_info("Examples:", message_group=group_id)
@@ -289,7 +289,7 @@ class MCPConfigWizard:
 
         return config
 
-    def prompt_url(self, server_type: str, group_id: str = None) -> Optional[str]:
+    def prompt_url(self, server_type: str, group_id: str = None) -> str | None:
         """Prompt for and validate URL."""
         while True:
             url = prompt_ask(f"Enter {server_type} server URL", default=None)
@@ -306,7 +306,7 @@ class MCPConfigWizard:
                 "Invalid URL. Must be http:// or https://", message_group=group_id
             )
 
-    def prompt_headers(self, group_id: str = None) -> Dict[str, str]:
+    def prompt_headers(self, group_id: str = None) -> dict[str, str]:
         """Prompt for HTTP headers."""
         headers = {}
         emit_info("Enter headers (format: Name: Value)", message_group=group_id)
@@ -325,7 +325,7 @@ class MCPConfigWizard:
 
         return headers
 
-    def prompt_env_vars(self, group_id: str = None) -> Dict[str, str]:
+    def prompt_env_vars(self, group_id: str = None) -> dict[str, str]:
         """Prompt for environment variables."""
         env = {}
         emit_info("Enter environment variables", message_group=group_id)
@@ -474,7 +474,7 @@ def run_add_wizard(group_id: str = None) -> bool:
 
             # Load existing configs
             if os.path.exists(MCP_SERVERS_FILE):
-                with open(MCP_SERVERS_FILE, "r") as f:
+                with open(MCP_SERVERS_FILE) as f:
                     data = json.load(f)
                     servers = data.get("mcp_servers", {})
             else:

@@ -8,7 +8,7 @@ import time
 import urllib.parse
 from dataclasses import dataclass
 from http.server import BaseHTTPRequestHandler, HTTPServer
-from typing import Any, Optional, Tuple
+from typing import Any
 
 import requests
 
@@ -39,7 +39,7 @@ class TokenData:
 
 @dataclass
 class AuthBundle:
-    api_key: Optional[str]
+    api_key: str | None
     token_data: TokenData
     last_refresh: str
 
@@ -79,7 +79,7 @@ class _OAuthServer(HTTPServer):
         }
         return f"{self.issuer}/oauth/authorize?" + urllib.parse.urlencode(params)
 
-    def exchange_code(self, code: str) -> Tuple[AuthBundle, str]:
+    def exchange_code(self, code: str) -> tuple[AuthBundle, str]:
         data = {
             "grant_type": "authorization_code",
             "code": code,
@@ -131,7 +131,7 @@ class _OAuthServer(HTTPServer):
         api_key = token_data.access_token
 
         last_refresh = (
-            datetime.datetime.now(datetime.timezone.utc)
+            datetime.datetime.now(datetime.UTC)
             .isoformat()
             .replace("+00:00", "Z")
         )

@@ -1,7 +1,10 @@
+from __future__ import annotations
+
 import threading
+from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager, suppress
 from dataclasses import dataclass, field
-from typing import Any, AsyncIterator, List
+from typing import Any
 
 from pydantic_ai._run_context import RunContext
 from pydantic_ai.models import (
@@ -36,7 +39,7 @@ class RoundRobinModel(Model):
     overcome rate limits or distribute load.
     """
 
-    models: List[Model]
+    models: list[Model]
     _current_index: int = field(default=0, repr=False)
     _model_name: str = field(repr=False)
     _rotate_every: int = field(default=1, repr=False)

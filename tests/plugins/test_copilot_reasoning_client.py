@@ -16,14 +16,13 @@ import pytest
 
 from code_puppy.plugins.copilot_auth.reasoning_client import (
     _MAX_CACHE_ENTRIES,
-    _OpaqueCapturingStream,
     _capture_from_content,
     _inject_opaque_into_request,
+    _OpaqueCapturingStream,
     _strip_all_reasoning_fields,
     _text_key,
     patch_client_for_reasoning_opaque,
 )
-
 
 # ---------------------------------------------------------------------------
 # Helpers

@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import configparser
 import datetime
 import json
@@ -6,7 +8,6 @@ import os
 import pathlib
 import threading
 from collections import OrderedDict
-from typing import Optional
 
 from code_puppy.session_storage import save_session
 
@@ -253,10 +254,10 @@ DEFAULT_SECTION = "puppy"
 REQUIRED_KEYS = ["puppy_name", "owner_name"]
 
 # Runtime-only autosave session ID (per-process)
-_CURRENT_AUTOSAVE_ID: Optional[str] = None
+_CURRENT_AUTOSAVE_ID: str | None = None
 
 # Session-local model name (initialized from file on first access, then cached)
-_SESSION_MODEL: Optional[str] = None
+_SESSION_MODEL: str | None = None
 
 # Cache containers for model validation and defaults. The validation cache is a
 # bounded LRU keyed on model name so a long-lived session that probes many names
@@ -278,12 +279,12 @@ _default_vision_model_cache = None
 # free, while external edits (another terminal) and in-process writes still
 # invalidate correctly.
 # ---------------------------------------------------------------------------
-_CONFIG_CACHE: Optional[configparser.ConfigParser] = None
-_CONFIG_CACHE_SIG: Optional[tuple] = None
+_CONFIG_CACHE: configparser.ConfigParser | None = None
+_CONFIG_CACHE_SIG: tuple | None = None
 _CONFIG_CACHE_LOCK = threading.Lock()
 
 
-def _config_file_signature() -> Optional[tuple]:
+def _config_file_signature() -> tuple | None:
     try:
         st = os.stat(CONFIG_FILE)
         return (st.st_mtime_ns, st.st_size)
@@ -554,7 +555,7 @@ def load_mcp_server_configs():
     try:
         if not pathlib.Path(MCP_SERVERS_FILE).exists():
             return {}
-        with open(MCP_SERVERS_FILE, "r", encoding="utf-8") as f:
+        with open(MCP_SERVERS_FILE, encoding="utf-8") as f:
             conf = json.loads(f.read())
             return conf["mcp_servers"]
     except Exception as e:
@@ -908,7 +909,7 @@ def set_openai_verbosity(value: str) -> None:
     set_config_value("openai_verbosity", normalized)
 
 
-def get_temperature() -> Optional[float]:
+def get_temperature() -> float | None:
     """Return the configured model temperature (0.0 to 2.0).
 
     Returns:
@@ -926,7 +927,7 @@ def get_temperature() -> Optional[float]:
         return None
 
 
-def set_temperature(value: Optional[float]) -> None:
+def set_temperature(value: float | None) -> None:
     """Set the global model temperature in config.
 
     Args:
@@ -957,8 +958,8 @@ def _sanitize_model_name_for_key(model_name: str) -> str:
 
 
 def get_model_setting(
-    model_name: str, setting: str, default: Optional[float] = None
-) -> Optional[float]:
+    model_name: str, setting: str, default: float | None = None
+) -> float | None:
     """Get a specific setting for a model.
 
     Args:
@@ -982,7 +983,7 @@ def get_model_setting(
         return default
 
 
-def set_model_setting(model_name: str, setting: str, value: Optional[float]) -> None:
+def set_model_setting(model_name: str, setting: str, value: float | None) -> None:
     """Set a specific setting for a model.
 
     Args:
@@ -1066,7 +1067,7 @@ def clear_model_settings(model_name: str) -> None:
         _persist_config(config)
 
 
-def get_effective_model_settings(model_name: Optional[str] = None) -> dict:
+def get_effective_model_settings(model_name: str | None = None) -> dict:
     """Get all effective settings for a model, filtered by what the model supports.
 
     This is the generalized way to get model settings. It:
@@ -1108,7 +1109,7 @@ def get_effective_model_settings(model_name: Optional[str] = None) -> dict:
 
 
 # Legacy functions for backward compatibility
-def get_effective_temperature(model_name: Optional[str] = None) -> Optional[float]:
+def get_effective_temperature(model_name: str | None = None) -> float | None:
     """Get the effective temperature for a model.
 
     Checks per-model settings first, then falls back to global temperature.
@@ -1123,7 +1124,7 @@ def get_effective_temperature(model_name: Optional[str] = None) -> Optional[floa
     return settings.get("temperature")
 
 
-def get_effective_top_p(model_name: Optional[str] = None) -> Optional[float]:
+def get_effective_top_p(model_name: str | None = None) -> float | None:
     """Get the effective top_p for a model.
 
     Args:
@@ -1136,7 +1137,7 @@ def get_effective_top_p(model_name: Optional[str] = None) -> Optional[float]:
     return settings.get("top_p")
 
 
-def get_effective_seed(model_name: Optional[str] = None) -> Optional[int]:
+def get_effective_seed(model_name: str | None = None) -> int | None:
     """Get the effective seed for a model.
 
     Args:
@@ -1176,7 +1177,7 @@ def normalize_command_history():
     try:
         # Read the entire file with encoding error handling for Windows
         with open(
-            COMMAND_HISTORY_FILE, "r", encoding="utf-8", errors="surrogateescape"
+            COMMAND_HISTORY_FILE, encoding="utf-8", errors="surrogateescape"
         ) as f:
             content = f.read()
 
@@ -1244,7 +1245,7 @@ def get_user_agents_directory() -> str:
     return AGENTS_DIR
 
 
-def get_project_agents_directory() -> Optional[str]:
+def get_project_agents_directory() -> str | None:
     """Get the project-local agents directory path.
 
     Looks for a .fast_puppy/agents/ directory in the current working directory.
@@ -1638,7 +1639,7 @@ _DEFAULT_DIFF_ADDITION_HEX = "#0b1f0b"  # darker green
 _DEFAULT_DIFF_DELETION_HEX = "#390e1a"  # wine
 
 
-def _coerce_to_hex(value: Optional[str], fallback: str) -> str:
+def _coerce_to_hex(value: str | None, fallback: str) -> str:
     """Normalize any color string to '#RRGGBB'.
 
     Accepts:
@@ -1916,7 +1917,7 @@ def get_diff_context_lines() -> int:
         return 6
 
 
-def get_terminal_tty() -> Optional[str]:
+def get_terminal_tty() -> str | None:
     """Return the TTY device path for stdin, or None if unavailable.
 
     This identifies the physical terminal so /switch-agent can resume the
@@ -1969,7 +1970,7 @@ def record_terminal_session(session_name: str, *, overwrite: bool = True) -> Non
         pass
 
 
-def get_last_terminal_session() -> Optional[str]:
+def get_last_terminal_session() -> str | None:
     """Return the last autosave session recorded for this terminal."""
     tty = get_terminal_tty()
     if not tty:

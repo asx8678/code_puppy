@@ -1,4 +1,5 @@
 """Full coverage tests for mcp_/status_tracker.py."""
+from __future__ import annotations
 
 from datetime import datetime, timedelta
 

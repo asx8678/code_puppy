@@ -4,8 +4,9 @@ This module registers a callback that intercepts shell commands in yolo_mode,
 or in non-interactive sub-agent runs, and assesses their safety risk before
 execution.
 """
+from __future__ import annotations
 
-from typing import Any, Dict, Optional
+from typing import Any
 
 from code_puppy.callbacks import register_callback
 from code_puppy.config import (
@@ -49,7 +50,7 @@ def is_oauth_model(model_name: str | None) -> bool:
 # Risk level hierarchy for numeric comparison
 # Lower numbers = safer commands, higher numbers = more dangerous
 # This mapping allows us to compare risk levels as integers
-RISK_LEVELS: Dict[str, int] = {
+RISK_LEVELS: dict[str, int] = {
     "none": 0,
     "low": 1,
     "medium": 2,
@@ -58,7 +59,7 @@ RISK_LEVELS: Dict[str, int] = {
 }
 
 
-def compare_risk_levels(assessed_risk: Optional[str], threshold: str) -> bool:
+def compare_risk_levels(assessed_risk: str | None, threshold: str) -> bool:
     """Compare assessed risk against threshold.
 
     Args:
@@ -83,8 +84,8 @@ def compare_risk_levels(assessed_risk: Optional[str], threshold: str) -> bool:
 
 
 async def shell_safety_callback(
-    context: Any, command: str, cwd: Optional[str] = None, timeout: int = 60
-) -> Optional[Dict[str, Any]]:
+    context: Any, command: str, cwd: str | None = None, timeout: int = 60
+) -> dict[str, Any] | None:
     """Callback to assess shell command safety before execution.
 
     This callback is active when yolo_mode is True. It also runs for sub-agents

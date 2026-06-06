@@ -15,6 +15,7 @@ The autouse ``isolate_global_state_between_tests`` fixture in conftest.py
 redirects CONFIG_DIR/CONFIG_FILE to an empty temp dir, so tests that call the
 real config setters/getters start from true product defaults.
 """
+from __future__ import annotations
 
 import configparser
 import json
@@ -1198,7 +1199,7 @@ class TestMCPServerConfigs:
         with (
             patch("code_puppy.config.MCP_SERVERS_FILE", "/mock/mcp_servers.json"),
             patch("pathlib.Path.exists", return_value=True),
-            patch("builtins.open", side_effect=IOError("Permission denied")),
+            patch("builtins.open", side_effect=OSError("Permission denied")),
             patch("code_puppy.messaging.message_queue.emit_error") as mock_emit_error,
         ):
             assert cp_config.load_mcp_server_configs() == {}

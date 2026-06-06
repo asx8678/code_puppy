@@ -1,4 +1,5 @@
 """Tests for ask_user_question models."""
+from __future__ import annotations
 
 import pytest
 from pydantic import ValidationError

@@ -14,14 +14,11 @@ Covers:
 from __future__ import annotations
 
 import asyncio
-from typing import Any, Dict, List
+from typing import Any
 from unittest.mock import patch
 
 import pytest
 
-from code_puppy.plugins.frontend_emitter.session_context import (
-    current_emitter_session_id,
-)
 from code_puppy.plugins.frontend_emitter.emitter import (
     _recent_events,
     _subscriber_records,
@@ -29,6 +26,9 @@ from code_puppy.plugins.frontend_emitter.emitter import (
     get_subscriber_count,
     subscribe,
     unsubscribe,
+)
+from code_puppy.plugins.frontend_emitter.session_context import (
+    current_emitter_session_id,
 )
 
 # ─── helpers ─────────────────────────────────────────────────────────────
@@ -40,9 +40,9 @@ def _reset_emitter_state() -> None:
     _recent_events.clear()
 
 
-def _drain(q: "asyncio.Queue[Dict[str, Any]]") -> List[Dict[str, Any]]:
+def _drain(q: "asyncio.Queue[dict[str, Any]]") -> list[dict[str, Any]]:
     """Drain everything currently in ``q`` without awaiting."""
-    out: List[Dict[str, Any]] = []
+    out: list[dict[str, Any]] = []
     while not q.empty():
         out.append(q.get_nowait())
     return out

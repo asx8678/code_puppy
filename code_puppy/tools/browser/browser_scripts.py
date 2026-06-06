@@ -1,6 +1,7 @@
 """JavaScript execution and advanced page manipulation tools."""
+from __future__ import annotations
 
-from typing import Any, Dict, Optional
+from typing import Any
 
 from pydantic_ai import RunContext
 
@@ -13,7 +14,7 @@ from .browser_manager import get_session_browser_manager
 async def execute_javascript(
     script: str,
     timeout: int = 30000,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """Execute JavaScript code in the browser context."""
     group_id = generate_group_id("browser_execute_js", script[:100])
     emit_info(
@@ -44,8 +45,8 @@ async def execute_javascript(
 async def scroll_page(
     direction: str = "down",
     amount: int = 3,
-    element_selector: Optional[str] = None,
-) -> Dict[str, Any]:
+    element_selector: str | None = None,
+) -> dict[str, Any]:
     """Scroll the page or a specific element."""
     target = element_selector or "page"
     group_id = generate_group_id("browser_scroll", f"{direction}_{amount}_{target}")
@@ -140,7 +141,7 @@ async def scroll_page(
 async def scroll_to_element(
     selector: str,
     timeout: int = 10000,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """Scroll to bring an element into view."""
     group_id = generate_group_id("browser_scroll_to_element", selector[:100])
     emit_info(
@@ -172,7 +173,7 @@ async def scroll_to_element(
 async def set_viewport_size(
     width: int,
     height: int,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """Set the viewport size."""
     group_id = generate_group_id("browser_set_viewport", f"{width}x{height}")
     emit_info(
@@ -203,7 +204,7 @@ async def wait_for_element(
     selector: str,
     state: str = "visible",
     timeout: int = 30000,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """Wait for an element to reach a specific state."""
     group_id = generate_group_id("browser_wait_for_element", f"{selector[:50]}_{state}")
     emit_info(
@@ -232,7 +233,7 @@ async def highlight_element(
     selector: str,
     color: str = "red",
     timeout: int = 10000,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """Highlight an element with a colored border."""
     group_id = generate_group_id(
         "browser_highlight_element", f"{selector[:50]}_{color}"
@@ -271,7 +272,7 @@ async def highlight_element(
         return {"success": False, "error": str(e), "selector": selector}
 
 
-async def clear_highlights() -> Dict[str, Any]:
+async def clear_highlights() -> dict[str, Any]:
     """Clear all element highlights."""
     group_id = generate_group_id("browser_clear_highlights")
     emit_info(
@@ -318,7 +319,7 @@ def register_execute_javascript(agent):
         context: RunContext,
         script: str,
         timeout: int = 30000,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         Execute JavaScript code in the browser context.
 
@@ -340,8 +341,8 @@ def register_scroll_page(agent):
         context: RunContext,
         direction: str = "down",
         amount: int = 3,
-        element_selector: Optional[str] = None,
-    ) -> Dict[str, Any]:
+        element_selector: str | None = None,
+    ) -> dict[str, Any]:
         """
         Scroll the page or a specific element.
 
@@ -364,7 +365,7 @@ def register_scroll_to_element(agent):
         context: RunContext,
         selector: str,
         timeout: int = 10000,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         Scroll to bring an element into view.
 
@@ -386,7 +387,7 @@ def register_set_viewport_size(agent):
         context: RunContext,
         width: int,
         height: int,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         Set the browser viewport size.
 
@@ -409,7 +410,7 @@ def register_wait_for_element(agent):
         selector: str,
         state: str = "visible",
         timeout: int = 30000,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         Wait for an element to reach a specific state.
 
@@ -433,7 +434,7 @@ def register_browser_highlight_element(agent):
         selector: str,
         color: str = "red",
         timeout: int = 10000,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         Highlight an element with a colored border for visual identification.
 
@@ -452,7 +453,7 @@ def register_browser_clear_highlights(agent):
     """Register the clear highlights tool."""
 
     @agent.tool
-    async def browser_clear_highlights(context: RunContext) -> Dict[str, Any]:
+    async def browser_clear_highlights(context: RunContext) -> dict[str, Any]:
         """
         Clear all element highlights from the page.
 

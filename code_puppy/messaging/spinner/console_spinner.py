@@ -1,6 +1,7 @@
 """
 Console spinner implementation for CLI mode using Rich's Live Display.
 """
+from __future__ import annotations
 
 import platform
 import threading

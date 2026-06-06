@@ -7,13 +7,15 @@ failures when MCP servers become unhealthy. The circuit breaker has three states
 - OPEN: Calls are blocked and fail fast
 - HALF_OPEN: Limited calls allowed to test recovery
 """
+from __future__ import annotations
 
 import asyncio
 import logging
 import threading
 import time
+from collections.abc import Callable
 from enum import Enum
-from typing import Any, Callable
+from typing import Any
 
 logger = logging.getLogger(__name__)
 

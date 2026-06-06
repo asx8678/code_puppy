@@ -16,7 +16,6 @@ from __future__ import annotations
 
 import asyncio
 import sys
-from typing import List, Tuple
 
 from prompt_toolkit.application import Application
 from prompt_toolkit.key_binding import KeyBindings
@@ -36,10 +35,10 @@ from code_puppy.messaging import emit_info, emit_warning
 from code_puppy.tools.command_runner import set_awaiting_user_input
 
 
-def _list_servers() -> List[Tuple[str, str, str]]:
+def _list_servers() -> list[tuple[str, str, str]]:
     """Return ``[(name, type, state)]`` for every registered MCP server."""
     manager = get_mcp_manager()
-    rows: List[Tuple[str, str, str]] = []
+    rows: list[tuple[str, str, str]] = []
     try:
         infos = manager.list_servers()
     except Exception as exc:  # pragma: no cover - defensive
@@ -53,12 +52,12 @@ def _list_servers() -> List[Tuple[str, str, str]]:
 
 def _render_menu(
     agent_name: str,
-    servers: List[Tuple[str, str, str]],
+    servers: list[tuple[str, str, str]],
     selected_idx: int,
-) -> List:
+) -> list:
     """Format the left binding panel."""
     bindings = get_bound_servers(agent_name)
-    lines: List = []
+    lines: list = []
     lines.append(("bold", "MCP bindings for agent: "))
     lines.append(("fg:ansicyan bold", agent_name))
     lines.append(("", "\n\n"))
@@ -98,11 +97,11 @@ def _render_menu(
 
 def _render_preview(
     agent_name: str,
-    servers: List[Tuple[str, str, str]],
+    servers: list[tuple[str, str, str]],
     selected_idx: int,
-) -> List:
+) -> list:
     """Format the right detail panel."""
-    lines: List = []
+    lines: list = []
     lines.append(("dim cyan", " SERVER DETAILS"))
     lines.append(("", "\n\n"))
     if not servers or not (0 <= selected_idx < len(servers)):
@@ -254,8 +253,8 @@ async def prompt_bind_after_install(server_name: str) -> None:
     selected_idx = [0]
     menu_control = FormattedTextControl(text="")
 
-    def render() -> List:
-        lines: List = []
+    def render() -> list:
+        lines: list = []
         lines.append(("bold", "Bind '"))
         lines.append(("fg:ansicyan bold", server_name))
         lines.append(("bold", "' to which agents?"))

@@ -9,6 +9,7 @@ Provides full coverage of MCPDashboard functionality including:
 - Metrics summarization
 - Console output
 """
+from __future__ import annotations
 
 from datetime import datetime, timedelta
 from unittest.mock import MagicMock, Mock, patch

@@ -6,6 +6,7 @@ Focuses on:
 - Callback functions (update_preview, dummy_update, get_main_preview)
 - Exception handling paths
 """
+from __future__ import annotations
 
 from unittest.mock import AsyncMock, MagicMock, patch
 

@@ -10,6 +10,7 @@ Tests stdio server capture functionality including:
 - Proper cleanup and resource management
 - Error handling and edge cases
 """
+from __future__ import annotations
 
 import asyncio
 import time
@@ -462,7 +463,7 @@ class TestCapturedMCPServerStdio:
         server = CapturedMCPServerStdio(command="python")
 
         with (
-            patch("builtins.open", side_effect=IOError("File error")),
+            patch("builtins.open", side_effect=OSError("File error")),
             patch(
                 "code_puppy.mcp_.captured_stdio_server.StderrCapture"
             ) as mock_stderr_capture,

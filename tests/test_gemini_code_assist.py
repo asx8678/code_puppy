@@ -1,4 +1,5 @@
 """Tests for code_puppy/gemini_code_assist.py - full coverage."""
+from __future__ import annotations
 
 import json
 from datetime import datetime

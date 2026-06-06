@@ -3,6 +3,7 @@
 Tests cover markdown command loading, global/project command resolution,
 custom help callbacks, and command execution.
 """
+from __future__ import annotations
 
 import tempfile
 from pathlib import Path
@@ -229,7 +230,7 @@ class TestLoadMarkdownCommands:
 
             def mock_read_text(self, *args, **kwargs):
                 if "error_test.md" in str(self):
-                    raise IOError("Simulated read error")
+                    raise OSError("Simulated read error")
                 return original_read_text(self, *args, **kwargs)
 
             with patch(

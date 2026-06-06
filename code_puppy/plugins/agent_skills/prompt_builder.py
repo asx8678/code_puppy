@@ -4,8 +4,9 @@ Keep the verbosity floor-low. Each skill becomes a single line of the form
 ``- <name>: <description>``. That is essentially the frontmatter `name` and
 `description` fields, flattened. No XML, no ceremony, no escaping circus.
 """
+from __future__ import annotations
 
-from typing import TYPE_CHECKING, List
+from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from .metadata import SkillMetadata
@@ -16,7 +17,7 @@ def _one_line(text: str) -> str:
     return " ".join(text.split())
 
 
-def build_available_skills_block(skills: List["SkillMetadata"]) -> str:
+def build_available_skills_block(skills: list["SkillMetadata"]) -> str:
     """Render a minimal markdown list of available skills.
 
     Format::

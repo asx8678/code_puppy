@@ -4,6 +4,7 @@ Additional coverage tests for message_queue.py.
 Focuses on uncovered code paths: start/stop lifecycle, listeners,
 prompt request/response, async operations, and global helper functions.
 """
+from __future__ import annotations
 
 import asyncio
 import threading
@@ -193,7 +194,7 @@ class TestMessageQueueAsyncOperations:
         async def get_with_timeout():
             try:
                 return await asyncio.wait_for(queue.get_async(), timeout=0.5)
-            except asyncio.TimeoutError:
+            except TimeoutError:
                 return None
 
         # The get_async should initialize the async queue
@@ -237,7 +238,7 @@ class TestMessageQueueAsyncOperations:
             try:
                 result = await task
                 return result
-            except asyncio.TimeoutError:
+            except TimeoutError:
                 return None
 
         result = await init_and_wait()

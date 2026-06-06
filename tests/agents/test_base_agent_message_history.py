@@ -7,6 +7,7 @@ This module tests the following message history methods in BaseAgent:
 - extend_message_history()
 - clear_message_history()
 """
+from __future__ import annotations
 
 import pytest
 

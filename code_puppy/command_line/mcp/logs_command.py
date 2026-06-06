@@ -1,9 +1,9 @@
 """
 MCP Logs Command - Shows server logs from persistent log files.
 """
+from __future__ import annotations
 
 import logging
-from typing import List, Optional
 
 from rich.panel import Panel
 from rich.syntax import Syntax
@@ -32,7 +32,7 @@ class LogsCommand(MCPCommandBase):
     Shows logs from persistent log files stored in ~/.fast_puppy/mcp_logs/.
     """
 
-    def execute(self, args: List[str], group_id: Optional[str] = None) -> None:
+    def execute(self, args: list[str], group_id: str | None = None) -> None:
         """
         Show logs for a server.
 
@@ -119,7 +119,7 @@ class LogsCommand(MCPCommandBase):
 
         emit_info("\n".join(lines), message_group=group_id)
 
-    def _show_logs(self, server_name: str, lines: Optional[int], group_id: str) -> None:
+    def _show_logs(self, server_name: str, lines: int | None, group_id: str) -> None:
         """
         Show logs for a specific server.
 

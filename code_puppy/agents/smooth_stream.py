@@ -23,7 +23,7 @@ from __future__ import annotations
 
 import asyncio
 import math
-from typing import Optional, TextIO
+from typing import TextIO
 
 from rich.console import Console
 from rich.markup import escape
@@ -53,7 +53,7 @@ class SteadyDrainer:
         self._catch_up_ticks = max(1, round(catch_up_seconds / tick_interval))
         self._min_units = max(1, min_units_per_tick)
         self._closed = False
-        self._task: Optional[asyncio.Task] = None
+        self._task: asyncio.Task | None = None
 
     def start(self) -> None:
         """Spin up the background drain task (idempotent)."""
@@ -226,7 +226,7 @@ def _split_by_visible(s: str, budget: int) -> tuple[str, str, int]:
     return s[:i], s[i:], consumed
 
 
-def make_thinking_smoother(console: Console) -> Optional[ThinkingStreamSmoother]:
+def make_thinking_smoother(console: Console) -> ThinkingStreamSmoother | None:
     """Build a thinking smoother honoring the user's config toggle.
 
     Returns ``None`` when smoothing is disabled, so callers fall back to
@@ -242,7 +242,7 @@ def make_thinking_smoother(console: Console) -> Optional[ThinkingStreamSmoother]
     return ThinkingStreamSmoother(console)
 
 
-def make_smooth_termflow_writer(target: TextIO) -> Optional[SmoothTermflowWriter]:
+def make_smooth_termflow_writer(target: TextIO) -> SmoothTermflowWriter | None:
     """Build a smooth termflow writer honoring the user's config toggle.
 
     Returns ``None`` when response smoothing is disabled, so callers fall back

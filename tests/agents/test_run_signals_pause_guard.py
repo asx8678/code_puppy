@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import asyncio
-from typing import Any, List
+from typing import Any
 
 import pytest
 
@@ -49,7 +49,7 @@ def _fake_loop() -> Any:
 
 def test_schedule_pause_no_ops_when_already_paused(monkeypatch):
     """Pressing the pause key twice MUST NOT fire the callback twice."""
-    scheduled_calls: List[Any] = []
+    scheduled_calls: list[Any] = []
 
     def _spy(coro, loop):
         scheduled_calls.append((coro, loop))
@@ -87,7 +87,7 @@ def test_schedule_pause_no_ops_when_already_paused(monkeypatch):
 
 def test_schedule_pause_schedules_when_not_paused(monkeypatch):
     """Baseline: when controller is fresh, schedule_pause does fire."""
-    scheduled_calls: List[Any] = []
+    scheduled_calls: list[Any] = []
 
     def _spy(coro, loop):
         scheduled_calls.append((coro, loop))
@@ -110,7 +110,7 @@ def test_schedule_pause_schedules_when_not_paused(monkeypatch):
 
 
 def test_schedule_pause_no_ops_when_task_done(monkeypatch):
-    scheduled_calls: List[Any] = []
+    scheduled_calls: list[Any] = []
 
     monkeypatch.setattr(
         asyncio,
@@ -133,7 +133,7 @@ def test_schedule_pause_proceeds_when_shell_running(monkeypatch):
     message and lets the agent continue naturally. The renderer buffers
     shell stdout/stderr while paused so the steering prompt is safe.
     """
-    scheduled_calls: List[Any] = []
+    scheduled_calls: list[Any] = []
 
     def _spy(coro, loop):
         scheduled_calls.append((coro, loop))

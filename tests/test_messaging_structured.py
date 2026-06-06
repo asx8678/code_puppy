@@ -2,8 +2,9 @@
 
 Tests for Pydantic message models and MessageBus functionality.
 """
+from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from code_puppy.messaging import MessageBus
 from code_puppy.messaging.messages import (
@@ -28,7 +29,7 @@ class TestShellLineMessage:
         assert isinstance(msg.id, str)
         assert len(msg.id) > 0
         assert isinstance(msg.timestamp, datetime)
-        assert msg.timestamp.tzinfo == timezone.utc
+        assert msg.timestamp.tzinfo == UTC
 
     def test_shell_line_message_stderr(self):
         """Test ShellLineMessage with stderr."""

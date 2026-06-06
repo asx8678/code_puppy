@@ -1,9 +1,9 @@
 """
 MCP Restart Command - Restarts a specific MCP server.
 """
+from __future__ import annotations
 
 import logging
-from typing import List, Optional
 
 from rich.text import Text
 
@@ -23,7 +23,7 @@ class RestartCommand(MCPCommandBase):
     Stops, reloads configuration, and starts a specific MCP server.
     """
 
-    def execute(self, args: List[str], group_id: Optional[str] = None) -> None:
+    def execute(self, args: list[str], group_id: str | None = None) -> None:
         """
         Restart a specific MCP server.
 

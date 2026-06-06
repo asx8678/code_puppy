@@ -23,9 +23,10 @@ On startup we monkeypatch four things:
 We do **not** touch ``event_stream_handler`` inlining — that code is for
 progress display only, not for compaction decisions.
 """
+from __future__ import annotations
 
 import logging
-from typing import Any, Optional, Union
+from typing import Any
 
 from code_puppy.callbacks import register_callback
 
@@ -64,7 +65,7 @@ def _patched_estimate_tokens(text: str) -> int:
 
 def _patched_estimate_tokens_for_message(
     message: Any,
-    model_name: Optional[str] = None,
+    model_name: str | None = None,
 ) -> int:
     """Per-message token estimation using learned model-specific ratios.
 
@@ -91,7 +92,7 @@ def _patched_estimate_tokens_for_message(
 
 
 def _compute_input_char_count(
-    agent: Any, prompt: Union[str, list], attachments: Any, link_attachments: Any
+    agent: Any, prompt: str | list, attachments: Any, link_attachments: Any
 ) -> int:
     """Compute a reasonable character count for the input to the model.
 
@@ -127,9 +128,9 @@ async def _patched_run_with_mcp(
     agent: Any,
     prompt: str,
     *,
-    attachments: Optional[Any] = None,
-    link_attachments: Optional[Any] = None,
-    output_type: Optional[Any] = None,
+    attachments: Any | None = None,
+    link_attachments: Any | None = None,
+    output_type: Any | None = None,
     **kwargs: Any,
 ) -> Any:
     """Wrap ``run_with_mcp`` to learn token ratios from real API responses."""

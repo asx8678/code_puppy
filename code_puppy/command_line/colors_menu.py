@@ -5,11 +5,12 @@ for different tool outputs (THINKING, SHELL COMMAND, READ FILE, etc.).
 
 Use /colors to launch the TUI and customize your banners!
 """
+from __future__ import annotations
 
 import asyncio
 import io
 import sys
-from typing import Callable, Optional
+from collections.abc import Callable
 
 from prompt_toolkit import Application
 from prompt_toolkit.formatted_text import ANSI, FormattedText
@@ -153,7 +154,7 @@ class ColorConfiguration:
         )
 
 
-async def interactive_colors_picker() -> Optional[dict]:
+async def interactive_colors_picker() -> dict | None:
     """Show an interactive full-screen terminal UI to configure banner colors.
 
     Returns:
@@ -259,8 +260,8 @@ async def _split_panel_selector(
     choices: list[str],
     on_change: Callable[[str], None],
     get_preview: Callable[[], ANSI],
-    config: Optional[ColorConfiguration] = None,
-) -> Optional[str]:
+    config: ColorConfiguration | None = None,
+) -> str | None:
     """Split-panel selector with menu on left and live preview on right."""
     selected_index = [0]
     result = [None]

@@ -8,7 +8,7 @@ queue and re-invokes the agent with the steer as a fresh user turn.
 
 from __future__ import annotations
 
-from typing import Any, List
+from typing import Any
 
 import pytest
 
@@ -18,7 +18,6 @@ from code_puppy.messaging.pause_controller import (
     get_pause_controller,
     reset_pause_controller,
 )
-
 
 # =============================================================================
 # Shared fixtures — mirror test_runtime_pause_integration.py
@@ -55,7 +54,7 @@ class _ScriptedPydanticAgent:
 
     def __init__(self, *outcomes: Any) -> None:
         self._outcomes = list(outcomes)
-        self.calls: List[dict[str, Any]] = []
+        self.calls: list[dict[str, Any]] = []
 
     async def run(self, prompt: Any, **kwargs: Any) -> Any:
         self.calls.append({"prompt": prompt, "kwargs": kwargs})

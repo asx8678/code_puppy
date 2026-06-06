@@ -1,4 +1,5 @@
 """Tests for code_puppy/command_line/onboarding_wizard.py"""
+from __future__ import annotations
 
 import os
 from unittest.mock import AsyncMock, MagicMock, mock_open, patch

@@ -3,12 +3,12 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any, Dict
+from typing import Any
 
 from code_puppy import config
 
 # GitHub Copilot auth configuration
-COPILOT_AUTH_CONFIG: Dict[str, Any] = {
+COPILOT_AUTH_CONFIG: dict[str, Any] = {
     # Copilot session-token endpoints
     "github_token_url": "https://api.github.com/copilot_internal/v2/token",
     # GHE template: replace {host}
@@ -27,7 +27,7 @@ COPILOT_AUTH_CONFIG: Dict[str, Any] = {
 
 # GitHub Device Flow configuration — browser-based auth with no IDE required.
 # Uses the VS Code Copilot extension's public client ID which supports Device Flow.
-DEVICE_FLOW_CONFIG: Dict[str, Any] = {
+DEVICE_FLOW_CONFIG: dict[str, Any] = {
     "client_id": "Iv1.b507a08c87ecfe98",
     "scope": "read:user",
     # Endpoint templates — {host} is replaced at runtime
@@ -56,7 +56,7 @@ DEFAULT_COPILOT_MODELS = [
 ]
 
 # Per-model context-length overrides (tokens).
-COPILOT_MODEL_CONTEXT_LENGTHS: Dict[str, int] = {
+COPILOT_MODEL_CONTEXT_LENGTHS: dict[str, int] = {
     "gpt-4o": 64000,
     "gpt-4.1": 128000,
     "gpt-4.1-mini": 128000,

@@ -7,6 +7,7 @@ This module tests the SystemToolDetector class which provides:
 - Package dependency checking (npm/python)
 - Installation suggestions for missing tools
 """
+from __future__ import annotations
 
 import subprocess
 from unittest.mock import MagicMock, Mock, patch

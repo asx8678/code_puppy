@@ -3,10 +3,10 @@
 Provides a beautiful interface for viewing and modifying model-specific
 settings like temperature and seed on a per-model basis.
 """
+from __future__ import annotations
 
 import sys
 import time
-from typing import Dict, List, Optional
 
 from prompt_toolkit import Application
 from prompt_toolkit.key_binding import KeyBindings
@@ -41,7 +41,7 @@ MODELS_PER_PAGE = 15
 
 # Setting definitions with metadata
 # Numeric settings have min/max/step, choice settings have choices list
-SETTING_DEFINITIONS: Dict[str, Dict] = {
+SETTING_DEFINITIONS: dict[str, dict] = {
     "temperature": {
         "name": "Temperature",
         "description": "Controls randomness (0.0-1.0). Lower = more deterministic, higher = more creative.",
@@ -145,13 +145,13 @@ SETTING_DEFINITIONS: Dict[str, Dict] = {
 }
 
 
-def _load_all_model_names() -> List[str]:
+def _load_all_model_names() -> list[str]:
     """Load all available model names from config."""
     models_config = ModelFactory.load_config()
     return list(models_config.keys())
 
 
-def _get_model_display_settings(model_name: str) -> Dict:
+def _get_model_display_settings(model_name: str) -> dict:
     """Get model settings merged with global OpenAI controls for display."""
     settings = get_all_model_settings(model_name)
 
@@ -166,8 +166,8 @@ def _get_model_display_settings(model_name: str) -> Dict:
 
 
 def _get_setting_choices(
-    setting_key: str, model_name: Optional[str] = None
-) -> List[str]:
+    setting_key: str, model_name: str | None = None
+) -> list[str]:
     """Get the available choices for a setting, filtered by model capabilities.
 
     For reasoning_effort, only codex models support 'xhigh' - regular GPT-5.2
@@ -201,7 +201,7 @@ def _get_setting_choices(
     return base_choices
 
 
-def _get_setting_default(setting_key: str, model_name: Optional[str] = None):
+def _get_setting_default(setting_key: str, model_name: str | None = None):
     """Resolve the effective default for a setting, per-model when applicable.
 
     Most settings have a static default declared in SETTING_DEFINITIONS, but
@@ -256,13 +256,13 @@ class ModelSettingsMenu:
 
         # Editing state
         self.editing_mode = False
-        self.edit_value: Optional[float] = None
+        self.edit_value: float | None = None
         self.result_changed = False
 
         # Cache for selected model's settings
-        self.selected_model: Optional[str] = None
-        self.supported_settings: List[str] = []
-        self.current_settings: Dict = {}
+        self.selected_model: str | None = None
+        self.supported_settings: list[str] = []
+        self.current_settings: dict = {}
 
     @property
     def total_pages(self) -> int:
@@ -282,7 +282,7 @@ class ModelSettingsMenu:
         return end
 
     @property
-    def models_on_page(self) -> List[str]:
+    def models_on_page(self) -> list[str]:
         """Get the models visible on the current page."""
         return self.all_models[self.page_start : self.page_end]
 
@@ -295,7 +295,7 @@ class ModelSettingsMenu:
             self.page_size,
         )
 
-    def _get_supported_settings(self, model_name: str) -> List[str]:
+    def _get_supported_settings(self, model_name: str) -> list[str]:
         """Get list of settings supported by a model."""
         supported = []
         for setting_key in SETTING_DEFINITIONS:
@@ -337,7 +337,7 @@ class ModelSettingsMenu:
         fmt = setting_def.get("format", "{:.2f}")
         return fmt.format(value)
 
-    def _render_main_list(self) -> List:
+    def _render_main_list(self) -> list:
         """Render the main list panel (models or settings)."""
         lines = []
 
@@ -433,7 +433,7 @@ class ModelSettingsMenu:
 
         return lines
 
-    def _add_model_nav_hints(self, lines: List):
+    def _add_model_nav_hints(self, lines: list):
         """Add navigation hints for model list view."""
         lines.append(("", "\n"))
         lines.append(("fg:ansibrightblack", "  ↑/↓  "))
@@ -446,7 +446,7 @@ class ModelSettingsMenu:
         lines.append(("fg:ansiyellow", "  Esc  "))
         lines.append(("", "Exit\n"))
 
-    def _add_settings_nav_hints(self, lines: List):
+    def _add_settings_nav_hints(self, lines: list):
         """Add navigation hints for settings view."""
         lines.append(("", "\n"))
 
@@ -469,7 +469,7 @@ class ModelSettingsMenu:
             lines.append(("fg:ansiyellow", "  Esc  "))
             lines.append(("", "Back to models\n"))
 
-    def _render_details_panel(self) -> List:
+    def _render_details_panel(self) -> list:
         """Render the details/help panel."""
         lines = []
 
@@ -950,7 +950,7 @@ class ModelSettingsMenu:
         return self.result_changed
 
 
-def interactive_model_settings(model_name: Optional[str] = None) -> bool:
+def interactive_model_settings(model_name: str | None = None) -> bool:
     """Show interactive TUI to configure model settings.
 
     Args:
@@ -964,7 +964,7 @@ def interactive_model_settings(model_name: Optional[str] = None) -> bool:
     return menu.run()
 
 
-def show_model_settings_summary(model_name: Optional[str] = None) -> None:
+def show_model_settings_summary(model_name: str | None = None) -> None:
     """Print a summary of current model settings to the console.
 
     Args:

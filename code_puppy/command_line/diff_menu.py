@@ -3,11 +3,12 @@
 Now using the fixed arrow_select_async with proper HTML escaping.
 Supports cycling through all supported languages with left/right arrows!
 """
+from __future__ import annotations
 
 import asyncio
 import io
 import sys
-from typing import Callable, Optional
+from collections.abc import Callable
 
 from prompt_toolkit import Application
 from prompt_toolkit.formatted_text import ANSI, FormattedText
@@ -389,7 +390,7 @@ class DiffConfiguration:
         return SUPPORTED_LANGUAGES[self.current_language_index]
 
 
-async def interactive_diff_picker() -> Optional[dict]:
+async def interactive_diff_picker() -> dict | None:
     """Show an interactive full-screen terminal UI to configure diff settings.
 
     Returns:
@@ -476,8 +477,8 @@ async def _split_panel_selector(
     choices: list[str],
     on_change: Callable[[str], None],
     get_preview: Callable[[], ANSI],
-    config: Optional[DiffConfiguration] = None,
-) -> Optional[str]:
+    config: DiffConfiguration | None = None,
+) -> str | None:
     """Split-panel selector with menu on left and live preview on right.
 
     Supports left/right arrow navigation through languages if config is provided.

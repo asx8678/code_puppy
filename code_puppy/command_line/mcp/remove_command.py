@@ -1,11 +1,11 @@
 """
 MCP Remove Command - Removes an MCP server.
 """
+from __future__ import annotations
 
 import json
 import logging
 import os
-from typing import List, Optional
 
 from code_puppy.messaging import emit_error, emit_info
 
@@ -23,7 +23,7 @@ class RemoveCommand(MCPCommandBase):
     Removes a specific MCP server from the manager and configuration.
     """
 
-    def execute(self, args: List[str], group_id: Optional[str] = None) -> None:
+    def execute(self, args: list[str], group_id: str | None = None) -> None:
         """
         Remove an MCP server.
 
@@ -75,7 +75,7 @@ class RemoveCommand(MCPCommandBase):
 
                 if os.path.exists(MCP_SERVERS_FILE):
                     try:
-                        with open(MCP_SERVERS_FILE, "r") as f:
+                        with open(MCP_SERVERS_FILE) as f:
                             data = json.load(f)
                             servers = data.get("mcp_servers", {})
 

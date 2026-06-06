@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-from typing import Optional, Tuple
-
 CLAUDE_LOGO_URL = "https://voideditor.com/claude-icon.png"
 CHATGPT_LOGO_URL = (
     "https://freelogopng.com/images/all_img/1681038325chatgpt-logo-transparent.png"
@@ -11,7 +9,7 @@ CHATGPT_LOGO_URL = (
 GEMINI_LOGO_URL = "https://upload.wikimedia.org/wikipedia/commons/thumb/8/8a/Google_Gemini_logo.svg/512px-Google_Gemini_logo.svg.png"
 
 
-def oauth_success_html(service_name: str, extra_message: Optional[str] = None) -> str:
+def oauth_success_html(service_name: str, extra_message: str | None = None) -> str:
     """Return an over-the-top puppy celebration HTML page with artillery effects."""
     clean_service = service_name.strip() or "OAuth"
     detail = f"<p class='detail'>🐾 {extra_message} 🐾</p>" if extra_message else ""
@@ -187,7 +185,7 @@ _FAILURE_PUPPIES = (
 )
 
 
-_STRAFE_SHELLS: Tuple[Tuple[float, float], ...] = (
+_STRAFE_SHELLS: tuple[tuple[float, float], ...] = (
     (22.0, 0.0),
     (28.0, 0.35),
     (34.0, 0.7),
@@ -216,7 +214,7 @@ def _build_artillery(projectile: str, *, shells_only: bool = False) -> str:
     return cannons + shells
 
 
-def _service_targets(service_name: str) -> Tuple[str, str, str, str]:
+def _service_targets(service_name: str) -> tuple[str, str, str, str]:
     """Map service names to projectile emoji and rival logo metadata."""
     normalized = service_name.lower()
     if "anthropic" in normalized or "claude" in normalized:

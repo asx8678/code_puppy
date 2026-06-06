@@ -3,6 +3,7 @@
 These tests cover end-to-end OAuth flows, security scenarios,
 and integration between different OAuth components.
 """
+from __future__ import annotations
 
 import json
 import threading
@@ -213,7 +214,7 @@ class TestOAuthFlowIntegration:
                     assert success is True
 
                     # Verify models were saved
-                    with open(mock_models_storage, "r") as f:
+                    with open(mock_models_storage) as f:
                         saved_models = json.load(f)
 
                     # Check that default Codex models were registered
@@ -445,7 +446,7 @@ class TestOAuthSecurityScenarios:
             assert file_stat.st_mode & 0o777 == 0o600  # Read/write for owner only
 
             # Verify content is stored correctly
-            with open(mock_token_storage, "r") as f:
+            with open(mock_token_storage) as f:
                 saved_data = json.load(f)
             assert saved_data == test_tokens
 
@@ -822,7 +823,7 @@ class TestOAuthDataIntegrity:
                 json.dump(model_config, f, indent=2, ensure_ascii=False)
 
             # Load and verify
-            with open(mock_models_storage, "r", encoding="utf-8") as f:
+            with open(mock_models_storage, encoding="utf-8") as f:
                 loaded_config = json.load(f)
 
             assert loaded_config == model_config
@@ -869,7 +870,7 @@ class TestOAuthDataIntegrity:
 
         # File should still be valid
         if mock_token_storage.exists():
-            with open(mock_token_storage, "r") as f:
+            with open(mock_token_storage) as f:
                 data = json.load(f)
             assert isinstance(data, dict)
 

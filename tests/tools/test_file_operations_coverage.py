@@ -3,6 +3,7 @@
 This module focuses on testing edge cases, error paths, and helper functions
 that weren't covered by the existing test_file_operations_extended.py tests.
 """
+from __future__ import annotations
 
 import os
 import subprocess

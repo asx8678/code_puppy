@@ -14,7 +14,7 @@ import logging
 import mimetypes
 import time
 from pathlib import Path
-from typing import Any, Dict, Union
+from typing import Any
 
 from PIL import Image, UnidentifiedImageError
 from pydantic_ai import BinaryContent, RunContext, ToolReturn
@@ -33,7 +33,7 @@ def _validate_and_prepare_image(
     image_bytes: bytes,
     source_path: str | None = None,
     max_edge: int | None = None,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """Verify image bytes, determine the real MIME type, and optionally resize.
 
     The MIME type is determined from the decoded image content, not from the
@@ -100,7 +100,7 @@ def _validate_and_prepare_image(
 async def load_image(
     image_path: str,
     max_height: int = DEFAULT_MAX_HEIGHT,
-) -> Union[ToolReturn, Dict[str, Any]]:
+) -> ToolReturn | dict[str, Any]:
     """Load an image from the filesystem for visual analysis."""
     group_id = generate_group_id("load_image", image_path)
     emit_info(f"LOAD IMAGE 🖼️ {image_path}", message_group=group_id)
@@ -175,7 +175,7 @@ def register_load_image(agent):
     async def load_image_for_analysis(
         context: RunContext,
         image_path: str,
-    ) -> Union[ToolReturn, Dict[str, Any]]:
+    ) -> ToolReturn | dict[str, Any]:
         """Load an image file so you can see and analyze it.
 
         Args:

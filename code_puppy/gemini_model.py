@@ -15,7 +15,7 @@ import uuid
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 import httpx
@@ -770,7 +770,7 @@ class GeminiStreamingResponse(StreamedResponse):
     _model_name_str: str
     _provider_name_str: str = "google"
     _provider_url_str: str | None = None
-    _timestamp_val: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
+    _timestamp_val: datetime = field(default_factory=lambda: datetime.now(UTC))
     _current_tool_call_id: str | None = None
     _current_tool_name: str | None = None
     _current_vendor_part_id: uuid.UUID | None = None

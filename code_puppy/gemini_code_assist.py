@@ -13,8 +13,8 @@ import logging
 import uuid
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
-from datetime import datetime, timezone
-from typing import Any, Dict, Optional
+from datetime import UTC, datetime
+from typing import Any
 
 import httpx
 from pydantic_ai.messages import (
@@ -119,7 +119,7 @@ class GeminiCodeAssistModel(Model):
 
                 yield StreamedResponse(response, self._model_name)
 
-    def _get_headers(self) -> Dict[str, str]:
+    def _get_headers(self) -> dict[str, str]:
         """Get HTTP headers for the request."""
         return {
             "Authorization": f"Bearer {self.access_token}",
@@ -132,7 +132,7 @@ class GeminiCodeAssistModel(Model):
         messages: list[ModelMessage],
         model_settings: ModelSettings | None,
         model_request_parameters: ModelRequestParameters,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Build the Code Assist API request body."""
         contents = []
         system_instruction = None
@@ -202,7 +202,7 @@ class GeminiCodeAssistModel(Model):
                     contents.append({"role": "model", "parts": parts})
 
         # Build the inner request (Vertex-style format)
-        inner_request: Dict[str, Any] = {
+        inner_request: dict[str, Any] = {
             "contents": contents,
         }
 
@@ -228,12 +228,12 @@ class GeminiCodeAssistModel(Model):
             "request": inner_request,
         }
 
-    def _build_tools(self, tools: list[ToolDefinition]) -> Dict[str, Any]:
+    def _build_tools(self, tools: list[ToolDefinition]) -> dict[str, Any]:
         """Build tool definitions for the API."""
         function_declarations = []
 
         for tool in tools:
-            func_decl: Dict[str, Any] = {
+            func_decl: dict[str, Any] = {
                 "name": tool.name,
                 "description": tool.description or "",
             }
@@ -247,12 +247,12 @@ class GeminiCodeAssistModel(Model):
 
     def _build_generation_config(
         self, model_settings: ModelSettings | None
-    ) -> Optional[Dict[str, Any]]:
+    ) -> dict[str, Any] | None:
         """Build generation config from model settings."""
         if not model_settings:
             return None
 
-        config: Dict[str, Any] = {}
+        config: dict[str, Any] = {}
 
         if (
             hasattr(model_settings, "temperature")
@@ -271,7 +271,7 @@ class GeminiCodeAssistModel(Model):
 
         return config if config else None
 
-    def _parse_response(self, data: Dict[str, Any]) -> ModelResponse:
+    def _parse_response(self, data: dict[str, Any]) -> ModelResponse:
         """Parse the Code Assist API response."""
         # Unwrap the Code Assist response format
         inner_response = data.get("response", data)
@@ -317,8 +317,8 @@ class StreamedResponse:
     def __init__(self, response: httpx.Response, model_name: str):
         self._response = response
         self._model_name = model_name
-        self._usage: Optional[RequestUsage] = None
-        self._timestamp = datetime.now(timezone.utc)
+        self._usage: RequestUsage | None = None
+        self._timestamp = datetime.now(UTC)
 
     def __aiter__(self) -> AsyncIterator[str]:
         return self._iter_chunks()

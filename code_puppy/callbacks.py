@@ -1,8 +1,11 @@
+from __future__ import annotations
+
 import asyncio
 import logging
 import threading
 import traceback
-from typing import Any, Callable, Dict, List, Literal, Optional
+from collections.abc import Callable
+from typing import Any, Literal
 
 PhaseType = Literal[
     "startup",
@@ -58,7 +61,7 @@ PhaseType = Literal[
 ]
 CallbackFunc = Callable[..., Any]
 
-_callbacks: Dict[PhaseType, List[CallbackFunc]] = {
+_callbacks: dict[PhaseType, list[CallbackFunc]] = {
     "startup": [],
     "shutdown": [],
     "invoke_agent": [],
@@ -172,7 +175,7 @@ def unregister_callback(phase: PhaseType, func: CallbackFunc) -> bool:
         return False
 
 
-def clear_callbacks(phase: Optional[PhaseType] = None) -> None:
+def clear_callbacks(phase: PhaseType | None = None) -> None:
     if phase is None:
         for p in _callbacks:
             _callbacks[p].clear()
@@ -183,7 +186,7 @@ def clear_callbacks(phase: Optional[PhaseType] = None) -> None:
             logger.debug(f"Cleared async callbacks for phase '{phase}'")
 
 
-def get_callbacks(phase: PhaseType) -> List[CallbackFunc]:
+def get_callbacks(phase: PhaseType) -> list[CallbackFunc]:
     # Copy only when the phase actually has callbacks (the common case on hot
     # paths like on_load_prompt is zero/one). Avoids the default-list + copy
     # double allocation per dispatch while still returning a fresh, safe-to-hold
@@ -192,13 +195,13 @@ def get_callbacks(phase: PhaseType) -> List[CallbackFunc]:
     return callbacks.copy() if callbacks else []
 
 
-def count_callbacks(phase: Optional[PhaseType] = None) -> int:
+def count_callbacks(phase: PhaseType | None = None) -> int:
     if phase is None:
         return sum(len(callbacks) for callbacks in _callbacks.values())
     return len(_callbacks.get(phase, []))
 
 
-def _trigger_callbacks_sync(phase: PhaseType, *args, **kwargs) -> List[Any]:
+def _trigger_callbacks_sync(phase: PhaseType, *args, **kwargs) -> list[Any]:
     callbacks = get_callbacks(phase)
     if not callbacks:
         logger.debug(f"No callbacks registered for phase '{phase}'")
@@ -249,7 +252,7 @@ def _trigger_callbacks_sync(phase: PhaseType, *args, **kwargs) -> List[Any]:
     return results
 
 
-async def _trigger_callbacks(phase: PhaseType, *args, **kwargs) -> List[Any]:
+async def _trigger_callbacks(phase: PhaseType, *args, **kwargs) -> list[Any]:
     callbacks = get_callbacks(phase)
 
     if not callbacks:
@@ -276,31 +279,31 @@ async def _trigger_callbacks(phase: PhaseType, *args, **kwargs) -> List[Any]:
     return results
 
 
-async def on_startup() -> List[Any]:
+async def on_startup() -> list[Any]:
     return await _trigger_callbacks("startup")
 
 
-async def on_shutdown() -> List[Any]:
+async def on_shutdown() -> list[Any]:
     return await _trigger_callbacks("shutdown")
 
 
-async def on_invoke_agent(*args, **kwargs) -> List[Any]:
+async def on_invoke_agent(*args, **kwargs) -> list[Any]:
     return await _trigger_callbacks("invoke_agent", *args, **kwargs)
 
 
-async def on_agent_exception(exception: Exception, *args, **kwargs) -> List[Any]:
+async def on_agent_exception(exception: Exception, *args, **kwargs) -> list[Any]:
     return await _trigger_callbacks("agent_exception", exception, *args, **kwargs)
 
 
-async def on_version_check(*args, **kwargs) -> List[Any]:
+async def on_version_check(*args, **kwargs) -> list[Any]:
     return await _trigger_callbacks("version_check", *args, **kwargs)
 
 
-def on_load_model_config(*args, **kwargs) -> List[Any]:
+def on_load_model_config(*args, **kwargs) -> list[Any]:
     return _trigger_callbacks_sync("load_model_config", *args, **kwargs)
 
 
-def on_load_models_config() -> List[Any]:
+def on_load_models_config() -> list[Any]:
     """Trigger callbacks to load additional model configurations.
 
     Plugins can register callbacks that return a dict of model configurations
@@ -313,7 +316,7 @@ def on_load_models_config() -> List[Any]:
     return _trigger_callbacks_sync("load_models_config")
 
 
-def on_load_model_descriptions() -> List[Any]:
+def on_load_model_descriptions() -> list[Any]:
     """Trigger callbacks that provide description-only model overlays.
 
     Plugins can return dictionaries mapping ``model_name -> description``.
@@ -366,7 +369,7 @@ def on_load_prompt():
     return [r for r in results if r is not None]
 
 
-def on_custom_command_help() -> List[Any]:
+def on_custom_command_help() -> list[Any]:
     """Collect custom command help entries from plugins.
 
     Each callback should return a list of tuples [(name, description), ...]
@@ -375,7 +378,7 @@ def on_custom_command_help() -> List[Any]:
     return _trigger_callbacks_sync("custom_command_help")
 
 
-def on_custom_command(command: str, name: str) -> List[Any]:
+def on_custom_command(command: str, name: str) -> list[Any]:
     """Trigger custom command callbacks.
 
     This allows plugins to register handlers for slash commands
@@ -401,7 +404,7 @@ def on_file_permission(
     preview: str | None = None,
     message_group: str | None = None,
     operation_data: Any = None,
-) -> List[Any]:
+) -> list[Any]:
     """Trigger file permission callbacks.
 
     This allows plugins to register handlers for file permission checks
@@ -435,7 +438,7 @@ def on_file_permission(
 
 async def on_pre_tool_call(
     tool_name: str, tool_args: dict, context: Any = None
-) -> List[Any]:
+) -> list[Any]:
     """Trigger callbacks before a tool is called.
 
     This allows plugins to inspect, modify, or log tool calls before
@@ -458,7 +461,7 @@ async def on_post_tool_call(
     result: Any,
     duration_ms: float,
     context: Any = None,
-) -> List[Any]:
+) -> list[Any]:
     """Trigger callbacks after a tool completes.
 
     This allows plugins to inspect tool results, log execution times,
@@ -481,7 +484,7 @@ async def on_post_tool_call(
 
 async def on_stream_event(
     event_type: str, event_data: Any, agent_session_id: str | None = None
-) -> List[Any]:
+) -> list[Any]:
     """Trigger callbacks for streaming events.
 
     This allows plugins to react to streaming events in real-time,
@@ -500,7 +503,7 @@ async def on_stream_event(
     )
 
 
-def on_register_tools() -> List[Dict[str, Any]]:
+def on_register_tools() -> list[dict[str, Any]]:
     """Collect custom tool registrations from plugins.
 
     Each callback should return a list of dicts with:
@@ -512,7 +515,7 @@ def on_register_tools() -> List[Dict[str, Any]]:
     return _trigger_callbacks_sync("register_tools")
 
 
-def on_register_agent_tools(agent_name: Optional[str] = None) -> List[str]:
+def on_register_agent_tools(agent_name: str | None = None) -> list[str]:
     """Collect tool names plugins want injected into an agent's tool list.
 
     The companion to ``on_register_tools``: that hook *defines* tools and
@@ -529,7 +532,7 @@ def on_register_agent_tools(agent_name: Optional[str] = None) -> List[str]:
     Returns a flat, deduplicated list of tool names from all callbacks.
     """
     results = _trigger_callbacks_sync("register_agent_tools", agent_name)
-    flat: List[str] = []
+    flat: list[str] = []
     seen: set[str] = set()
     for r in results:
         if r is None:
@@ -544,7 +547,7 @@ def on_register_agent_tools(agent_name: Optional[str] = None) -> List[str]:
     return flat
 
 
-def on_register_agents() -> List[Dict[str, Any]]:
+def on_register_agents() -> list[dict[str, Any]]:
     """Collect custom agent registrations from plugins.
 
     Each callback should return a list of dicts with either:
@@ -556,7 +559,7 @@ def on_register_agents() -> List[Dict[str, Any]]:
     return _trigger_callbacks_sync("register_agents")
 
 
-def on_register_model_types() -> List[Dict[str, Any]]:
+def on_register_model_types() -> list[dict[str, Any]]:
     """Collect custom model type registrations from plugins.
 
     This hook allows plugins to register custom model types that can be used
@@ -583,7 +586,7 @@ def on_register_model_types() -> List[Dict[str, Any]]:
     return _trigger_callbacks_sync("register_model_type")
 
 
-def on_register_skills() -> List[Dict[str, Any]]:
+def on_register_skills() -> list[dict[str, Any]]:
     """Collect skill registrations from plugins.
 
     Each callback should return a list of dicts with either:
@@ -603,7 +606,7 @@ def on_register_skills() -> List[Dict[str, Any]]:
 
 def on_get_model_system_prompt(
     model_name: str, default_system_prompt: str, user_prompt: str
-) -> List[Dict[str, Any]]:
+) -> list[dict[str, Any]]:
     """Allow plugins to provide custom system prompts for specific model types.
 
     This hook allows plugins to override the system prompt handling for custom
@@ -645,7 +648,7 @@ def on_prepare_model_prompt(
     system_prompt: str,
     user_prompt: str,
     prepend_system_to_user: bool = True,
-) -> List[Optional[Dict[str, Any]]]:
+) -> list[dict[str, Any] | None]:
     """Allow plugins to fully prepare the prompt (instructions + user prompt) for a model.
 
     This is the hook fired from ``model_utils.prepare_prompt_for_model`` to let
@@ -690,7 +693,7 @@ async def on_agent_run_start(
     agent_name: str,
     model_name: str,
     session_id: str | None = None,
-) -> List[Any]:
+) -> list[Any]:
     """Trigger callbacks when an agent run starts.
 
     This fires at the beginning of run_with_mcp, before the agent task is created.
@@ -720,7 +723,7 @@ async def on_agent_run_end(
     error: Exception | None = None,
     response_text: str | None = None,
     metadata: dict | None = None,
-) -> List[Any]:
+) -> list[Any]:
     """Trigger callbacks when an agent run ends.
 
     This fires at the end of run_with_mcp, in the finally block.
@@ -761,7 +764,7 @@ async def on_agent_run_result(
     result: Any,
     agent_name: str,
     model_name: str,
-) -> List[Any]:
+) -> list[Any]:
     """Trigger callbacks after an agent run returns a result.
 
     Fires after ``pydantic_agent.run()`` completes successfully, **before**
@@ -797,7 +800,7 @@ async def on_agent_run_result(
     return await _trigger_callbacks("agent_run_result", result, agent_name, model_name)
 
 
-def on_register_mcp_catalog_servers() -> List[Any]:
+def on_register_mcp_catalog_servers() -> list[Any]:
     """Trigger callbacks to register additional MCP catalog servers.
 
     Plugins can register callbacks that return List[MCPServerTemplate] to add
@@ -809,7 +812,7 @@ def on_register_mcp_catalog_servers() -> List[Any]:
     return _trigger_callbacks_sync("register_mcp_catalog_servers")
 
 
-async def on_pre_mcp_autostart(agent_name: str, server_names: List[str]) -> List[Any]:
+async def on_pre_mcp_autostart(agent_name: str, server_names: list[str]) -> list[Any]:
     """Fire ``pre_mcp_autostart`` callbacks before bound MCP servers auto-start.
 
     Plugins use this to refresh tokens, mint credentials, or do any other
@@ -825,7 +828,7 @@ async def on_pre_mcp_autostart(agent_name: str, server_names: List[str]) -> List
     return await _trigger_callbacks("pre_mcp_autostart", agent_name, server_names)
 
 
-def on_pre_mcp_autostart_sync(agent_name: str, server_names: List[str]) -> List[Any]:
+def on_pre_mcp_autostart_sync(agent_name: str, server_names: list[str]) -> list[Any]:
     """Sync variant of :func:`on_pre_mcp_autostart` for non-async callers.
 
     Coroutine callbacks are still awaited via ``asyncio.run`` when no loop
@@ -834,7 +837,7 @@ def on_pre_mcp_autostart_sync(agent_name: str, server_names: List[str]) -> List[
     return _trigger_callbacks_sync("pre_mcp_autostart", agent_name, server_names)
 
 
-def on_register_browser_types() -> List[Any]:
+def on_register_browser_types() -> list[Any]:
     """Trigger callbacks to register custom browser types/providers.
 
     Plugins can register callbacks that return a dict mapping browser type names
@@ -859,7 +862,7 @@ def on_register_browser_types() -> List[Any]:
     return _trigger_callbacks_sync("register_browser_types")
 
 
-def on_register_model_providers() -> List[Any]:
+def on_register_model_providers() -> list[Any]:
     """Trigger callbacks to register custom model provider classes.
 
     Plugins can register callbacks that return a dict mapping provider names
@@ -874,9 +877,9 @@ def on_register_model_providers() -> List[Any]:
 def on_message_history_processor_start(
     agent_name: str,
     session_id: str | None,
-    message_history: List[Any],
-    incoming_messages: List[Any],
-) -> List[Any]:
+    message_history: list[Any],
+    incoming_messages: list[Any],
+) -> list[Any]:
     """Trigger callbacks at the start of message history processing.
 
     This hook fires at the beginning of the message_history_accumulator,
@@ -906,10 +909,10 @@ def on_message_history_processor_start(
 def on_message_history_processor_end(
     agent_name: str,
     session_id: str | None,
-    message_history: List[Any],
+    message_history: list[Any],
     messages_added: int,
     messages_filtered: int,
-) -> List[Any]:
+) -> list[Any]:
     """Trigger callbacks at the end of message history processing.
 
     This hook fires at the end of the message_history_accumulator,
@@ -938,7 +941,7 @@ def on_message_history_processor_end(
     )
 
 
-async def on_message(message_id: str, message: Any) -> List[Any]:
+async def on_message(message_id: str, message: Any) -> list[Any]:
     """Trigger callbacks when a message is emitted.
 
     This is the global observation hook for the messaging system.
@@ -992,7 +995,7 @@ def on_wrap_pydantic_agent(
     return pydantic_agent
 
 
-def on_agent_run_context(agent, pydantic_agent, group_id, mcp_servers) -> List[Any]:
+def on_agent_run_context(agent, pydantic_agent, group_id, mcp_servers) -> list[Any]:
     """Collect async context managers that should wrap the ``pydantic_agent.run()`` call.
 
     Each callback returns an async CM (with ``__aenter__``/``__aexit__``) or
@@ -1007,7 +1010,7 @@ def on_agent_run_context(agent, pydantic_agent, group_id, mcp_servers) -> List[A
     return [r for r in results if r is not None]
 
 
-async def on_agent_run_cancel(group_id: str) -> List[Any]:
+async def on_agent_run_cancel(group_id: str) -> list[Any]:
     """Fired when an agent run is cancelled or interrupted.
 
     Plugins use this to cancel any external workflow tracking the run.
@@ -1027,8 +1030,8 @@ async def on_interactive_turn_end(
     result: Any = None,
     *,
     success: bool = True,
-    error: Optional[BaseException] = None,
-) -> List[Any]:
+    error: BaseException | None = None,
+) -> list[Any]:
     """Fired after an interactive prompt run completes.
 
     Plugins may return a continuation request dict, for example::
@@ -1049,7 +1052,7 @@ async def on_interactive_turn_end(
 
 async def on_interactive_turn_cancel(
     prompt: str, *, reason: str = "cancelled"
-) -> List[Any]:
+) -> list[Any]:
     """Fired when the active interactive prompt/loop is cancelled."""
     return await _trigger_callbacks(
         "interactive_turn_cancel",
@@ -1060,7 +1063,7 @@ async def on_interactive_turn_cancel(
 
 async def on_user_prompt_submit(
     prompt: str, session_id: str | None = None
-) -> List[Any]:
+) -> list[Any]:
     """Fired when a user prompt is about to be submitted to the agent.
 
     Plugins may inspect the prompt for analytics/logging or return a string
@@ -1084,7 +1087,7 @@ async def on_pre_compact(
     strategy: str,
     message_count: int,
     token_count: int,
-) -> List[Any]:
+) -> list[Any]:
     """Fired right before history compaction runs.
 
     Plugins use this for observation/logging or to short-circuit
@@ -1095,7 +1098,7 @@ async def on_pre_compact(
     )
 
 
-async def on_session_end() -> List[Any]:
+async def on_session_end() -> list[Any]:
     """Fired when the interactive session ends (distinct from per-run ``shutdown``).
 
     For Claude Code-style ``SessionEnd`` semantics. Fires once when the
@@ -1106,7 +1109,7 @@ async def on_session_end() -> List[Any]:
 
 async def on_notification(
     message: str, level: str = "info", context: Any = None
-) -> List[Any]:
+) -> list[Any]:
     """Fired when the app surfaces a notification to the user.
 
     For Claude Code-style ``Notification`` events (permission prompts,
@@ -1115,7 +1118,7 @@ async def on_notification(
     return await _trigger_callbacks("notification", message, level, context)
 
 
-async def on_agent_pause_requested() -> List[Any]:
+async def on_agent_pause_requested() -> list[Any]:
     """Fired when the user presses the pause key while the agent is running.
 
     Plugins are expected to handle the pause UX (collect steering input,

@@ -11,7 +11,7 @@ import json
 import logging
 import os
 import subprocess
-from typing import Any, Dict, Optional
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -23,14 +23,14 @@ def _safe(fn, default=None):
         return default
 
 
-def _model_block() -> Dict[str, Any]:
+def _model_block() -> dict[str, Any]:
     from code_puppy.command_line.model_picker_completion import get_active_model
 
     model_id = _safe(get_active_model) or "(default)"
     return {"id": model_id, "display_name": model_id}
 
 
-def _agent_block() -> Optional[Dict[str, Any]]:
+def _agent_block() -> dict[str, Any] | None:
     from code_puppy.agents.agent_manager import get_current_agent
 
     agent = _safe(get_current_agent)
@@ -40,7 +40,7 @@ def _agent_block() -> Optional[Dict[str, Any]]:
     return {"name": name} if name else None
 
 
-def _git_branch(cwd: str) -> Optional[str]:
+def _git_branch(cwd: str) -> str | None:
     try:
         out = subprocess.run(
             ["git", "rev-parse", "--abbrev-ref", "HEAD"],
@@ -57,8 +57,8 @@ def _git_branch(cwd: str) -> Optional[str]:
     return None
 
 
-def _context_block() -> Dict[str, Any]:
-    block: Dict[str, Any] = {}
+def _context_block() -> dict[str, Any]:
+    block: dict[str, Any] = {}
     try:
         from code_puppy.plugins.context_indicator.usage import get_current_usage
 
@@ -83,12 +83,12 @@ def _tokens_per_second() -> float:
         return 0.0
 
 
-def build_payload() -> Dict[str, Any]:
+def build_payload() -> dict[str, Any]:
     """Assemble the full session payload (all fields best-effort)."""
     from code_puppy.config import get_puppy_name
 
     cwd = _safe(os.getcwd, "") or ""
-    payload: Dict[str, Any] = {
+    payload: dict[str, Any] = {
         "cwd": cwd,
         "puppy_name": _safe(get_puppy_name) or "fast-puppy",
         "model": _model_block(),

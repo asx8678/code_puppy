@@ -4,13 +4,14 @@ Server Status Tracker for monitoring MCP server runtime status.
 This module provides the ServerStatusTracker class that tracks the runtime
 status of MCP servers including state, metrics, and events.
 """
+from __future__ import annotations
 
 import logging
 import threading
 from collections import defaultdict, deque
 from dataclasses import dataclass
 from datetime import datetime, timedelta
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from .managed_server import ServerState
 
@@ -24,7 +25,7 @@ class Event:
 
     timestamp: datetime
     event_type: str  # "started", "stopped", "error", "health_check", etc.
-    details: Dict
+    details: dict
     server_id: str
 
 
@@ -49,18 +50,18 @@ class ServerStatusTracker:
         self._lock = threading.RLock()
 
         # Server states (server_id -> ServerState)
-        self._server_states: Dict[str, ServerState] = {}
+        self._server_states: dict[str, ServerState] = {}
 
         # Server metadata (server_id -> key -> value)
-        self._server_metadata: Dict[str, Dict[str, Any]] = defaultdict(dict)
+        self._server_metadata: dict[str, dict[str, Any]] = defaultdict(dict)
 
         # Server events (server_id -> deque of events)
         # Using deque with maxlen for automatic size limiting
-        self._server_events: Dict[str, deque] = defaultdict(lambda: deque(maxlen=1000))
+        self._server_events: dict[str, deque] = defaultdict(lambda: deque(maxlen=1000))
 
         # Server timing information
-        self._start_times: Dict[str, datetime] = {}
-        self._stop_times: Dict[str, datetime] = {}
+        self._start_times: dict[str, datetime] = {}
+        self._stop_times: dict[str, datetime] = {}
 
         logger.info("ServerStatusTracker initialized")
 
@@ -146,7 +147,7 @@ class ServerStatusTracker:
         with self._lock:
             return self._server_metadata.get(server_id, {}).get(key)
 
-    def record_event(self, server_id: str, event_type: str, details: Dict) -> None:
+    def record_event(self, server_id: str, event_type: str, details: dict) -> None:
         """
         Record an event for a server.
 
@@ -170,7 +171,7 @@ class ServerStatusTracker:
 
             logger.debug(f"Event recorded for server {server_id}: {event_type}")
 
-    def get_events(self, server_id: str, limit: int = 100) -> List[Event]:
+    def get_events(self, server_id: str, limit: int = 100) -> list[Event]:
         """
         Get recent events for a server.
 
@@ -200,7 +201,7 @@ class ServerStatusTracker:
                 self._server_events[server_id].clear()
                 logger.info(f"Cleared all events for server: {server_id}")
 
-    def get_uptime(self, server_id: str) -> Optional[timedelta]:
+    def get_uptime(self, server_id: str) -> timedelta | None:
         """
         Calculate uptime for a server based on start/stop times.
 
@@ -278,7 +279,7 @@ class ServerStatusTracker:
 
             logger.info(f"Recorded stop time for server: {server_id}")
 
-    def get_all_server_ids(self) -> List[str]:
+    def get_all_server_ids(self) -> list[str]:
         """
         Get all server IDs that have been tracked.
 
@@ -296,7 +297,7 @@ class ServerStatusTracker:
 
             return sorted(list(all_ids))
 
-    def get_server_summary(self, server_id: str) -> Dict[str, Any]:
+    def get_server_summary(self, server_id: str) -> dict[str, Any]:
         """
         Get comprehensive summary of server status.
 

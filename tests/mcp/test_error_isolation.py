@@ -5,6 +5,7 @@ This module tests the error isolation system that prevents MCP server
 errors from crashing the application, including quarantine logic and
 exponential backoff.
 """
+from __future__ import annotations
 
 import asyncio
 from datetime import datetime, timedelta

@@ -1,6 +1,7 @@
 """Tests for the code-puppy -> fast-puppy rename: config-dir migration and the
 legacy agent-id alias that keeps pre-rename sessions/configs working.
 """
+from __future__ import annotations
 
 from code_puppy import config as cp_config
 

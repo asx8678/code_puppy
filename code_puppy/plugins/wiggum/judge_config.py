@@ -104,7 +104,7 @@ def load_judges() -> JudgeRegistry:
         return JudgeRegistry()
 
     try:
-        with open(JUDGES_FILE, "r", encoding="utf-8") as f:
+        with open(JUDGES_FILE, encoding="utf-8") as f:
             data = json.load(f)
     except (OSError, json.JSONDecodeError) as exc:
         logger.warning("Failed to load judges from %s: %s", JUDGES_FILE, exc)

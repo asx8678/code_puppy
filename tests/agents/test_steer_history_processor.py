@@ -9,7 +9,6 @@ single ``agent.run()``), this is what makes mid-turn steering Just Work.
 
 from __future__ import annotations
 
-from typing import List
 from unittest.mock import Mock
 
 import pytest
@@ -29,7 +28,7 @@ def _reset_pause_controller():
     reset_pause_controller()
 
 
-def _make_agent_with_history(history: List[ModelMessage] | None = None) -> Mock:
+def _make_agent_with_history(history: list[ModelMessage] | None = None) -> Mock:
     agent = Mock()
     agent._message_history = list(history or [])
     return agent
@@ -43,7 +42,7 @@ def _make_agent_with_history(history: List[ModelMessage] | None = None) -> Mock:
 def test_no_pending_steers_returns_messages_unchanged():
     agent = _make_agent_with_history()
     proc = make_steer_history_processor(agent)
-    messages: List[ModelMessage] = [
+    messages: list[ModelMessage] = [
         ModelRequest(parts=[UserPromptPart(content="original")])
     ]
 
@@ -64,7 +63,7 @@ def test_single_steer_appended_as_user_message():
     proc = make_steer_history_processor(agent)
     get_pause_controller().request_steer("change strategy please")
 
-    original: List[ModelMessage] = []
+    original: list[ModelMessage] = []
     result = proc(original)
 
     assert len(result) == 1
@@ -195,7 +194,7 @@ def test_processor_with_no_agent_message_history_attribute():
 
 
 def test_processor_emits_preview_info_message(monkeypatch):
-    infos: List[str] = []
+    infos: list[str] = []
     monkeypatch.setattr(
         "code_puppy.agents._steer_processor.emit_info",
         lambda msg, *_a, **_k: infos.append(msg),
@@ -213,7 +212,7 @@ def test_processor_emits_preview_info_message(monkeypatch):
 
 def test_processor_truncates_long_previews(monkeypatch):
     """Steer previews longer than 80 chars get an ellipsis."""
-    infos: List[str] = []
+    infos: list[str] = []
     monkeypatch.setattr(
         "code_puppy.agents._steer_processor.emit_info",
         lambda msg, *_a, **_k: infos.append(msg),

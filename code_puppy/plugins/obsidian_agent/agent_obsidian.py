@@ -1,4 +1,5 @@
 """Obsidian Agent for working with Obsidian vaults via the official CLI."""
+from __future__ import annotations
 
 from code_puppy.agents.base_agent import BaseAgent
 

@@ -5,14 +5,15 @@ from __future__ import annotations
 import json
 import os
 import tempfile
+from unittest.mock import patch
 
 import pytest
-from unittest.mock import patch
 
 from code_puppy.plugins.wiggum import judge_config
 from code_puppy.plugins.wiggum.judge_config import (
     DEFAULT_JUDGE_PROMPT,
     JudgeConfig,
+    JudgeRegistry,
     add_judge,
     delete_judge,
     get_enabled_judges_or_default,
@@ -21,7 +22,6 @@ from code_puppy.plugins.wiggum.judge_config import (
     toggle_judge,
     update_judge,
     validate_name,
-    JudgeRegistry,
 )
 
 

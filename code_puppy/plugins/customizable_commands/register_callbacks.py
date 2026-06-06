@@ -1,17 +1,19 @@
+from __future__ import annotations
+
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any
 
 from code_puppy.callbacks import register_callback
 from code_puppy.messaging import emit_error, emit_info
 
 # Global cache for loaded commands
-_custom_commands: Dict[str, str] = {}
-_command_descriptions: Dict[str, str] = {}
+_custom_commands: dict[str, str] = {}
+_command_descriptions: dict[str, str] = {}
 _commands_loaded: bool = False  # Sentinel to track if commands have been loaded
 # Cheap signature (set of (dir, mtime) for the command directories) captured at
 # the last load. Used by _custom_help() to skip the expensive glob+read_text
 # rescan on every '/'-keystroke when nothing on disk has changed.
-_commands_signature: Optional[frozenset] = None
+_commands_signature: frozenset | None = None
 
 # Directories to scan for commands (in priority order - later directories override earlier)
 _COMMAND_DIRECTORIES = [
@@ -124,7 +126,7 @@ def _compute_commands_signature() -> frozenset:
     return frozenset(entries)
 
 
-def _custom_help() -> List[Tuple[str, str]]:
+def _custom_help() -> list[tuple[str, str]]:
     """Return help entries for loaded markdown commands.
 
     Runs on every ``/``-keystroke via the slash completer, so we avoid the
@@ -146,7 +148,7 @@ def _custom_help() -> List[Tuple[str, str]]:
     return help_entries
 
 
-def _handle_custom_command(command: str, name: str) -> Optional[Any]:
+def _handle_custom_command(command: str, name: str) -> Any | None:
     """Handle a markdown-based custom command.
 
     Args:

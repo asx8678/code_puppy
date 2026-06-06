@@ -3,13 +3,13 @@
 Provides a beautiful split-panel interface for browsing providers and models
 with live preview of model details and one-click addition to extra_models.json.
 """
+from __future__ import annotations
 
 import json
 import os
 import sys
 import time
 from pathlib import Path
-from typing import List, Optional
 
 from prompt_toolkit.application import Application
 from prompt_toolkit.key_binding import KeyBindings
@@ -98,14 +98,14 @@ class AddModelMenu:
     # Class-level default so the attribute is always present, even when the
     # instance is constructed via ``__new__`` (e.g. in tests that bypass
     # ``__init__``). ``run()`` reads this in its event loop.
-    pending_credentials_edit: Optional[ProviderInfo] = None
+    pending_credentials_edit: ProviderInfo | None = None
 
     def __init__(self):
         """Initialize the model browser menu."""
-        self.registry: Optional[ModelsDevRegistry] = None
-        self.providers: List[ProviderInfo] = []
-        self.current_provider: Optional[ProviderInfo] = None
-        self.current_models: List[ModelInfo] = []
+        self.registry: ModelsDevRegistry | None = None
+        self.providers: list[ProviderInfo] = []
+        self.current_provider: ProviderInfo | None = None
+        self.current_models: list[ModelInfo] = []
 
         # State management
         self.view_mode = "providers"  # "providers" or "models"
@@ -117,13 +117,13 @@ class AddModelMenu:
         self.model_filter = ""
 
         # Pending model for credential prompting
-        self.pending_model: Optional[ModelInfo] = None
-        self.pending_provider: Optional[ProviderInfo] = None
-        self.pending_credentials_edit: Optional[ProviderInfo] = None
+        self.pending_model: ModelInfo | None = None
+        self.pending_provider: ProviderInfo | None = None
+        self.pending_credentials_edit: ProviderInfo | None = None
 
         # Custom model support
         self.is_custom_model_selected = False
-        self.custom_model_name: Optional[str] = None
+        self.custom_model_name: str | None = None
 
         # Initialize registry
         self._initialize_registry()
@@ -145,14 +145,14 @@ class AddModelMenu:
         except Exception as e:
             emit_error(f"Error loading models registry: {e}")
 
-    def _get_current_provider(self) -> Optional[ProviderInfo]:
+    def _get_current_provider(self) -> ProviderInfo | None:
         """Get the currently selected provider."""
         filtered_providers = self._filtered_providers()
         if 0 <= self.selected_provider_idx < len(filtered_providers):
             return filtered_providers[self.selected_provider_idx]
         return None
 
-    def _get_current_model(self) -> Optional[ModelInfo]:
+    def _get_current_model(self) -> ModelInfo | None:
         """Get the currently selected model.
 
         Returns None if "Custom model" option is selected (which is at index len(current_models)).
@@ -168,7 +168,7 @@ class AddModelMenu:
                 return filtered_models[self.selected_model_idx]
         return None
 
-    def _get_current_provider_from_model(self) -> Optional[ProviderInfo]:
+    def _get_current_provider_from_model(self) -> ProviderInfo | None:
         """Get the provider for the currently selected model (in models view)."""
         return self.current_provider
 
@@ -180,7 +180,7 @@ class AddModelMenu:
             )
         return False
 
-    def _filtered_providers(self) -> List[ProviderInfo]:
+    def _filtered_providers(self) -> list[ProviderInfo]:
         provider_filter = getattr(self, "provider_filter", "")
         if not provider_filter:
             return self.providers
@@ -190,7 +190,7 @@ class AddModelMenu:
             if query_matches_text(provider_filter, provider.name, provider.id)
         ]
 
-    def _filtered_models(self) -> List[ModelInfo]:
+    def _filtered_models(self) -> list[ModelInfo]:
         model_filter = getattr(self, "model_filter", "")
         if not model_filter:
             return self.current_models
@@ -219,7 +219,7 @@ class AddModelMenu:
         return getattr(self, "model_filter", "")
 
     def _sync_provider_selection(
-        self, preferred_provider: Optional[ProviderInfo]
+        self, preferred_provider: ProviderInfo | None
     ) -> None:
         filtered_providers = self._filtered_providers()
         if not filtered_providers:
@@ -236,7 +236,7 @@ class AddModelMenu:
         self._ensure_selection_visible()
 
     def _sync_model_selection(
-        self, preferred_model: Optional[ModelInfo], preferred_custom: bool
+        self, preferred_model: ModelInfo | None, preferred_custom: bool
     ) -> None:
         filtered_models = self._filtered_models()
         total_items = len(filtered_models) + int(self._should_show_custom_model())
@@ -339,7 +339,7 @@ class AddModelMenu:
         self.current_page += 1
         self._set_selected_index(self.current_page * PAGE_SIZE)
 
-    def _render_provider_list(self) -> List:
+    def _render_provider_list(self) -> list:
         """Render the provider list panel."""
         lines = []
 
@@ -400,7 +400,7 @@ class AddModelMenu:
         self._render_navigation_hints(lines)
         return lines
 
-    def _render_model_list(self) -> List:
+    def _render_model_list(self) -> list:
         """Render the model list panel."""
         lines = []
 
@@ -471,7 +471,7 @@ class AddModelMenu:
         self._render_navigation_hints(lines)
         return lines
 
-    def _render_navigation_hints(self, lines: List):
+    def _render_navigation_hints(self, lines: list):
         """Render navigation hints at the bottom of the list panel."""
         lines.append(("", "\n"))
         lines.append(("fg:ansibrightblack", "  ↑/↓ "))
@@ -497,7 +497,7 @@ class AddModelMenu:
         lines.append(("fg:ansibrightred", "  Ctrl+C "))
         lines.append(("", "Cancel"))
 
-    def _render_model_details(self) -> List:
+    def _render_model_details(self) -> list:
         """Render the model details panel."""
         lines = []
 
@@ -767,7 +767,7 @@ class AddModelMenu:
 
             if extra_models_path.exists():
                 try:
-                    with open(extra_models_path, "r", encoding="utf-8") as f:
+                    with open(extra_models_path, encoding="utf-8") as f:
                         extra_models = json.load(f)
                         if not isinstance(extra_models, dict):
                             emit_error(
@@ -976,7 +976,7 @@ class AddModelMenu:
         self._add_current_model()
         return self.result is not None
 
-    def _get_missing_env_vars(self, provider: ProviderInfo) -> List[str]:
+    def _get_missing_env_vars(self, provider: ProviderInfo) -> list[str]:
         """Check which required env vars are missing for a provider."""
         missing = []
         for env_var in provider.env:
@@ -1081,7 +1081,7 @@ class AddModelMenu:
             output_modalities=["text"],
         )
 
-    def _prompt_for_custom_model(self) -> Optional[tuple[str, int]]:
+    def _prompt_for_custom_model(self) -> tuple[str, int] | None:
         """Prompt user for custom model details.
 
         Returns:

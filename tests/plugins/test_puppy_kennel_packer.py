@@ -26,8 +26,8 @@ def kennel_root(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     import importlib
 
     from code_puppy.plugins.puppy_kennel import config as kennel_config
-    from code_puppy.plugins.puppy_kennel import packer as packer_mod
     from code_puppy.plugins.puppy_kennel import kennel as kennel_mod
+    from code_puppy.plugins.puppy_kennel import packer as packer_mod
     from code_puppy.plugins.puppy_kennel import recorder as recorder_mod
     from code_puppy.plugins.puppy_kennel import state as state_mod
 
@@ -100,7 +100,7 @@ def test_pack_renders_with_one_long_assistant_drawer(kennel_root: Path) -> None:
 
 
 def test_user_prefs_land_in_p0(kennel_root: Path) -> None:
-    from code_puppy.plugins.puppy_kennel import packer, kennel
+    from code_puppy.plugins.puppy_kennel import kennel, packer
 
     kennel.write_note(
         wing_name="user:default",
@@ -115,7 +115,7 @@ def test_user_prefs_land_in_p0(kennel_root: Path) -> None:
 
 
 def test_sticky_repo_notes_land_in_p1(kennel_root: Path) -> None:
-    from code_puppy.plugins.puppy_kennel import packer, kennel
+    from code_puppy.plugins.puppy_kennel import kennel, packer
     from code_puppy.plugins.puppy_kennel.wings import repo_wing
 
     kennel.write_note(
@@ -148,7 +148,7 @@ def test_assistant_responses_land_in_p2(kennel_root: Path) -> None:
 
 
 def test_all_three_tiers_render_in_order(kennel_root: Path) -> None:
-    from code_puppy.plugins.puppy_kennel import packer, kennel, recorder
+    from code_puppy.plugins.puppy_kennel import kennel, packer, recorder
     from code_puppy.plugins.puppy_kennel.wings import repo_wing
 
     kennel.write_note(
@@ -227,7 +227,7 @@ def test_single_huge_drawer_gets_truncated_not_dropped(kennel_root: Path) -> Non
 
 def test_p0_does_not_starve_p1(kennel_root: Path) -> None:
     """If user-wing has tons of long prefs, sticky repo notes still get a slot."""
-    from code_puppy.plugins.puppy_kennel import packer, kennel
+    from code_puppy.plugins.puppy_kennel import kennel, packer
     from code_puppy.plugins.puppy_kennel.wings import repo_wing
 
     for i in range(20):

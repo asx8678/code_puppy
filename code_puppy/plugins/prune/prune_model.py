@@ -7,7 +7,7 @@ prompt_toolkit wiring. Everything here is pure data-shape + parsing.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any, List, Optional, Set
+from typing import Any
 
 # ── palette ────────────────────────────────────────────────────────────────
 # Style strings for prompt_toolkit's formatted-text tuples. Centralised here
@@ -79,18 +79,18 @@ class MessageEntry:
     role: str  # "system" | "user" | "assistant" | "tool-return" | "unknown"
     preview: str
     full_text: str
-    tool_calls: List[ToolCallInfo] = field(default_factory=list)
-    tool_return_ids: List[str] = field(default_factory=list)
+    tool_calls: list[ToolCallInfo] = field(default_factory=list)
+    tool_return_ids: list[str] = field(default_factory=list)
     # Thinking / chain-of-thought content from the model. These are
     # ``ThinkingPart`` instances that live inside a ``ModelResponse``
     # alongside the regular ``TextPart`` reply. They're stored separately
     # so the preview line stays focused on the user-facing answer while
     # the detail pane can still surface what the model was thinking.
-    thinking_segments: List[str] = field(default_factory=list)
+    thinking_segments: list[str] = field(default_factory=list)
     # Context-window analysis. Filled in by annotate_context_window().
     # Both default to None when no estimator is available.
-    tokens: Optional[int] = None
-    in_context: Optional[bool] = None
+    tokens: int | None = None
+    in_context: bool | None = None
 
     @property
     def is_pure_tool_return(self) -> bool:
@@ -148,7 +148,7 @@ class PruneSelection:
     via cascade logic in ``_perform_prune``.
     """
 
-    history_indices_to_drop: Set[int] = field(default_factory=set)
+    history_indices_to_drop: set[int] = field(default_factory=set)
 
     @property
     def is_empty(self) -> bool:
@@ -169,21 +169,21 @@ class ContextBudget:
     unavailable — the menu degrades gracefully when this happens.
     """
 
-    used_tokens: Optional[int] = None  # in-context message tokens (what fits)
-    overhead_tokens: Optional[int] = None  # system prompt + tool defs
-    context_length: Optional[int] = None  # model's max context size
+    used_tokens: int | None = None  # in-context message tokens (what fits)
+    overhead_tokens: int | None = None  # system prompt + tool defs
+    context_length: int | None = None  # model's max context size
     out_of_context_tokens: int = 0  # tokens from messages that won't be sent
     out_of_context_messages: int = 0  # count of those messages
     available: bool = False  # True if the rest of the fields are meaningful
 
     @property
-    def total_used(self) -> Optional[int]:
+    def total_used(self) -> int | None:
         if self.used_tokens is None or self.overhead_tokens is None:
             return None
         return self.used_tokens + self.overhead_tokens
 
     @property
-    def percent_used(self) -> Optional[float]:
+    def percent_used(self) -> float | None:
         if not self.available or not self.context_length:
             return None
         total = self.total_used or 0
@@ -205,7 +205,7 @@ def short_str(value: Any, limit: int = 80) -> str:
 def short_args(args: dict, limit: int = 80) -> str:
     if not args:
         return ""
-    items: List[str] = []
+    items: list[str] = []
     for k, v in list(args.items())[:4]:
         vs = short_str(v, limit=20)
         items.append(f"{k}={vs}")
@@ -218,7 +218,7 @@ def short_args(args: dict, limit: int = 80) -> str:
 # ── pydantic-ai introspection ──────────────────────────────────────────────
 
 
-def _extract_message(message: Any) -> Optional[MessageEntry]:
+def _extract_message(message: Any) -> MessageEntry | None:
     """Inspect a pydantic-ai message and produce a MessageEntry, or None
     if it's the system prompt / something we shouldn't show."""
     try:
@@ -251,12 +251,12 @@ def _extract_message(message: Any) -> Optional[MessageEntry]:
 
     if isinstance(message, ModelRequest):
         parts = getattr(message, "parts", []) or []
-        text_fragments: List[str] = []
-        user_text_fragments: List[str] = []
+        text_fragments: list[str] = []
+        user_text_fragments: list[str] = []
         saw_user = False
         saw_tool_return = False
         saw_system = False
-        tool_return_ids: List[str] = []
+        tool_return_ids: list[str] = []
 
         for part in parts:
             if isinstance(part, SystemPromptPart):
@@ -334,9 +334,9 @@ def _extract_message(message: Any) -> Optional[MessageEntry]:
 
     if isinstance(message, ModelResponse):
         parts = getattr(message, "parts", []) or []
-        text_fragments: List[str] = []
-        thinking_segments: List[str] = []
-        tool_calls: List[ToolCallInfo] = []
+        text_fragments: list[str] = []
+        thinking_segments: list[str] = []
+        tool_calls: list[ToolCallInfo] = []
         for part in parts:
             if isinstance(part, TextPart):
                 text_fragments.append(str(part.content))
@@ -392,7 +392,7 @@ def _extract_message(message: Any) -> Optional[MessageEntry]:
     )
 
 
-def build_message_entries(raw_history: List[Any]) -> List[MessageEntry]:
+def build_message_entries(raw_history: list[Any]) -> list[MessageEntry]:
     """Turn pydantic-ai history into a list of MessageEntry, preserving order.
 
     Pure-system messages in raw history are filtered out. Tool-return-only
@@ -405,7 +405,7 @@ def build_message_entries(raw_history: List[Any]) -> List[MessageEntry]:
     transports that fold the system prompt into the first user message
     (e.g. claude-code OAuth).
     """
-    return_ids: Set[str] = set()
+    return_ids: set[str] = set()
     try:
         from pydantic_ai.messages import ModelRequest, ToolReturnPart
 
@@ -431,7 +431,7 @@ def build_message_entries(raw_history: List[Any]) -> List[MessageEntry]:
     except Exception:
         pass
 
-    entries: List[MessageEntry] = []
+    entries: list[MessageEntry] = []
     for hist_idx, msg in enumerate(raw_history):
         entry = _extract_message(msg)
         if entry is None:
@@ -445,8 +445,8 @@ def build_message_entries(raw_history: List[Any]) -> List[MessageEntry]:
 
 
 def annotate_context_window(
-    entries: List[MessageEntry],
-    raw_history: List[Any],
+    entries: list[MessageEntry],
+    raw_history: list[Any],
     agent: Any,
 ) -> ContextBudget:
     """Mutate `entries` to set tokens + in_context, and return the budget.

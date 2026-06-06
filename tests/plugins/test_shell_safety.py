@@ -4,6 +4,7 @@ Comprehensive tests for the shell safety plugin.
 Tests cover command assessment, caching, risk level comparison,
 and safety thresholds.
 """
+from __future__ import annotations
 
 from code_puppy.plugins.shell_safety.agent_shell_safety import ShellSafetyAgent
 from code_puppy.plugins.shell_safety.command_cache import (

@@ -4,6 +4,7 @@ Comprehensive tests for blocking_startup.py MCP server startup functionality.
 Tests cover stderr capture, blocking initialization, startup monitoring,
 and timeout/error scenarios.
 """
+from __future__ import annotations
 
 import asyncio
 import os

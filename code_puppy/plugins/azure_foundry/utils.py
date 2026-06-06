@@ -111,7 +111,7 @@ def load_extra_models() -> dict[str, Any]:
         return {}
 
     try:
-        with open(extra_models_path, "r", encoding="utf-8") as f:
+        with open(extra_models_path, encoding="utf-8") as f:
             return json.load(f)
     except json.JSONDecodeError as e:
         logger.error(f"Invalid JSON in extra_models.json: {e}")

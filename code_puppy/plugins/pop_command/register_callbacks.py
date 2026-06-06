@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Any, List, Optional, Tuple
+from typing import Any
 
 from code_puppy.callbacks import register_callback
 
@@ -31,7 +31,7 @@ def emit_warning(message: Any) -> None:
     _emit_warning(message)
 
 
-def _custom_help() -> List[Tuple[str, str]]:
+def _custom_help() -> list[tuple[str, str]]:
     return [
         (
             "pop",
@@ -68,7 +68,7 @@ def _has_unresolved_tool_calls(message: Any) -> bool:
         return False
 
 
-def _prune_dangling_tool_fragments(history: List[Any]) -> tuple[List[Any], int]:
+def _prune_dangling_tool_fragments(history: list[Any]) -> tuple[list[Any], int]:
     """Strip incomplete tool-call sequences from the tail of history."""
     pruned = 0
 
@@ -89,7 +89,7 @@ def _prune_dangling_tool_fragments(history: List[Any]) -> tuple[List[Any], int]:
     return history, pruned
 
 
-def _parse_pop_count(command: str) -> Optional[int]:
+def _parse_pop_count(command: str) -> int | None:
     tokens = command.split()
     if len(tokens) < 2:
         return 1
@@ -120,7 +120,7 @@ def _handle_pop_command(command: str) -> bool:
         emit_error(f"/pop: could not get current agent – {exc}")
         return True
 
-    history: List[Any] = list(agent.get_message_history())
+    history: list[Any] = list(agent.get_message_history())
     if not history:
         emit_warning("/pop: conversation history is empty – nothing to remove")
         return True
@@ -169,7 +169,7 @@ def _handle_pop_command(command: str) -> bool:
     return True
 
 
-def _handle_custom_command(command: str, name: str) -> Optional[bool]:
+def _handle_custom_command(command: str, name: str) -> bool | None:
     if name != "pop":
         return None
 

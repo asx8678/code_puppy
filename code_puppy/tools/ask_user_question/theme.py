@@ -7,7 +7,8 @@ the global configuration.
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Mapping, NamedTuple, TypeVar
+from collections.abc import Mapping
+from typing import TYPE_CHECKING, NamedTuple, TypeVar
 
 if TYPE_CHECKING:
     from collections.abc import Callable

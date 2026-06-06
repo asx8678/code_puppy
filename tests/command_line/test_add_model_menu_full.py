@@ -2,6 +2,7 @@
 
 Missing: 736, 900-975, 1046, 1080 - these are TUI key bindings and post-TUI flow.
 """
+from __future__ import annotations
 
 import os
 from unittest.mock import patch

@@ -9,6 +9,7 @@ Tests interactive model browser TUI including:
 - Search/filter functionality
 - Custom model support
 """
+from __future__ import annotations
 
 from unittest.mock import MagicMock, patch
 

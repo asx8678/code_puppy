@@ -1,4 +1,5 @@
 """Tests for ask_user_question demo_tui module."""
+from __future__ import annotations
 
 from unittest.mock import patch
 

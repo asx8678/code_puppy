@@ -3,9 +3,10 @@ MCP Interactive Wizard Utilities - Shared interactive installation wizard functi
 
 Provides interactive functionality for installing and configuring MCP servers.
 """
+from __future__ import annotations
 
 import logging
-from typing import Any, Dict, Optional
+from typing import Any
 
 from rich.text import Text
 
@@ -147,7 +148,7 @@ def interactive_server_selection(group_id: str):
             emit_info(f"    {server.description[:80]}...", message_group=group_id)
 
         choice = emit_prompt(
-            "Enter number (1-{}) or 'q' to quit: ".format(len(servers))
+            f"Enter number (1-{len(servers)}) or 'q' to quit: "
         )
 
         if choice.lower() == "q":
@@ -169,7 +170,7 @@ def interactive_server_selection(group_id: str):
         return None
 
 
-def interactive_get_server_name(selected_server, group_id: str) -> Optional[str]:
+def interactive_get_server_name(selected_server, group_id: str) -> str | None:
     """
     Get custom server name from user.
 
@@ -189,8 +190,8 @@ def interactive_configure_server(
     selected_server,
     server_name: str,
     group_id: str,
-    env_vars: Dict[str, Any],
-    cmd_args: Dict[str, Any],
+    env_vars: dict[str, Any],
+    cmd_args: dict[str, Any],
 ) -> bool:
     """
     Configure and install the selected server.
@@ -244,8 +245,8 @@ def install_server_from_catalog(
     manager,
     selected_server,
     server_name: str,
-    env_vars: Dict[str, Any],
-    cmd_args: Dict[str, Any],
+    env_vars: dict[str, Any],
+    cmd_args: dict[str, Any],
     group_id: str,
 ) -> bool:
     """
@@ -303,7 +304,7 @@ def install_server_from_catalog(
 
         # Save to mcp_servers.json for persistence
         if os.path.exists(MCP_SERVERS_FILE):
-            with open(MCP_SERVERS_FILE, "r") as f:
+            with open(MCP_SERVERS_FILE) as f:
                 data = json.load(f)
                 servers = data.get("mcp_servers", {})
         else:
@@ -334,7 +335,7 @@ def install_server_from_catalog(
             message_group=group_id,
         )
         emit_info(
-            "Use '/mcp start {}' to start the server".format(server_name),
+            f"Use '/mcp start {server_name}' to start the server",
             message_group=group_id,
         )
 

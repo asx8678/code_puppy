@@ -14,8 +14,8 @@ skill — and removes the temptation to reimplement the dance a fourth time.
 
 from __future__ import annotations
 
+from collections.abc import Iterator
 from pathlib import Path
-from typing import Iterator, List, Optional
 
 # Import modules (not names) so monkeypatching at `<module>.attr` reaches us.
 from . import config as _config
@@ -26,7 +26,7 @@ from .metadata import SkillMetadata
 
 
 def iter_enabled_skill_metadata(
-    *, directories: Optional[List[Path]] = None
+    *, directories: list[Path] | None = None
 ) -> Iterator[SkillMetadata]:
     """Yield ``SkillMetadata`` for every enabled, valid skill.
 
@@ -58,14 +58,14 @@ def iter_enabled_skill_metadata(
 
 
 def list_enabled_skill_metadata(
-    *, directories: Optional[List[Path]] = None
-) -> List[SkillMetadata]:
+    *, directories: list[Path] | None = None
+) -> list[SkillMetadata]:
     """Materialised list version of :func:`iter_enabled_skill_metadata`."""
     return list(iter_enabled_skill_metadata(directories=directories))
 
 
 def iter_enabled_skills(
-    *, directories: Optional[List[Path]] = None
+    *, directories: list[Path] | None = None
 ) -> Iterator[SkillInfo]:
     """Yield ``SkillInfo`` for enabled skills *without* parsing frontmatter.
 

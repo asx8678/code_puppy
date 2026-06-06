@@ -8,16 +8,16 @@ is better than complex, nested side effects are worse than deliberate helpers.
 
 from __future__ import annotations
 
-import json
 import hashlib
 import hmac
+import json
 import os
 import pickle
 import secrets
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Callable, List
-
+from typing import Any
 
 _LEGACY_SIGNED_HEADER = b"CPSESSION\x01"
 _LEGACY_SIGNATURE_SIZE = (
@@ -36,7 +36,7 @@ def _safe_loads(data: bytes) -> Any:
     return pickle.loads(data)  # noqa: S301
 
 
-SessionHistory = List[Any]
+SessionHistory = list[Any]
 TokenEstimator = Callable[[Any], int]
 
 
@@ -226,13 +226,13 @@ def load_session(
     return _safe_loads(pickle_data)
 
 
-def list_sessions(base_dir: Path) -> List[str]:
+def list_sessions(base_dir: Path) -> list[str]:
     if not base_dir.exists():
         return []
     return sorted(path.stem for path in base_dir.glob("*.pkl"))
 
 
-def cleanup_sessions(base_dir: Path, max_sessions: int) -> List[str]:
+def cleanup_sessions(base_dir: Path, max_sessions: int) -> list[str]:
     if max_sessions <= 0:
         return []
 
@@ -249,7 +249,7 @@ def cleanup_sessions(base_dir: Path, max_sessions: int) -> List[str]:
     )
 
     stale_entries = sorted_candidates[:-max_sessions]
-    removed_sessions: List[str] = []
+    removed_sessions: list[str] = []
     for _, pickle_path in stale_entries:
         metadata_path = base_dir / f"{pickle_path.stem}_meta.json"
         try:

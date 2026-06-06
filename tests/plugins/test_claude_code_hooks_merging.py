@@ -4,6 +4,7 @@ Tests for the new hook merging behavior in claude_code_hooks.
 Tests that verify global and project-level hooks are merged correctly
 when both configuration files exist.
 """
+from __future__ import annotations
 
 import json
 import os

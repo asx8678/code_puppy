@@ -1,7 +1,9 @@
+from __future__ import annotations
+
+import logging
 import os
 import sys
-import logging
-from typing import Iterable, Optional
+from collections.abc import Iterable
 
 from prompt_toolkit import Application, PromptSession
 from prompt_toolkit.completion import Completer, Completion
@@ -17,6 +19,7 @@ from code_puppy.command_line.pagination import (
     get_page_for_index,
     get_total_pages,
 )
+from code_puppy.command_line.utils import safe_input
 from code_puppy.config import get_global_model_name
 from code_puppy.list_filtering import query_matches_text
 from code_puppy.model_switching import set_model_and_reload_agent
@@ -26,7 +29,6 @@ from code_puppy.provider_credentials import (
     required_env_var_for_model,
     save_credential,
 )
-from code_puppy.command_line.utils import safe_input
 
 logger = logging.getLogger(__name__)
 
@@ -121,7 +123,7 @@ class ModelNameCompleter(Completer):
             )
 
 
-def _find_matching_model(rest: str, model_names: list[str]) -> Optional[str]:
+def _find_matching_model(rest: str, model_names: list[str]) -> str | None:
     """
     Find the best matching model for the given input.
 
@@ -161,7 +163,7 @@ def _find_matching_model(rest: str, model_names: list[str]) -> Optional[str]:
     return None
 
 
-def update_model_in_input(text: str) -> Optional[str]:
+def update_model_in_input(text: str) -> str | None:
     # If input starts with /model or /m and a model name, set model and strip it out
     content = text.strip()
     model_names = load_model_names()
@@ -227,7 +229,7 @@ def update_model_in_input(text: str) -> Optional[str]:
 class ModelSelectionMenu:
     """Paginated interactive model picker for the /model command."""
 
-    def __init__(self, model_names: Optional[list[str]] = None):
+    def __init__(self, model_names: list[str] | None = None):
         self.model_names = (
             list(model_names) if model_names is not None else load_model_names()
         )
@@ -236,8 +238,8 @@ class ModelSelectionMenu:
         self.selected_index = 0
         self.page = 0
         self.page_size = MODEL_PICKER_PAGE_SIZE
-        self.result: Optional[str] = None
-        self.pending_credentials_edit: Optional[str] = None
+        self.result: str | None = None
+        self.pending_credentials_edit: str | None = None
 
         if self.current_model in self.visible_model_names:
             self.selected_index = self.visible_model_names.index(self.current_model)
@@ -275,7 +277,7 @@ class ModelSelectionMenu:
             if query_matches_text(self.filter_text, model_name)
         ]
 
-    def _get_selected_model_name(self) -> Optional[str]:
+    def _get_selected_model_name(self) -> str | None:
         if 0 <= self.selected_index < len(self.visible_model_names):
             return self.visible_model_names[self.selected_index]
         return None
@@ -433,7 +435,7 @@ class ModelSelectionMenu:
             logger.info("Credential editing cancelled by user")
             print("\n⚠️ Credential editing cancelled")
 
-    async def run_async(self) -> Optional[str]:
+    async def run_async(self) -> str | None:
         control = FormattedTextControl(lambda: self._render())
         kb = KeyBindings()
 
@@ -566,7 +568,7 @@ def _normalize_legacy_picker_choice(choice: str) -> str:
     return choice.removesuffix(" (current)")
 
 
-async def interactive_model_picker() -> Optional[str]:
+async def interactive_model_picker() -> str | None:
     """Run the paginated interactive model picker used by /model."""
     from code_puppy.tools.command_runner import set_awaiting_user_input
 
@@ -595,7 +597,7 @@ async def interactive_model_picker() -> Optional[str]:
 async def get_input_with_model_completion(
     prompt_str: str = ">>> ",
     trigger: str = "/model",
-    history_file: Optional[str] = None,
+    history_file: str | None = None,
 ) -> str:
     history = FileHistory(os.path.expanduser(history_file)) if history_file else None
     session = PromptSession(

@@ -1,4 +1,5 @@
 """Full coverage tests for browser_navigation.py."""
+from __future__ import annotations
 
 from unittest.mock import AsyncMock, MagicMock, patch
 

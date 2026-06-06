@@ -2,6 +2,7 @@
 
 Tests browser initialization, lifecycle, and cleanup without actual browser execution.
 """
+from __future__ import annotations
 
 from unittest.mock import AsyncMock, patch
 

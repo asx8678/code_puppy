@@ -3,12 +3,12 @@
 Launch with /skills to browse, enable, disable, and configure skills.
 Built with prompt_toolkit for proper interactive split-panel interface.
 """
+from __future__ import annotations
 
 import os
 import sys
 import time
 from pathlib import Path
-from typing import List, Optional
 
 from prompt_toolkit.application import Application
 from prompt_toolkit.key_binding import KeyBindings
@@ -52,9 +52,9 @@ class SkillsMenu:
 
     def __init__(self):
         """Initialize the skills menu."""
-        self.skills: List[SkillInfo] = []
-        self.disabled_skills: List[str] = []
-        self.skill_directories: List[Path] = []
+        self.skills: list[SkillInfo] = []
+        self.disabled_skills: list[str] = []
+        self.skill_directories: list[Path] = []
         self.skills_enabled = False
 
         # State management
@@ -63,8 +63,8 @@ class SkillsMenu:
         self.result = None
 
         # UI controls (set during run)
-        self.menu_control: Optional[FormattedTextControl] = None
-        self.preview_control: Optional[FormattedTextControl] = None
+        self.menu_control: FormattedTextControl | None = None
+        self.preview_control: FormattedTextControl | None = None
 
         # Initialize data
         self._refresh_data()
@@ -79,13 +79,13 @@ class SkillsMenu:
         except Exception as e:
             emit_error(f"Failed to refresh skills data: {e}")
 
-    def _get_current_skill(self) -> Optional[SkillInfo]:
+    def _get_current_skill(self) -> SkillInfo | None:
         """Get the currently selected skill."""
         if 0 <= self.selected_idx < len(self.skills):
             return self.skills[self.selected_idx]
         return None
 
-    def _get_skill_metadata(self, skill: SkillInfo) -> Optional[SkillMetadata]:
+    def _get_skill_metadata(self, skill: SkillInfo) -> SkillMetadata | None:
         """Get metadata for a skill."""
         try:
             return parse_skill_metadata(skill.path)
@@ -114,7 +114,7 @@ class SkillsMenu:
         self._refresh_data()
         self.update_display()
 
-    def _render_skill_list(self) -> List:
+    def _render_skill_list(self) -> list:
         """Render the skill list panel."""
         lines = []
 
@@ -180,7 +180,7 @@ class SkillsMenu:
         self._render_navigation_hints(lines)
         return lines
 
-    def _render_navigation_hints(self, lines: List) -> None:
+    def _render_navigation_hints(self, lines: list) -> None:
         """Render navigation hints at the bottom."""
         lines.append(("", "\n"))
         lines.append(("fg:ansibrightblack", "  ↑/↓ or j/k "))
@@ -202,7 +202,7 @@ class SkillsMenu:
         lines.append(("fg:ansired", "  q  "))
         lines.append(("", "Exit"))
 
-    def _render_skill_details(self) -> List:
+    def _render_skill_details(self) -> list:
         """Render the skill details panel."""
         lines = []
 
@@ -293,7 +293,7 @@ class SkillsMenu:
 
         return lines
 
-    def _wrap_text(self, text: str, width: int) -> List[str]:
+    def _wrap_text(self, text: str, width: int) -> list[str]:
         """Wrap text to specified width."""
         words = text.split()
         lines = []
@@ -495,7 +495,7 @@ class SkillsMenu:
         return self.result
 
 
-def _prompt_for_directory() -> Optional[str]:
+def _prompt_for_directory() -> str | None:
     """Prompt user for a directory path to add."""
     try:
         print("\n" + "=" * 60)
@@ -518,7 +518,7 @@ def _prompt_for_directory() -> Optional[str]:
     return None
 
 
-def _show_directories_menu() -> Optional[str]:
+def _show_directories_menu() -> str | None:
     """Show current directories and allow removal."""
     try:
         dirs = get_skill_directories()

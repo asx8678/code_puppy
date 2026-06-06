@@ -20,9 +20,10 @@ Hook stdout on exit code 0 is propagated to the agent context for the events
 where Claude Code's spec says it should become "additional context"
 (SessionStart, UserPromptSubmit, PreToolUse). See issue #298.
 """
+from __future__ import annotations
 
 import logging
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from code_puppy.callbacks import register_callback
 from code_puppy.hook_engine import EventData, HookEngine
@@ -49,16 +50,16 @@ _SUBAGENT_NAMES = frozenset(
 
 logger = logging.getLogger(__name__)
 
-_hook_engine: Optional[HookEngine] = None
+_hook_engine: HookEngine | None = None
 
 # Deferred-context buffer: SessionStart hook stdout is collected here at boot
 # and injected into the very next user prompt (which is where Claude Code's
 # spec says SessionStart "additional context" should land — the assistant's
 # first turn). Cleared on first inject so it's a one-shot per session.
-_pending_session_context: List[str] = []
+_pending_session_context: list[str] = []
 
 
-def _initialize_engine() -> Optional[HookEngine]:
+def _initialize_engine() -> HookEngine | None:
     config = load_hooks_config()
 
     if not config:
@@ -81,13 +82,13 @@ def _initialize_engine() -> Optional[HookEngine]:
 _hook_engine = _initialize_engine()
 
 
-def _collect_context_stdout(result: Any) -> List[str]:
+def _collect_context_stdout(result: Any) -> list[str]:
     """Pull stdout from non-blocking, exit-0 hook results.
 
     Per Claude Code spec, only exit code 0 hooks contribute "additional
     context" — exit 1 blocks and exit 2 routes stderr back as a tool error.
     """
-    chunks: List[str] = []
+    chunks: list[str] = []
     for r in getattr(result, "results", []) or []:
         if getattr(r, "blocked", False):
             continue
@@ -106,9 +107,9 @@ def _collect_context_stdout(result: Any) -> List[str]:
 
 async def on_pre_tool_call_hook(
     tool_name: str,
-    tool_args: Dict[str, Any],
+    tool_args: dict[str, Any],
     context: Any = None,
-) -> Optional[Dict[str, Any]]:
+) -> dict[str, Any] | None:
     """Pre-tool callback — executes hooks before tool runs. Can block AND
     inject stdout as additional context for the model."""
     if not _hook_engine:
@@ -148,7 +149,7 @@ async def on_pre_tool_call_hook(
 
 async def on_post_tool_call_hook(
     tool_name: str,
-    tool_args: Dict[str, Any],
+    tool_args: dict[str, Any],
     result: Any,
     duration_ms: float,
     context: Any = None,
@@ -235,15 +236,15 @@ register_callback("session_end", on_session_end_hook)
 
 
 async def on_user_prompt_submit_hook(
-    prompt: str, session_id: Optional[str] = None
-) -> Optional[str]:
+    prompt: str, session_id: str | None = None
+) -> str | None:
     """Fire UserPromptSubmit hooks and inject their stdout (+ any pending
     SessionStart stdout) into the user prompt.
 
     Returns the (possibly augmented) prompt, or ``None`` if there's nothing
     to add. See issue #298.
     """
-    chunks: List[str] = []
+    chunks: list[str] = []
 
     # Drain any pending SessionStart context first.
     if _pending_session_context:

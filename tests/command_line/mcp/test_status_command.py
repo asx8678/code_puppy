@@ -1,4 +1,5 @@
 """Tests for MCP status command."""
+from __future__ import annotations
 
 from datetime import timedelta
 from unittest.mock import MagicMock, patch

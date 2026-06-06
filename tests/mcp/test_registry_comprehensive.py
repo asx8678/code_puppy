@@ -4,6 +4,7 @@ Comprehensive tests for ServerRegistry CRUD operations and validation.
 Tests cover server registration, retrieval, updates, deletion, validation,
 persistence, and thread-safety.
 """
+from __future__ import annotations
 
 import tempfile
 import threading

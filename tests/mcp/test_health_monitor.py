@@ -9,6 +9,7 @@ Tests health monitoring system including:
 - Circuit breaker functionality
 - Error handling and edge cases
 """
+from __future__ import annotations
 
 import asyncio
 from datetime import datetime, timedelta

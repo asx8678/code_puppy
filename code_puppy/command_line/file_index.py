@@ -21,7 +21,6 @@ import shutil
 import subprocess
 import threading
 from dataclasses import dataclass, field
-from typing import List, Optional
 
 # Cap so we don't blow up RAM on absurdly huge repos. 200k paths is plenty
 # for fuzzy ranking; anything beyond that is almost certainly noise.
@@ -48,7 +47,7 @@ class FileIndex:
     def __init__(self) -> None:
         self._current: Index = _EMPTY_INDEX
         self._lock = threading.Lock()
-        self._build_thread: Optional[threading.Thread] = None
+        self._build_thread: threading.Thread | None = None
         self._test_mode: bool = False
 
     # ----------------------------------------------------------------- public
@@ -57,7 +56,7 @@ class FileIndex:
     def current(self) -> Index:
         return self._current
 
-    def reindex(self, root: Optional[str] = None, *, blocking: bool = False) -> None:
+    def reindex(self, root: str | None = None, *, blocking: bool = False) -> None:
         """Kick off a (re)build of the index.
 
         Args:
@@ -92,7 +91,7 @@ class FileIndex:
         if blocking:
             thread.join()
 
-    def set_for_testing(self, root: str, paths: List[str]) -> None:
+    def set_for_testing(self, root: str, paths: list[str]) -> None:
         """Inject an index directly. Tests only — keeps subprocess out of unit tests.
 
         Also enables test mode which suppresses automatic reindexing for the rest
@@ -112,7 +111,7 @@ class FileIndex:
         self._current = _make_index(root, paths)
 
 
-def _run_ripgrep(root: str) -> Optional[List[str]]:
+def _run_ripgrep(root: str) -> list[str] | None:
     rg = shutil.which("rg")
     if not rg:
         return None
@@ -136,7 +135,7 @@ def _run_ripgrep(root: str) -> Optional[List[str]]:
     return lines
 
 
-def _make_index(root: str, paths: List[str]) -> Index:
+def _make_index(root: str, paths: list[str]) -> Index:
     # Normalize once up front so every fuzzy lookup is a cheap tuple read.
     normalized = tuple(paths)
     lowered = tuple(p.lower() for p in normalized)
@@ -159,11 +158,11 @@ def get_index() -> Index:
     return _INDEX.current
 
 
-def reindex(root: Optional[str] = None, *, blocking: bool = False) -> None:
+def reindex(root: str | None = None, *, blocking: bool = False) -> None:
     """Trigger an (async) reindex of ``root`` (defaults to cwd)."""
     _INDEX.reindex(root, blocking=blocking)
 
 
-def set_index_for_testing(root: str, paths: List[str]) -> None:
+def set_index_for_testing(root: str, paths: list[str]) -> None:
     """Test helper — inject an index without invoking ripgrep."""
     _INDEX.set_for_testing(root, paths)

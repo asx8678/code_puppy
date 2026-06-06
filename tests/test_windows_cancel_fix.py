@@ -5,6 +5,7 @@ These tests verify that the ConsoleSpinner properly resets terminal state
 on Windows when stopped, and that the main interactive loop also performs
 cleanup after cancellation.
 """
+from __future__ import annotations
 
 import platform
 import sys

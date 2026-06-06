@@ -1,4 +1,5 @@
 """Tests for the smooth-stream renderers (thinking + termflow typewriter)."""
+from __future__ import annotations
 
 import asyncio
 import io

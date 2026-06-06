@@ -11,6 +11,7 @@ It is a re-entrant lock so a writer already holding it (e.g. a helper that
 prints a header then delegates to another printing helper) doesn't
 self-deadlock.
 """
+from __future__ import annotations
 
 import threading
 

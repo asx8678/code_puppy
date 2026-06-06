@@ -3,12 +3,12 @@
 Provides a form-based interface for configuring custom MCP servers
 with inline JSON editing and live validation.
 """
+from __future__ import annotations
 
 import json
 import os
 import sys
 import time
-from typing import List, Optional
 
 from prompt_toolkit.application import Application
 from prompt_toolkit.filters import Condition
@@ -75,7 +75,7 @@ class CustomServerForm:
         edit_mode: bool = False,
         existing_name: str = "",
         existing_type: str = "stdio",
-        existing_config: Optional[dict] = None,
+        existing_config: dict | None = None,
     ):
         """Initialize the custom server form.
 
@@ -102,13 +102,13 @@ class CustomServerForm:
         else:
             self.json_config = CUSTOM_SERVER_EXAMPLES["stdio"]
 
-        self.validation_error: Optional[str] = None
+        self.validation_error: str | None = None
 
         # Focus state: 0=name, 1=type, 2=json
         self.focused_field = 0
 
         # Status message for user feedback (e.g., "Save failed: ...")
-        self.status_message: Optional[str] = None
+        self.status_message: str | None = None
         self.status_is_error: bool = False
 
         # Result
@@ -124,7 +124,7 @@ class CustomServerForm:
         """Get the currently selected server type."""
         return SERVER_TYPES[self.selected_type_idx]
 
-    def _render_form(self) -> List:
+    def _render_form(self) -> list:
         """Render the form panel."""
         lines = []
 
@@ -224,7 +224,7 @@ class CustomServerForm:
 
         return lines
 
-    def _render_preview(self) -> List:
+    def _render_preview(self) -> list:
         """Render the preview/help panel."""
         lines = []
 
@@ -290,7 +290,7 @@ class CustomServerForm:
 
         return lines
 
-    def _validate_server_name(self, name: str) -> Optional[str]:
+    def _validate_server_name(self, name: str) -> str | None:
         """Validate server name format.
 
         Args:
@@ -423,7 +423,7 @@ class CustomServerForm:
 
             # Save to mcp_servers.json for persistence
             if os.path.exists(MCP_SERVERS_FILE):
-                with open(MCP_SERVERS_FILE, "r") as f:
+                with open(MCP_SERVERS_FILE) as f:
                     data = json.load(f)
                     servers = data.get("mcp_servers", {})
             else:
@@ -677,7 +677,7 @@ def run_custom_server_form(
     edit_mode: bool = False,
     existing_name: str = "",
     existing_type: str = "stdio",
-    existing_config: Optional[dict] = None,
+    existing_config: dict | None = None,
 ) -> bool:
     """Run the custom server form.
 

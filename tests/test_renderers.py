@@ -7,6 +7,7 @@ content, human-input handling, flush behavior, and error paths.
 
 Source under test: code_puppy/messaging/renderers.py
 """
+from __future__ import annotations
 
 import asyncio
 import sys

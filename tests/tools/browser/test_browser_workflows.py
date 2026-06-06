@@ -3,6 +3,7 @@
 Tests workflow management including saving, listing, and reading browser automation
 workflows as markdown files. Achieves 70%+ coverage.
 """
+from __future__ import annotations
 
 import os
 
@@ -145,7 +146,7 @@ class TestSaveWorkflow(BrowserWorkflowsBaseTest):
         # Verify file was created and content matches
         workflow_file = temp_workflows_dir / "test-workflow.md"
         assert workflow_file.exists()
-        with open(workflow_file, "r", encoding="utf-8") as f:
+        with open(workflow_file, encoding="utf-8") as f:
             assert f.read() == sample_workflow_content
 
     @patch("tools.browser.browser_workflows.get_workflows_directory")
@@ -182,7 +183,7 @@ class TestSaveWorkflow(BrowserWorkflowsBaseTest):
         assert result["success"] is True
 
         # Verify content was updated
-        with open(workflow_file, "r") as f:
+        with open(workflow_file) as f:
             assert f.read() == sample_workflow_content
 
     @patch("tools.browser.browser_workflows.get_workflows_directory")

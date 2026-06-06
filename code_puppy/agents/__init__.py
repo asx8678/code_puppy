@@ -3,7 +3,10 @@
 This module provides functionality for switching between different agent
 configurations, each with their own system prompts and tool sets.
 """
+from __future__ import annotations
 
+# Import for its side effect: auto-registers the TTFT/TG run-stats hooks.
+from . import run_stats  # noqa: F401
 from .agent_manager import (
     clone_agent,
     delete_clone_agent,
@@ -15,9 +18,6 @@ from .agent_manager import (
     refresh_agents,
     set_current_agent,
 )
-
-# Import for its side effect: auto-registers the TTFT/TG run-stats hooks.
-from . import run_stats  # noqa: F401
 from .subagent_stream_handler import subagent_stream_handler
 
 __all__ = [

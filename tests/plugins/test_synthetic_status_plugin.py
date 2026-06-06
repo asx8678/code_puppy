@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from unittest.mock import MagicMock, patch
 
 from code_puppy.plugins.synthetic_status import status_api
@@ -46,7 +46,7 @@ def test_fetch_synthetic_quota_success():
     assert result.quota.limit == 135
     assert result.quota.requests_used == 28.55
     assert result.quota.renews_at_utc.tzinfo is not None
-    assert result.quota.renews_at_utc.tzinfo == timezone.utc
+    assert result.quota.renews_at_utc.tzinfo == UTC
 
 
 def test_fetch_synthetic_quota_auth_error():
@@ -117,7 +117,7 @@ def test_handle_provider_synthetic_status_command():
     quota = SyntheticQuota(
         limit=100,
         requests_used=25,
-        renews_at_utc=datetime(2026, 1, 1, 12, 0, tzinfo=timezone.utc),
+        renews_at_utc=datetime(2026, 1, 1, 12, 0, tzinfo=UTC),
     )
 
     with (

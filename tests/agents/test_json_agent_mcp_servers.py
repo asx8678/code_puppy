@@ -14,7 +14,6 @@ import pytest
 
 from code_puppy.agents.json_agent import JSONAgent
 
-
 # ---------- helpers ----------------------------------------------------------
 
 

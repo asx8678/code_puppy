@@ -3,6 +3,7 @@
 Tests cover token provider, configuration utilities, model creation,
 and slash command handlers with comprehensive mocking.
 """
+from __future__ import annotations
 
 import json
 import os
@@ -10,7 +11,6 @@ import time
 from unittest.mock import Mock, patch
 
 import pytest
-
 
 # ============================================================================
 # FIXTURES
@@ -849,7 +849,6 @@ class TestPluginCallbackRegistration:
         """Test that importing the module registers callbacks."""
         # Import triggers callback registration (side effect is intentional)
         import code_puppy.plugins.azure_foundry.register_callbacks  # noqa: F401
-
         from code_puppy.callbacks import get_callbacks
 
         # Check that there are callbacks registered for each phase

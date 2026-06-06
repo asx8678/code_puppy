@@ -4,12 +4,13 @@ Shared fixtures and utilities for MCP command tests.
 Provides common mocks and test infrastructure to avoid duplication
 across MCP command test files.
 """
+from __future__ import annotations
 
 import json
 import os
 import tempfile
 from dataclasses import dataclass
-from typing import Any, Dict, Optional
+from typing import Any
 from unittest.mock import Mock, patch
 
 import pytest
@@ -26,7 +27,7 @@ class MockServerInfo:
     type: str = "stdio"
     enabled: bool = True
     state: ServerState = ServerState.STOPPED
-    error_message: Optional[str] = None
+    error_message: str | None = None
     quarantined: bool = False
     uptime_seconds: float = 0.0
 
@@ -35,7 +36,7 @@ class MockMCPManager:
     """Mock MCP manager for testing."""
 
     def __init__(self):
-        self.servers: Dict[str, MockServerInfo] = {}
+        self.servers: dict[str, MockServerInfo] = {}
         self.call_history = []
         # Make these Mock methods for proper testing
         self.list_servers = Mock()
@@ -63,7 +64,7 @@ class MockMCPManager:
             servers.append(mock_server)
         self.list_servers.return_value = servers
 
-    def _get_server_status_impl(self, server_id: str) -> Dict[str, Any]:
+    def _get_server_status_impl(self, server_id: str) -> dict[str, Any]:
         """Get detailed status for a server."""
         if server_id not in self.servers:
             return {"exists": False}
@@ -83,7 +84,7 @@ class MockMCPManager:
             "tracker_metadata": {},
         }
 
-    def get_server_status(self, server_id: str) -> Dict[str, Any]:
+    def get_server_status(self, server_id: str) -> dict[str, Any]:
         """Mock wrapper that delegates to the real implementation."""
         return self._get_server_status_impl(server_id)
 
@@ -110,12 +111,12 @@ class MockMCPManager:
         self.call_history.append(f"reload_{server_id}")
         return server_id in self.servers
 
-    def register_server(self, config: ServerConfig) -> Optional[str]:
+    def register_server(self, config: ServerConfig) -> str | None:
         """Mock register server."""
         self.call_history.append("register_server")
         return config.id
 
-    def get_server_by_name(self, name: str) -> Optional[MockServerInfo]:
+    def get_server_by_name(self, name: str) -> MockServerInfo | None:
         """Mock get server by name."""
         for server_id, server_info in self.servers.items():
             if server_info.name == name:

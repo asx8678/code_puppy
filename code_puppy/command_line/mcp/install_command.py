@@ -1,9 +1,9 @@
 """
 MCP Install Command - Installs pre-configured MCP servers from the registry.
 """
+from __future__ import annotations
 
 import logging
-from typing import List, Optional
 
 from rich.text import Text
 
@@ -23,7 +23,7 @@ class InstallCommand(MCPCommandBase):
     Installs pre-configured MCP servers with interactive menu-based browser.
     """
 
-    def execute(self, args: List[str], group_id: Optional[str] = None) -> None:
+    def execute(self, args: list[str], group_id: str | None = None) -> None:
         """
         Install a pre-configured MCP server from the registry.
 

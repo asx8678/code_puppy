@@ -11,7 +11,7 @@ import logging
 import threading
 import time
 from http.server import BaseHTTPRequestHandler, HTTPServer
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any
 from urllib.parse import parse_qs, urlparse
 
 from code_puppy.callbacks import register_callback
@@ -51,9 +51,9 @@ logger = logging.getLogger(__name__)
 
 class _OAuthResult:
     def __init__(self) -> None:
-        self.code: Optional[str] = None
-        self.state: Optional[str] = None
-        self.error: Optional[str] = None
+        self.code: str | None = None
+        self.state: str | None = None
+        self.error: str | None = None
 
 
 class _CallbackHandler(BaseHTTPRequestHandler):
@@ -63,7 +63,7 @@ class _CallbackHandler(BaseHTTPRequestHandler):
     def do_GET(self) -> None:  # noqa: N802
         logger.info("Callback received: path=%s", self.path)
         parsed = urlparse(self.path)
-        params: Dict[str, List[str]] = parse_qs(parsed.query)
+        params: dict[str, list[str]] = parse_qs(parsed.query)
 
         code = params.get("code", [None])[0]
         state = params.get("state", [None])[0]
@@ -98,7 +98,7 @@ class _CallbackHandler(BaseHTTPRequestHandler):
 
 def _start_callback_server(
     context: OAuthContext,
-) -> Optional[Tuple[HTTPServer, _OAuthResult, threading.Event]]:
+) -> tuple[HTTPServer, _OAuthResult, threading.Event] | None:
     port_range = CLAUDE_CODE_OAUTH_CONFIG["callback_port_range"]
 
     for port in range(port_range[0], port_range[1] + 1):
@@ -123,7 +123,7 @@ def _start_callback_server(
     return None
 
 
-def _await_callback(context: OAuthContext) -> Optional[str]:
+def _await_callback(context: OAuthContext) -> str | None:
     timeout = CLAUDE_CODE_OAUTH_CONFIG["callback_timeout"]
 
     started = _start_callback_server(context)
@@ -182,7 +182,7 @@ def _await_callback(context: OAuthContext) -> Optional[str]:
     return result.code
 
 
-def _custom_help() -> List[Tuple[str, str]]:
+def _custom_help() -> list[tuple[str, str]]:
     return [
         (
             "claude-code-auth",
@@ -240,7 +240,7 @@ def _perform_authentication() -> None:
         )
 
 
-def _reauthenticate_after_expired_oauth(model_name: str) -> Optional[str]:
+def _reauthenticate_after_expired_oauth(model_name: str) -> str | None:
     """Run full Claude Code OAuth only for configured claude-code-* models."""
     prefix = CLAUDE_CODE_OAUTH_CONFIG["prefix"]
     if not model_name.startswith(prefix):
@@ -263,7 +263,7 @@ def _reauthenticate_after_expired_oauth(model_name: str) -> Optional[str]:
     return None
 
 
-def _handle_custom_command(command: str, name: str) -> Optional[bool]:
+def _handle_custom_command(command: str, name: str) -> bool | None:
     if not name:
         return None
 
@@ -350,7 +350,7 @@ def _handle_custom_command(command: str, name: str) -> Optional[bool]:
     return None
 
 
-def _create_claude_code_model(model_name: str, model_config: Dict, config: Dict) -> Any:
+def _create_claude_code_model(model_name: str, model_config: dict, config: dict) -> Any:
     """Create a Claude Code model instance.
 
     This handler is registered via the 'register_model_type' callback to handle
@@ -469,20 +469,20 @@ def _create_claude_code_model(model_name: str, model_config: Dict, config: Dict)
     return AnthropicModel(model_name=model_config["name"], provider=provider)
 
 
-def _register_model_types() -> List[Dict[str, Any]]:
+def _register_model_types() -> list[dict[str, Any]]:
     """Register the claude_code model type handler."""
     return [{"type": "claude_code", "handler": _create_claude_code_model}]
 
 
 # Global storage for the token refresh heartbeat
 # Using a dict to allow multiple concurrent agent runs (keyed by session_id)
-_active_heartbeats: Dict[str, Any] = {}
+_active_heartbeats: dict[str, Any] = {}
 
 
 async def _on_agent_run_start(
     agent_name: str,
     model_name: str,
-    session_id: Optional[str] = None,
+    session_id: str | None = None,
 ) -> None:
     """Start token refresh heartbeat for Claude Code OAuth models.
 
@@ -517,11 +517,11 @@ async def _on_agent_run_start(
 async def _on_agent_run_end(
     agent_name: str,
     model_name: str,
-    session_id: Optional[str] = None,
+    session_id: str | None = None,
     success: bool = True,
-    error: Optional[Exception] = None,
-    response_text: Optional[str] = None,
-    metadata: Optional[Dict[str, Any]] = None,
+    error: Exception | None = None,
+    response_text: str | None = None,
+    metadata: dict[str, Any] | None = None,
 ) -> None:
     """Stop token refresh heartbeat when agent run ends.
 

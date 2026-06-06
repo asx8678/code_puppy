@@ -23,7 +23,6 @@ from __future__ import annotations
 import shutil
 import sys
 import time
-from typing import List, Optional, Set, Tuple
 
 from prompt_toolkit.application import Application
 from prompt_toolkit.key_binding import KeyBindings
@@ -46,9 +45,9 @@ class PruneMenu:
 
     def __init__(
         self,
-        entries: List[MessageEntry],
+        entries: list[MessageEntry],
         *,
-        budget: Optional[ContextBudget] = None,
+        budget: ContextBudget | None = None,
     ) -> None:
         if not entries:
             raise ValueError("PruneMenu requires at least one entry")
@@ -59,7 +58,7 @@ class PruneMenu:
         # Build the visible row list NEWEST-FIRST. Pure tool-return
         # messages are hidden from the top level — they tag along with
         # whichever assistant message owns the matching ToolCallPart.
-        self.rows: List[Row] = [
+        self.rows: list[Row] = [
             Row(message_idx=msg_idx)
             for msg_idx in range(len(entries) - 1, -1, -1)
             if not entries[msg_idx].is_pure_tool_return
@@ -69,7 +68,7 @@ class PruneMenu:
             raise ValueError("PruneMenu has no visible rows")
 
         self.cursor: int = 0
-        self.selected_messages: Set[int] = set()  # message_idx values
+        self.selected_messages: set[int] = set()  # message_idx values
 
         # Viewport state — set for real in run() once we know the terminal
         # size, but seed with sensible defaults so the menu can be unit-tested
@@ -77,11 +76,11 @@ class PruneMenu:
         self.viewport_top: int = 0
         self._visible_rows: int = 20
 
-        self.list_control: Optional[FormattedTextControl] = None
-        self.detail_control: Optional[FormattedTextControl] = None
-        self.detail_window: Optional[Window] = None
+        self.list_control: FormattedTextControl | None = None
+        self.detail_control: FormattedTextControl | None = None
+        self.detail_window: Window | None = None
 
-        self._result: Optional[PruneSelection] = None
+        self._result: PruneSelection | None = None
 
     # ── selection logic ───────────────────────────────────────────────────
 
@@ -220,7 +219,7 @@ class PruneMenu:
 
         return kb
 
-    def _measure_terminal(self) -> Tuple[int, int]:
+    def _measure_terminal(self) -> tuple[int, int]:
         """Return (cols, rows) of the current terminal, with sane fallbacks."""
         try:
             size = shutil.get_terminal_size(fallback=(120, 40))
@@ -228,7 +227,7 @@ class PruneMenu:
         except Exception:
             return 120, 40
 
-    def run(self) -> Optional[PruneSelection]:
+    def run(self) -> PruneSelection | None:
         self.list_control = FormattedTextControl(text="")
         self.detail_control = FormattedTextControl(text="")
 

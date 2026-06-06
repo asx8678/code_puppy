@@ -3,6 +3,7 @@
 Tests element locator strategies including CSS selectors, XPath, text matching,
 role-based locators, and other semantic locators. Achieves 70%+ coverage.
 """
+from __future__ import annotations
 
 from unittest.mock import AsyncMock, MagicMock, patch
 

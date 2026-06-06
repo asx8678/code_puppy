@@ -1,8 +1,8 @@
 """Tests for code_puppy/plugins/agent_skills/skills_install_menu.py"""
+from __future__ import annotations
 
 from pathlib import Path
 from unittest.mock import MagicMock, patch
-
 
 _MOD = "code_puppy.plugins.agent_skills.skills_install_menu"
 
@@ -434,10 +434,10 @@ class TestPromptAndInstall:
     @patch(f"{_MOD}.safe_input", return_value="y")
     @patch(f"{_MOD}.is_skill_installed", return_value=False)
     def test_install_success(self, mock_inst, mock_input, mock_download):
+        from code_puppy.plugins.agent_skills.installer import InstallResult
         from code_puppy.plugins.agent_skills.skills_install_menu import (
             _prompt_and_install,
         )
-        from code_puppy.plugins.agent_skills.installer import InstallResult
 
         mock_download.return_value = InstallResult(
             success=True, message="OK", installed_path=Path("/tmp/s")
@@ -458,10 +458,10 @@ class TestPromptAndInstall:
     @patch(f"{_MOD}.safe_input", return_value="y")
     @patch(f"{_MOD}.is_skill_installed", return_value=True)
     def test_reinstall(self, mock_inst, mock_input, mock_download):
+        from code_puppy.plugins.agent_skills.installer import InstallResult
         from code_puppy.plugins.agent_skills.skills_install_menu import (
             _prompt_and_install,
         )
-        from code_puppy.plugins.agent_skills.installer import InstallResult
 
         mock_download.return_value = InstallResult(success=True, message="OK")
         assert _prompt_and_install(_make_entry()) is True
@@ -507,10 +507,10 @@ class TestPromptAndInstall:
     @patch(f"{_MOD}.safe_input", return_value="y")
     @patch(f"{_MOD}.is_skill_installed", return_value=False)
     def test_install_failure_result(self, mock_inst, mock_input, mock_download):
+        from code_puppy.plugins.agent_skills.installer import InstallResult
         from code_puppy.plugins.agent_skills.skills_install_menu import (
             _prompt_and_install,
         )
-        from code_puppy.plugins.agent_skills.installer import InstallResult
 
         mock_download.return_value = InstallResult(success=False, message="Failed")
         assert _prompt_and_install(_make_entry()) is False

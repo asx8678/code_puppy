@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Test script to verify file permission prompts work correctly."""
+from __future__ import annotations
 
 import os
 import sys
@@ -130,7 +131,7 @@ class TestFilePermissions(unittest.TestCase):
         self.assertTrue(result["changed"])
 
         # Verify file was actually written
-        with open(self.test_file, "r") as f:
+        with open(self.test_file) as f:
             content = f.read()
         self.assertEqual(content, "New content")
 
@@ -148,7 +149,7 @@ class TestFilePermissions(unittest.TestCase):
         self.assertTrue(result["changed"])
 
         # Verify file was actually written
-        with open(self.test_file, "r") as f:
+        with open(self.test_file) as f:
             content = f.read()
         self.assertEqual(content, "Yolo content")
 

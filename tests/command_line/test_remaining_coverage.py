@@ -16,6 +16,7 @@ Covers remaining uncovered lines across:
 - agent_menu.py (keybinding handlers, action flows)
 - uc_menu.py (keybinding handlers, highlight, delete)
 """
+from __future__ import annotations
 
 import importlib
 import sys

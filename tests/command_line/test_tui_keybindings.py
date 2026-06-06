@@ -3,6 +3,7 @@
 Captures the KeyBindings object from Application construction
 and invokes handlers directly to cover the closure bodies.
 """
+from __future__ import annotations
 
 import asyncio
 from unittest.mock import AsyncMock, MagicMock, patch

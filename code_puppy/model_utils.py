@@ -9,6 +9,7 @@ Plugins can register:
 - ``prepare_model_prompt``: fully take over prompt prep for a model family.
 - ``get_model_system_prompt``: augment/override the system prompt for a model.
 """
+from __future__ import annotations
 
 from dataclasses import dataclass
 

@@ -32,6 +32,7 @@ Example (new):
 # =============================================================================
 # Apply Rich Markdown patches (left-justified headers)
 # =============================================================================
+from __future__ import annotations
 from .markdown_patches import patch_markdown_headings
 
 patch_markdown_headings()

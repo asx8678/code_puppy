@@ -2,6 +2,7 @@
 
 This module provides browser-based terminal automation tools.
 """
+from __future__ import annotations
 
 from code_puppy.config import get_banner_color
 

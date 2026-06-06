@@ -1,4 +1,5 @@
 """Test Windows pipe non-blocking read functionality."""
+from __future__ import annotations
 
 import subprocess
 import sys

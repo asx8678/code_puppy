@@ -6,6 +6,8 @@ different key for cancelling agent tasks.
 """
 
 # Character codes for Ctrl+letter combinations (Ctrl+A = 0x01, Ctrl+Z = 0x1A)
+from __future__ import annotations
+
 KEY_CODES: dict[str, str] = {
     "ctrl+a": "\x01",
     "ctrl+b": "\x02",

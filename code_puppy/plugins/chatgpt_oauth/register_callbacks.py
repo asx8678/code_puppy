@@ -7,7 +7,7 @@ the 'chatgpt_oauth' model type handler.
 from __future__ import annotations
 
 import os
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any
 
 from code_puppy.callbacks import register_callback
 from code_puppy.messaging import emit_info, emit_success, emit_warning
@@ -23,7 +23,7 @@ from .utils import (
 )
 
 
-def _custom_help() -> List[Tuple[str, str]]:
+def _custom_help() -> list[tuple[str, str]]:
     return [
         (
             "chatgpt-auth",
@@ -79,7 +79,7 @@ def _handle_chatgpt_logout() -> None:
     emit_success("ChatGPT logout complete")
 
 
-def _handle_custom_command(command: str, name: str) -> Optional[bool]:
+def _handle_custom_command(command: str, name: str) -> bool | None:
     if not name:
         return None
 
@@ -100,7 +100,7 @@ def _handle_custom_command(command: str, name: str) -> Optional[bool]:
 
 
 def _create_chatgpt_oauth_model(
-    model_name: str, model_config: Dict, config: Dict
+    model_name: str, model_config: dict, config: dict
 ) -> Any:
     """Create a ChatGPT OAuth model instance.
 
@@ -164,7 +164,7 @@ def _create_chatgpt_oauth_model(
     return OpenAIResponsesModel(model_name=model_config["name"], provider=provider)
 
 
-def _register_model_types() -> List[Dict[str, Any]]:
+def _register_model_types() -> list[dict[str, Any]]:
     """Register the chatgpt_oauth model type handler."""
     return [{"type": "chatgpt_oauth", "handler": _create_chatgpt_oauth_model}]
 

@@ -14,7 +14,7 @@ import logging
 import shutil
 import subprocess
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any
 
 from code_puppy.callbacks import register_callback
 from code_puppy.config import EXTRA_MODELS_FILE
@@ -117,7 +117,7 @@ def _register_model(model_tag: str) -> bool:
 
     if extra_path.exists():
         try:
-            with open(extra_path, "r", encoding="utf-8") as fh:
+            with open(extra_path, encoding="utf-8") as fh:
                 extra_models = json.load(fh)
                 if not isinstance(extra_models, dict):
                     emit_error("extra_models.json must be a dict, not a list")
@@ -252,7 +252,7 @@ def _run_ollama_login() -> bool:
         return False
 
 
-def _start_ollama_serve() -> Optional[subprocess.Popen]:
+def _start_ollama_serve() -> subprocess.Popen | None:
     """Start ``ollama serve`` as a background subprocess if not already running.
 
     Returns the Popen handle, or None if already running / on failure.
@@ -376,7 +376,7 @@ def _handle_ollama_setup(command: str, name: str) -> Any:
     return True
 
 
-def _resolve_model(user_input: str) -> Optional[str]:
+def _resolve_model(user_input: str) -> str | None:
     """Resolve user input to an exact cloud model tag.
 
     Supports exact match and unambiguous prefix matching.

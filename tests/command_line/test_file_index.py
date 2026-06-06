@@ -1,4 +1,5 @@
 """Tests for the ripgrep-backed file index."""
+from __future__ import annotations
 
 import os
 import tempfile

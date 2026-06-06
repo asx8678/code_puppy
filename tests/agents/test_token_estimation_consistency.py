@@ -4,6 +4,7 @@ Ensures subagent_stream_handler._estimate_tokens and event_stream_handler
 use the same 2.5 chars/token heuristic as BaseAgent to prevent unexpected
 early compaction triggered by estimation mismatch.
 """
+from __future__ import annotations
 
 import math
 

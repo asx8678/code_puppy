@@ -14,9 +14,9 @@ the terminal ends up bricked — see the Phase 3 fix-up pass.
 from __future__ import annotations
 
 import threading
+from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass, field
-from typing import Callable, Iterator, Optional
 
 from code_puppy.keymap import (
     cancel_agent_uses_signal,
@@ -24,7 +24,6 @@ from code_puppy.keymap import (
     get_pause_agent_char_code,
 )
 from code_puppy.messaging import emit_warning
-
 
 # =============================================================================
 # Public handle
@@ -78,18 +77,18 @@ class KeyListenerHandle:
 # Module-level singleton for plugins
 # =============================================================================
 
-_active_handle: Optional[KeyListenerHandle] = None
+_active_handle: KeyListenerHandle | None = None
 _active_handle_lock = threading.Lock()
 
 
-def set_active_handle(handle: Optional[KeyListenerHandle]) -> None:
+def set_active_handle(handle: KeyListenerHandle | None) -> None:
     """Publish the currently-running listener handle for plugins."""
     global _active_handle
     with _active_handle_lock:
         _active_handle = handle
 
 
-def get_active_handle() -> Optional[KeyListenerHandle]:
+def get_active_handle() -> KeyListenerHandle | None:
     """Get the currently-running listener handle, or ``None``."""
     with _active_handle_lock:
         return _active_handle
@@ -103,9 +102,9 @@ def get_active_handle() -> Optional[KeyListenerHandle]:
 def spawn_key_listener(
     stop_event: threading.Event,
     on_escape: Callable[[], None],
-    on_cancel_agent: Optional[Callable[[], None]] = None,
-    on_pause_agent: Optional[Callable[[], None]] = None,
-) -> Optional[KeyListenerHandle]:
+    on_cancel_agent: Callable[[], None] | None = None,
+    on_pause_agent: Callable[[], None] | None = None,
+) -> KeyListenerHandle | None:
     """Start a daemon thread that listens for Ctrl+X / cancel / pause keys.
 
     Args:
@@ -178,19 +177,19 @@ def spawn_key_listener(
 
 
 def _resolve_special_chars(
-    on_cancel_agent: Optional[Callable[[], None]],
-    on_pause_agent: Optional[Callable[[], None]],
-) -> tuple[Optional[str], Optional[str]]:
+    on_cancel_agent: Callable[[], None] | None,
+    on_pause_agent: Callable[[], None] | None,
+) -> tuple[str | None, str | None]:
     """Resolve the cancel + pause character codes once per listener start.
 
     Returns ``(cancel_char, pause_char)``; either may be ``None`` if the
     corresponding callback wasn't provided or if SIGINT owns cancel.
     """
-    cancel_char: Optional[str] = None
+    cancel_char: str | None = None
     if on_cancel_agent is not None and not cancel_agent_uses_signal():
         cancel_char = get_cancel_agent_char_code()
 
-    pause_char: Optional[str] = None
+    pause_char: str | None = None
     if on_pause_agent is not None:
         try:
             pause_char = get_pause_agent_char_code()
@@ -225,10 +224,10 @@ def _wait_while_suspended(
 def _listen_windows(
     stop_event: threading.Event,
     on_escape: Callable[[], None],
-    on_cancel_agent: Optional[Callable[[], None]] = None,
-    on_pause_agent: Optional[Callable[[], None]] = None,
-    suspend_event: Optional[threading.Event] = None,
-    released_event: Optional[threading.Event] = None,
+    on_cancel_agent: Callable[[], None] | None = None,
+    on_pause_agent: Callable[[], None] | None = None,
+    suspend_event: threading.Event | None = None,
+    released_event: threading.Event | None = None,
 ) -> None:
     import msvcrt
     import time
@@ -286,10 +285,10 @@ def _listen_windows(
 def _listen_posix(
     stop_event: threading.Event,
     on_escape: Callable[[], None],
-    on_cancel_agent: Optional[Callable[[], None]] = None,
-    on_pause_agent: Optional[Callable[[], None]] = None,
-    suspend_event: Optional[threading.Event] = None,
-    released_event: Optional[threading.Event] = None,
+    on_cancel_agent: Callable[[], None] | None = None,
+    on_pause_agent: Callable[[], None] | None = None,
+    suspend_event: threading.Event | None = None,
+    released_event: threading.Event | None = None,
 ) -> None:
     import select
     import sys

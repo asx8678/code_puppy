@@ -37,7 +37,6 @@ introduce their own ContextVar with a clearly-scoped name.
 from __future__ import annotations
 
 from contextvars import ContextVar
-from typing import Optional
 
 # The session_id of the currently running agent invocation, if any.
 #
@@ -49,7 +48,7 @@ from typing import Optional
 # ``None`` is the legitimate "no session context" value -- callers
 # should treat it as "this event is not associated with any particular
 # session" rather than as an error.
-current_emitter_session_id: ContextVar[Optional[str]] = ContextVar(
+current_emitter_session_id: ContextVar[str | None] = ContextVar(
     "code_puppy_frontend_emitter_session_id", default=None
 )
 

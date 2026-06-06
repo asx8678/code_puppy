@@ -12,10 +12,10 @@ from __future__ import annotations
 
 import shutil
 import sys
-from typing import Literal, Optional, Tuple
+from typing import Literal
 
 SteerMode = Literal["now", "queue"]
-SteerResult = Optional[Tuple[str, SteerMode]]
+SteerResult = tuple[str, SteerMode] | None
 KeyAction = Literal["continue", "submit", "cancel", "redraw"]
 
 # Minimum sensible terminal width — guards against zero/negative widths from

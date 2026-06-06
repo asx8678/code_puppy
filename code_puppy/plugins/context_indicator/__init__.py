@@ -9,5 +9,6 @@ agent's message history is relative to the active model's context window:
 
 Also exposes a ``/context`` slash command for a detailed breakdown.
 """
+from __future__ import annotations
 
 __all__: list[str] = []

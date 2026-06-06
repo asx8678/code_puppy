@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import logging
 
 from code_puppy.callbacks import on_register_agent_tools, on_register_tools

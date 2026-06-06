@@ -9,6 +9,7 @@ Tests the reopenable HTTP client wrapper including:
 - Properties and state inspection
 - Edge cases and error conditions
 """
+from __future__ import annotations
 
 from unittest.mock import AsyncMock, MagicMock, Mock, patch
 

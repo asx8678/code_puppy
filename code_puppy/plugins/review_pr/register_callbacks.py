@@ -14,11 +14,8 @@ code review.
 
 from __future__ import annotations
 
-from typing import List, Optional, Tuple
-
 from code_puppy.callbacks import register_callback
 from code_puppy.messaging import emit_error, emit_info
-
 
 COMMAND_NAME = "review-pr"
 
@@ -31,7 +28,7 @@ _USAGE = (
 )
 
 
-def _custom_help() -> List[Tuple[str, str]]:
+def _custom_help() -> list[tuple[str, str]]:
     return [
         (
             COMMAND_NAME,
@@ -40,7 +37,7 @@ def _custom_help() -> List[Tuple[str, str]]:
     ]
 
 
-def _parse_target(command: str) -> Optional[str]:
+def _parse_target(command: str) -> str | None:
     """Return the raw PR target (number, URL, or '' for current branch).
 
     Returns None if the user asked for --help (already handled).
@@ -126,7 +123,7 @@ One of: **APPROVE**, **REQUEST CHANGES**, or **COMMENT** — with a one-line jus
 """
 
 
-def _handle_custom_command(command: str, name: str) -> Optional[object]:
+def _handle_custom_command(command: str, name: str) -> object | None:
     if name != COMMAND_NAME:
         return None
 

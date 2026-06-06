@@ -6,7 +6,7 @@ from __future__ import annotations
 
 import asyncio
 from io import StringIO
-from typing import Any, List
+from typing import Any
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -25,7 +25,6 @@ from code_puppy.messaging.pause_controller import (
     reset_pause_controller,
 )
 from code_puppy.messaging.spinner.console_spinner import ConsoleSpinner
-
 
 # =============================================================================
 # Shared fixtures
@@ -63,7 +62,7 @@ class _PauseTriggerEvent:
         self.delay = delay
 
 
-async def _scripted_event_stream(events: List[Any], pause_after: int) -> Any:
+async def _scripted_event_stream(events: list[Any], pause_after: int) -> Any:
     """Yields events; after ``pause_after`` real events, pauses the controller
     and schedules a resume.
     """
@@ -149,7 +148,7 @@ async def test_pause_timeout_auto_resumes_and_warns(monkeypatch):
     """If a pause exceeds max_pause_seconds, the handler force-resumes and
     emits a warning.
     """
-    warnings: List[str] = []
+    warnings: list[str] = []
 
     def _capture(msg: str, *_a, **_k) -> None:
         warnings.append(msg)

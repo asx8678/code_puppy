@@ -7,6 +7,7 @@ Target functions:
 - Syntax highlighting functions (_get_lexer_for_extension, _get_token_color, _highlight_code_line)
 - Diff utilities (brighten_hex, _extract_file_extension_from_diff, _format_diff_with_syntax_highlighting)
 """
+from __future__ import annotations
 
 import importlib.util
 from pathlib import Path

@@ -1,10 +1,10 @@
 """
 MCP Start All Command - Starts all registered MCP servers.
 """
+from __future__ import annotations
 
 import logging
 import time
-from typing import List, Optional
 
 from rich.text import Text
 
@@ -25,7 +25,7 @@ class StartAllCommand(MCPCommandBase):
     Starts all registered MCP servers and provides a summary of results.
     """
 
-    def execute(self, args: List[str], group_id: Optional[str] = None) -> None:
+    def execute(self, args: list[str], group_id: str | None = None) -> None:
         """
         Start all registered MCP servers.
 

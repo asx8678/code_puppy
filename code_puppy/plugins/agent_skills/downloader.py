@@ -16,7 +16,6 @@ import shutil
 import tempfile
 import zipfile
 from pathlib import Path
-from typing import Optional
 
 import httpx
 
@@ -102,7 +101,7 @@ def _is_within_directory(base_dir: Path, candidate: Path) -> bool:
         return False
 
 
-def _validate_zip_safety(zf: zipfile.ZipFile) -> Optional[str]:
+def _validate_zip_safety(zf: zipfile.ZipFile) -> str | None:
     """Return an error message if unsafe, otherwise None."""
 
     total_uncompressed = 0
@@ -169,7 +168,7 @@ def _safe_extract_zip(zf: zipfile.ZipFile, extract_dir: Path) -> bool:
         return False
 
 
-def _determine_extracted_root(extract_dir: Path) -> Optional[Path]:
+def _determine_extracted_root(extract_dir: Path) -> Path | None:
     """Determine where the skill files live inside an extracted zip.
 
     Supports:
@@ -206,7 +205,7 @@ def _determine_extracted_root(extract_dir: Path) -> Optional[Path]:
 
 def _stage_normalized_install(
     extracted_root: Path, skill_name: str, staging_base: Path
-) -> Optional[Path]:
+) -> Path | None:
     """Copy extracted content into staging_base/<skill_name>."""
 
     try:
@@ -232,7 +231,7 @@ def _stage_normalized_install(
 def download_and_install_skill(
     skill_name: str,
     download_url: str,
-    target_dir: Optional[Path] = None,
+    target_dir: Path | None = None,
     force: bool = False,
 ) -> InstallResult:
     """Download and install a remote skill zip.

@@ -5,16 +5,17 @@ This plugin:
 2. Registers skill-related tools
 3. Provides /skills slash command (and alias /skill)
 """
+from __future__ import annotations
 
 import logging
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any
 
 from code_puppy.callbacks import register_callback
 
 logger = logging.getLogger(__name__)
 
 
-def _get_skills_prompt_section() -> Optional[str]:
+def _get_skills_prompt_section() -> str | None:
     """Build the skills section to inject into system prompts.
 
     Returns None if skills are disabled or no enabled skills exist.
@@ -50,7 +51,7 @@ def _get_skills_prompt_section() -> Optional[str]:
 
 def _inject_skills_into_prompt(
     model_name: str, default_system_prompt: str, user_prompt: str
-) -> Optional[Dict[str, Any]]:
+) -> dict[str, Any] | None:
     """Callback to inject skills into system prompt.
 
     This is registered with the 'get_model_system_prompt' callback phase.
@@ -70,7 +71,7 @@ def _inject_skills_into_prompt(
     }
 
 
-def _register_skills_tools() -> List[Dict[str, Any]]:
+def _register_skills_tools() -> list[dict[str, Any]]:
     """Callback to register skills tools.
 
     This is registered with the 'register_tools' callback phase.
@@ -98,11 +99,11 @@ _COMMAND_NAME = "skills"
 _ALIASES = ("skill",)
 
 
-def _skills_command_help() -> List[Tuple[str, str]]:
+def _skills_command_help() -> list[tuple[str, str]]:
     """Advertise /skills (+ every individual skill) in the /help menu."""
     from .skill_commands import skill_command_help
 
-    entries: List[Tuple[str, str]] = [
+    entries: list[tuple[str, str]] = [
         ("skills", "Manage agent skills – browse, enable, disable, install"),
         ("skill", "Alias for /skills"),
     ]
@@ -111,7 +112,7 @@ def _skills_command_help() -> List[Tuple[str, str]]:
     return entries
 
 
-def _handle_skills_command(command: str, name: str) -> Optional[Any]:
+def _handle_skills_command(command: str, name: str) -> Any | None:
     """Handle /skills and /skill slash commands.
 
     Sub-commands:

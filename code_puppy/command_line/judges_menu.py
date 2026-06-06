@@ -25,7 +25,6 @@ from __future__ import annotations
 import asyncio
 import sys
 import unicodedata
-from typing import Optional
 
 from prompt_toolkit.application import Application
 from prompt_toolkit.key_binding import KeyBindings
@@ -521,7 +520,7 @@ def _render_menu(
     return lines
 
 
-def _render_preview(judge: Optional[JudgeConfig]) -> list:
+def _render_preview(judge: JudgeConfig | None) -> list:
     lines = []
     lines.append(("dim cyan", " JUDGE DETAILS"))
     lines.append(("", "\n\n"))
@@ -560,7 +559,7 @@ def _render_preview(judge: Optional[JudgeConfig]) -> list:
 # ---------------------------------------------------------------------------
 
 
-async def _add_judge_flow() -> Optional[str]:
+async def _add_judge_flow() -> str | None:
     form = await _run_judge_form(title="New Judge")
     if not form.saved:
         emit_info("Cancelled.")
@@ -581,7 +580,7 @@ async def _add_judge_flow() -> Optional[str]:
     return form.name
 
 
-async def _edit_judge_flow(current: JudgeConfig) -> Optional[str]:
+async def _edit_judge_flow(current: JudgeConfig) -> str | None:
     form = await _run_judge_form(
         title=f"Edit Judge — {current.name}",
         initial_name=current.name,
@@ -618,10 +617,10 @@ async def interactive_judges_menu() -> None:
 
     selected_idx = [0]
     current_page = [0]
-    pending_action: list[Optional[str]] = [None]
-    pending_target: list[Optional[str]] = [None]
+    pending_action: list[str | None] = [None]
+    pending_target: list[str | None] = [None]
 
-    def refresh(select_name: Optional[str] = None) -> None:
+    def refresh(select_name: str | None = None) -> None:
         nonlocal judges
         registry = load_judges()
         judges = list(registry.judges)
@@ -640,7 +639,7 @@ async def interactive_judges_menu() -> None:
             selected_idx[0] = min(selected_idx[0], len(judges) - 1)
         current_page[0] = get_page_for_index(selected_idx[0], PAGE_SIZE)
 
-    def current_judge() -> Optional[JudgeConfig]:
+    def current_judge() -> JudgeConfig | None:
         if 0 <= selected_idx[0] < len(judges):
             return judges[selected_idx[0]]
         return None

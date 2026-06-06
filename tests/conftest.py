@@ -4,6 +4,7 @@ This file intentionally keeps the test environment lean (no extra deps).
 To support `async def` tests without pytest-asyncio, we provide a minimal
 hook that runs coroutine test functions using the stdlib's asyncio.
 """
+from __future__ import annotations
 
 import asyncio
 import inspect
@@ -14,8 +15,8 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from code_puppy import config as cp_config
 from code_puppy import callbacks as cp_callbacks
+from code_puppy import config as cp_config
 
 
 def _ensure_builtin_plugin_callback_registrations() -> None:

@@ -9,7 +9,7 @@ totally different) agent run. These tests lock the hygiene down.
 from __future__ import annotations
 
 import asyncio
-from typing import Any, List
+from typing import Any
 
 import pytest
 
@@ -19,7 +19,6 @@ from code_puppy.messaging.pause_controller import (
     get_pause_controller,
     reset_pause_controller,
 )
-
 
 # =============================================================================
 # Shared fixtures (mirrors test_runtime_pause_integration.py)
@@ -103,7 +102,7 @@ async def test_stale_steer_drained_at_run_start(_isolated_runtime, monkeypatch):
     """A stale steer left over from a prior cancelled run MUST NOT be
     consumed as if the user had typed it in this run.
     """
-    warnings: List[str] = []
+    warnings: list[str] = []
     # ``reset_pause_state_at_run_start`` lives in _run_signals and calls
     # ``emit_warning`` imported there. Patch the imported reference.
     monkeypatch.setattr(
@@ -165,7 +164,7 @@ async def test_clean_state_at_run_start_emits_no_warning(
     Regression guard: previous bug fixes that over-eagerly emit can be
     just as annoying as the bug they're fixing.
     """
-    warnings: List[str] = []
+    warnings: list[str] = []
     monkeypatch.setattr(
         "code_puppy.agents._run_signals.emit_warning",
         lambda msg, *_a, **_k: warnings.append(msg),
@@ -197,7 +196,7 @@ async def test_steer_drained_on_cancel(_isolated_runtime, monkeypatch):
     before ``run_with_mcp`` starts would be drained by the start-of-run
     reset, which is its own (also-tested) hygiene step.
     """
-    infos: List[str] = []
+    infos: list[str] = []
     # ``drain_pause_state_on_cancel`` lives in _run_signals.
     monkeypatch.setattr(
         "code_puppy.agents._run_signals.emit_info",

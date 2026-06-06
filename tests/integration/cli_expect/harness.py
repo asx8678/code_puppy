@@ -4,6 +4,7 @@ Handles a clean temporary HOME, config bootstrapping, and sending/receiving
 with the quirks we learned (\r line endings, tiny delays, optional stdout
 capture). Includes fixtures for pytest.
 """
+from __future__ import annotations
 
 import os
 import pathlib

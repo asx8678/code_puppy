@@ -1,6 +1,7 @@
 """Browser element interaction tools for clicking, typing, and form manipulation."""
+from __future__ import annotations
 
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from pydantic_ai import RunContext
 
@@ -15,8 +16,8 @@ async def click_element(
     timeout: int = 10000,
     force: bool = False,
     button: str = "left",
-    modifiers: Optional[List[str]] = None,
-) -> Dict[str, Any]:
+    modifiers: list[str] | None = None,
+) -> dict[str, Any]:
     """Click on an element."""
     group_id = generate_group_id("browser_click", selector[:100])
     emit_info(
@@ -62,7 +63,7 @@ async def double_click_element(
     selector: str,
     timeout: int = 10000,
     force: bool = False,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """Double-click on an element."""
     group_id = generate_group_id("browser_double_click", selector[:100])
     emit_info(
@@ -92,7 +93,7 @@ async def hover_element(
     selector: str,
     timeout: int = 10000,
     force: bool = False,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """Hover over an element."""
     group_id = generate_group_id("browser_hover", selector[:100])
     emit_info(
@@ -123,7 +124,7 @@ async def set_element_text(
     text: str,
     clear_first: bool = True,
     timeout: int = 10000,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """Set text in an input element."""
     group_id = generate_group_id("browser_set_text", f"{selector[:50]}_{text[:30]}")
     emit_info(
@@ -162,7 +163,7 @@ async def set_element_text(
 async def get_element_text(
     selector: str,
     timeout: int = 10000,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """Get text content from an element."""
     group_id = generate_group_id("browser_get_text", selector[:100])
     emit_info(
@@ -190,7 +191,7 @@ async def get_element_text(
 async def get_element_value(
     selector: str,
     timeout: int = 10000,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """Get value from an input element."""
     group_id = generate_group_id("browser_get_value", selector[:100])
     emit_info(
@@ -217,11 +218,11 @@ async def get_element_value(
 
 async def select_option(
     selector: str,
-    value: Optional[str] = None,
-    label: Optional[str] = None,
-    index: Optional[int] = None,
+    value: str | None = None,
+    label: str | None = None,
+    index: int | None = None,
     timeout: int = 10000,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """Select an option in a dropdown/select element."""
     option_desc = value or label or str(index) if index is not None else "unknown"
     group_id = generate_group_id(
@@ -271,7 +272,7 @@ async def select_option(
 async def check_element(
     selector: str,
     timeout: int = 10000,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """Check a checkbox or radio button."""
     group_id = generate_group_id("browser_check", selector[:100])
     emit_info(
@@ -300,7 +301,7 @@ async def check_element(
 async def uncheck_element(
     selector: str,
     timeout: int = 10000,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """Uncheck a checkbox."""
     group_id = generate_group_id("browser_uncheck", selector[:100])
     emit_info(
@@ -337,8 +338,8 @@ def register_click_element(agent):
         timeout: int = 10000,
         force: bool = False,
         button: str = "left",
-        modifiers: Optional[List[str]] = None,
-    ) -> Dict[str, Any]:
+        modifiers: list[str] | None = None,
+    ) -> dict[str, Any]:
         """
         Click on an element in the browser.
 
@@ -364,7 +365,7 @@ def register_double_click_element(agent):
         selector: str,
         timeout: int = 10000,
         force: bool = False,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         Double-click on an element in the browser.
 
@@ -388,7 +389,7 @@ def register_hover_element(agent):
         selector: str,
         timeout: int = 10000,
         force: bool = False,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         Hover over an element in the browser.
 
@@ -413,7 +414,7 @@ def register_set_element_text(agent):
         text: str,
         clear_first: bool = True,
         timeout: int = 10000,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         Set text in an input element.
 
@@ -437,7 +438,7 @@ def register_get_element_text(agent):
         context: RunContext,
         selector: str,
         timeout: int = 10000,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         Get text content from an element.
 
@@ -459,7 +460,7 @@ def register_get_element_value(agent):
         context: RunContext,
         selector: str,
         timeout: int = 10000,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         Get value from an input element.
 
@@ -480,11 +481,11 @@ def register_select_option(agent):
     async def browser_select_option(
         context: RunContext,
         selector: str,
-        value: Optional[str] = None,
-        label: Optional[str] = None,
-        index: Optional[int] = None,
+        value: str | None = None,
+        label: str | None = None,
+        index: int | None = None,
         timeout: int = 10000,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         Select an option in a dropdown/select element.
 
@@ -509,7 +510,7 @@ def register_browser_check(agent):
         context: RunContext,
         selector: str,
         timeout: int = 10000,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         Check a checkbox or radio button.
 
@@ -531,7 +532,7 @@ def register_browser_uncheck(agent):
         context: RunContext,
         selector: str,
         timeout: int = 10000,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         Uncheck a checkbox.
 

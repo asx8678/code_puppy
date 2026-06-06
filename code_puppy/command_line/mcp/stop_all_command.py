@@ -1,10 +1,10 @@
 """
 MCP Stop All Command - Stops all running MCP servers.
 """
+from __future__ import annotations
 
 import logging
 import time
-from typing import List, Optional
 
 from rich.text import Text
 
@@ -25,7 +25,7 @@ class StopAllCommand(MCPCommandBase):
     Stops all running MCP servers and provides a summary of results.
     """
 
-    def execute(self, args: List[str], group_id: Optional[str] = None) -> None:
+    def execute(self, args: list[str], group_id: str | None = None) -> None:
         """
         Stop all running MCP servers.
 

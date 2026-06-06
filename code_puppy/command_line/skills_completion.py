@@ -12,7 +12,7 @@ from __future__ import annotations
 
 import logging
 import time
-from typing import Iterable, List
+from collections.abc import Iterable
 
 from prompt_toolkit.completion import Completer, Completion
 from prompt_toolkit.document import Document
@@ -20,7 +20,7 @@ from prompt_toolkit.document import Document
 logger = logging.getLogger(__name__)
 
 
-def load_catalog_skill_ids() -> List[str]:
+def load_catalog_skill_ids() -> list[str]:
     """Load skill ids from the remote catalog (lazy, cached)."""
 
     try:
@@ -53,10 +53,10 @@ class SkillsCompleter(Completer):
             "help": "Show skills help",
         }
 
-        self._skill_ids_cache: List[str] | None = None
+        self._skill_ids_cache: list[str] | None = None
         self._cache_timestamp: float | None = None
 
-    def _get_skill_ids(self) -> List[str]:
+    def _get_skill_ids(self) -> list[str]:
         """Get skill ids with 30-second cache."""
 
         current_time = time.time()

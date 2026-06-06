@@ -1,10 +1,12 @@
 """Skill discovery - scans directories for valid skills."""
+from __future__ import annotations
 
 import logging
 import shutil
+from collections.abc import Iterable
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Iterable, List, Optional
+from typing import Any
 
 from code_puppy.callbacks import get_callbacks, on_register_skills
 from code_puppy.config import CACHE_DIR
@@ -25,10 +27,10 @@ class SkillInfo:
 
 
 # Global cache for discovered skills
-_skill_cache: Optional[List[SkillInfo]] = None
+_skill_cache: list[SkillInfo] | None = None
 
 
-def get_default_skill_directories() -> List[Path]:
+def get_default_skill_directories() -> list[Path]:
     """Return default directories to scan for skills.
 
     Returns:
@@ -180,12 +182,12 @@ def _iter_plugin_skill_registrations() -> Iterable[tuple[str, str, dict[str, Any
             yield callback.__module__, callback.__name__, entry
 
 
-def _collect_plugin_skills() -> List[SkillInfo]:
+def _collect_plugin_skills() -> list[SkillInfo]:
     if _PLUGIN_SKILLS_CACHE_DIR.exists():
         shutil.rmtree(_PLUGIN_SKILLS_CACHE_DIR, ignore_errors=True)
     _PLUGIN_SKILLS_CACHE_DIR.mkdir(parents=True, exist_ok=True)
 
-    plugin_skills: List[SkillInfo] = []
+    plugin_skills: list[SkillInfo] = []
     seen_names: set[str] = set()
 
     for callback_module, callback_name, entry in _iter_plugin_skill_registrations():
@@ -206,7 +208,7 @@ def _collect_plugin_skills() -> List[SkillInfo]:
     return plugin_skills
 
 
-def discover_skills(directories: Optional[List[Path]] = None) -> List[SkillInfo]:
+def discover_skills(directories: list[Path] | None = None) -> list[SkillInfo]:
     """Scan directories for valid skills."""
     global _skill_cache
 
@@ -219,7 +221,7 @@ def discover_skills(directories: Optional[List[Path]] = None) -> List[SkillInfo]
             if d.resolve() not in seen:
                 directories.append(d)
 
-    discovered_skills: List[SkillInfo] = []
+    discovered_skills: list[SkillInfo] = []
     seen_skill_names: set[str] = set()
 
     for directory in directories:
@@ -272,7 +274,7 @@ def discover_skills(directories: Optional[List[Path]] = None) -> List[SkillInfo]
     return discovered_skills
 
 
-def refresh_skill_cache() -> List[SkillInfo]:
+def refresh_skill_cache() -> list[SkillInfo]:
     """Force re-discovery of all skills."""
     global _skill_cache
     _skill_cache = None
