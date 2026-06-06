@@ -5,6 +5,7 @@ import logging
 import os
 import pathlib
 import threading
+from collections import OrderedDict
 from typing import Optional
 
 from code_puppy.session_storage import save_session
@@ -195,8 +196,11 @@ _CURRENT_AUTOSAVE_ID: Optional[str] = None
 # Session-local model name (initialized from file on first access, then cached)
 _SESSION_MODEL: Optional[str] = None
 
-# Cache containers for model validation and defaults
-_model_validation_cache = {}
+# Cache containers for model validation and defaults. The validation cache is a
+# bounded LRU keyed on model name so a long-lived session that probes many names
+# can't grow it without limit.
+_MODEL_VALIDATION_CACHE_MAX = 256
+_model_validation_cache: "OrderedDict[str, bool]" = OrderedDict()
 _default_model_cache = None
 _default_vision_model_cache = None
 
@@ -563,8 +567,9 @@ def _validate_model_exists(model_name: str) -> bool:
     """Check if a model exists in models.json with caching to avoid redundant calls."""
     global _model_validation_cache
 
-    # Check cache first
+    # Check cache first (refresh LRU recency on hit)
     if model_name in _model_validation_cache:
+        _model_validation_cache.move_to_end(model_name)
         return _model_validation_cache[model_name]
 
     try:
@@ -573,8 +578,11 @@ def _validate_model_exists(model_name: str) -> bool:
         models_config = ModelFactory.load_config()
         exists = model_name in models_config
 
-        # Cache the result
+        # Cache the result, evicting the least-recently-used entry once the
+        # cache is full so it stays bounded across a long session.
         _model_validation_cache[model_name] = exists
+        if len(_model_validation_cache) > _MODEL_VALIDATION_CACHE_MAX:
+            _model_validation_cache.popitem(last=False)
         return exists
     except Exception:
         # If we can't validate, assume it exists to avoid breaking things.

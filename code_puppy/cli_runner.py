@@ -519,8 +519,11 @@ async def interactive_mode(message_renderer, initial_command: str = None) -> Non
         try:
             import subprocess
 
-            subprocess.check_call(
-                [sys.executable, "-m", "pip", "install", "--quiet", "prompt_toolkit"]
+            # Offload the blocking install to a thread so we don't stall the
+            # event loop (this runs inside async interactive_mode()).
+            await asyncio.to_thread(
+                subprocess.check_call,
+                [sys.executable, "-m", "pip", "install", "--quiet", "prompt_toolkit"],
             )
             from code_puppy.messaging import emit_success
 

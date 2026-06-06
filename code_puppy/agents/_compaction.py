@@ -26,6 +26,7 @@ from pydantic_ai.messages import (
 
 from code_puppy.agents._history import (
     _classify_tool_part,
+    estimate_history_tokens,
     estimate_tokens_for_message,
     filter_huge_messages,
     has_pending_tool_calls,
@@ -334,7 +335,7 @@ def compact(
         except Exception:
             model_name = None
 
-    message_tokens = sum(estimate_tokens_for_message(m, model_name) for m in messages)
+    message_tokens = estimate_history_tokens(messages, model_name)
     # Resolve the overhead thunk only here, where it's first needed (to compute
     # proportion_used). Backward compatible: a plain int is used directly.
     overhead = context_overhead() if callable(context_overhead) else context_overhead
@@ -425,9 +426,7 @@ def compact(
                 filtered, protected_tokens, model_name
             )
 
-    final_token_count = sum(
-        estimate_tokens_for_message(m, model_name) for m in result_messages
-    )
+    final_token_count = estimate_history_tokens(result_messages, model_name)
     final_summary = SpinnerBase.format_context_info(
         final_token_count,
         model_max,
