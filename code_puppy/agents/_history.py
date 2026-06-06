@@ -14,7 +14,7 @@ import math
 import re
 import threading
 from collections import OrderedDict
-from typing import Any, Dict, List, Optional, Set, Tuple
+from typing import Any, Dict, Iterable, List, Optional, Set, Tuple
 
 import pydantic
 from pydantic_ai import BinaryContent
@@ -212,11 +212,15 @@ def model_token_multiplier(model_name: Optional[str]) -> float:
     return 1.0
 
 
-def _apply_multiplier(raw_tokens: int, model_name: Optional[str]) -> int:
-    multiplier = model_token_multiplier(model_name)
+def _scale_raw(raw_tokens: int, multiplier: float) -> int:
+    """Apply a calibration multiplier to a raw token count."""
     if multiplier == 1.0:
         return raw_tokens
     return max(1, math.floor(raw_tokens * multiplier))
+
+
+def _apply_multiplier(raw_tokens: int, model_name: Optional[str]) -> int:
+    return _scale_raw(raw_tokens, model_token_multiplier(model_name))
 
 
 def estimate_tokens_for_message(
@@ -231,6 +235,26 @@ def estimate_tokens_for_message(
     """
     raw_tokens, _ = _message_stats(message)
     return _apply_multiplier(max(1, raw_tokens), model_name)
+
+
+def estimate_history_tokens(
+    messages: Iterable[ModelMessage],
+    model_name: Optional[str] = None,
+) -> int:
+    """Total estimated tokens across ``messages`` for ``model_name``.
+
+    Equivalent to ``sum(estimate_tokens_for_message(m, model_name) for m in
+    messages)`` but resolves the per-model calibration multiplier once instead
+    of re-running the substring match for every message. The history processor
+    sums the whole history before *every* model request, so this runs on the
+    hot path.
+    """
+    multiplier = model_token_multiplier(model_name)
+    total = 0
+    for message in messages:
+        raw_tokens, _ = _message_stats(message)
+        total += _scale_raw(max(1, raw_tokens), multiplier)
+    return total
 
 
 def _extract_tool_description(tool_obj: Any) -> str:
