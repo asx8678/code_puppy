@@ -6,6 +6,7 @@ discovered by the command registry system.
 
 from __future__ import annotations
 
+import itertools
 import json
 
 from code_puppy.command_line.command_registry import register_command
@@ -701,8 +702,7 @@ def _show_color_options(color_type: str):
     for category, colors in color_categories.items():
         emit_info(f"\n{category}:")
         # Display in columns for better readability
-        for i in range(0, len(colors), 4):
-            row = colors[i : i + 4]
+        for row in itertools.batched(colors, 4):
             row_text = "  ".join([f"[{color}]■[/{color}] {color}" for color, _ in row])
             emit_info(Text.from_markup(f"  {row_text}"))
 

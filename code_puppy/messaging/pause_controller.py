@@ -248,7 +248,8 @@ class PauseController:
             if timeout is None:
                 await event.wait()
             else:
-                await asyncio.wait_for(event.wait(), timeout=timeout)
+                async with asyncio.timeout(timeout):
+                    await event.wait()
         except TimeoutError:
             # Force-resume so we don't leave the controller stuck.
             self.resume()
