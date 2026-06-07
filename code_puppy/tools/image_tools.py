@@ -16,7 +16,15 @@ import time
 from pathlib import Path
 from typing import Any
 
-from PIL import Image, UnidentifiedImageError
+try:
+    from PIL import Image, UnidentifiedImageError
+
+    _PIL_AVAILABLE = True
+except ImportError:  # Pillow is an optional extra: pip install 'fast-puppy[images]'
+    Image = None  # type: ignore[assignment]
+    UnidentifiedImageError = Exception  # type: ignore[misc,assignment]
+    _PIL_AVAILABLE = False
+
 from pydantic_ai import BinaryContent, RunContext, ToolReturn
 
 from code_puppy.messaging import emit_error, emit_info, emit_success
@@ -40,6 +48,11 @@ def _validate_and_prepare_image(
     file extension. If the image is resized, the output is normalized to PNG so
     the returned bytes and MIME type stay in sync like civilized software.
     """
+    if not _PIL_AVAILABLE:
+        raise ValueError(
+            "Image analysis requires Pillow. Install it with: "
+            "pip install 'fast-puppy[images]'"
+        )
     try:
         with Image.open(io.BytesIO(image_bytes)) as verified_image:
             verified_image.verify()
