@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "fast-puppy"
-version = "0.6.2"
+version = "0.6.3"
 description = "Code generation agent"
 readme = "README.md"
 requires-python = ">=3.14,<3.15"
@@ -23,9 +23,13 @@ dependencies = [
     "openai>=1.99.1",
     "ripgrep==14.1.0",
     "termflow-md>=0.1.11",
-    # anthropic is imported directly (model_factory.py); the lower bound matches
-    # what pydantic-ai-slim[anthropic] resolves so the two never fight.
-    "anthropic>=0.79.0",
+    # anthropic is imported directly (model_factory.py). Capped below 0.80.0:
+    # pydantic-ai-slim==1.56.0 imports `UserLocation` from
+    # anthropic.types.beta.beta_web_search_tool_20250305_param, which 0.80.0
+    # removed. Without the upper bound a fresh `pip install` pulls the latest
+    # anthropic and the app dies at startup with an ImportError. 0.79.0 is the
+    # only release compatible with the pinned pydantic-ai-slim.
+    "anthropic>=0.79.0,<0.80.0",
 ]
 dev-dependencies = [
     "ruff>=0.15",
