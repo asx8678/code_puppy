@@ -308,6 +308,12 @@ class SubAgentStatusMessage(BaseMessage):
         default=0, ge=0, description="Number of tools called so far"
     )
     token_count: int = Field(default=0, ge=0, description="Estimated tokens in context")
+    token_limit: int | None = Field(
+        default=None, ge=1, description="Model context window (allocated tokens)"
+    )
+    token_percent: float | None = Field(
+        default=None, ge=0, description="Percent of context window used"
+    )
     current_tool: str | None = Field(
         default=None, description="Name of tool currently being called"
     )

@@ -32,6 +32,8 @@ from code_puppy.config import (
     initialize_command_history_file,
     record_terminal_session,
     save_command_to_history,
+    set_subagent_status_runtime_override,
+    set_value,
 )
 from code_puppy.http_utils import find_available_port
 from code_puppy.keymap import (
@@ -146,6 +148,18 @@ async def main():
         help="Resume a saved session from a .pkl file (e.g. ~/.fast_puppy/contexts/foo.pkl)",
     )
     parser.add_argument(
+        "--show-agents",
+        action="store_true",
+        default=None,
+        help="Show the live sub-agent status dashboard (persists to config)",
+    )
+    parser.add_argument(
+        "--hide-agents",
+        action="store_true",
+        default=False,
+        help="Hide the live sub-agent status dashboard (persists to config)",
+    )
+    parser.add_argument(
         "command", nargs="*", help="Run a single command (deprecated, use -p instead)"
     )
     args = parser.parse_args()
@@ -159,6 +173,15 @@ async def main():
 
     # Create a shared console for both renderers
     display_console = Console()
+
+    # Wire the sub-agent status dashboard to the SAME console. This must happen
+    # BEFORE any sub-agent can run, so the lazy SubAgentConsoleManager.get_instance()
+    # call inside the stream handler / agent_tools returns this shared-console
+    # instance rather than creating one on a default Console. Reassigning the
+    # manager's console after a Live has been started is undefined.
+    from code_puppy.messaging.subagent_console import get_subagent_console_manager
+
+    get_subagent_console_manager(console=display_console)
 
     # Legacy renderer for backward compatibility (emits via get_global_queue)
     message_queue = get_global_queue()
@@ -221,6 +244,27 @@ async def main():
         set_model_name(early_model)
 
     ensure_config_exists()
+
+    # ---- Sub-agent dashboard toggle (T5, code_puppy-9zt.14) ----
+    # (1) Persist explicit user intent from --show-agents / --hide-agents.
+    #     Both flags are mutually exclusive; passing both is a usage error.
+    if getattr(args, "show_agents", None) and getattr(args, "hide_agents", False):
+        parser.error("--show-agents and --hide-agents are mutually exclusive")
+    elif getattr(args, "show_agents", None):
+        set_value("show_subagent_status", "true")
+    elif getattr(args, "hide_agents", False):
+        set_value("show_subagent_status", "false")
+
+    # (2) Apply a runtime-only override for non-TTY / one-shot invocations.
+    #     A Rich Live would corrupt piped output and is meaningless in -p
+    #     mode, so we force the dashboard off WITHOUT touching the user's
+    #     saved preference. An explicit --show-agents in a TTY still wins
+    #     because we only set the override for non-TTY or -p runs.
+    _one_shot = bool(getattr(args, "prompt", None))
+    _isatty = getattr(sys.stdout, "isatty", None)
+    _not_tty = not bool(_isatty and _isatty())
+    if _one_shot or _not_tty:
+        set_subagent_status_runtime_override(False)
 
     # Validate cancel_agent_key configuration early
     try:
