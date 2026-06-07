@@ -762,18 +762,25 @@ def _extract_file_extension_from_diff(diff_text: str) -> str:
 
 def brighten_hex(hex_color: str, factor: float) -> str:
     """
-    Darken a hex color by multiplying each RGB channel by `factor`.
-    factor=1.0 -> no change
-    factor=0.0 -> black
+    Brighten a ``#RRGGBB`` color by scaling each RGB channel by ``1 + factor``.
+    factor=0.0 -> no change
     factor=0.18 -> good for diff backgrounds (recommended)
-    """
-    hex_color = hex_color.lstrip("#")
-    if len(hex_color) != 6:
-        raise ValueError(f"Expected #RRGGBB, got {hex_color!r}")
 
-    r = int(hex_color[0:2], 16)
-    g = int(hex_color[2:4], 16)
-    b = int(hex_color[4:6], 16)
+    Inputs come from user config, so anything that isn't a 6-digit hex color
+    (``None``, a named color like ``"green"``, or short ``#RGB`` form) is
+    returned unchanged rather than raising — Rich can consume the original
+    value directly, and a bad diff color must never crash diff rendering.
+    """
+    if not isinstance(hex_color, str):
+        return hex_color
+
+    stripped = hex_color.lstrip("#")
+    if len(stripped) != 6 or any(c not in "0123456789abcdefABCDEF" for c in stripped):
+        return hex_color
+
+    r = int(stripped[0:2], 16)
+    g = int(stripped[2:4], 16)
+    b = int(stripped[4:6], 16)
 
     r = max(0, min(255, int(r * (1 + factor))))
     g = max(0, min(255, int(g * (1 + factor))))

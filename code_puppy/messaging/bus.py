@@ -426,12 +426,16 @@ class MessageBus:
         Returns:
             The next message to display.
         """
-        # For async usage, wrap sync queue in asyncio-friendly way
+        # Block-wait on the sync queue in a worker thread instead of busy-polling
+        # at 100 Hz. The short per-call timeout means a cancelled consumer frees
+        # its worker within 0.1s rather than the thread blocking indefinitely.
+        loop = asyncio.get_running_loop()
         while True:
-            try:
-                return self._outgoing.get_nowait()
-            except queue.Empty:
-                await asyncio.sleep(0.01)
+            message = await loop.run_in_executor(
+                None, self.get_message_blocking, 0.1
+            )
+            if message is not None:
+                return message
 
     def get_message_nowait(self) -> AnyMessage | None:
         """Get the next outgoing message without blocking.
@@ -465,12 +469,16 @@ class MessageBus:
         Returns:
             The next command to process.
         """
-        # For async usage, wrap sync queue in asyncio-friendly way
+        # Block-wait in a worker thread instead of busy-polling at 100 Hz; the
+        # short timeout keeps the consumer cancellable.
+        loop = asyncio.get_running_loop()
         while True:
             try:
-                return self._incoming.get_nowait()
+                return await loop.run_in_executor(
+                    None, self._incoming.get, True, 0.1
+                )
             except queue.Empty:
-                await asyncio.sleep(0.01)
+                continue
 
     # =========================================================================
     # Startup Buffering

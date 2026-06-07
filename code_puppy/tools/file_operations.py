@@ -99,6 +99,38 @@ def _cleanup_cached_ignore_files() -> None:
         _IGNORE_FILE_CACHE.clear()
 
 
+# Spill files created when a list_files result is too large for the context
+# window. They must outlive the tool call (the agent reads them later) but be
+# removed at process exit so they don't accumulate in the temp dir forever.
+_LISTING_SPILL_FILES: list[str] = []
+_LISTING_SPILL_LOCK = threading.Lock()
+_LISTING_SPILL_MAX = 64
+
+
+def _register_listing_spill(path: str) -> None:
+    with _LISTING_SPILL_LOCK:
+        _LISTING_SPILL_FILES.append(path)
+        # Bound the set of live spill files within a session: once we exceed the
+        # cap, delete the oldest eagerly so a long session can't accumulate them.
+        while len(_LISTING_SPILL_FILES) > _LISTING_SPILL_MAX:
+            stale = _LISTING_SPILL_FILES.pop(0)
+            try:
+                os.unlink(stale)
+            except OSError:
+                pass
+
+
+@atexit.register
+def _cleanup_listing_spill_files() -> None:
+    with _LISTING_SPILL_LOCK:
+        for path in _LISTING_SPILL_FILES:
+            try:
+                os.unlink(path)
+            except OSError:
+                pass
+        _LISTING_SPILL_FILES.clear()
+
+
 # Pydantic models for tool return types
 class ListedFile(BaseModel):
     path: str | None
@@ -915,6 +947,9 @@ def register_list_files(agent):
                 spill.write(result.content)
             finally:
                 spill.close()
+
+            # Track for cleanup at exit so these don't pile up in the temp dir.
+            _register_listing_spill(spill.name)
 
             result.content = (
                 f"Directory listing for {directory} exceeded "

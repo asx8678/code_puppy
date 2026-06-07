@@ -52,16 +52,23 @@ def _load_api_payload() -> dict[str, Any] | None:
     the bundled JSON.
     """
     global _CACHED_API_DATA
-    if _CACHED_API_DATA is not None:
-        return _CACHED_API_DATA
+    # Read the cache under the lock so the prefetch thread and an on-demand
+    # fetch don't race on the read-modify-write of the module global.
+    with _PREFETCH_LOCK:
+        if _CACHED_API_DATA is not None:
+            return _CACHED_API_DATA
     try:
         with httpx.Client(timeout=10.0) as client:
             response = client.get(MODELS_DEV_API_URL)
             response.raise_for_status()
             data = response.json()
             if isinstance(data, dict) and len(data) > 0:
-                _CACHED_API_DATA = data
-                return data
+                # Store under the lock; first successful writer wins so a
+                # concurrent fetch's result is harmlessly discarded.
+                with _PREFETCH_LOCK:
+                    if _CACHED_API_DATA is None:
+                        _CACHED_API_DATA = data
+                    return _CACHED_API_DATA
             return None
     except httpx.TimeoutException:
         emit_warning("models.dev API timed out, using bundled fallback")

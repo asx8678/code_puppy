@@ -14,6 +14,7 @@ let the next ``history_processor`` invocation handle it.
 from __future__ import annotations
 
 import dataclasses
+import logging
 from collections.abc import Callable
 from typing import Any
 
@@ -256,6 +257,12 @@ def _run_summarization_core(
 def _log_summarization_failure(error: Exception, fallback_note: str = "") -> None:
     """Single source of truth for summarization-failure user messaging."""
     error_type = type(error).__name__
+    # Capture the full traceback so an unexpected programming error in the
+    # summarization core isn't reduced to a one-line "no compaction" that's
+    # impossible to diagnose. The user-facing emit_error stays concise.
+    logging.getLogger(__name__).debug(
+        "Summarization failed (%s): %s", error_type, error, exc_info=True
+    )
     emit_error(f"Compaction failed: [{error_type}] {error}")
     if isinstance(error, SummarizationError) and error.original_error:
         underlying = type(error.original_error).__name__

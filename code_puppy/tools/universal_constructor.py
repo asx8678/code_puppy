@@ -24,7 +24,8 @@ from code_puppy.plugins.universal_constructor.models import (
     UCListOutput,
     UCUpdateOutput,
 )
-from code_puppy.tools.common import atomic_write_text
+from code_puppy.tools.common import atomic_write_text, get_user_approval_async
+from code_puppy.tools.subagent_context import is_subagent
 
 
 class UniversalConstructorOutput(BaseModel):
@@ -137,6 +138,59 @@ def _emit_uc_message(
     bus.emit(msg)
 
 
+async def _require_uc_approval(
+    *,
+    action: str,
+    tool_name: str | None,
+    python_code: str | None,
+    tool_args: dict | str | None,
+) -> tuple[bool, str | None]:
+    """Interactive approval gate for code-writing/executing UC actions.
+
+    Returns ``(approved, feedback)``. Auto-approves (without prompting) under
+    yolo mode, for sub-agents, or when stdin is not an interactive TTY, matching
+    the behavior of ``run_shell_command``.
+    """
+    import sys
+
+    from rich.text import Text
+
+    from code_puppy.config import get_puppy_name, get_yolo_mode
+
+    if get_yolo_mode() or is_subagent() or not sys.stdin.isatty():
+        return True, None
+
+    panel_content = Text()
+    if action == "call":
+        panel_content.append(
+            "⚡ Requesting permission to EXECUTE a dynamic tool:\n",
+            style="bold yellow",
+        )
+        panel_content.append(f"  {tool_name}\n", style="bold white")
+        if tool_args:
+            panel_content.append(f"\n  args: {tool_args!r}", style="dim")
+        preview = None
+    else:
+        verb = "CREATE" if action == "create" else "UPDATE"
+        panel_content.append(
+            f"⚠️  Requesting permission to {verb} and persist a dynamic tool "
+            "that can run with full host privileges:\n",
+            style="bold yellow",
+        )
+        panel_content.append(f"  {tool_name}\n", style="bold white")
+        # Show the actual code so the user can review before it's written.
+        preview = python_code or "(no source provided)"
+
+    puppy_name = get_puppy_name().title()
+    return await get_user_approval_async(
+        title="Universal Constructor",
+        content=panel_content,
+        preview=preview,
+        border_style="yellow",
+        puppy_name=puppy_name,
+    )
+
+
 async def universal_constructor_impl(
     context: RunContext,
     action: Literal["list", "call", "create", "update", "info"],
@@ -166,6 +220,39 @@ async def universal_constructor_impl(
     Returns:
         UniversalConstructorOutput with action-specific results
     """
+    # Security gate: create/update write model-authored Python to disk and
+    # `call` executes it in-process with full host privileges. Without this the
+    # UC tool bypasses every approval flow the shell/file tools enforce, making
+    # it a sandbox-escape / RCE path. Require interactive approval (mirroring
+    # run_shell_command's gating: skipped under yolo mode and for sub-agents,
+    # which run autonomously by design).
+    if action in ("create", "update", "call"):
+        approved, feedback = await _require_uc_approval(
+            action=action,
+            tool_name=tool_name,
+            python_code=python_code,
+            tool_args=tool_args,
+        )
+        if not approved:
+            result = UniversalConstructorOutput(
+                action=action,
+                success=False,
+                error=(
+                    f"USER REJECTED: {feedback}"
+                    if feedback
+                    else "User declined the universal_constructor operation"
+                ),
+            )
+            summary = _build_summary(result)
+            _emit_uc_message(
+                action=action,
+                success=False,
+                summary=summary,
+                tool_name=tool_name,
+                details=result.error,
+            )
+            return result
+
     # Route to appropriate action handler
     if action == "list":
         result = _handle_list_action(context)
@@ -352,11 +439,17 @@ def _handle_call_action(
         )
     start_time = time.time()
 
+    executor = ThreadPoolExecutor(max_workers=1)
     try:
-        # Execute with timeout using ThreadPoolExecutor
-        with ThreadPoolExecutor(max_workers=1) as executor:
-            future = executor.submit(func, **args)
+        # Execute with timeout. Note: a runaway tool function cannot be force
+        # -killed (Python threads aren't interruptible), so on timeout we
+        # shutdown(wait=False) to avoid blocking the caller until the thread
+        # eventually returns. The worker may keep running in the background.
+        future = executor.submit(func, **args)
+        try:
             result = future.result(timeout=30)
+        finally:
+            executor.shutdown(wait=False)
 
         execution_time = time.time() - start_time
 

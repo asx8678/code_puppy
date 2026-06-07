@@ -130,11 +130,23 @@ class CircuitBreaker:
                 if asyncio.iscoroutinefunction(func)
                 else func(*args, **kwargs)
             )
-            await self._on_success(checked_state=checked_state)
-            return result
         except Exception:
             await self._on_failure(checked_state=checked_state)
             raise
+        except BaseException:
+            # asyncio.CancelledError / KeyboardInterrupt are NOT Exception
+            # subclasses, so without this branch a cancelled half-open test call
+            # would leave _half_open_in_flight stuck True, permanently rejecting
+            # every future call with CircuitOpenError. Cancellation isn't a
+            # service failure, so we don't count it — but we must release the
+            # half-open test slot.
+            if checked_state == CircuitState.HALF_OPEN:
+                with self._sync_lock:
+                    self._half_open_in_flight = False
+            raise
+        else:
+            await self._on_success(checked_state=checked_state)
+            return result
 
     def record_success(self) -> None:
         """Record a successful operation (synchronous)."""
@@ -147,24 +159,30 @@ class CircuitBreaker:
             self._on_failure_sync()
 
     def get_state(self) -> CircuitState:
-        """Get current circuit breaker state."""
+        """Get current circuit breaker state.
+
+        Read-only: this does NOT perform the OPEN->HALF_OPEN transition. Merely
+        observing the breaker must not change its behavior (which would let a
+        status poll consume the single half-open test slot or reset counters).
+        The transition happens only inside an actual ``call()``.
+        """
         with self._sync_lock:
-            return self._get_current_state()
+            return self._peek_current_state()
 
     def is_open(self) -> bool:
         """Check if circuit breaker is in OPEN state."""
         with self._sync_lock:
-            return self._get_current_state() == CircuitState.OPEN
+            return self._peek_current_state() == CircuitState.OPEN
 
     def is_half_open(self) -> bool:
         """Check if circuit breaker is in HALF_OPEN state."""
         with self._sync_lock:
-            return self._get_current_state() == CircuitState.HALF_OPEN
+            return self._peek_current_state() == CircuitState.HALF_OPEN
 
     def is_closed(self) -> bool:
         """Check if circuit breaker is in CLOSED state."""
         with self._sync_lock:
-            return self._get_current_state() == CircuitState.CLOSED
+            return self._peek_current_state() == CircuitState.CLOSED
 
     def reset(self) -> None:
         """Reset circuit breaker to CLOSED state and clear counters."""
@@ -206,6 +224,17 @@ class CircuitBreaker:
             self._state = CircuitState.HALF_OPEN
             self._success_count = 0  # Reset success counter for half-open testing
 
+        return self._state
+
+    def _peek_current_state(self) -> CircuitState:
+        """Return the effective state WITHOUT mutating anything.
+
+        Like ``_get_current_state`` it reports HALF_OPEN once the timeout has
+        elapsed in OPEN, but it does not actually perform the transition or
+        reset the success counter. Use this for read-only observers.
+        """
+        if self._state == CircuitState.OPEN and self._should_attempt_reset():
+            return CircuitState.HALF_OPEN
         return self._state
 
     def _should_attempt_reset(self) -> bool:

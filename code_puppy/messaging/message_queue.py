@@ -76,6 +76,9 @@ class MessageQueue:
         self._running = False
         self._thread = None
         self._startup_buffer = []  # Buffer messages before any renderer starts
+        # Cap the startup buffer so a headless run (renderer never attaches)
+        # can't grow it without bound. Oldest messages are dropped first.
+        self._startup_buffer_maxsize = maxsize
         self._has_active_renderer = False
         self._event_loop = None  # Store reference to the event loop
         self._prompt_responses = {}  # Store responses to human input requests
@@ -89,10 +92,12 @@ class MessageQueue:
 
     def start(self):
         """Start the queue processing."""
-        if self._running:
-            return
-
-        self._running = True
+        # Guard the check-then-set so two concurrent start() calls can't each
+        # spawn a daemon thread.
+        with self._startup_lock:
+            if self._running:
+                return
+            self._running = True
         self._thread = threading.Thread(target=self._process_messages, daemon=True)
         self._thread.start()
 
@@ -124,11 +129,17 @@ class MessageQueue:
 
     def emit(self, message: UIMessage):
         """Emit a message to the queue."""
-        # If no renderer is active yet, buffer the message for startup
-        if not self._has_active_renderer:
-            with self._startup_lock:
+        # Decide buffer-vs-queue atomically under the startup lock. Reading the
+        # flag outside the lock previously raced renderer attach/detach, which
+        # could route a message to the startup buffer that nobody drains (or the
+        # reverse). The flag is mutated under this same lock everywhere.
+        with self._startup_lock:
+            if not self._has_active_renderer:
+                # Bounded buffer: drop oldest to make room.
+                if len(self._startup_buffer) >= self._startup_buffer_maxsize:
+                    self._startup_buffer.pop(0)
                 self._startup_buffer.append(message)
-            return
+                return
 
         try:
             self._queue.put_nowait(message)
@@ -226,7 +237,11 @@ class MessageQueue:
         """Add a listener for messages (for direct sync consumption)."""
         with self._listeners_lock:
             self._listeners.append(callback)
-            # Mark that we have an active renderer
+        # Mark that we have an active renderer. The flag is guarded by
+        # _startup_lock (same lock emit() uses to decide buffer-vs-queue). Lock
+        # ordering is always _listeners_lock -> _startup_lock; nothing acquires
+        # them the other way around, so this can't deadlock.
+        with self._startup_lock:
             self._has_active_renderer = True
 
     def remove_listener(self, callback):
@@ -234,17 +249,20 @@ class MessageQueue:
         with self._listeners_lock:
             if callback in self._listeners:
                 self._listeners.remove(callback)
-            # If no more listeners, mark as no active renderer
-            if not self._listeners:
+            no_listeners = not self._listeners
+        if no_listeners:
+            with self._startup_lock:
                 self._has_active_renderer = False
 
     def mark_renderer_active(self):
         """Mark that a renderer is now active and consuming messages."""
-        self._has_active_renderer = True
+        with self._startup_lock:
+            self._has_active_renderer = True
 
     def mark_renderer_inactive(self):
         """Mark that no renderer is currently active."""
-        self._has_active_renderer = False
+        with self._startup_lock:
+            self._has_active_renderer = False
 
     def create_prompt_request(self, prompt_text: str) -> str:
         """Create a human input request and return its unique ID."""
@@ -286,6 +304,10 @@ class MessageQueue:
             self._prompt_events.pop(prompt_id, None)
 
             if not signaled:
+                # Drop any response that may have arrived in the race window
+                # between wait() timing out and re-acquiring the lock, so it
+                # doesn't linger in _prompt_responses forever.
+                self._prompt_responses.pop(prompt_id, None)
                 raise TimeoutError(
                     f"No response for prompt {prompt_id} within {timeout}s"
                 )
@@ -295,10 +317,17 @@ class MessageQueue:
     def provide_prompt_response(self, prompt_id: str, response: str):
         """Provide a response to a human input request."""
         with self._prompt_lock:
-            self._prompt_responses[prompt_id] = response
+            # Only store a response if there is an outstanding waiter for this
+            # prompt. Storing unconditionally leaked entries for prompts that
+            # were never awaited, already timed out, or had bogus ids.
             event = self._prompt_events.get(prompt_id)
-        if event is not None:
-            event.set()
+            if event is None:
+                logger.debug(
+                    "Ignoring response for unknown/expired prompt %s", prompt_id
+                )
+                return
+            self._prompt_responses[prompt_id] = response
+        event.set()
 
 
 # Global message queue instance
@@ -320,10 +349,11 @@ def get_global_queue() -> MessageQueue:
 
 def get_buffered_startup_messages():
     """Get any messages that were buffered before renderers started."""
-    queue = get_global_queue()
-    # Only return startup buffer messages, don't clear them yet
-    messages = list(queue._startup_buffer)
-    return messages
+    q = get_global_queue()
+    # Only return startup buffer messages, don't clear them yet. Snapshot under
+    # the same lock that guards appends so we don't read a torn/mutating list.
+    with q._startup_lock:
+        return list(q._startup_buffer)
 
 
 def emit_message(message_type: MessageType, content: Any, **metadata):

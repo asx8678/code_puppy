@@ -6,6 +6,7 @@ import json
 import logging
 import os
 import pathlib
+import tempfile
 import threading
 from collections import OrderedDict
 
@@ -77,9 +78,24 @@ def migrate_legacy_config_dirs() -> None:
                 os.chmod(new_dir, 0o700)
             except OSError:
                 pass
-        except Exception:
-            # Best-effort: if the copy fails, a fresh dir is created below.
-            pass
+        except Exception as e:
+            # A failed migration must not masquerade as a brand-new install: the
+            # user's API keys/sessions live in legacy_dir and silently starting
+            # fresh would look like total data loss. Surface it loudly and remove
+            # any partial copy so a retry (or manual recovery) is clean.
+            logging.error(
+                "Failed to migrate legacy config %s -> %s: %s. "
+                "Your existing data remains at %s.",
+                legacy_dir,
+                new_dir,
+                e,
+                legacy_dir,
+            )
+            if os.path.exists(new_dir):
+                try:
+                    shutil.rmtree(new_dir)
+                except OSError:
+                    pass
 
 
 # XDG Base Directory paths
@@ -266,6 +282,11 @@ _MODEL_VALIDATION_CACHE_MAX = 256
 _model_validation_cache: "OrderedDict[str, bool]" = OrderedDict()
 _default_model_cache = None
 _default_vision_model_cache = None
+# Guards all of the model caches above. They are read/written from multiple
+# threads (e.g. a background plugin resolving a model while clear_model_cache()
+# runs); OrderedDict.move_to_end/popitem are not atomic, so unsynchronized
+# access can raise "OrderedDict mutated during iteration"/KeyError.
+_MODEL_CACHE_LOCK = threading.RLock()
 
 # ---------------------------------------------------------------------------
 # Cached config reads
@@ -331,17 +352,43 @@ def _read_config_cached() -> configparser.ConfigParser:
         return config
 
 
-def _persist_config(config: configparser.ConfigParser) -> None:
-    """Write puppy.cfg and lock its permissions to 0600.
+# Serializes read-modify-write sequences across writers (and the threads that
+# may invoke them concurrently, e.g. a background token-refresh writing a
+# credential while the user runs ``/set``). Reentrant so nested writers don't
+# self-deadlock. Note: this only guards in-process writers; cross-process
+# safety would additionally require file locking (fcntl.flock).
+_CONFIG_WRITE_LOCK = threading.RLock()
 
-    puppy.cfg can hold API keys / tokens, so it must never be world-readable.
+
+def _persist_config(config: configparser.ConfigParser) -> None:
+    """Atomically write puppy.cfg with 0600 permissions.
+
+    puppy.cfg can hold API keys / tokens, so it must never be world-readable
+    and must never be left truncated/corrupted by a crash mid-write. We write
+    to a temp file in the same directory (created 0600 *before* any secret is
+    written), fsync it, then atomically ``os.replace`` it into place.
     """
-    with open(CONFIG_FILE, "w", encoding="utf-8") as f:
-        config.write(f)
-    try:
-        os.chmod(CONFIG_FILE, 0o600)
-    except OSError:
-        pass
+    with _CONFIG_WRITE_LOCK:
+        directory = os.path.dirname(CONFIG_FILE) or "."
+        os.makedirs(directory, exist_ok=True)
+        # O_CREAT|O_EXCL guarantees we own a fresh file; mode 0600 is applied at
+        # creation so secrets are never momentarily world-readable.
+        fd, tmp_path = tempfile.mkstemp(
+            prefix=".puppy.cfg.", suffix=".tmp", dir=directory
+        )
+        try:
+            os.fchmod(fd, 0o600)
+            with os.fdopen(fd, "w", encoding="utf-8") as f:
+                config.write(f)
+                f.flush()
+                os.fsync(f.fileno())
+            os.replace(tmp_path, CONFIG_FILE)
+        except BaseException:
+            try:
+                os.unlink(tmp_path)
+            except OSError:
+                pass
+            raise
     # Any in-process write invalidates the read cache so subsequent getters
     # observe the new state immediately (mtime resolution can't be relied on
     # for sub-second write-then-read sequences).
@@ -519,12 +566,13 @@ def set_config_value(key: str, value: str):
     """
     Sets a config value in the persistent config file.
     """
-    config = configparser.ConfigParser()
-    config.read(CONFIG_FILE)
-    if DEFAULT_SECTION not in config:
-        config[DEFAULT_SECTION] = {}
-    config[DEFAULT_SECTION][key] = value
-    _persist_config(config)
+    with _CONFIG_WRITE_LOCK:
+        config = configparser.ConfigParser()
+        config.read(CONFIG_FILE)
+        if DEFAULT_SECTION not in config:
+            config[DEFAULT_SECTION] = {}
+        config[DEFAULT_SECTION][key] = value
+        _persist_config(config)
 
 
 # Alias for API compatibility
@@ -535,11 +583,12 @@ def set_value(key: str, value: str) -> None:
 
 def reset_value(key: str) -> None:
     """Remove a key from the config file, resetting it to default."""
-    config = configparser.ConfigParser()
-    config.read(CONFIG_FILE)
-    if DEFAULT_SECTION in config and key in config[DEFAULT_SECTION]:
-        del config[DEFAULT_SECTION][key]
-        _persist_config(config)
+    with _CONFIG_WRITE_LOCK:
+        config = configparser.ConfigParser()
+        config.read(CONFIG_FILE)
+        if DEFAULT_SECTION in config and key in config[DEFAULT_SECTION]:
+            del config[DEFAULT_SECTION][key]
+            _persist_config(config)
 
 
 # --- MODEL STICKY EXTENSION STARTS HERE ---
@@ -556,10 +605,22 @@ def load_mcp_server_configs():
             return {}
         with open(MCP_SERVERS_FILE, encoding="utf-8") as f:
             conf = json.loads(f.read())
-            return conf["mcp_servers"]
-    except Exception as e:
-        emit_error(f"Failed to load MCP servers - {str(e)}")
+    except json.JSONDecodeError as e:
+        emit_error(
+            f"Failed to parse MCP servers file {MCP_SERVERS_FILE} (invalid JSON): {e}"
+        )
         return {}
+    except OSError as e:
+        emit_error(f"Failed to read MCP servers file {MCP_SERVERS_FILE}: {e}")
+        return {}
+    servers = conf.get("mcp_servers")
+    if servers is None:
+        emit_error(
+            f"MCP servers file {MCP_SERVERS_FILE} is missing the top-level "
+            "'mcp_servers' key; no servers loaded."
+        )
+        return {}
+    return servers
 
 
 def _default_model_from_models_json():
@@ -570,95 +631,98 @@ def _default_model_from_models_json():
     """
     global _default_model_cache
 
-    if _default_model_cache is not None:
-        return _default_model_cache
+    with _MODEL_CACHE_LOCK:
+        if _default_model_cache is not None:
+            return _default_model_cache
 
-    try:
-        from code_puppy.model_factory import ModelFactory
+        try:
+            from code_puppy.model_factory import ModelFactory
 
-        models_config = ModelFactory.load_config()
-        if models_config:
-            # Use first model in models.json as default
-            first_key = next(iter(models_config))
-            _default_model_cache = first_key
-            return first_key
-        _default_model_cache = "gpt-5"
-        return "gpt-5"
-    except Exception:
-        # A transient load_config error must not permanently poison the cached
-        # default — return the fallback WITHOUT memoizing it.
-        return "gpt-5"
+            models_config = ModelFactory.load_config()
+            if models_config:
+                # Use first model in models.json as default
+                first_key = next(iter(models_config))
+                _default_model_cache = first_key
+                return first_key
+            _default_model_cache = "gpt-5"
+            return "gpt-5"
+        except Exception:
+            # A transient load_config error must not permanently poison the
+            # cached default — return the fallback WITHOUT memoizing it.
+            return "gpt-5"
 
 
 def _default_vision_model_from_models_json() -> str:
     """Select a default vision-capable model from models.json with caching."""
     global _default_vision_model_cache
 
-    if _default_vision_model_cache is not None:
-        return _default_vision_model_cache
-
-    try:
-        from code_puppy.model_factory import ModelFactory
-
-        models_config = ModelFactory.load_config()
-        if models_config:
-            # Prefer explicitly tagged vision models
-            for name, config in models_config.items():
-                if config.get("supports_vision"):
-                    _default_vision_model_cache = name
-                    return name
-
-            # Fallback heuristic: common multimodal models
-            preferred_candidates = (
-                "gpt-4.1",
-                "gpt-4.1-mini",
-                "gpt-4.1-nano",
-                "claude-4-0-sonnet",
-                "gemini-2.5-flash-preview-05-20",
-            )
-            for candidate in preferred_candidates:
-                if candidate in models_config:
-                    _default_vision_model_cache = candidate
-                    return candidate
-
-            # Last resort: use the general default model
-            _default_vision_model_cache = _default_model_from_models_json()
+    with _MODEL_CACHE_LOCK:
+        if _default_vision_model_cache is not None:
             return _default_vision_model_cache
 
-        _default_vision_model_cache = "gpt-4.1"
-        return "gpt-4.1"
-    except Exception:
-        # A transient load_config error must not permanently poison the cached
-        # default — return the fallback WITHOUT memoizing it.
-        return "gpt-4.1"
+        try:
+            from code_puppy.model_factory import ModelFactory
+
+            models_config = ModelFactory.load_config()
+            if models_config:
+                # Prefer explicitly tagged vision models
+                for name, config in models_config.items():
+                    if config.get("supports_vision"):
+                        _default_vision_model_cache = name
+                        return name
+
+                # Fallback heuristic: common multimodal models
+                preferred_candidates = (
+                    "gpt-4.1",
+                    "gpt-4.1-mini",
+                    "gpt-4.1-nano",
+                    "claude-4-0-sonnet",
+                    "gemini-2.5-flash-preview-05-20",
+                )
+                for candidate in preferred_candidates:
+                    if candidate in models_config:
+                        _default_vision_model_cache = candidate
+                        return candidate
+
+                # Last resort: use the general default model
+                _default_vision_model_cache = _default_model_from_models_json()
+                return _default_vision_model_cache
+
+            _default_vision_model_cache = "gpt-4.1"
+            return "gpt-4.1"
+        except Exception:
+            # A transient load_config error must not permanently poison the
+            # cached default — return the fallback WITHOUT memoizing it.
+            return "gpt-4.1"
 
 
 def _validate_model_exists(model_name: str) -> bool:
     """Check if a model exists in models.json with caching to avoid redundant calls."""
     global _model_validation_cache
 
-    # Check cache first (refresh LRU recency on hit)
-    if model_name in _model_validation_cache:
-        _model_validation_cache.move_to_end(model_name)
-        return _model_validation_cache[model_name]
+    with _MODEL_CACHE_LOCK:
+        # Check cache first (refresh LRU recency on hit)
+        if model_name in _model_validation_cache:
+            _model_validation_cache.move_to_end(model_name)
+            return _model_validation_cache[model_name]
 
-    try:
-        from code_puppy.model_factory import ModelFactory
+        try:
+            from code_puppy.model_factory import ModelFactory
 
-        models_config = ModelFactory.load_config()
-        exists = model_name in models_config
+            models_config = ModelFactory.load_config()
+            exists = model_name in models_config
 
-        # Cache the result, evicting the least-recently-used entry once the
-        # cache is full so it stays bounded across a long session.
-        _model_validation_cache[model_name] = exists
-        if len(_model_validation_cache) > _MODEL_VALIDATION_CACHE_MAX:
-            _model_validation_cache.popitem(last=False)
-        return exists
-    except Exception:
-        # If we can't validate, assume it exists to avoid breaking things.
-        # Do NOT memoize this fallback — a transient error must not pin a model
-        # as "valid" forever.
-        return True
+            # Cache the result, evicting the least-recently-used entry once the
+            # cache is full so it stays bounded across a long session.
+            _model_validation_cache[model_name] = exists
+            if len(_model_validation_cache) > _MODEL_VALIDATION_CACHE_MAX:
+                _model_validation_cache.popitem(last=False)
+            return exists
+        except Exception:
+            # If we can't validate, assume it exists to avoid breaking things.
+            # Do NOT memoize this fallback — a transient error must not pin a
+            # model as "valid" forever.
+            return True
 
 
 def clear_model_cache():
@@ -668,13 +732,14 @@ def clear_model_cache():
         _default_model_cache, \
         _default_vision_model_cache, \
         _SESSION_MODEL
-    _model_validation_cache.clear()
-    _default_model_cache = None
-    _default_vision_model_cache = None
-    # Reset the session model too: if it was set to a fallback while the catalog
-    # was unavailable, a stale fallback must not persist after the catalog
-    # changes. The next get_global_model_name() will re-resolve it.
-    _SESSION_MODEL = None
+    with _MODEL_CACHE_LOCK:
+        _model_validation_cache.clear()
+        _default_model_cache = None
+        _default_vision_model_cache = None
+        # Reset the session model too: if it was set to a fallback while the
+        # catalog was unavailable, a stale fallback must not persist after the
+        # catalog changes. The next get_global_model_name() will re-resolve it.
+        _SESSION_MODEL = None
     # Also drop the assembled-config memo so model list/setting changes that
     # don't touch a source file (e.g. plugin-registered providers) take effect.
     try:
@@ -785,12 +850,13 @@ def set_model_name(model: str):
     _SESSION_MODEL = model
 
     # Also persist to file for new terminal sessions
-    config = configparser.ConfigParser()
-    config.read(CONFIG_FILE)
-    if DEFAULT_SECTION not in config:
-        config[DEFAULT_SECTION] = {}
-    config[DEFAULT_SECTION]["model"] = model or ""
-    _persist_config(config)
+    with _CONFIG_WRITE_LOCK:
+        config = configparser.ConfigParser()
+        config.read(CONFIG_FILE)
+        if DEFAULT_SECTION not in config:
+            config[DEFAULT_SECTION] = {}
+        config[DEFAULT_SECTION]["model"] = model or ""
+        _persist_config(config)
 
     # Clear model cache when switching models to ensure fresh validation.
     # clear_model_cache() also resets _SESSION_MODEL, so re-assert the explicit
@@ -1053,17 +1119,18 @@ def clear_model_settings(model_name: str) -> None:
     sanitized_name = _sanitize_model_name_for_key(model_name)
     prefix = f"model_settings_{sanitized_name}_"
 
-    config = configparser.ConfigParser()
-    config.read(CONFIG_FILE)
+    with _CONFIG_WRITE_LOCK:
+        config = configparser.ConfigParser()
+        config.read(CONFIG_FILE)
 
-    if DEFAULT_SECTION in config:
-        keys_to_remove = [
-            key for key in config[DEFAULT_SECTION] if key.startswith(prefix)
-        ]
-        for key in keys_to_remove:
-            del config[DEFAULT_SECTION][key]
+        if DEFAULT_SECTION in config:
+            keys_to_remove = [
+                key for key in config[DEFAULT_SECTION] if key.startswith(prefix)
+            ]
+            for key in keys_to_remove:
+                del config[DEFAULT_SECTION][key]
 
-        _persist_config(config)
+            _persist_config(config)
 
 
 def get_effective_model_settings(model_name: str | None = None) -> dict:
@@ -2154,7 +2221,12 @@ def set_api_key(key_name: str, value: str):
         key_name: The name of the API key (e.g., 'OPENAI_API_KEY')
         value: The API key value (empty string to remove)
     """
-    set_config_value(key_name, value)
+    # An empty value means "remove" per the documented contract — delete the key
+    # from disk rather than persisting a lingering empty secret.
+    if value == "":
+        reset_value(key_name)
+    else:
+        set_config_value(key_name, value)
 
 
 def load_api_keys_to_environment():

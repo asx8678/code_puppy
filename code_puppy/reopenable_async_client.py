@@ -181,9 +181,15 @@ class ReopenableAsyncClient:
         """
         with self._sync_lock:
             if self._client is None or self._is_closed:
-                # Create temporary sync client for building request only
-                # Use httpx.Client (sync) so we can properly close it
-                temp_client = httpx.Client(**self._client_kwargs)
+                # Create temporary sync client for building request only.
+                # Strip kwargs that only RetryingAsyncClient understands —
+                # httpx.Client.__init__ would raise TypeError on them.
+                httpx_kwargs = {
+                    k: v
+                    for k, v in self._client_kwargs.items()
+                    if k not in ("retry_status_codes", "max_retries", "model_name")
+                }
+                temp_client = httpx.Client(**httpx_kwargs)
                 try:
                     return temp_client.build_request(method, url, **kwargs)
                 finally:

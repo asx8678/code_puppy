@@ -110,8 +110,15 @@ class AsyncServerLifecycleManager:
                 task.cancel()
                 try:
                     await task
-                except (asyncio.CancelledError, Exception) as e:
-                    logger.error(f"Server {server_id} task cancelled/failed: {e}")
+                except asyncio.CancelledError:
+                    # Expected: the task we just cancelled. But if *this*
+                    # coroutine is itself being cancelled (e.g. shutdown), we
+                    # must not swallow that — propagate it.
+                    current = asyncio.current_task()
+                    if current is not None and current.cancelling() > 0:
+                        raise
+                except Exception as e:
+                    logger.error(f"Server {server_id} task failed: {e}")
                 return False
 
             # Check if task failed during startup

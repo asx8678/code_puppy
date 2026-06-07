@@ -11,6 +11,7 @@ from __future__ import annotations
 import hashlib
 import hmac
 import json
+import logging
 import os
 import pickle
 import secrets
@@ -25,6 +26,8 @@ _LEGACY_SIGNATURE_SIZE = (
 )
 _SIGNED_HEADER = b"CPSESSION\x02"
 _SIGNATURE_SIZE = 32
+
+logger = logging.getLogger(__name__)
 
 
 class SessionSecurityError(ValueError):
@@ -104,25 +107,30 @@ def _load_session_signing_key() -> bytes:
     except OSError:
         pass
 
-    tmp_path = path.with_name(f"{path.name}.tmp")
+    # Create the key file atomically with O_CREAT|O_EXCL so that two concurrent
+    # processes generating a first key converge on a single value instead of
+    # racing via temp-file rename (last-writer-wins), which would leave sessions
+    # signed by the loser permanently unverifiable. The first writer wins; every
+    # other process gets FileExistsError and re-reads the winner's key.
     try:
-        with tmp_path.open("wb") as key_file:
+        fd = os.open(str(path), os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+    except FileExistsError:
+        # Another process created it first; read the authoritative key.
+        existing = path.read_bytes()
+        if len(existing) >= 32:
+            return existing
+        raise SessionSecurityError("Session signing key is invalid")
+    try:
+        with os.fdopen(fd, "wb") as key_file:
             key_file.write(key)
+    except BaseException:
+        # On write failure, remove the empty/partial file we created so a retry
+        # can recreate it cleanly rather than reading a truncated key.
         try:
-            os.chmod(tmp_path, 0o600)
+            os.unlink(path)
         except OSError:
             pass
-        tmp_path.replace(path)
-    finally:
-        try:
-            tmp_path.unlink()
-        except FileNotFoundError:
-            pass
-
-    try:
-        os.chmod(path, 0o600)
-    except OSError:
-        pass
+        raise
     return key
 
 
@@ -157,9 +165,18 @@ def _extract_pickle_payload(raw: bytes, *, allow_legacy: bool = False) -> bytes:
                 "Legacy unsigned session requires explicit allow_legacy=True"
             )
         offset = len(_LEGACY_SIGNED_HEADER) + _LEGACY_SIGNATURE_SIZE
+        logger.warning(
+            "Loading a legacy session whose signature cannot be verified; "
+            "deserializing its pickle payload is only safe if you trust the file."
+        )
         return raw[offset:]
 
     if allow_legacy:
+        logger.warning(
+            "Deserializing an UNSIGNED session file (allow_legacy=True). This "
+            "pickle payload is not authenticated and must only be loaded from a "
+            "trusted source."
+        )
         return raw
 
     raise SessionSecurityError("Unsigned session file rejected")
@@ -243,21 +260,41 @@ def cleanup_sessions(base_dir: Path, max_sessions: int) -> list[str]:
     if len(candidate_paths) <= max_sessions:
         return []
 
-    sorted_candidates = sorted(
-        ((path.stat().st_mtime, path) for path in candidate_paths),
-        key=lambda item: item[0],
-    )
+    # Stat defensively: a file deleted between glob() and stat() (e.g. another
+    # process cleaning up concurrently) must not abort the whole cleanup.
+    stat_results: list[tuple[float, Path]] = []
+    for path in candidate_paths:
+        try:
+            stat_results.append((path.stat().st_mtime, path))
+        except OSError:
+            continue
+
+    if len(stat_results) <= max_sessions:
+        return []
+
+    sorted_candidates = sorted(stat_results, key=lambda item: item[0])
 
     stale_entries = sorted_candidates[:-max_sessions]
     removed_sessions: list[str] = []
     for _, pickle_path in stale_entries:
         metadata_path = base_dir / f"{pickle_path.stem}_meta.json"
+        # Delete pickle + metadata as a unit; if the metadata delete fails after
+        # the pickle is gone, log it so we don't silently leak orphaned _meta.json.
         try:
             pickle_path.unlink(missing_ok=True)
-            metadata_path.unlink(missing_ok=True)
-            removed_sessions.append(pickle_path.stem)
-        except OSError:
+        except OSError as e:
+            logger.warning("Failed to delete stale session %s: %s", pickle_path, e)
             continue
+        try:
+            metadata_path.unlink(missing_ok=True)
+        except OSError as e:
+            logger.warning(
+                "Deleted session %s but failed to remove its metadata %s: %s",
+                pickle_path.stem,
+                metadata_path,
+                e,
+            )
+        removed_sessions.append(pickle_path.stem)
 
     return removed_sessions
 

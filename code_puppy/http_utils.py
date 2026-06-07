@@ -53,13 +53,16 @@ def _resolve_proxy_config(verify: bool | str | None = None) -> ProxyConfig:
         or os.environ.get("https_proxy")
     )
 
-    # Determine trust_env and verify based on proxy/retry settings
-    if disable_retry:
-        # Test mode: disable SSL verification for proxy testing
-        verify = False
-        trust_env = True
-    elif has_proxy:
-        # Production proxy: keep SSL verification enabled
+    # Determine trust_env based on proxy/retry settings.
+    #
+    # NOTE: TLS certificate verification is *never* disabled here. Disabling the
+    # retry transport and disabling certificate verification are unrelated
+    # concerns; conflating them previously meant that setting
+    # CODE_PUPPY_DISABLE_RETRY_TRANSPORT silently turned off TLS verification for
+    # every outbound HTTPS request (leaking credentials to any MITM). `verify`
+    # is left exactly as the caller / cert-bundle resolution provided it.
+    if disable_retry or has_proxy:
+        # Honor ambient proxy/SSL environment (HTTP(S)_PROXY, SSL_CERT_FILE, ...).
         trust_env = True
     else:
         trust_env = False
@@ -196,14 +199,18 @@ class RetryingAsyncClient(httpx.AsyncClient):
                 raise
 
         # Return last response (even if it's an error status)
-        if last_response:
+        if last_response is not None:
             return last_response
 
         # Should catch this in loop, but just in case
-        if last_exception:
+        if last_exception is not None:
             raise last_exception
 
-        return last_response
+        # No response and no exception should be impossible, but never return
+        # None to callers (pydantic-ai) that expect an httpx.Response.
+        raise RuntimeError(
+            "RetryingAsyncClient.send exhausted retries without a response or exception"
+        )
 
 
 def get_cert_bundle_path() -> str | None:
