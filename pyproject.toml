@@ -44,15 +44,11 @@ classifiers = [
 ]
 
 [project.optional-dependencies]
-# Provider-specific SDKs (lazy-imported by their plugins) and feature-specific
-# heavy deps live behind extras so the base install stays lean and starts fast.
-bedrock = ["boto3>=1.43.9"]
-azure = ["azure-identity>=1.15.0"]
+# Feature-specific heavy deps live behind extras so the base install stays lean
+# and starts fast. Lazy-imported by the code paths that need them.
 browser = ["playwright>=1.40.0"]
 images = ["Pillow>=10.0.0"]
 all = [
-    "boto3>=1.43.9",
-    "azure-identity>=1.15.0",
     "playwright>=1.40.0",
     "Pillow>=10.0.0",
 ]
