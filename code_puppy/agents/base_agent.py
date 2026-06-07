@@ -197,15 +197,23 @@ class BaseAgent(ABC):
     def _estimate_context_overhead(self) -> int:
         """Tokens used by system prompt + registered pydantic tools.
 
-        Memoized on ``(model_name, hash(system_prompt))``: the history
+        Memoized on ``(model_name, sha1(system_prompt))``: the history
         processor calls this on every model request, and re-resolving the
         system prompt + re-running ``prepare_prompt_for_model`` each time is
         wasteful when neither the model nor the prompt has changed. Mirrors the
-        ``_ctx_len_cache`` pattern — recompute only when the key changes.
+        ``_ctx_len_cache`` pattern — recompute only when the key changes. A
+        strong digest is used instead of ``hash()`` so two distinct prompts
+        that happen to collide under ``str.__hash__`` can't serve a stale
+        overhead (which would skew proportion_used / compaction timing).
         """
+        import hashlib
+
         model_name = self.get_model_name()
         system_prompt = self.get_full_system_prompt()
-        key = (model_name, hash(system_prompt))
+        key = (
+            model_name,
+            hashlib.sha1(system_prompt.encode("utf-8", "replace")).hexdigest(),
+        )
         cached = self._ctx_overhead_cache
         if cached is not None and cached[0] == key:
             return cached[1]

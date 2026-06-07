@@ -7,10 +7,35 @@ based on tool name, arguments, and other event data.
 
 from __future__ import annotations
 
+import functools
 import re
 from typing import Any
 
 from .aliases import get_aliases
+
+# Upper bound on the haystack length we feed to a user-supplied regex. Matcher
+# patterns come from hook config (user-authored) but the strings matched against
+# can include model-influenced file paths, so we bound the input to limit the
+# blast radius of a pathological (catastrophic-backtracking) pattern. Full ReDoS
+# safety would require a timeout-capable regex engine.
+_MAX_REGEX_HAYSTACK = 4096
+
+
+@functools.lru_cache(maxsize=512)
+def _compile_pattern(pattern: str, flags: int) -> re.Pattern | None:
+    """Compile and cache a user pattern. Returns None if it is invalid."""
+    try:
+        return re.compile(pattern, flags)
+    except re.error:
+        return None
+
+
+def _safe_search(pattern: str, text: str) -> bool:
+    """Case-insensitive ``re.search`` with a cached pattern and bounded input."""
+    compiled = _compile_pattern(pattern, re.IGNORECASE)
+    if compiled is None:
+        return False
+    return bool(compiled.search(text[:_MAX_REGEX_HAYSTACK]))
 
 
 def matches(matcher: str, tool_name: str, tool_args: dict[str, Any]) -> bool:
@@ -63,19 +88,17 @@ def _match_single(pattern: str, tool_name: str, tool_args: dict[str, Any]) -> bo
 
     if "*" in pattern:
         parts = pattern.split("*")
-        regex_pattern = ".*".join(re.escape(part) for part in parts)
-        if re.match(f"^{regex_pattern}$", tool_name, re.IGNORECASE):
+        regex_pattern = "^" + ".*".join(re.escape(part) for part in parts) + "$"
+        compiled = _compile_pattern(regex_pattern, re.IGNORECASE)
+        if compiled is not None and compiled.match(tool_name):
             return True
 
     if _is_regex_pattern(pattern):
-        try:
-            if re.search(pattern, tool_name, re.IGNORECASE):
-                return True
-            file_path = _extract_file_path(tool_args)
-            if file_path and re.search(pattern, file_path, re.IGNORECASE):
-                return True
-        except re.error:
-            pass
+        if _safe_search(pattern, tool_name):
+            return True
+        file_path = _extract_file_path(tool_args)
+        if file_path and _safe_search(pattern, file_path):
+            return True
 
     return False
 

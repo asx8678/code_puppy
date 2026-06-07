@@ -68,7 +68,13 @@ class GeminiCodeAssistModel(Model):
         into the client), so token rotation does not require a new client.
         """
         if self._client is None or self._client.is_closed:
-            self._client = httpx.AsyncClient(timeout=180)
+            # Route through create_async_client so this honors the cert bundle
+            # (SSL_CERT_FILE), corporate proxy env vars, HTTP/2 config and the
+            # retry transport — a bare httpx.AsyncClient(timeout=180) would
+            # silently bypass all of that and fail in proxied/custom-CA setups.
+            from code_puppy.http_utils import create_async_client
+
+            self._client = create_async_client(timeout=180)
         return self._client
 
     async def aclose(self) -> None:

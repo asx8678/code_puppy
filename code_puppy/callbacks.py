@@ -114,6 +114,12 @@ _callbacks: dict[PhaseType, list[CallbackFunc]] = {
     "notification": [],
 }
 
+# Guards mutations of the global ``_callbacks`` registry. Registration happens
+# during plugin load (potentially from multiple threads) while dispatch can run
+# concurrently from worker threads (see ``_run_coroutine_in_worker_thread``);
+# list.append/remove/clear are not safe against a concurrent iteration/copy.
+_callbacks_lock = threading.Lock()
+
 logger = logging.getLogger(__name__)
 
 
@@ -151,13 +157,14 @@ def register_callback(phase: PhaseType, func: CallbackFunc) -> None:
 
     # Prevent duplicate registration of the same callback function
     # This can happen if plugins are accidentally loaded multiple times
-    if func in _callbacks[phase]:
-        logger.debug(
-            f"Callback {func.__name__} already registered for phase '{phase}', skipping"
-        )
-        return
+    with _callbacks_lock:
+        if func in _callbacks[phase]:
+            logger.debug(
+                f"Callback {func.__name__} already registered for phase '{phase}', skipping"
+            )
+            return
 
-    _callbacks[phase].append(func)
+        _callbacks[phase].append(func)
     logger.debug(f"Registered async callback {func.__name__} for phase '{phase}'")
 
 
@@ -166,7 +173,8 @@ def unregister_callback(phase: PhaseType, func: CallbackFunc) -> bool:
         return False
 
     try:
-        _callbacks[phase].remove(func)
+        with _callbacks_lock:
+            _callbacks[phase].remove(func)
         logger.debug(
             f"Unregistered async callback {func.__name__} from phase '{phase}'"
         )
@@ -176,29 +184,33 @@ def unregister_callback(phase: PhaseType, func: CallbackFunc) -> bool:
 
 
 def clear_callbacks(phase: PhaseType | None = None) -> None:
-    if phase is None:
-        for p in _callbacks:
-            _callbacks[p].clear()
-        logger.debug("Cleared all async callbacks")
-    else:
-        if phase in _callbacks:
-            _callbacks[phase].clear()
-            logger.debug(f"Cleared async callbacks for phase '{phase}'")
+    with _callbacks_lock:
+        if phase is None:
+            for p in _callbacks:
+                _callbacks[p].clear()
+            logger.debug("Cleared all async callbacks")
+        else:
+            if phase in _callbacks:
+                _callbacks[phase].clear()
+                logger.debug(f"Cleared async callbacks for phase '{phase}'")
 
 
 def get_callbacks(phase: PhaseType) -> list[CallbackFunc]:
     # Copy only when the phase actually has callbacks (the common case on hot
     # paths like on_load_prompt is zero/one). Avoids the default-list + copy
     # double allocation per dispatch while still returning a fresh, safe-to-hold
-    # list when populated.
-    callbacks = _callbacks.get(phase)
-    return callbacks.copy() if callbacks else []
+    # list when populated. Copying under the lock prevents tearing against a
+    # concurrent append/remove.
+    with _callbacks_lock:
+        callbacks = _callbacks.get(phase)
+        return callbacks.copy() if callbacks else []
 
 
 def count_callbacks(phase: PhaseType | None = None) -> int:
-    if phase is None:
-        return sum(len(callbacks) for callbacks in _callbacks.values())
-    return len(_callbacks.get(phase, []))
+    with _callbacks_lock:
+        if phase is None:
+            return sum(len(callbacks) for callbacks in _callbacks.values())
+        return len(_callbacks.get(phase, []))
 
 
 def _trigger_callbacks_sync(phase: PhaseType, *args, **kwargs) -> list[Any]:

@@ -461,6 +461,12 @@ class ClaudeCacheAsyncClient(httpx.AsyncClient):
             except Exception as exc:
                 logger.debug("Error in Claude Code transformations: %s", exc)
 
+        # Capture the request body BEFORE sending. After super().send() consumes
+        # the request (especially a streaming one), request.content can raise or
+        # _content can be cleared, so re-extracting it for an auth-retry below
+        # would yield None and silently resend an empty body. Snapshot it now.
+        original_body = self._extract_body_bytes(request)
+
         # Send the request with retry logic for transient errors
         response = await self._send_with_retries(request, *args, **kwargs)
 
@@ -490,7 +496,7 @@ class ClaudeCacheAsyncClient(httpx.AsyncClient):
                     if recovered_token:
                         logger.info("Token recovered successfully, retrying request")
                         await response.aclose()
-                        body_bytes = self._extract_body_bytes(request)
+                        body_bytes = original_body
                         headers = dict(request.headers)
                         self._update_auth_headers(headers, recovered_token)
                         retry_request = self.build_request(

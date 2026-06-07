@@ -146,19 +146,17 @@ class MCPErrorIsolator:
         Returns:
             True if the server is quarantined, False otherwise
         """
-        if server_id not in self.server_stats:
+        stats = self.server_stats.get(server_id)
+        if stats is None or stats.quarantine_until is None:
             return False
 
-        stats = self.server_stats[server_id]
-        if stats.quarantine_until is None:
-            return False
-
-        # Check if quarantine has expired
-        if datetime.now() >= stats.quarantine_until:
-            stats.quarantine_until = None
-            return False
-
-        return True
+        # Read-only: do NOT clear quarantine_until here. This method is called
+        # without holding self._lock (which is an asyncio lock and can't be
+        # acquired from this sync context), so mutating shared ErrorStats would
+        # race a concurrent isolated_call(). The expiry comparison alone yields
+        # the correct answer; the stale timestamp is reset on the next
+        # quarantine_server()/release_quarantine().
+        return datetime.now() < stats.quarantine_until
 
     async def release_quarantine(self, server_id: str) -> None:
         """

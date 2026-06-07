@@ -198,14 +198,21 @@ def _substitute_variables(
     substitutions: dict[str, str] = {
         var: shlex.quote(str(value)) for var, value in untrusted.items()
     }
-    # User-configured env vars are trusted (they may intentionally expand to
-    # multiple shell tokens) and are substituted verbatim.
-    for var, value in env_vars.items():
-        substitutions.setdefault(var, str(value))
+    # NOTE: User-configured env vars are deliberately NOT substituted into the
+    # command string here. They are already exported into the subprocess
+    # environment by _build_environment(), so a command can reference them as
+    # ``$VAR``/``${VAR}`` and let the shell expand them. Relying on shell
+    # expansion preserves intentional multi-token (word-split) expansion while
+    # closing a command-injection hole: splicing an env value verbatim into the
+    # command string would let a value containing ``$(...)``/backticks/``;``
+    # execute, whereas shell *variable* expansion does not run command
+    # substitution on the variable's contents.
 
-    # Single pass: a value that itself contains "${other}" must not be
-    # re-expanded by a later variable.
-    keys = "|".join(re.escape(k) for k in substitutions)
+    # Single pass over the trusted (quoted) substitutions. Longer names first so
+    # that, e.g., "$result_x" can never be partially matched as "$result".
+    keys = "|".join(
+        re.escape(k) for k in sorted(substitutions, key=len, reverse=True)
+    )
     pattern = re.compile(rf"\$\{{({keys})\}}|\$({keys})(?=\W|$)")
 
     def _replace(match: "re.Match[str]") -> str:

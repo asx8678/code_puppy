@@ -621,12 +621,19 @@ class MCPManager:
             # Store task reference to prevent garbage collection
             if not hasattr(self, "_pending_start_tasks"):
                 self._pending_start_tasks = {}
+            existing = self._pending_start_tasks.get(server_id)
+            if existing is not None and not existing.done():
+                # A start is already scheduled; don't overwrite (and orphan) it.
+                logger.debug(f"Start already pending for server: {server_id}")
+                return True
             self._pending_start_tasks[server_id] = task
 
-            # Add callback to clean up task reference when done
-            def cleanup_task(t):
-                if hasattr(self, "_pending_start_tasks"):
-                    self._pending_start_tasks.pop(server_id, None)
+            # Add callback to clean up task reference when done. Only remove the
+            # entry if it still points at *this* task, so a newer scheduled task
+            # isn't accidentally evicted by an older task's completion.
+            def cleanup_task(t, _server_id=server_id, _task=task):
+                if getattr(self, "_pending_start_tasks", {}).get(_server_id) is _task:
+                    self._pending_start_tasks.pop(_server_id, None)
 
             task.add_done_callback(cleanup_task)
 
@@ -634,14 +641,21 @@ class MCPManager:
             return True  # Return immediately - server will start in background
 
         except RuntimeError:
-            # No async loop, just enable the server
+            # No running event loop, so we cannot actually start the async
+            # lifecycle/subprocess. Enable the server and mark it STOPPED (not
+            # RUNNING): claiming RUNNING here would make status/uptime/health all
+            # lie about a server that has no process. It will be started later
+            # when an event loop is available.
             managed_server = self._managed_servers.get(server_id)
             if managed_server:
                 managed_server.enable()
-                self.status_tracker.set_status(server_id, ServerState.RUNNING)
-                self.status_tracker.record_start_time(server_id)
-                logger.info(f"Enabled server (no async context): {server_id}")
-                return True
+                self.status_tracker.set_status(server_id, ServerState.STOPPED)
+                logger.warning(
+                    "Enabled server %s but could not start it: no running event "
+                    "loop. It will start when an async context is available.",
+                    server_id,
+                )
+                return False
             return False
 
     async def stop_server(self, server_id: str) -> bool:
