@@ -46,9 +46,7 @@ _TYPE_PROVIDER_OVERRIDES = {
     "chatgpt_oauth": "chatgpt",
     "gemini": "google",
     "gemini_oauth": "google",
-    "aws_bedrock": "aws_bedrock",
     "azure_openai": "azure_openai",
-    "azure_foundry_openai": "azure_foundry_openai",
 }
 
 _KEY_PREFIX_OVERRIDES = (

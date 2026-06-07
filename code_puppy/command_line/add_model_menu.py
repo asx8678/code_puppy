@@ -55,7 +55,7 @@ PROVIDER_ENDPOINTS = {
 # Providers that require custom SDK implementations we don't support yet.
 # These use non-OpenAI-compatible APIs or require special authentication (AWS SigV4, GCP, etc.)
 UNSUPPORTED_PROVIDERS = {
-    "amazon-bedrock": "Use /bedrock-setup to configure (aws_bedrock plugin)",
+    "amazon-bedrock": "Requires AWS SigV4 authentication (not supported)",
     "google-vertex": "Requires GCP service account authentication",
     "google-vertex-anthropic": "Requires GCP service account authentication",
     "cloudflare-workers-ai": "Requires account ID in URL path",

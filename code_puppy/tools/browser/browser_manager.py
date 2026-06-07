@@ -11,8 +11,15 @@ import contextvars
 import os
 from collections.abc import Callable
 from pathlib import Path
+from typing import TYPE_CHECKING
 
-from playwright.async_api import Browser, BrowserContext, Page
+if TYPE_CHECKING:
+    # playwright is an optional extra (pip install 'fast-puppy[browser]'). These
+    # names are used only in annotations, which `from __future__ import
+    # annotations` keeps lazy, so we never import playwright at module load.
+    # The actual runtime engine is imported lazily via async_playwright() inside
+    # the browser-launch path.
+    from playwright.async_api import Browser, BrowserContext, Page
 
 from code_puppy import config
 from code_puppy.messaging import emit_info, emit_success, emit_warning
@@ -179,7 +186,13 @@ class BrowserManager:
             return
 
         # Default: use Playwright Chromium
-        from playwright.async_api import async_playwright
+        try:
+            from playwright.async_api import async_playwright
+        except ImportError as exc:
+            raise RuntimeError(
+                "Browser automation requires Playwright. Install it with: "
+                "pip install 'fast-puppy[browser]' && playwright install chromium"
+            ) from exc
 
         emit_info(f"Using persistent profile: {self.profile_dir}")
 
