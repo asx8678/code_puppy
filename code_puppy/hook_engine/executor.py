@@ -117,10 +117,8 @@ async def execute_hook(
         )
 
         try:
-            stdout, stderr = await asyncio.wait_for(
-                proc.communicate(input=stdin_payload),
-                timeout=hook.timeout / 1000.0,
-            )
+            async with asyncio.timeout(hook.timeout / 1000.0):
+                stdout, stderr = await proc.communicate(input=stdin_payload)
         except TimeoutError:
             try:
                 proc.kill()

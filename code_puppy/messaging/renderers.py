@@ -91,7 +91,8 @@ class MessageRenderer(ABC):
         """Consume messages from the queue."""
         while self._running:
             try:
-                message = await asyncio.wait_for(self.queue.get_async(), timeout=0.1)
+                async with asyncio.timeout(0.1):
+                    message = await self.queue.get_async()
                 await self.render_message(message)
             except TimeoutError:
                 continue

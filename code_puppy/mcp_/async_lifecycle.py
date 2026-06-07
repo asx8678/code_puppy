@@ -103,7 +103,8 @@ class AsyncServerLifecycleManager:
         # Release the lock while waiting for the server to become ready
         try:
             try:
-                await asyncio.wait_for(ready_event.wait(), timeout=10.0)
+                async with asyncio.timeout(10.0):
+                    await ready_event.wait()
             except TimeoutError:
                 logger.error(f"Timed out waiting for server {server_id} to start")
                 # Cancel the orphaned lifecycle task so it doesn't leak.

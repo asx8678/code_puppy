@@ -293,7 +293,8 @@ class BlockingMCPServerStdio(SimpleCapturedMCPServerStdio):
             Exception: If server initialization failed
         """
         try:
-            await asyncio.wait_for(self._initialized.wait(), timeout=timeout)
+            async with asyncio.timeout(timeout):
+                await self._initialized.wait()
 
             # Check if there was an initialization error
             if self._init_error:

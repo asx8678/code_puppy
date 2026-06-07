@@ -87,9 +87,8 @@ class TokenRefreshHeartbeat:
             try:
                 # Wait for the interval or until stopped
                 try:
-                    await asyncio.wait_for(
-                        self._stop_event.wait(), timeout=self._interval
-                    )
+                    async with asyncio.timeout(self._interval):
+                        await self._stop_event.wait()
                     # If we got here, stop event was set
                     break
                 except TimeoutError:
