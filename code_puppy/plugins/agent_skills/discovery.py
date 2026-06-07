@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 import shutil
+import threading
 from collections.abc import Iterable
 from dataclasses import dataclass
 from pathlib import Path
@@ -16,6 +17,15 @@ from code_puppy.plugins.agent_skills.config import get_skill_directories
 logger = logging.getLogger(__name__)
 
 _PLUGIN_SKILLS_CACHE_DIR = Path(CACHE_DIR) / "plugin-skills"
+
+# Serializes plugin-skill collection. ``_collect_plugin_skills`` wipes and
+# rebuilds the shared cache dir above; without this lock, concurrent
+# ``get_model_system_prompt`` dispatches (main agent + subagents on separate
+# threads) race on the rmtree/mkdir pair (see _reset_plugin_skills_cache_dir).
+_collect_lock = threading.Lock()
+
+# Retries for the wipe+recreate when a race or a stale non-directory is hit.
+_RESET_RETRIES = 5
 
 
 @dataclass
@@ -183,30 +193,82 @@ def _iter_plugin_skill_registrations() -> Iterable[tuple[str, str, dict[str, Any
             yield callback.__module__, callback.__name__, entry
 
 
+def _reset_plugin_skills_cache_dir() -> None:
+    """Wipe and recreate the plugin-skills cache dir, tolerant of races.
+
+    A bare ``rmtree`` + ``mkdir(parents=True, exist_ok=True)`` is unsafe here:
+
+    * ``shutil.rmtree`` only removes *directories*. If the path is left behind
+      as a file or symlink, ``rmtree(ignore_errors=True)`` silently no-ops and
+      the following ``mkdir`` raises ``FileExistsError`` on every call.
+    * The two calls are not atomic. ``mkdir(exist_ok=True)`` re-checks
+      ``is_dir()`` after a failed ``os.mkdir``; if a sibling reset removes the
+      directory in that window the check fails and ``FileExistsError`` escapes
+      *despite* ``exist_ok=True``. Concurrent ``get_model_system_prompt``
+      dispatches hit exactly this.
+
+    Callers hold ``_collect_lock`` to remove the in-process race; this helper
+    additionally repairs a stale non-directory and absorbs cross-process races.
+    """
+    cache = _PLUGIN_SKILLS_CACHE_DIR
+    for _ in range(_RESET_RETRIES):
+        if cache.is_dir() and not cache.is_symlink():
+            shutil.rmtree(cache, ignore_errors=True)
+        elif cache.exists() or cache.is_symlink():
+            # A stale file or (possibly broken) symlink squatting on the path.
+            # Best-effort removal: any failure (vanished, perms, races) falls
+            # through to the mkdir + retry below, which is the real correctness.
+            try:
+                cache.unlink()
+            except OSError:
+                pass
+        try:
+            cache.mkdir(parents=True, exist_ok=True)
+            return
+        except FileExistsError:
+            # FileExistsError from mkdir(exist_ok=True) is never a real,
+            # persistent failure: it means a sibling/process removed the dir
+            # between os.mkdir() and pathlib's is_dir() recheck, or a non-dir
+            # reappeared on the path. Both are retriable. Genuine failures
+            # (PermissionError, EROFS, ...) are not FileExistsError and
+            # propagate straight out of mkdir() above.
+            if cache.is_dir() and not cache.is_symlink():
+                return
+    # Retries exhausted under sustained contention. Don't crash prompt-building
+    # over a transient race: skills are materialized with their own
+    # mkdir(parents=True) and a missing-but-empty cache dir is harmless.
+    if not (cache.is_dir() and not cache.is_symlink()):
+        logger.warning(
+            "plugin-skills cache dir %s could not be reset cleanly after %d "
+            "attempts; continuing best-effort",
+            cache,
+            _RESET_RETRIES,
+        )
+
+
 def _collect_plugin_skills() -> list[SkillInfo]:
-    if _PLUGIN_SKILLS_CACHE_DIR.exists():
-        shutil.rmtree(_PLUGIN_SKILLS_CACHE_DIR, ignore_errors=True)
-    _PLUGIN_SKILLS_CACHE_DIR.mkdir(parents=True, exist_ok=True)
+    with _collect_lock:
+        _reset_plugin_skills_cache_dir()
 
-    plugin_skills: list[SkillInfo] = []
-    seen_names: set[str] = set()
+        plugin_skills: list[SkillInfo] = []
+        seen_names: set[str] = set()
 
-    for callback_module, callback_name, entry in _iter_plugin_skill_registrations():
-        skill = _materialize_plugin_skill(callback_module, callback_name, entry)
-        if skill is None:
-            continue
-        if skill.name in seen_names:
-            logger.warning(
-                "Skipping duplicate plugin skill registration for '%s' from %s.%s",
-                skill.name,
-                callback_module,
-                callback_name,
-            )
-            continue
-        seen_names.add(skill.name)
-        plugin_skills.append(skill)
+        for callback_module, callback_name, entry in _iter_plugin_skill_registrations():
+            skill = _materialize_plugin_skill(callback_module, callback_name, entry)
+            if skill is None:
+                continue
+            if skill.name in seen_names:
+                logger.warning(
+                    "Skipping duplicate plugin skill registration for '%s' from %s.%s",
+                    skill.name,
+                    callback_module,
+                    callback_name,
+                )
+                continue
+            seen_names.add(skill.name)
+            plugin_skills.append(skill)
 
-    return plugin_skills
+        return plugin_skills
 
 
 def discover_skills(directories: list[Path] | None = None) -> list[SkillInfo]:
