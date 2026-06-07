@@ -11,12 +11,10 @@ import os
 import socket
 import time
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 import httpx
 
-if TYPE_CHECKING:
-    import requests
 from code_puppy.config import get_http2
 
 
@@ -102,6 +100,37 @@ except ImportError:
         pass
 
 
+def compute_backoff_wait(
+    attempt: int,
+    *,
+    retry_after: str | None = None,
+    base_delay: float = 1.0,
+    min_wait: float = 0.5,
+    max_wait: float = 60.0,
+) -> float:
+    """Exponential backoff delay, optionally overridden by a Retry-After header.
+
+    Returns ``base_delay * 2**attempt`` (1s, 2s, 4s, …), unless ``retry_after``
+    is provided and parseable — as a number of seconds or an HTTP-date — in which
+    case that value wins. Always clamped to ``[min_wait, max_wait]``. Shared by
+    ``RetryingAsyncClient`` and ``claude_cache_client.ClaudeCacheAsyncClient`` so
+    the two retry loops compute waits identically and can't drift apart.
+    """
+    wait_time = base_delay * (2**attempt)
+    if retry_after:
+        try:
+            wait_time = float(retry_after)
+        except ValueError:
+            from email.utils import parsedate_to_datetime
+
+            try:
+                date = parsedate_to_datetime(retry_after)
+                wait_time = date.timestamp() - time.time()
+            except Exception:
+                pass
+    return max(min_wait, min(wait_time, max_wait))
+
+
 class RetryingAsyncClient(httpx.AsyncClient):
     """AsyncClient with built-in rate limit handling (429) and retries.
 
@@ -149,31 +178,15 @@ class RetryingAsyncClient(httpx.AsyncClient):
                 # Close response if we're going to retry
                 await response.aclose()
 
-                # Determine wait time - Cerebras gets special treatment
+                # Determine wait time. Cerebras gets special treatment: a 3s
+                # base and we ignore its absurdly aggressive Retry-After headers;
+                # everyone else uses a 1s base and honors Retry-After.
                 if self._ignore_retry_headers:
-                    # Cerebras: 3s base with exponential backoff (3s, 6s, 12s...)
-                    wait_time = 3.0 * (2**attempt)
+                    wait_time = compute_backoff_wait(attempt, base_delay=3.0)
                 else:
-                    # Default exponential backoff: 1s, 2s, 4s...
-                    wait_time = 1.0 * (2**attempt)
-
-                    # Check Retry-After header (only for non-Cerebras)
-                    retry_after = response.headers.get("Retry-After")
-                    if retry_after:
-                        try:
-                            wait_time = float(retry_after)
-                        except ValueError:
-                            # Try parsing http-date
-                            from email.utils import parsedate_to_datetime
-
-                            try:
-                                date = parsedate_to_datetime(retry_after)
-                                wait_time = date.timestamp() - time.time()
-                            except Exception:
-                                pass
-
-                # Cap wait time
-                wait_time = max(0.5, min(wait_time, 60.0))
+                    wait_time = compute_backoff_wait(
+                        attempt, retry_after=response.headers.get("Retry-After")
+                    )
 
                 if attempt < self.max_retries:
                     provider_note = (
@@ -272,26 +285,6 @@ def create_async_client(
             http2=config.http2_enabled,
             trust_env=config.trust_env,
         )
-
-
-def create_requests_session(
-    timeout: float = 5.0,
-    verify: bool | str = None,
-    headers: dict[str, str] | None = None,
-) -> "requests.Session":
-    import requests
-
-    session = requests.Session()
-
-    if verify is None:
-        verify = get_cert_bundle_path()
-
-    session.verify = verify
-
-    if headers:
-        session.headers.update(headers or {})
-
-    return session
 
 
 def create_auth_headers(

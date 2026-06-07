@@ -200,31 +200,12 @@ async def main():
     # This happens when: no -p flag (prompt-only mode) is used
     # The logo should appear for both `fast-puppy` and `fast-puppy -i`
     if not args.prompt:
-        try:
-            import pyfiglet
+        from code_puppy.banner import gradient_banner_lines
 
-            intro_lines = pyfiglet.figlet_format(
-                "FAST PUPPY", font="ansi_shadow"
-            ).split("\n")
-
-            # Simple blue to green gradient (top to bottom)
-            gradient_colors = ["bright_blue", "bright_cyan", "bright_green"]
-            display_console.print("\n")
-
-            lines = []
-            # Apply gradient line by line
-            for line_num, line in enumerate(intro_lines):
-                if line.strip():
-                    # Use line position to determine color (top blue, middle cyan, bottom green)
-                    color_idx = min(line_num // 2, len(gradient_colors) - 1)
-                    color = gradient_colors[color_idx]
-                    lines.append(f"[{color}]{line}[/{color}]")
-                else:
-                    lines.append("")
-            # Print directly to console to avoid the 'dim' style from emit_system_message
-            display_console.print("\n".join(lines))
-        except ImportError:
-            emit_system_message("🐶 Fast Puppy is Loading...")
+        # Print directly to the console to avoid the 'dim' style that
+        # emit_system_message applies to the gradient banner.
+        display_console.print("\n")
+        display_console.print("\n".join(gradient_banner_lines()))
 
         # Truecolor warning moved to interactive_mode() so it prints LAST
         # after all the help stuff - max visibility for the ugly red box!

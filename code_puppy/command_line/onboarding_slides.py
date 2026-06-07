@@ -43,19 +43,9 @@ def get_nav_footer() -> str:
 
 def get_gradient_banner() -> str:
     """Generate the gradient FAST PUPPY banner."""
-    try:
-        import pyfiglet
+    from code_puppy.banner import gradient_banner
 
-        lines = pyfiglet.figlet_format("FAST PUPPY", font="ansi_shadow").split("\n")
-        colors = ["bright_blue", "bright_cyan", "bright_green"]
-        result = []
-        for i, line in enumerate(lines):
-            if line.strip():
-                color = colors[min(i // 2, len(colors) - 1)]
-                result.append(f"[{color}]{line}[/{color}]")
-        return "\n".join(result)
-    except ImportError:
-        return "[bold bright_cyan]═══ FAST PUPPY 🐶 ═══[/bold bright_cyan]"
+    return gradient_banner()
 
 
 # ============================================================================

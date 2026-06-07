@@ -25,6 +25,8 @@ from urllib.parse import parse_qs, urlencode, urlparse, urlunparse
 
 import httpx
 
+from code_puppy.http_utils import compute_backoff_wait
+
 logger = logging.getLogger(__name__)
 
 # Refresh token if it's older than the configured max age (seconds)
@@ -549,27 +551,17 @@ class ClaudeCacheAsyncClient(httpx.AsyncClient):
                 # Close response before retrying
                 await response.aclose()
 
-                # Calculate wait time with exponential backoff
-                wait_time = 1.0 * (2**attempt)  # 1s, 2s, 4s, 8s, 16s
-
-                # For 429, respect Retry-After header if present
-                if response.status_code == 429:
-                    retry_after = response.headers.get("Retry-After")
-                    if retry_after:
-                        try:
-                            wait_time = float(retry_after)
-                        except ValueError:
-                            # Try parsing http-date format
-                            try:
-                                from email.utils import parsedate_to_datetime
-
-                                date = parsedate_to_datetime(retry_after)
-                                wait_time = max(0, date.timestamp() - time.time())
-                            except Exception:
-                                pass
-
-                # Cap wait time between 0.5s and 60s
-                wait_time = max(0.5, min(wait_time, 60.0))
+                # Exponential backoff, honoring Retry-After only on 429 (server
+                # errors rarely send a meaningful one). Shared helper keeps this
+                # in lockstep with http_utils.RetryingAsyncClient.
+                wait_time = compute_backoff_wait(
+                    attempt,
+                    retry_after=(
+                        response.headers.get("Retry-After")
+                        if response.status_code == 429
+                        else None
+                    ),
+                )
 
                 logger.info(
                     "HTTP %d received, retrying in %.1fs (attempt %d/%d)",

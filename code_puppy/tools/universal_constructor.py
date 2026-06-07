@@ -938,7 +938,7 @@ def register_universal_constructor(agent):
             python_code: Python source code defining the tool function.
                 Required for action="create" and action="update".
                 You have access to the FULL Python standard library plus any
-                installed packages (requests, etc.).
+                installed packages (httpx, etc.).
             description: Human-readable description of what the tool does.
                 Used with action="create".
 
@@ -948,10 +948,10 @@ def register_universal_constructor(agent):
         Examples:
             # Create an API client tool
             code = '''
-            import requests
+            import httpx
             TOOL_META = {"name": "weather", "description": "Get weather data"}
             def weather(city: str) -> dict:
-                resp = requests.get(f"https://wttr.in/{city}?format=j1")
+                resp = httpx.get(f"https://wttr.in/{city}?format=j1")
                 return resp.json()
             '''
             universal_constructor(ctx, action="create", python_code=code)

@@ -7,16 +7,7 @@ config_wizard.py imports ServerConfig and get_mcp_manager directly from
 
 from __future__ import annotations
 
-from .circuit_breaker import CircuitBreaker, CircuitOpenError, CircuitState
 from .config_wizard import MCPConfigWizard, run_add_wizard
-from .dashboard import MCPDashboard
-from .error_isolation import (
-    ErrorCategory,
-    ErrorStats,
-    MCPErrorIsolator,
-    QuarantinedServerError,
-    get_error_isolator,
-)
 from .managed_server import ManagedMCPServer, ServerConfig, ServerState
 from .manager import MCPManager, ServerInfo, get_mcp_manager
 from .mcp_logs import (
@@ -29,7 +20,6 @@ from .mcp_logs import (
     write_log,
 )
 from .registry import ServerRegistry
-from .retry_manager import RetryManager, RetryStats, get_retry_manager, retry_mcp_call
 from .status_tracker import Event, ServerStatusTracker
 
 __all__ = [
@@ -42,19 +32,6 @@ __all__ = [
     "ServerInfo",
     "get_mcp_manager",
     "ServerRegistry",
-    "MCPErrorIsolator",
-    "ErrorStats",
-    "ErrorCategory",
-    "QuarantinedServerError",
-    "get_error_isolator",
-    "CircuitBreaker",
-    "CircuitState",
-    "CircuitOpenError",
-    "RetryManager",
-    "RetryStats",
-    "get_retry_manager",
-    "retry_mcp_call",
-    "MCPDashboard",
     "MCPConfigWizard",
     "run_add_wizard",
     # Log management
