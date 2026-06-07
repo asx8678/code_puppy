@@ -146,11 +146,16 @@ def _save_session_history(
     sessions_dir = _get_subagent_sessions_dir()
 
     # Save pickle file with message history (atomic: write a temp file then
-    # replace, so a crash mid-write can't corrupt an existing session pickle)
+    # replace, so a crash mid-write can't corrupt an existing session pickle).
+    # HMAC-sign the payload (same key/format as session_storage.save_session)
+    # so a tampered or foreign session file is rejected at load time instead of
+    # being fed to pickle.loads — which is RCE on untrusted input.
+    from code_puppy.session_storage import _sign_payload
+
     pkl_path = sessions_dir / f"{session_id}.pkl"
     tmp_pkl = pkl_path.with_suffix(".tmp")
     with open(tmp_pkl, "wb") as f:
-        pickle.dump(message_history, f)
+        f.write(_sign_payload(pickle.dumps(message_history)))
     tmp_pkl.replace(pkl_path)
 
     # Save or update txt file with metadata
@@ -198,11 +203,18 @@ def _load_session_history(session_id: str) -> list[ModelMessage]:
     if not pkl_path.exists():
         return []
 
+    # Verify the HMAC signature before deserializing. A corrupted, tampered, or
+    # legacy-unsigned file fails extraction and is treated as a fresh (empty)
+    # session rather than deserialized — the next save rewrites it in signed
+    # form. This closes the unsigned-pickle gap that session_storage already
+    # hardened for top-level sessions.
+    from code_puppy.session_storage import _extract_pickle_payload, _safe_loads
+
     try:
-        with open(pkl_path, "rb") as f:
-            return pickle.load(f)
+        payload = _extract_pickle_payload(pkl_path.read_bytes())
+        return _safe_loads(payload)
     except Exception:
-        # If pickle is corrupted or incompatible, return empty history
+        # Corrupted, unsigned/legacy, tampered, or incompatible — start clean.
         return []
 
 
@@ -324,6 +336,30 @@ def register_invoke_agent(agent):
         Returns:
             AgentInvokeOutput: Contains response, agent_name, session_id, and error fields.
         """
+        # Enforce the sub-agent nesting cap. Depth is already tracked by
+        # ``subagent_context`` (incremented around each sub-agent run); without
+        # this check it was tracked but never enforced, so an agent could nest
+        # ``invoke_agent`` calls indefinitely. ``get_subagent_depth()`` returns
+        # the *caller's* depth here (we haven't entered this sub-agent's context
+        # yet), so refusing at ``>= max`` allows exactly ``max`` levels of
+        # nesting.
+        from code_puppy.config import get_max_subagent_depth
+        from code_puppy.tools.subagent_context import get_subagent_depth
+
+        current_depth = get_subagent_depth()
+        max_depth = get_max_subagent_depth()
+        if current_depth >= max_depth:
+            group_id = generate_group_id("invoke_agent", agent_name)
+            msg = (
+                f"Sub-agent nesting limit reached (depth {current_depth}/{max_depth}); "
+                f"refusing to invoke '{agent_name}' to prevent runaway recursion. "
+                "Raise it with /set max_subagent_depth=<n> if this nesting is intentional."
+            )
+            emit_error(msg, message_group=group_id)
+            return AgentInvokeOutput(
+                response=None, agent_name=agent_name, error=msg
+            )
+
         from code_puppy.agents.agent_manager import load_agent
 
         # Validate user-provided session_id if given

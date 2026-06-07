@@ -91,6 +91,13 @@ class BaseAgent(ABC):
         # re-resolve the system prompt + re-run prepare_prompt_for_model each
         # time. Stored as ``(key, value)``; recompute only when the key changes.
         self._ctx_overhead_cache: tuple[tuple[str | None, int], int] | None = None
+        # Memo for the fully-assembled system prompt (base + load_prompt plugin
+        # fragments + identity), keyed by ``(model_name, callbacks generation)``.
+        # ``_estimate_context_overhead`` runs on every model request and would
+        # otherwise re-run every load_prompt plugin (memory recall, skills, ...)
+        # each time just to rebuild a near-constant string. See
+        # ``_full_system_prompt_for_overhead``.
+        self._full_prompt_cache: tuple[tuple[str | None, int], str] | None = None
 
     # ---- Abstract interface ------------------------------------------------
     @property
@@ -158,6 +165,32 @@ class BaseAgent(ABC):
             prompt += "\n" + "\n".join(prompt_additions)
         return prompt + self.get_identity_prompt()
 
+    def _full_system_prompt_for_overhead(self) -> str:
+        """``get_full_system_prompt`` memoized for context-overhead accounting.
+
+        ``_estimate_context_overhead`` runs on every model request; calling
+        ``get_full_system_prompt`` there re-runs every ``load_prompt`` plugin
+        (memory recall, skills, file-permission rules, ...) just to rebuild a
+        string that almost never changes mid-run. We cache it keyed on
+        ``(model_name, callbacks.get_load_prompt_generation())`` so the plugins
+        only re-run when the model switches or the callback registry changes.
+
+        This memo feeds the context-usage ESTIMATE only — the real prompt sent
+        to the model is assembled fresh at agent-build time — so a briefly stale
+        value (e.g. after a plugin changes the *content* it returns without a
+        registry change) is harmless to correctness; it only nudges compaction
+        timing and the ``/context`` badge.
+        """
+        from code_puppy import callbacks
+
+        key = (self.get_model_name(), callbacks.get_load_prompt_generation())
+        cached = self._full_prompt_cache
+        if cached is not None and cached[0] == key:
+            return cached[1]
+        prompt = self.get_full_system_prompt()
+        self._full_prompt_cache = (key, prompt)
+        return prompt
+
     # ---- Message history (plain dict-level access) ------------------------
     def get_message_history(self) -> list[Any]:
         return self._message_history
@@ -209,7 +242,7 @@ class BaseAgent(ABC):
         import hashlib
 
         model_name = self.get_model_name()
-        system_prompt = self.get_full_system_prompt()
+        system_prompt = self._full_system_prompt_for_overhead()
         key = (
             model_name,
             hashlib.sha1(system_prompt.encode("utf-8", "replace")).hexdigest(),

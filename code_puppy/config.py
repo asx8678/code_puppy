@@ -237,6 +237,26 @@ def get_max_hook_retries() -> int:
         return 3
 
 
+def get_max_subagent_depth() -> int:
+    """Return the maximum allowed sub-agent nesting depth.
+
+    ``invoke_agent`` lets an agent spawn a sub-agent, and sub-agents can call
+    ``invoke_agent`` themselves. Without a cap a buggy or looping agent could
+    nest indefinitely, burning tokens/money with no hard stop (the per-run
+    ``message_limit`` bounds breadth per level, not depth). Depth is tracked by
+    ``tools.subagent_context``; this is the limit enforced against it. Defaults
+    to 5 and clamps to [1, 100].
+    """
+    val = get_value("max_subagent_depth")
+    if val is None:
+        return 5
+    try:
+        n = int(val)
+        return min(100, max(1, n))
+    except ValueError, TypeError:
+        return 5
+
+
 def get_max_continuation_iterations() -> int:
     """Return the max plugin-requested follow-up turns after one user prompt.
 
@@ -528,6 +548,7 @@ def get_config_keys():
         "default_agent",
         "temperature",
         "max_continuation_iterations",
+        "max_subagent_depth",
     ]
     # Add pack agents control key
     default_keys.append("enable_pack_agents")

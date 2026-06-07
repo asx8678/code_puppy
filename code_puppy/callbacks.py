@@ -120,6 +120,21 @@ _callbacks: dict[PhaseType, list[CallbackFunc]] = {
 # list.append/remove/clear are not safe against a concurrent iteration/copy.
 _callbacks_lock = threading.Lock()
 
+# Monotonic version counter bumped on every registry mutation. Agents use it as
+# a cheap cache key when memoizing the assembled system prompt for context
+# accounting (see ``BaseAgent._full_system_prompt_for_overhead``): the
+# ``load_prompt`` plugins only need to re-run when the registry actually
+# changes. Bumped under ``_callbacks_lock``; read locklessly (a stale read just
+# costs one extra recompute). It intentionally does NOT track per-call content
+# changes in plugin output — those only affect the approximate overhead figure.
+_load_prompt_generation = 0
+
+
+def get_load_prompt_generation() -> int:
+    """Return the current callback-registry generation counter."""
+    return _load_prompt_generation
+
+
 logger = logging.getLogger(__name__)
 
 
@@ -157,6 +172,7 @@ def register_callback(phase: PhaseType, func: CallbackFunc) -> None:
 
     # Prevent duplicate registration of the same callback function
     # This can happen if plugins are accidentally loaded multiple times
+    global _load_prompt_generation
     with _callbacks_lock:
         if func in _callbacks[phase]:
             logger.debug(
@@ -165,6 +181,7 @@ def register_callback(phase: PhaseType, func: CallbackFunc) -> None:
             return
 
         _callbacks[phase].append(func)
+        _load_prompt_generation += 1
     logger.debug(f"Registered async callback {func.__name__} for phase '{phase}'")
 
 
@@ -172,9 +189,11 @@ def unregister_callback(phase: PhaseType, func: CallbackFunc) -> bool:
     if phase not in _callbacks:
         return False
 
+    global _load_prompt_generation
     try:
         with _callbacks_lock:
             _callbacks[phase].remove(func)
+            _load_prompt_generation += 1
         logger.debug(
             f"Unregistered async callback {func.__name__} from phase '{phase}'"
         )
@@ -184,6 +203,7 @@ def unregister_callback(phase: PhaseType, func: CallbackFunc) -> bool:
 
 
 def clear_callbacks(phase: PhaseType | None = None) -> None:
+    global _load_prompt_generation
     with _callbacks_lock:
         if phase is None:
             for p in _callbacks:
@@ -193,6 +213,7 @@ def clear_callbacks(phase: PhaseType | None = None) -> None:
             if phase in _callbacks:
                 _callbacks[phase].clear()
                 logger.debug(f"Cleared async callbacks for phase '{phase}'")
+        _load_prompt_generation += 1
 
 
 def get_callbacks(phase: PhaseType) -> list[CallbackFunc]:

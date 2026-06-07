@@ -82,3 +82,23 @@ def default_version_mismatch_behavior(current_version):
         emit_info(f"Latest version: {latest_version}")
         emit_warning(f"A new version of code puppy is available: {latest_version}")
         emit_success("Please consider updating!")
+
+
+def check_latest_version_in_background(current_version) -> None:
+    """Run the version check in a daemon thread so PyPI never blocks startup.
+
+    ``fetch_latest_version`` does a blocking ``httpx.get`` with a 5s timeout.
+    Called inline on the async startup path it freezes the interactive prompt
+    for up to 5s on every launch when the network is slow or PyPI is down.
+    Mirroring ``models_dev_parser.prefetch_models_dev``, we move it off the
+    critical path; the version banner just appears a moment later. Output
+    goes through the (thread-safe) message bus.
+    """
+    import threading
+
+    threading.Thread(
+        target=default_version_mismatch_behavior,
+        args=(current_version,),
+        name="version-check",
+        daemon=True,
+    ).start()

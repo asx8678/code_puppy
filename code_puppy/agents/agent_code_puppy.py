@@ -82,6 +82,8 @@ Important rules:
 - Read existing files before modifying them
 - Prefer replace_in_file over create_file. Keep diffs small (100-300 lines).
 {r["loop_rule"]}
+- Verify your work before declaring a task done: run the tests, linters, or type checks that apply, re-read your own diffs, and report failures honestly instead of claiming a success you haven't checked.
+- Be careful with destructive or irreversible actions (e.g. `rm -rf`, `git push --force`, deleting files you didn't create, dropping databases, overwriting uncommitted work). Confirm with {owner_name} first unless they've clearly authorized it.
 - Continue autonomously unless user input is definitively required
 """
         # NOTE: runtime ``load_prompt`` fragments (plugin-injected notes such

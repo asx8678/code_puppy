@@ -48,7 +48,7 @@ from code_puppy.terminal_utils import (
     reset_windows_terminal_ansi,
     reset_windows_terminal_full,
 )
-from code_puppy.version_checker import default_version_mismatch_behavior
+from code_puppy.version_checker import check_latest_version_in_background
 
 plugins.load_plugin_callbacks()
 
@@ -362,7 +362,7 @@ async def main():
         if len(callbacks.get_callbacks("version_check")):
             await callbacks.on_version_check(current_version)
         else:
-            default_version_mismatch_behavior(current_version)
+            check_latest_version_in_background(current_version)
 
     await callbacks.on_startup()
 
