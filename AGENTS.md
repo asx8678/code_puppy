@@ -71,6 +71,7 @@ Code Puppy supports a multi-agent delegation system where specialized agents col
 |-------|------|---------|------|-------|
 | **Orchestrator** 🎯 | `orchestrator` | Orchestrator 🎯 | Opt-in (`/agent orchestrator`) | Read-only (list_files, read_file, grep) — **no write tools** |
 | **Planning Agent** 🧠 | `planning-agent` | Planning Agent 🧠 | Opt-in (`/agent planning-agent`) | Dual-mode: Plan Mode (read-only) + Fix/Execute Mode (shell + create_file + replace_in_file + delete_snippet with guardrails) |
+| **Explore** 🔍 | `explore` | Explore 🔍 | Opt-in (`/agent explore`) | Read-only (list_files, read_file, grep, agent_run_shell_command, list_or_search_skills) — **no write tools, no invoke_agent** |
 | **Code Puppy** 🐶 | `code-puppy` | Code Puppy 🐶 | Default | Full tool access |
 | **Fast Puppy** ⚡ | `fast-puppy` | Fast Puppy ⚡ | Opt-in | Full tool access |
 
@@ -78,9 +79,11 @@ Code Puppy supports a multi-agent delegation system where specialized agents col
 
 The orchestrator is a **pure read-only conductor**. It:
 - Reads the `bd` ready queue to identify the next task
-- Analyzes what needs doing and decides which agent should handle it
+- Routes already-planned work to the right agent — it never plans or reasons through complex problems itself
+- Delegates ALL planning, decomposition, and complex analysis to `planning-agent` (the instant a task stops being mechanical, it hands off)
 - Delegates code changes to `planning-agent` (for hard fixes / investigations) or `fast-puppy` / `code-puppy` (for routine execution)
 - **Never writes code itself** — it has no write tools
+- **Never plans complex work itself** — planning, decomposition, and hard thinking all live with `planning-agent`
 
 ### Planning Agent (Dual-Mode)
 
@@ -98,6 +101,7 @@ The planning agent operates in two modes:
 User
  └─→ Orchestrator 🎯 (read-only conductor)
       └─→ Planning Agent 🧠 (investigation / hard fixes)
+           ├─→ Explore 🔍 (cheap read-only exploration — file discovery, repo walking, context gathering)
            └─→ fast-puppy / code-puppy (routine execution)
                 └─→ Reviewers / QA agents
 ```
@@ -114,5 +118,6 @@ Pin models per-agent for cost optimization:
 |------------|-------|----------------|
 | `agent_model_orchestrator` | Orchestrator 🎯 | **Cheap/fast** model — it only reads and delegates |
 | `agent_model_planning-agent` | Planning Agent 🧠 | **Expensive/capable** model — it does deep analysis and targeted fixes |
+| `agent_model_explore` | Explore 🔍 | **Cheap/fast** model (Haiku, Cerebras GLM) — read-only exploration |
 
 Set these in your models config (e.g., `~/.code_puppy/extra_models.json`).

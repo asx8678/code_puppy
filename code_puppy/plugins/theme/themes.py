@@ -7,8 +7,8 @@ content_styles. Testable in isolation. Zen: simple is better than complex.
 from __future__ import annotations
 
 import random
+from collections.abc import Callable
 from itertools import cycle
-from typing import Callable
 
 from code_puppy.command_line.colors_menu import BANNER_COLORS, BANNER_DISPLAY_INFO
 from code_puppy.config import set_banner_color

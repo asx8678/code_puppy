@@ -331,7 +331,16 @@ This is useful for managing context length when you have a long conversation his
 - **Specialty**: Read-only conductor that follows the `bd` ready queue and delegates work to other agents
 - **Tools**: Read-only only (list_files, read_file, grep) — **no write tools**
 - **Best for**: Orchestrating multi-step workflows; following a task queue without touching code directly
-- **Behavior**: Pure conductor — plans what needs doing, then delegates code changes to `planning-agent`, `fast-puppy`, or `code-puppy`
+- **Behavior**: Pure conductor — it never plans or reasons through complex work itself; it delegates ALL planning, decomposition, and complex analysis to `planning-agent`, then routes the resulting steps to `fast-puppy` or `code-puppy` and verifies. The instant a task stops being mechanical, it hands off to `planning-agent`
+
+### Explore 🔍
+- **Name**: `explore`
+- **Opt-in**: `/agent explore`
+- **Specialty**: Cheap, read-only codebase explorer for file discovery, repo walking, and context gathering
+- **Tools**: Read-only (list_files, read_file, grep, agent_run_shell_command, list_or_search_skills) — **no write tools, no invoke_agent**
+- **Best for**: Cost-effective first-pass exploration; finding relevant files before deeper work
+- **Model**: Runs on cheap models (Haiku, Cerebras GLM) via `agent_model_explore` pin
+- **Note**: Leaf agent — does not delegate to other agents
 
 ### Planning Agent 🧠
 - **Name**: `planning-agent`
@@ -727,6 +736,7 @@ Code Puppy supports a multi-agent architecture where specialized agents collabor
 User
  └─→ Orchestrator 🎯 (read-only conductor)
       └─→ Planning Agent 🧠 (investigation / hard fixes)
+           ├─→ Explore 🔍 (cheap read-only exploration — file discovery, repo walking, context gathering)
            └─→ fast-puppy / code-puppy (routine execution)
                 └─→ Reviewers / QA agents
 ```
@@ -749,6 +759,8 @@ Pin different models to different agents for optimal cost/performance:
 |------------|-------|----------------|
 | `agent_model_orchestrator` | Orchestrator 🎯 | Pin a **cheap/fast** model — it only reads and delegates |
 | `agent_model_planning-agent` | Planning Agent 🧠 | Pin an **expensive/capable** model — it does deep analysis |
+
+| `agent_model_explore` | Explore 🔍 | Pin a **cheap/fast** model (Haiku, Cerebras GLM) — read-only exploration |
 
 These are set in your models config (e.g., `~/.code_puppy/extra_models.json` or via `/model`).
 

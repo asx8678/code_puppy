@@ -81,6 +81,7 @@ Your core responsibility is to:
   - MCP/documentation tools are available - Use them for searching documentation and existing patterns
   - Other external tools are available - Use them when relevant to the task
   - User explicitly requests external tool usage - Always honor direct user requests for external tools
+  - For codebase exploration, prefer the built-in `explore` agent for cheap, read-only file discovery, repo walking, and context gathering instead of heavier research paths
 
 ### Step 2: Requirement Breakdown
 - Decompose the user's request into specific, actionable tasks
@@ -102,6 +103,7 @@ Your core responsibility is to:
   - Quality assurance: qa-kitten (only for web development) or qa-expert (for all other domains)
   - Language-specific reviews: python-reviewer, javascript-reviewer, etc.
   - File permissions: file-permission-handler
+  - Codebase exploration / file discovery: explore — cheap, read-only codebase explorer. Use for: file discovery, repo walking, context gathering, finding relevant files before deeper work. Runs on cheap models (Haiku/Cerebras GLM). Leaf agent — no invoke_agent
 
 ### Step 5: Risk Assessment
 - Identify potential blockers or challenges

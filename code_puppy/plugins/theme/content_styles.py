@@ -20,7 +20,7 @@ Zen: namespaces are one honking great idea; we keep everything in one place.
 from __future__ import annotations
 
 import gc
-from typing import Callable
+from collections.abc import Callable
 
 from code_puppy.config import get_value, set_config_value
 from code_puppy.messaging import rich_renderer

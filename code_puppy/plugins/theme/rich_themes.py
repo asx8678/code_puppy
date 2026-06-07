@@ -26,7 +26,7 @@ from __future__ import annotations
 import gc
 import json
 import weakref
-from typing import Callable, Optional
+from collections.abc import Callable
 
 from rich.color import Color
 from rich.console import Console
@@ -44,7 +44,7 @@ _CONFIG_KEY = "rich_color_remap_json"
 
 
 # --- Color-swap mechanics ---------------------------------------------------
-def _safe_parse(name: str) -> Optional[Color]:
+def _safe_parse(name: str) -> Color | None:
     """Parse a color name, returning None if Rich can't handle it.
 
     Rich's named-color set is a strict subset of what some palettes use
@@ -180,13 +180,13 @@ def reapply_from_config() -> None:
 # --- Reasonable default palette presets -------------------------------------
 # Used by themes.py. Keep semantic colors (red/yellow/green) untouched.
 def make_remap(
-    cyan: Optional[str] = None,
-    blue: Optional[str] = None,
-    magenta: Optional[str] = None,
-    bright_cyan: Optional[str] = None,
-    bright_blue: Optional[str] = None,
-    bright_magenta: Optional[str] = None,
-    white: Optional[str] = None,
+    cyan: str | None = None,
+    blue: str | None = None,
+    magenta: str | None = None,
+    bright_cyan: str | None = None,
+    bright_blue: str | None = None,
+    bright_magenta: str | None = None,
+    white: str | None = None,
 ) -> dict[str, str]:
     """Build a clean remap dict from optional kwargs (None = skip)."""
     mapping = {

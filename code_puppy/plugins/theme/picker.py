@@ -12,7 +12,6 @@ import asyncio
 import io
 import random
 import sys
-from typing import Optional
 
 from prompt_toolkit import Application
 from prompt_toolkit.formatted_text import ANSI, FormattedText
@@ -214,7 +213,7 @@ def _format_menu(selected_index: int) -> FormattedText:
     return FormattedText(lines)
 
 
-async def interactive_theme_picker() -> Optional[str]:
+async def interactive_theme_picker() -> str | None:
     """Show the full-screen theme picker.
 
     Returns:
@@ -223,7 +222,7 @@ async def interactive_theme_picker() -> Optional[str]:
     from code_puppy.tools.command_runner import set_awaiting_user_input
 
     selected = [0]
-    result: list[Optional[str]] = [None]
+    result: list[str | None] = [None]
     # Stable seed for "Surprise Me" preview per highlight; bumps on each focus.
     surprise_seed = [random.randint(0, 1_000_000)]
 

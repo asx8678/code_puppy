@@ -22,7 +22,7 @@ from __future__ import annotations
 import atexit
 import json
 import sys
-from typing import Optional, Sequence
+from collections.abc import Sequence
 
 from code_puppy.config import get_value, set_config_value
 
@@ -130,7 +130,7 @@ def reset_palette(persist: bool = True) -> None:
             pass
 
 
-def get_saved_palette() -> Optional[dict]:
+def get_saved_palette() -> dict | None:
     """Read the persisted palette (or None if nothing saved)."""
     raw = get_value(_CONFIG_KEY)
     if not raw:

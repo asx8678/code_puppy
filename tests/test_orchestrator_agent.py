@@ -70,6 +70,9 @@ def test_orchestrator_prompt():
     assert "read-only" in lower or "conductor" in lower, (
         "Prompt should mention read-only or conductor role"
     )
+    assert "planning-agent" in lower, (
+        "Prompt should route complex work to planning-agent"
+    )
 
 
 def test_orchestrator_identity():
@@ -77,6 +80,24 @@ def test_orchestrator_identity():
     agent = OrchestratorAgent()
     assert agent.name == "orchestrator"
     assert "Orchestrator" in agent.display_name
+
+
+def test_orchestrator_delegates_complexity():
+    """Prompt forbids self-planning and routes complex work to planning-agent."""
+    agent = OrchestratorAgent()
+    lower = agent.get_system_prompt().lower()
+
+    assert "planning-agent" in lower, (
+        "Prompt must name planning-agent as the destination for complex work"
+    )
+    assert "complex" in lower, (
+        "Prompt should reference complex work / complexity triggers"
+    )
+    assert (
+        "do not plan" in lower
+        or "never decompose" in lower
+        or "not yours to do" in lower
+    ), "Prompt should explicitly forbid the orchestrator from planning itself"
 
 
 # ---------------------------------------------------------------------------
@@ -122,6 +143,7 @@ if __name__ == "__main__":
         test_orchestrator_toolset_is_readonly,
         test_orchestrator_prompt,
         test_orchestrator_identity,
+        test_orchestrator_delegates_complexity,
         test_planning_has_execute_tools,
         test_planning_prompt_dual_mode,
     ]
