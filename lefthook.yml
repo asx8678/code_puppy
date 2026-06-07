@@ -35,6 +35,3 @@ pre-commit:
           ruff check --fix {staged_files}
         fi
       stage_fixed: true
-
-
-# pre-push hook removed - tests run in CI only

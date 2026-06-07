@@ -141,8 +141,7 @@ claude_code_oauth/
 ├── config.py              # Configuration settings
 ├── utils.py               # OAuth helpers and file operations
 ├── README.md              # This file
-├── SETUP.md               # Quick setup guide
-└── test_plugin.py         # Manual test helper
+└── SETUP.md               # Quick setup guide
 ```
 
 ### Key Components
