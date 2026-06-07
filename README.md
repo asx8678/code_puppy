@@ -325,6 +325,22 @@ This is useful for managing context length when you have a long conversation his
 - **Best for**: Building new specialized agents
 - **Features**: Schema validation, guided creation process
 
+### Orchestrator 🎯
+- **Name**: `orchestrator`
+- **Opt-in**: `/agent orchestrator` (not a default agent)
+- **Specialty**: Read-only conductor that follows the `bd` ready queue and delegates work to other agents
+- **Tools**: Read-only only (list_files, read_file, grep) — **no write tools**
+- **Best for**: Orchestrating multi-step workflows; following a task queue without touching code directly
+- **Behavior**: Pure conductor — plans what needs doing, then delegates code changes to `planning-agent`, `fast-puppy`, or `code-puppy`
+
+### Planning Agent 🧠
+- **Name**: `planning-agent`
+- **Opt-in**: `/agent planning-agent`
+- **Specialty**: Dual-mode agent for investigations, roadmaps, and targeted code fixes
+- **Plan Mode**: Investigates codebases, produces roadmaps and plans — read-only exploration
+- **Fix/Execute Mode**: For small, well-understood changes, can directly run shell commands and use `create_file`, `replace_in_file`, and `delete_snippet` — with guardrails (scope limits, confirmation for risky ops)
+- **Best for**: Complex analysis that may escalate into code changes; bridging the gap between pure planning and execution
+
 ## Agent Types
 
 ### Python Agents
@@ -700,6 +716,41 @@ The agent system supports future expansion:
 - **Agent Marketplace**: Share and discover community agents
 - **Enhanced Validation**: More sophisticated schema validation
 - **Team Agents**: Shared configurations for coding standards
+
+## Multi-Agent Delegation Flow
+
+Code Puppy supports a multi-agent architecture where specialized agents collaborate on complex tasks:
+
+### The Delegation Chain
+
+```
+User
+ └─→ Orchestrator 🎯 (read-only conductor)
+      └─→ Planning Agent 🧠 (investigation / hard fixes)
+           └─→ fast-puppy / code-puppy (routine execution)
+                └─→ Reviewers / QA agents
+```
+
+- **Orchestrator** reads the `bd` ready queue, identifies the next task, and delegates to the appropriate agent. It never touches code itself.
+- **Planning Agent** handles investigations, roadmap creation, and hard fixes that require deep analysis. In Plan Mode it's read-only; in Fix/Execute Mode it can make small, targeted code changes directly.
+- **Execution agents** (`fast-puppy`, `code-puppy`) handle routine code changes, file edits, and shell commands.
+- **Reviewers / QA** validate changes after execution.
+- **The user** is consulted for decisions that require human judgment.
+
+### Session Continuity
+
+Delegation uses `session_id` to maintain conversation context across multi-turn agent handoffs. When an orchestrator delegates to a planning-agent, the `session_id` ensures the receiving agent has full context from prior turns — no information is lost between hops.
+
+### Model-Pinning for Agents
+
+Pin different models to different agents for optimal cost/performance:
+
+| Config Key | Agent | Recommendation |
+|------------|-------|----------------|
+| `agent_model_orchestrator` | Orchestrator 🎯 | Pin a **cheap/fast** model — it only reads and delegates |
+| `agent_model_planning-agent` | Planning Agent 🧠 | Pin an **expensive/capable** model — it does deep analysis |
+
+These are set in your models config (e.g., `~/.code_puppy/extra_models.json` or via `/model`).
 
 ## Contributing
 

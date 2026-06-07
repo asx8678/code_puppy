@@ -60,3 +60,59 @@ Full list + rarely-used hooks: see `code_puppy/callbacks.py` source.
 5. **Return `None` from commands you don't own**
 6. **Always run linters - `ruff check --fix`, `ruff format .`
 7. **NEVER ALLOW A CLAUDE CO-AUTHOR COMMIT**
+
+## Multi-Agent Architecture
+
+Code Puppy supports a multi-agent delegation system where specialized agents collaborate on complex tasks.
+
+### Agents
+
+| Agent | Name | Display | Mode | Tools |
+|-------|------|---------|------|-------|
+| **Orchestrator** 🎯 | `orchestrator` | Orchestrator 🎯 | Opt-in (`/agent orchestrator`) | Read-only (list_files, read_file, grep) — **no write tools** |
+| **Planning Agent** 🧠 | `planning-agent` | Planning Agent 🧠 | Opt-in (`/agent planning-agent`) | Dual-mode: Plan Mode (read-only) + Fix/Execute Mode (shell + create_file + replace_in_file + delete_snippet with guardrails) |
+| **Code Puppy** 🐶 | `code-puppy` | Code Puppy 🐶 | Default | Full tool access |
+| **Fast Puppy** ⚡ | `fast-puppy` | Fast Puppy ⚡ | Opt-in | Full tool access |
+
+### Orchestrator (Conductor)
+
+The orchestrator is a **pure read-only conductor**. It:
+- Reads the `bd` ready queue to identify the next task
+- Analyzes what needs doing and decides which agent should handle it
+- Delegates code changes to `planning-agent` (for hard fixes / investigations) or `fast-puppy` / `code-puppy` (for routine execution)
+- **Never writes code itself** — it has no write tools
+
+### Planning Agent (Dual-Mode)
+
+The planning agent operates in two modes:
+
+- **Plan Mode** (default): Investigates codebases, produces roadmaps, answers architecture questions — read-only exploration
+- **Fix/Execute Mode**: For small, well-understood changes, can directly run shell commands and use `create_file`, `replace_in_file`, and `delete_snippet` — with guardrails:
+  - Scope limits on what files can be touched
+  - Confirmation required for destructive or risky operations
+  - Escalation to the user for decisions that require human judgment
+
+### Delegation Flow
+
+```
+User
+ └─→ Orchestrator 🎯 (read-only conductor)
+      └─→ Planning Agent 🧠 (investigation / hard fixes)
+           └─→ fast-puppy / code-puppy (routine execution)
+                └─→ Reviewers / QA agents
+```
+
+### Session Continuity
+
+Delegation uses `session_id` to maintain conversation context across multi-turn agent handoffs. When an orchestrator delegates to a planning-agent, the `session_id` ensures the receiving agent has full context from prior turns — no information is lost between hops.
+
+### Model-Pinning
+
+Pin models per-agent for cost optimization:
+
+| Config Key | Agent | Recommendation |
+|------------|-------|----------------|
+| `agent_model_orchestrator` | Orchestrator 🎯 | **Cheap/fast** model — it only reads and delegates |
+| `agent_model_planning-agent` | Planning Agent 🧠 | **Expensive/capable** model — it does deep analysis and targeted fixes |
+
+Set these in your models config (e.g., `~/.code_puppy/extra_models.json`).
