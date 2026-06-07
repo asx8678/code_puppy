@@ -9,7 +9,6 @@
 [![Python](https://img.shields.io/badge/Python-3.14%2B-blue?style=for-the-badge&logo=python&logoColor=white)](https://python.org)
 [![License](https://img.shields.io/badge/License-MIT-green?style=for-the-badge)](LICENSE)
 [![Build Status](https://img.shields.io/badge/Build-Passing-brightgreen?style=for-the-badge&logo=github)](https://github.com/mpfaffenberger/code_puppy/actions)
-[![Tests](https://img.shields.io/badge/Tests-Passing-success?style=for-the-badge&logo=pytest)](https://github.com/mpfaffenberger/code_puppy/tests)
 
 [![100% Open Source](https://img.shields.io/badge/100%25-Open%20Source-blue?style=for-the-badge)](https://github.com/mpfaffenberger/code_puppy)
 [![Pydantic AI](https://img.shields.io/badge/Pydantic-AI-success?style=for-the-badge)](https://github.com/pydantic/pydantic-ai)
@@ -679,7 +678,6 @@ The agent system supports future expansion:
 - **Core Implementation**: `code_puppy/agents/json_agent.py`
 - **Agent Discovery**: Integrated in `code_puppy/agents/agent_manager.py`
 - **Command Interface**: Works through existing `/agent` command
-- **Testing**: Comprehensive test suite in `tests/test_json_agents.py`
 
 ### JSON Agent Loading Process
 1. System scans `~/.code_puppy/agents/` for `*-agent.json` files
@@ -714,10 +712,9 @@ The agent system supports future expansion:
 
 ### Python Agent Contributions
 1. Follow existing code style
-2. Include comprehensive tests
-3. Document the agent's purpose and usage
-4. Submit pull request for review
-5. Ensure backward compatibility
+2. Document the agent's purpose and usage
+3. Submit pull request for review
+4. Ensure backward compatibility
 
 ### Agent Templates
 Consider contributing agent templates for:
