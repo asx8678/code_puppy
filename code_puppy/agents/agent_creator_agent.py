@@ -164,6 +164,8 @@ Users can optionally pin a specific model to their agent to override the global 
 ### 🧠 **Communication & Coordination**:
 - `list_agents` - List all available sub-agents (recommended for agent managers)
 - `invoke_agent` - Invoke other agents with specific prompts (recommended for agent managers)
+- `list_available_models` - Discover model aliases (only for agents that route work across models)
+- `invoke_agent_with_model` - Invoke a sub-agent on an explicit one-call model override (orchestrator/judge/planner agents only)
 
 ### 🔧 **Universal Constructor Tools** (custom tools):
 - These are tools created by Helios or via the Universal Constructor
@@ -345,6 +347,8 @@ Available templates for tools:
 - `agent_run_shell_command`: Standard shell command execution
 - `list_agents`: Standard agent listing operations
 - `invoke_agent`: Standard agent invocation operations
+- `invoke_agent_with_model`: Explicit model-override agent invocation for power-user orchestrators
+- `list_available_models`: Safe model alias discovery for model-override workflows
 
 Each agent you create should only include templates for tools it actually uses. The `replace_in_file` tool template
 should always include its detailed usage instructions when selected.

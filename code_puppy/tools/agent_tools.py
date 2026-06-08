@@ -254,6 +254,8 @@ class AgentInvokeOutput(BaseModel):
     response: str | None
     agent_name: str
     session_id: str | None = None
+    # The model the sub-agent actually ran on (after any per-call override).
+    model_name: str | None = None
     error: str | None = None
 
 
@@ -335,21 +337,31 @@ def register_list_agents(agent):
     return list_agents
 
 
-def register_invoke_agent(agent):
-    """Register the invoke_agent tool with the provided agent.
+def _make_invoke_registrars():
+    """Build the invoke_agent / invoke_agent_with_model registrars.
 
-    Args:
-        agent: The agent to register the tool with
+    Both share a single implementation (``_impl``); they differ only in the
+    tool schema they expose. ``invoke_agent`` has no model affordance, while
+    ``invoke_agent_with_model`` takes an explicit per-call ``model_name``
+    override. They are defined together inside this factory so the shared body
+    keeps its current indentation (no re-indentation needed).
     """
 
-    @agent.tool
-    async def invoke_agent(
-        context: RunContext, agent_name: str, prompt: str, session_id: str | None = None
+    async def _impl(
+        context: RunContext,
+        agent_name: str,
+        prompt: str,
+        session_id: str | None = None,
+        model_name_override: str | None = None,
     ) -> AgentInvokeOutput:
-        """Invoke a specific sub-agent with a given prompt.
+        """Invoke a sub-agent, optionally with a one-call model override.
+
+        ``model_name_override`` (when set) is applied via the agent's
+        ``temporary_model_name_override`` so it wins over the agent's
+        pinned/global model for this single run only — never persisted.
 
         Returns:
-            AgentInvokeOutput: Contains response, agent_name, session_id, and error fields.
+            AgentInvokeOutput: response, agent_name, session_id, model_name, error.
         """
         # Enforce the sub-agent nesting cap. Depth is already tracked by
         # ``subagent_context`` (incremented around each sub-agent run); without
@@ -371,9 +383,7 @@ def register_invoke_agent(agent):
                 "Raise it with /set max_subagent_depth=<n> if this nesting is intentional."
             )
             emit_error(msg, message_group=group_id)
-            return AgentInvokeOutput(
-                response=None, agent_name=agent_name, error=msg
-            )
+            return AgentInvokeOutput(response=None, agent_name=agent_name, error=msg)
 
         from code_puppy.agents.agent_manager import load_agent
 
@@ -433,6 +443,7 @@ def register_invoke_agent(agent):
                 prompt=prompt,
                 is_new_session=is_new_session,
                 message_count=len(message_history),
+                model_name=model_name_override,
             )
         )
 
@@ -474,9 +485,15 @@ def register_invoke_agent(agent):
             # can read partial progress straight off the wrapper below.
             agent_config.set_message_history(list(message_history))
 
-            # Get the current model for creating a temporary agent
-            model_name = agent_config.get_model_name()
+            # Get the current model for creating a temporary agent. Apply any
+            # per-invocation model override (set by invoke_agent_with_model) so
+            # it wins over the agent's pinned/global model for this run only.
+            with agent_config.temporary_model_name_override(model_name_override):
+                model_name = agent_config.get_model_name()
             models_config = ModelFactory.load_config()
+
+            if not model_name:
+                raise ValueError("No model configured for sub-agent invocation")
 
             # Only proceed if we have a valid model configuration
             if model_name not in models_config:
@@ -662,6 +679,7 @@ def register_invoke_agent(agent):
                 response=_cap_subagent_response(response, session_id),
                 agent_name=agent_name,
                 session_id=session_id,
+                model_name=model_name,
             )
 
         except Exception as e:
@@ -727,4 +745,60 @@ def register_invoke_agent(agent):
 
             _browser_session_var.reset(browser_session_token)
 
-    return invoke_agent
+    def register_invoke_agent(agent):
+        """Register the invoke_agent tool (uses each agent's configured model)."""
+
+        @agent.tool
+        async def invoke_agent(
+            context: RunContext,
+            agent_name: str,
+            prompt: str,
+            session_id: str | None = None,
+        ) -> AgentInvokeOutput:
+            """Invoke a specific sub-agent with a given prompt.
+
+            Uses the sub-agent's own configured model. For normal delegation.
+
+            Returns:
+                AgentInvokeOutput: response, agent_name, session_id, error.
+            """
+            return await _impl(context, agent_name, prompt, session_id=session_id)
+
+        return invoke_agent
+
+    def register_invoke_agent_with_model(agent):
+        """Register invoke_agent_with_model — one-call explicit model override."""
+
+        @agent.tool
+        async def invoke_agent_with_model(
+            context: RunContext,
+            agent_name: str,
+            prompt: str,
+            model_name: str,
+            session_id: str | None = None,
+        ) -> AgentInvokeOutput:
+            """Invoke a sub-agent with an explicit one-call model override.
+
+            ``model_name`` must be an alias returned by ``list_available_models``.
+            The override applies to this single run only and is never persisted.
+            Prefer ``invoke_agent`` for normal delegation; use this only for
+            agents that intentionally route work across models (orchestrators,
+            judges, planners).
+
+            Returns:
+                AgentInvokeOutput: response, agent_name, session_id, model_name, error.
+            """
+            return await _impl(
+                context,
+                agent_name,
+                prompt,
+                session_id=session_id,
+                model_name_override=model_name,
+            )
+
+        return invoke_agent_with_model
+
+    return register_invoke_agent, register_invoke_agent_with_model
+
+
+register_invoke_agent, register_invoke_agent_with_model = _make_invoke_registrars()

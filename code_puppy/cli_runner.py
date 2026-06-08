@@ -612,6 +612,14 @@ async def interactive_mode(message_renderer, initial_command: str = None) -> Non
                 emit_info("🎉 Tutorial complete! Happy coding!")
             elif result == "skipped":
                 emit_info("⏭️ Tutorial skipped. Run /tutorial anytime!")
+
+            # No bundled default model anymore: if the user skipped OAuth they
+            # must add a model explicitly.
+            from code_puppy.command_line.onboarding_wizard import (
+                require_model_setup_if_needed,
+            )
+
+            require_model_setup_if_needed(result)
     except Exception as e:
         from code_puppy.messaging import emit_warning
 

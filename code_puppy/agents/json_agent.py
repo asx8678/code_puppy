@@ -201,11 +201,17 @@ class JSONAgent(BaseAgent):
         self._validate_config()
 
     def get_model_name(self) -> str | None:
-        """Get pinned model name from JSON config, if specified.
+        """Get the effective model name for this JSON agent.
 
-        Returns:
-            Model name to use for this agent, or None to use global default.
+        A runtime override is checked first so orchestrators can choose a model
+        for a single invocation (via ``invoke_agent_with_model``) without
+        editing the JSON file. Otherwise: the JSON config's ``model``, then the
+        global default.
         """
+        override = self.get_runtime_model_name_override()
+        if override:
+            return override
+
         result = self._config.get("model")
         if result is None:
             result = super().get_model_name()

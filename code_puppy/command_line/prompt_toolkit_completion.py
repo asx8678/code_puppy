@@ -613,7 +613,9 @@ def get_prompt_with_active_model(base: str = ">>> "):
     from code_puppy.agents.agent_manager import get_current_agent
 
     puppy = get_puppy_name()
-    global_model = get_active_model() or "(default)"
+    # When nothing is configured this is None - surface that explicitly as
+    # [None] so the user immediately sees they need to run /add_model.
+    global_model = get_active_model()
 
     # Get current agent information
     current_agent = get_current_agent()

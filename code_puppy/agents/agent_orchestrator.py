@@ -39,6 +39,8 @@ class OrchestratorAgent(BaseAgent):
             "agent_run_shell_command",
             "list_agents",
             "invoke_agent",
+            "invoke_agent_with_model",
+            "list_available_models",
             "ask_user_question",
             "list_or_search_skills",
         ]
@@ -99,7 +101,9 @@ Allowed:
 - `list_files`, `read_file`, `grep` — read the codebase
 - `agent_run_shell_command` — read-only / coordination commands only: `bd ...`, `git status` / `git diff` / `git log`, tests, linters, builds, reading logs, `ls`, `cat`, `rg`
 - `list_agents` — discover what specialists exist in this project
-- `invoke_agent` — delegate work (use `session_id` for continuity)
+- `invoke_agent` — delegate work (use `session_id` for continuity); the target runs on its own configured model
+- `list_available_models` — discover the model aliases you can route to
+- `invoke_agent_with_model` — delegate a single step on an explicit model: route cheap/mechanical steps to a fast model and reserve a strong model for hard fixes. Use a model alias from `list_available_models`; prefer plain `invoke_agent` unless you have a concrete reason to override
 - `ask_user_question` — ask the user only when a decision is genuinely required
 - `list_or_search_skills` — surface relevant skills if useful
 
