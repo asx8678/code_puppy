@@ -5,8 +5,8 @@ Covers:
   2. Orchestrator read-only tool set (no write tools)
   3. Orchestrator system prompt content (delegation/read-only)
   4. Orchestrator identity properties
-  5. Planning dual-mode tool set (has execute tools, no delete_file)
-  6. Planning system prompt mentions both plan mode and fix/execute mode
+  5. Planning read-only tool set (no write tools, no shell)
+  6. Planning system prompt is plan-only (no fix/execute mode)
 
 Self-contained: no project fixtures/conftest required.
 """
@@ -43,6 +43,8 @@ def test_orchestrator_toolset_is_readonly():
         "agent_run_shell_command",
         "list_agents",
         "invoke_agent",
+        "invoke_agent_with_model",
+        "list_available_models",
         "ask_user_question",
         "list_or_search_skills",
     ]
@@ -105,33 +107,34 @@ def test_orchestrator_delegates_complexity():
 # ---------------------------------------------------------------------------
 
 
-def test_planning_has_execute_tools():
-    """PlanningAgent exposes the fix/execute tools but NOT delete_file."""
+def test_planning_is_readonly():
+    """PlanningAgent exposes a strictly read-only / coordination tool set."""
     agent = PlanningAgent()
     tools = set(agent.get_available_tools())
 
-    required = {
-        "agent_run_shell_command",
+    forbidden = {
         "create_file",
         "replace_in_file",
         "delete_snippet",
+        "delete_file",
+        "agent_run_shell_command",
     }
-    missing = required - tools
-    assert not missing, f"Missing required execute tools: {missing}"
+    leaked = forbidden & tools
+    assert not leaked, f"Write/execute tools leaked into planning agent: {leaked}"
 
-    assert "delete_file" not in tools, (
-        "delete_file must NOT be in Planning agent's tool set"
-    )
+    # It still needs read + coordination tools to plan and delegate.
+    for required in ("list_files", "read_file", "grep", "invoke_agent"):
+        assert required in tools, f"Planning agent missing core tool: {required}"
 
 
-def test_planning_prompt_dual_mode():
-    """System prompt covers both plan mode and fix/execute mode."""
+def test_planning_prompt_is_plan_only():
+    """System prompt covers plan mode and does NOT advertise a write/execute mode."""
     agent = PlanningAgent()
     prompt = agent.get_system_prompt().lower()
 
     assert "plan mode" in prompt, "Prompt should mention plan mode"
-    assert "fix" in prompt or "execute mode" in prompt, (
-        "Prompt should mention fix or execute mode"
+    assert "fix/execute mode" not in prompt, (
+        "Planning agent must not advertise a fix/execute mode"
     )
 
 
@@ -144,8 +147,8 @@ if __name__ == "__main__":
         test_orchestrator_prompt,
         test_orchestrator_identity,
         test_orchestrator_delegates_complexity,
-        test_planning_has_execute_tools,
-        test_planning_prompt_dual_mode,
+        test_planning_is_readonly,
+        test_planning_prompt_is_plan_only,
     ]
     failures = 0
     for t in tests:

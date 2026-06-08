@@ -38,6 +38,7 @@ STATUS_STYLES = {
     "thinking": {"color": "magenta", "spinner": "dots", "emoji": "🤔"},
     "tool_calling": {"color": "yellow", "spinner": "dots12", "emoji": "🔧"},
     "completed": {"color": "green", "spinner": None, "emoji": "✅"},
+    "cancelled": {"color": "dark_orange", "spinner": None, "emoji": "🚫"},
     "error": {"color": "red", "spinner": None, "emoji": "❌"},
 }
 

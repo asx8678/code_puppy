@@ -345,10 +345,10 @@ This is useful for managing context length when you have a long conversation his
 ### Planning Agent 🧠
 - **Name**: `planning-agent`
 - **Opt-in**: `/agent planning-agent`
-- **Specialty**: Dual-mode agent for investigations, roadmaps, and targeted code fixes
-- **Plan Mode**: Investigates codebases, produces roadmaps and plans — read-only exploration
-- **Fix/Execute Mode**: For small, well-understood changes, can directly run shell commands and use `create_file`, `replace_in_file`, and `delete_snippet` — with guardrails (scope limits, confirmation for risky ops)
-- **Best for**: Complex analysis that may escalate into code changes; bridging the gap between pure planning and execution
+- **Specialty**: Read-only strategist for investigations, roadmaps, and task decomposition
+- **Tools**: Read-only (list_files, read_file, grep, invoke_agent, ask_user_question, list_agents, list_or_search_skills) — **no write tools, no shell**
+- **Behavior**: Investigates codebases and produces plans, then delegates every concrete change to a specialist agent (e.g. `fast-puppy`) via `invoke_agent` — all execution is delegated and verified
+- **Best for**: Complex analysis and decomposition before handing implementation to executor agents
 
 ## Agent Types
 
@@ -742,7 +742,7 @@ User
 ```
 
 - **Orchestrator** reads the `bd` ready queue, identifies the next task, and delegates to the appropriate agent. It never touches code itself.
-- **Planning Agent** handles investigations, roadmap creation, and hard fixes that require deep analysis. In Plan Mode it's read-only; in Fix/Execute Mode it can make small, targeted code changes directly.
+- **Planning Agent** handles investigations, roadmap creation, and decomposition that require deep analysis. It is read-only — it never edits code or runs shell commands, and delegates the implementation it specifies to the execution agents.
 - **Execution agents** (`fast-puppy`, `code-puppy`) handle routine code changes, file edits, and shell commands.
 - **Reviewers / QA** validate changes after execution.
 - **The user** is consulted for decisions that require human judgment.

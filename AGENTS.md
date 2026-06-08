@@ -70,7 +70,7 @@ Code Puppy supports a multi-agent delegation system where specialized agents col
 | Agent | Name | Display | Mode | Tools |
 |-------|------|---------|------|-------|
 | **Orchestrator** 🎯 | `orchestrator` | Orchestrator 🎯 | Opt-in (`/agent orchestrator`) | Read-only (list_files, read_file, grep) — **no write tools** |
-| **Planning Agent** 🧠 | `planning-agent` | Planning Agent 🧠 | Opt-in (`/agent planning-agent`) | Dual-mode: Plan Mode (read-only) + Fix/Execute Mode (shell + create_file + replace_in_file + delete_snippet with guardrails) |
+| **Planning Agent** 🧠 | `planning-agent` | Planning Agent 🧠 | Opt-in (`/agent planning-agent`) | Read-only (list_files, read_file, grep, invoke_agent, ask_user_question, list_agents, list_or_search_skills) — **no write tools, no shell** |
 | **Explore** 🔍 | `explore` | Explore 🔍 | Opt-in (`/agent explore`) | Read-only (list_files, read_file, grep, agent_run_shell_command, list_or_search_skills) — **no write tools, no invoke_agent** |
 | **Code Puppy** 🐶 | `code-puppy` | Code Puppy 🐶 | Default | Full tool access |
 | **Fast Puppy** ⚡ | `fast-puppy` | Fast Puppy ⚡ | Opt-in | Full tool access |
@@ -81,19 +81,18 @@ The orchestrator is a **pure read-only conductor**. It:
 - Reads the `bd` ready queue to identify the next task
 - Routes already-planned work to the right agent — it never plans or reasons through complex problems itself
 - Delegates ALL planning, decomposition, and complex analysis to `planning-agent` (the instant a task stops being mechanical, it hands off)
-- Delegates code changes to `planning-agent` (for hard fixes / investigations) or `fast-puppy` / `code-puppy` (for routine execution)
+- Delegates investigations and planning to `planning-agent`, and code changes to `fast-puppy` / `code-puppy`
 - **Never writes code itself** — it has no write tools
 - **Never plans complex work itself** — planning, decomposition, and hard thinking all live with `planning-agent`
 
-### Planning Agent (Dual-Mode)
+### Planning Agent (Read-Only)
 
-The planning agent operates in two modes:
+The planning agent is a **read-only strategist**. It:
 
-- **Plan Mode** (default): Investigates codebases, produces roadmaps, answers architecture questions — read-only exploration
-- **Fix/Execute Mode**: For small, well-understood changes, can directly run shell commands and use `create_file`, `replace_in_file`, and `delete_snippet` — with guardrails:
-  - Scope limits on what files can be touched
-  - Confirmation required for destructive or risky operations
-  - Escalation to the user for decisions that require human judgment
+- Investigates codebases, produces roadmaps, and answers architecture questions — pure read-only exploration
+- Decomposes complex work into a clear, actionable plan
+- Delegates every concrete change (edits, file creation, tests, `git`/`bd`) to a specialist agent (e.g. `fast-puppy`) via `invoke_agent`
+- **Has no write tools and cannot run shell commands** — all execution is delegated and verified, never performed by the planner itself
 
 ### Delegation Flow
 

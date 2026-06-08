@@ -682,6 +682,14 @@ def _make_invoke_registrars():
                 model_name=model_name,
             )
 
+        except asyncio.CancelledError:
+            # A cancelled sub-agent (user Ctrl-X / cancel) must NOT render as a
+            # green "completed" row. CancelledError subclasses BaseException, so
+            # it bypasses the `except Exception` handler below; mark it
+            # distinctly and re-raise so cancellation still propagates.
+            final_status = "cancelled"
+            raise
+
         except Exception as e:
             final_status = "error"
             if registered:
